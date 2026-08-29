@@ -463,6 +463,13 @@ const OPTION_GROUPS = {
     required: true,
     options: [{name: '原味', price: 0}, {name: '辣味', price: 0}]
   },
+  // 總匯蛋專屬（2026-08-29依老闆截圖xlsx確認）：選「土司」才需要選主食(漢堡肉/里肌肉)，選「漢堡」固定用里肌肉不用選
+  egg_main_choice: {
+    label: '總匯主食選擇',
+    type: 'single',
+    required: true,
+    options: [{name: '漢堡肉', price: 0}, {name: '里肌肉', price: 10}]
+  },
   puffpastry_sauce: {
     label: '起酥醬料選擇（可複選）',
     type: 'multi',
@@ -912,6 +919,20 @@ function openItemModal(cat, key, item) {
   groupsEl.innerHTML = '';
   groupsForCategory(cat, item.name).forEach(gKey => renderOptionGroup(groupsEl, gKey));
 
+  // 總匯蛋專屬：選「土司」才跳出「總匯主食選擇」，選「漢堡」不用選(固定里肌肉)、不算漢堡多花$10
+  if (item.name === '總匯蛋') {
+    const eggMainEl = document.createElement('div');
+    eggMainEl.id = 'egg-main-choice-container';
+    groupsEl.appendChild(eggMainEl);
+    currentModal.updateEggMainChoice = () => {
+      eggMainEl.innerHTML = '';
+      delete currentModal.groups['egg_main_choice'];
+      if ((currentModal.groups['bread_choice'] || [])[0] === '土司') {
+        renderOptionGroup(eggMainEl, 'egg_main_choice');
+      }
+    };
+  }
+
   // 套餐版「特酥系列/熱帶鳳梨雞排堡」：選「套餐」才需要點心+飲料，選「單點」則不用
   if (item.price_set && SET_BUNDLE_CATEGORIES.includes(cat)) {
     const comboExtraEl = document.createElement('div');
@@ -1012,6 +1033,9 @@ function renderOptionGroup(container, gKey) {
         // （老闆糾正：原本以為這組是「選了就是最終選擇」，其實還是要能選溫度甜度，只是份量已經固定在名稱裡）
         if (inp.checked) openSmallDrinkCustom(inp.value);
         else clearDrinkCustom();
+      } else if (gKey === 'bread_choice' && currentModal.updateEggMainChoice) {
+        // 總匯蛋專屬：選「土司」才跳出總匯主食選擇，切回「漢堡」要把已選的主食清掉
+        currentModal.updateEggMainChoice();
       }
       updateItemModalTotal();
     };
