@@ -261,6 +261,14 @@
       <button type="button" class="btn-secondary" onclick="backToCart()">返回訂單</button>
     </form>
 
+    <div id="mockpay-view" style="display:none; text-align:center; padding:10px 0;">
+      <h2>模擬付款（測試用）</h2>
+      <p style="color:#888; font-size:0.9rem;">藍新金流尚未正式串接，這是測試用的假付款畫面，之後會換成真的付款頁面。</p>
+      <div class="order-no" id="mockpay-order-no"></div>
+      <div style="font-size:1.2rem; margin:12px 0;">應付金額：$<span id="mockpay-total"></span></div>
+      <button class="btn-primary" onclick="confirmMockPayment()">模擬付款成功</button>
+    </div>
+
     <div id="confirm-view">
       <h2>訂單已送出</h2>
       <div class="order-no" id="order-no"></div>
@@ -357,12 +365,13 @@ function getPickupDateISO(offsetDays) {
   return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
-// 送訂單到雲端後端(Google試算表)存查，失敗不擋顧客結帳流程(現階段結帳仍靠現場LINE Pay QR，後端只負責記錄)
-function sendOrderToBackend(payload) {
-  fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify(payload) })
-    .then(r => r.json())
-    .then(data => console.log('訂單已同步後端', data))
-    .catch(err => console.warn('訂單同步後端失敗（不影響本次點餐）', err));
+// 建立「待付款」訂單，回傳後端orderId供後續confirmPayment使用
+function createPendingOrderOnBackend(payload) {
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify(payload) }).then(r => r.json());
+}
+// 標記訂單為已付款（現階段由「模擬付款」按鈕觸發，之後改由藍新付款完成通知呼叫）
+function confirmPaymentOnBackend(orderId) {
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'confirmPayment', orderId }) }).then(r => r.json());
 }
 
 // 客製化選項群組，來源：溪湖菜單_202610.xlsx「雲端客製化」分頁 + imenu.com.tw 參考頁面互動實測（2026-08-27）
@@ -1270,6 +1279,8 @@ function closeAll() {
   updateCartBar();
 }
 
+let pendingOrderContext = null;
+
 function submitOrder(e) {
   e.preventDefault();
   const dateValue = document.getElementById('pickup-date').value;
@@ -1288,6 +1299,7 @@ function submitOrder(e) {
   const note = document.getElementById('cust-note').value;
   const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
+  const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price }));
 
   const lines = cart.map(c => `- ${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
   const summary = `【${STORE_NAME}】線上點餐訂單\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${time}\n---\n${lines}\n---\n總計：$${total}\n備註：${note || '無'}\n（取餐時請至現場以LINE Pay QR結帳，此頁尚未串接線上金流）`;
@@ -1299,23 +1311,44 @@ function submitOrder(e) {
     localStorage.setItem('abao_orders_' + 'meibao', JSON.stringify(log));
   } catch (err) {}
 
-  sendOrderToBackend({
+  pendingOrderContext = { orderNo, summary, total, backendOrderId: null };
+  cart = [];
+  saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
+  document.getElementById('checkout-form').style.display = 'none';
+
+  createPendingOrderOnBackend({
     storeId: 'meibao',
     pickupDate: getPickupDateISO(dateValue === 'today' ? 0 : 1),
     pickupTime: document.getElementById('pickup-time').value,
-    items: cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price })),
+    items: items,
     totalAmount: total,
     note: `訂單編號:${orderNo}　姓名:${name}　電話:${phone}${note ? '　備註:' + note : ''}`
-  });
+  }).then(data => {
+    if (data.status === 'ok') pendingOrderContext.backendOrderId = data.orderId;
+  }).catch(err => console.warn('建立待付款訂單失敗（不影響本次點餐流程）', err))
+    .finally(() => {
+      // 現階段藍新尚未串接，用「模擬付款」畫面代替真正的付款頁導向
+      document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
+      document.getElementById('mockpay-total').textContent = pendingOrderContext.total;
+      document.getElementById('mockpay-view').style.display = 'block';
+    });
 
-  cart = [];
-  saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
-
-  document.getElementById('checkout-form').style.display = 'none';
-  document.getElementById('order-no').textContent = orderNo;
-  document.getElementById('order-summary').textContent = summary;
-  document.getElementById('confirm-view').style.display = 'block';
   return false;
+}
+
+function confirmMockPayment() {
+  const ctx = pendingOrderContext;
+  document.getElementById('mockpay-view').style.display = 'none';
+  const finish = () => {
+    document.getElementById('order-no').textContent = ctx.orderNo;
+    document.getElementById('order-summary').textContent = ctx.summary;
+    document.getElementById('confirm-view').style.display = 'block';
+  };
+  if (ctx && ctx.backendOrderId) {
+    confirmPaymentOnBackend(ctx.backendOrderId).then(finish).catch(finish);
+  } else {
+    finish();
+  }
 }
 
 // 取餐日期：今天(若還在營業/接單時段內)或明天，兩選一（2026-08-27老闆確認規則）
