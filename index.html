@@ -1339,6 +1339,7 @@ function submitOrder(e) {
     localStorage.setItem('abao_orders_' + 'meibao', JSON.stringify(log));
   } catch (err) {}
 
+  const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓客人重選時段
   pendingOrderContext = { orderNo, summary, total, backendOrderId: null };
   cart = [];
   saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
@@ -1352,14 +1353,26 @@ function submitOrder(e) {
     totalAmount: total,
     note: `訂單編號:${orderNo}　姓名:${name}　電話:${phone}${note ? '　備註:' + note : ''}`
   }).then(data => {
-    if (data.status === 'ok') pendingOrderContext.backendOrderId = data.orderId;
-  }).catch(err => console.warn('建立待付款訂單失敗（不影響本次點餐流程）', err))
-    .finally(() => {
+    if (data.status === 'ok') {
+      pendingOrderContext.backendOrderId = data.orderId;
       // 現階段藍新尚未串接，用「模擬付款」畫面代替真正的付款頁導向
       document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
       document.getElementById('mockpay-total').textContent = pendingOrderContext.total;
       document.getElementById('mockpay-view').style.display = 'block';
-    });
+    } else {
+      // 後端拒絕(例如該時段剛好被別人搶滿) - 還原購物車讓客人重新選時段，不能假裝訂單成立
+      alert((data.message || '送出失敗，請重新選擇取餐時段') + '');
+      cart = cartBackup;
+      saveCartSession();
+      populatePickupTime(document.getElementById('pickup-date').value);
+      openCart();
+    }
+  }).catch(err => {
+    console.warn('建立待付款訂單失敗（網路問題，仍讓客人走完流程，現階段本來就靠截圖傳LINE兜底）', err);
+    document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
+    document.getElementById('mockpay-total').textContent = pendingOrderContext.total;
+    document.getElementById('mockpay-view').style.display = 'block';
+  });
 
   return false;
 }
@@ -1390,6 +1403,8 @@ function populatePickupDate() {
   sel.onchange = () => populatePickupTime(sel.value);
 }
 
+const MAX_SLOT_CAPACITY = 2; // 每個取餐時段最多幾張訂單（2026-08-29老闆確認）
+
 function populatePickupTime(dateValue) {
   const sel = document.getElementById('pickup-time');
   sel.innerHTML = '';
@@ -1404,6 +1419,25 @@ function populatePickupTime(dateValue) {
     const m = String(t % 60).padStart(2, '0');
     sel.innerHTML += `<option value="${h}:${m}">${h}:${m}</option>`;
   }
+  applySlotCapacity(dateValue);
+}
+
+// 讀取該取餐日期各時段目前已訂張數，額滿(達MAX_SLOT_CAPACITY)的時段從選單移除，避免同一時段塞爆備餐量。
+// 這只是前端體驗優化(避免客人選到已滿時段)，真正防止超賣的判斷在後端createPendingOrder_做，
+// 失敗就當作沒有容量限制、不擋顧客選時段，不能因為網路問題擋單
+function applySlotCapacity(dateValue) {
+  const dateISO = getPickupDateISO(dateValue === 'today' ? 0 : 1);
+  fetch(`${ORDER_BACKEND_URL}?action=slotCounts&storeId=meibao&date=${dateISO}`).then(r => r.json()).then(data => {
+    if (data.status !== 'ok' || !data.counts) return;
+    const sel = document.getElementById('pickup-time');
+    if (document.getElementById('pickup-date').value !== dateValue) return; // 使用者已經切換到別的日期，這批結果過期不套用
+    [...sel.options].forEach(opt => {
+      if ((data.counts[opt.value] || 0) >= MAX_SLOT_CAPACITY) opt.remove();
+    });
+    if (sel.options.length === 0) {
+      sel.innerHTML = '<option value="">此日期時段皆已額滿</option>';
+    }
+  }).catch(err => console.warn('讀取時段容量失敗（不影響選時段）', err));
 }
 
 // 非阻斷式提示：只在「今天」不可選時顯示告知，不影響瀏覽/加入購物車/選明天下單
