@@ -806,6 +806,7 @@ function renderMenu() {
     CATALOG[cat].forEach((item, j) => {
       const div = document.createElement('div');
       div.className = 'item';
+      div.dataset.itemName = item.name;
       const key = 'c' + i + '_i' + j;
 
       let priceLabel = '';
@@ -1397,6 +1398,27 @@ populatePickupTime(document.getElementById('pickup-date').value);
 checkOrderWindow();
 loadCartSession();
 updateCartBar();
+applyItemAvailability();
+
+// 讀取雲端平板設定的品項上下架狀態，同步反映到點餐頁（本日售完/永久下架→擋掉加入按鈕）
+// 失敗就當作全部品項供應中，不擋顧客點餐
+function applyItemAvailability() {
+  fetch(`${ORDER_BACKEND_URL}?action=storeStatus&storeId=meibao`).then(r => r.json()).then(data => {
+    if (data.status !== 'ok' || !data.items) return;
+    Object.keys(data.items).forEach(name => {
+      const div = document.querySelector(`.item[data-item-name="${CSS.escape(name)}"]`);
+      if (!div) return;
+      const status = data.items[name];
+      const btn = div.querySelector('.add');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = status === '永久下架' ? '已下架' : '本日售完';
+        btn.onclick = null;
+      }
+      div.style.opacity = '0.5';
+    });
+  }).catch(err => console.warn('讀取品項上下架狀態失敗（不影響點餐，全部視為供應中）', err));
+}
 </script>
 </body>
 </html>
