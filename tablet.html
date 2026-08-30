@@ -42,6 +42,30 @@
   .pos-size-select { font-size:0.78rem; margin-top:4px; }
   .pos-size-select label { margin-right:6px; cursor:pointer; }
   .pos-empty-cart { color:var(--muted); text-align:center; padding:20px 0; }
+  .pos-back-btn { display:none; border:none; background:none; color:var(--brand); font-size:0.85rem; font-weight:600; cursor:pointer; padding:4px 0 10px; }
+  #pos-mobile-cartbar { display:none; }
+  /* 手機直向(窄螢幕)：四欄擠不下，改成一次只顯示一層(分類→品項→客製化)，訂單/結帳改用底部浮動列進入，2026-08-30新增 */
+  @media (max-width: 900px) {
+    .pos-layout { flex-direction: column; }
+    .pos-col { width:100% !important; flex:1 1 auto !important; border-right:none !important; border-bottom:1px solid var(--border); }
+    .pos-back-btn { display:inline-block; }
+    .pos-layout[data-step="categories"] .pos-col-items,
+    .pos-layout[data-step="categories"] .pos-col-detail,
+    .pos-layout[data-step="categories"] .pos-col-cart { display:none; }
+    .pos-layout[data-step="items"] .pos-col-categories,
+    .pos-layout[data-step="items"] .pos-col-detail,
+    .pos-layout[data-step="items"] .pos-col-cart { display:none; }
+    .pos-layout[data-step="detail"] .pos-col-categories,
+    .pos-layout[data-step="detail"] .pos-col-items,
+    .pos-layout[data-step="detail"] .pos-col-cart { display:none; }
+    .pos-layout[data-step="cart"] .pos-col-categories,
+    .pos-layout[data-step="cart"] .pos-col-items,
+    .pos-layout[data-step="cart"] .pos-col-detail { display:none; }
+    #pos-mobile-cartbar { display:flex; position:fixed; bottom:0; left:0; right:0; background:var(--brand); color:#fff; padding:12px 16px; justify-content:space-between; align-items:center; cursor:pointer; z-index:11; box-shadow:0 -2px 10px rgba(0,0,0,0.15); }
+    #pos-mobile-cartbar span.count { background:#fff; color:var(--brand); border-radius:999px; padding:2px 8px; font-size:0.8rem; margin-right:8px; }
+    .pos-layout[data-step="cart"] #pos-mobile-cartbar { display:none; }
+    .pos-col-cart { padding-bottom:70px; }
+  }
   #member-info { margin-top:10px; font-size:0.88rem; }
   #member-info .member-card { background:#fff8f2; border:1px solid #ffd699; border-radius:8px; padding:10px; }
   #member-info input { padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:0.85rem; margin-right:6px; }
@@ -165,13 +189,15 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 
 <div id="view-pos" class="pos-layout" style="display:none">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
-  <div class="pos-col pos-col-items" id="pos-col-items">
-    <div class="pos-detail-empty">請從左側選擇分類</div>
+  <div class="pos-col pos-col-items">
+    <button type="button" class="pos-back-btn" onclick="setPosStep('categories')">← 分類</button>
+    <div id="pos-col-items"><div class="pos-detail-empty">請從左側選擇分類</div></div>
   </div>
   <div class="pos-col pos-col-detail" id="pos-col-detail">
     <div class="pos-detail-empty">請選擇品項</div>
   </div>
   <div class="pos-col pos-col-cart">
+    <button type="button" class="pos-back-btn" onclick="setPosStep('items')">← 返回點餐</button>
     <div class="pos-col-title">會員</div>
     <div class="row">
       <input type="tel" id="member-phone-input" placeholder="客人電話" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
@@ -201,6 +227,11 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </div>
 
     <button class="btn btn-primary" id="pos-checkout-btn" style="width:100%;padding:12px;margin-top:10px;" onclick="showPosCheckout()">結帳</button>
+  </div>
+
+  <div id="pos-mobile-cartbar" onclick="setPosStep('cart')">
+    <div><span class="count" id="pos-mobile-cart-count">0</span>目前訂單</div>
+    <strong id="pos-mobile-cart-total">$0</strong>
   </div>
 </div>
 
@@ -604,6 +635,21 @@ function renderPosMenu() {
     catCol.appendChild(btn);
   });
   if (cats.length) goToPosCategory(0);
+  setPosStep('categories'); // 手機直向初始畫面固定停在分類清單，不要一開始就跳到品項
+}
+
+// 手機直向螢幕太窄，四欄擠不下，改成一次只顯示一層（分類/品項/客製化/訂單），
+// 平板橫屏(寬螢幕)則由CSS media query忽略data-step、四欄照常並排顯示
+function setPosStep(step) {
+  document.querySelector('.pos-layout').dataset.step = step;
+  updateMobileCartBar();
+}
+
+function updateMobileCartBar() {
+  const count = posCart.reduce((s, c) => s + c.qty, 0);
+  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
+  document.getElementById('pos-mobile-cart-count').textContent = count;
+  document.getElementById('pos-mobile-cart-total').textContent = '$' + total;
 }
 
 function goToPosCategory(i) {
@@ -613,6 +659,7 @@ function goToPosCategory(i) {
   const cat = Object.keys(CATALOG)[i];
   const itemsCol = document.getElementById('pos-col-items');
   itemsCol.innerHTML = '';
+  setPosStep('items');
 
   const catNote = CATALOG[cat][0] && CATALOG[cat][0].note;
   if (catNote) {
@@ -738,6 +785,7 @@ function openPosItemModal(cat, key, item) {
   }
 
   updatePosItemModalTotal();
+  setPosStep('detail');
 }
 
 function renderPosOptionGroup(container, gKey) {
@@ -953,6 +1001,7 @@ function closePosItemModal() {
   document.querySelectorAll('.pos-grid-card').forEach(c => c.classList.remove('active'));
   document.getElementById('pos-col-detail').innerHTML = '<div class="pos-detail-empty">請選擇品項</div>';
   currentPosModal = null;
+  setPosStep('items');
 }
 
 function confirmAddToPosCart() {
@@ -1039,6 +1088,7 @@ function renderPosCart() {
   });
   const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
   document.getElementById('pos-cart-total').textContent = '$' + total;
+  updateMobileCartBar();
 }
 
 function changePosQty(lineKey, delta) {
@@ -1071,6 +1121,7 @@ function closePosCartAll() {
   selectedMember = null;
   document.getElementById('pos-confirm-panel').style.display = 'none';
   document.getElementById('pos-checkout-btn').style.display = 'block';
+  setPosStep('categories');
 }
 
 function submitPosOrder() {
