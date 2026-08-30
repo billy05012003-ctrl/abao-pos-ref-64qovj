@@ -5,12 +5,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>美寶美食館 雲端平板（店家端）</title>
 <style>
-  :root { --brand: #e8632c; --bg: #f5f5f5; }
+  :root { --brand: #e8632c; --bg: #f5f5f5; --muted: #888; --border: #eee0d4; --card: #fff; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family:-apple-system,"Microsoft JhengHei",sans-serif; background:var(--bg); color:#222; }
+  body { margin:0; font-family:-apple-system,"Microsoft JhengHei",sans-serif; background:var(--bg); color:#222; padding-bottom:90px; }
   header { background:var(--brand); color:#fff; padding:16px; }
   header h1 { margin:0; font-size:1.2rem; }
   header .sub { font-size:0.85rem; opacity:0.9; margin-top:2px; }
+  .tabbar { display:flex; background:#fff; border-bottom:1px solid #eee; position:sticky; top:0; z-index:15; }
+  .tabbar button { flex:1; border:none; background:none; padding:12px; font-size:0.95rem; font-weight:600; color:#888; cursor:pointer; border-bottom:3px solid transparent; }
+  .tabbar button.active { color:var(--brand); border-bottom-color:var(--brand); }
+  /* ---- POS功能區塊樣式（比照線上點餐頁的點餐/購物車/彈窗排版） ---- */
+  #pos-tabs { display:flex; overflow-x:auto; gap:6px; padding:10px 0; -webkit-overflow-scrolling:touch; }
+  #pos-tabs button { flex:none; border:1px solid var(--border); background:#fff; color:#222; padding:6px 12px; border-radius:999px; font-size:0.8rem; cursor:pointer; white-space:nowrap; }
+  #pos-tabs button.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .pos-category h3 { font-size:0.95rem; margin:14px 0 8px; padding-bottom:6px; border-bottom:2px solid var(--brand); display:inline-block; }
+  .pos-item { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .pos-item .info { flex:1; min-width:0; }
+  .pos-item .name { font-size:0.92rem; }
+  .pos-item .price { font-size:0.85rem; color:var(--muted); margin-top:2px; }
+  .pos-item button.add { background:var(--brand); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:0.78rem; cursor:pointer; flex-shrink:0; }
+  #pos-cart-bar { position:fixed; bottom:0; left:0; right:0; background:var(--brand); color:#fff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; box-shadow:0 -2px 10px rgba(0,0,0,0.15); z-index:12; }
+  #pos-cart-bar span.count { background:#fff; color:var(--brand); border-radius:999px; padding:2px 8px; font-size:0.8rem; margin-right:8px; }
+  .pos-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:20; align-items:flex-end; justify-content:center; }
+  .pos-overlay.open { display:flex; }
+  #pos-drink-overlay { z-index:25; }
+  .pos-sheet { background:#fff; width:100%; max-width:640px; max-height:85vh; overflow-y:auto; border-radius:16px 16px 0 0; padding:16px; }
+  .pos-cart-line { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+  .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:26px; height:26px; border-radius:6px; font-size:1rem; cursor:pointer; }
+  .pos-cart-total { display:flex; justify-content:space-between; font-size:1.1rem; font-weight:bold; padding:12px 0; }
+  .pos-size-select { font-size:0.78rem; margin-top:4px; }
+  .pos-size-select label { margin-right:6px; cursor:pointer; }
+  .pos-empty-cart { color:var(--muted); text-align:center; padding:20px 0; }
+  #member-info { margin-top:10px; font-size:0.88rem; }
+  #member-info .member-card { background:#fff8f2; border:1px solid #ffd699; border-radius:8px; padding:10px; }
+  #member-info input { padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:0.85rem; margin-right:6px; }
   .status-banner { padding:10px 16px; font-size:0.9rem; font-weight:600; text-align:center; }
   .status-ok { background:#e6f4ea; color:#1e7b34; }
   .status-busy { background:#fff4e0; color:#a3620a; }
@@ -84,6 +112,12 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   <h1>A-Bao溪湖培英店</h1>
   <div class="sub">雲端平板（店家端，非顧客點餐頁）</div>
 </header>
+<div class="tabbar">
+  <button id="tabbar-btn-tablet" class="active" onclick="switchTab('tablet')">雲端平板</button>
+  <button id="tabbar-btn-pos" onclick="switchTab('pos')">POS功能</button>
+</div>
+
+<div id="view-tablet">
 <div id="status-banner" class="status-banner status-ok">載入中...</div>
 
 <section>
@@ -121,6 +155,92 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   <h2>品項上下架管理</h2>
   <div id="items-list"><div class="empty-hint">載入中...</div></div>
 </section>
+</div>
+
+<div id="view-pos" style="display:none">
+  <section>
+    <h2>會員查詢/註冊</h2>
+    <div class="row">
+      <input type="tel" id="member-phone-input" placeholder="輸入客人電話">
+      <button class="btn btn-primary" onclick="lookupMember()">查詢</button>
+    </div>
+    <div id="member-info"></div>
+  </section>
+
+  <section>
+    <h2>現場點餐</h2>
+    <div id="pos-tabs"></div>
+    <div id="pos-menu"></div>
+  </section>
+</div>
+
+<div id="pos-cart-bar" style="display:none" onclick="openPosCart()">
+  <div><span class="count" id="pos-cart-count">0</span>查看訂單</div>
+  <strong id="pos-cart-total-bar">$0</strong>
+</div>
+
+<div class="pos-overlay" id="pos-item-overlay">
+  <div class="pos-sheet">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button type="button" onclick="closePosItemModal()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <h2 id="pos-item-modal-title" style="margin:0; flex:1; font-size:1rem;"></h2>
+    </div>
+    <div id="pos-item-modal-size"></div>
+    <div id="pos-item-modal-groups"></div>
+    <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填）</label>
+    <textarea id="pos-item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem;" maxlength="100" placeholder="例如：不要洋蔥"></textarea>
+    <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:14px;">
+      <button type="button" class="qty-btn" onclick="posItemModalQty(-1)" style="width:34px;height:34px;font-size:1.2rem;">-</button>
+      <span id="pos-item-modal-qty" style="font-size:1.1rem; min-width:20px; text-align:center;">1</span>
+      <button type="button" class="qty-btn" onclick="posItemModalQty(1)" style="width:34px;height:34px;font-size:1.2rem;">+</button>
+    </div>
+    <button class="btn-primary" style="width:100%;margin-top:12px;padding:12px;" onclick="confirmAddToPosCart()">新增至購物車　<span id="pos-item-modal-total"></span></button>
+  </div>
+</div>
+
+<div class="pos-overlay" id="pos-drink-overlay">
+  <div class="pos-sheet">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button type="button" onclick="cancelPosDrinkCustom()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <h2 id="pos-drink-modal-title" style="margin:0; flex:1; font-size:1rem;"></h2>
+    </div>
+    <div id="pos-drink-modal-body"></div>
+    <button class="btn-primary" style="width:100%;margin-top:8px;padding:12px;" onclick="confirmPosDrinkCustom()">確定</button>
+  </div>
+</div>
+
+<div class="pos-overlay" id="pos-cart-overlay">
+  <div class="pos-sheet">
+    <div id="pos-cart-view">
+      <h2>現場訂單</h2>
+      <div id="pos-cart-lines"></div>
+      <div class="pos-cart-total"><span>總計</span><span id="pos-cart-total">$0</span></div>
+      <button class="btn-primary" style="width:100%;padding:12px;" onclick="showPosCheckout()">結帳</button>
+      <button class="btn-secondary" style="width:100%;padding:12px;margin-top:8px;background:#fff;border:1px solid var(--brand);color:var(--brand);border-radius:8px;" onclick="closePosCart()">繼續點餐</button>
+    </div>
+
+    <div id="pos-checkout-view" style="display:none">
+      <h2>結帳</h2>
+      <div id="pos-checkout-member" style="font-size:0.9rem;margin-bottom:10px;"></div>
+      <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">付款方式</label>
+      <select id="pos-payment-method" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;">
+        <option value="LinePay現場">LinePay現場</option>
+        <option value="現金">現金</option>
+        <option value="其他">其他</option>
+      </select>
+      <div class="pos-cart-total"><span>應收金額</span><span id="pos-checkout-total">$0</span></div>
+      <button class="btn-primary" style="width:100%;padding:12px;" onclick="submitPosOrder()">確認結帳</button>
+      <button class="btn-secondary" style="width:100%;padding:12px;margin-top:8px;background:#fff;border:1px solid var(--brand);color:var(--brand);border-radius:8px;" onclick="backToPosCart()">返回訂單</button>
+    </div>
+
+    <div id="pos-confirm-view" style="display:none; text-align:center; padding:10px 0;">
+      <h2>結帳完成</h2>
+      <div style="font-size:1.4rem; font-weight:bold; color:var(--brand); margin:12px 0;" id="pos-confirm-order-no"></div>
+      <p id="pos-confirm-points" style="color:#888; font-size:0.9rem;"></p>
+      <button class="btn-primary" style="width:100%;padding:12px;" onclick="closePosCartAll()">完成，關閉視窗</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
@@ -250,6 +370,757 @@ function onItemStatusChange(name, status) {
 loadStoreStatus();
 loadRevenue();
 loadOrders();
+
+// ---------------------------------------------------------------
+// POS功能：頂層分頁切換
+// ---------------------------------------------------------------
+let posMenuRendered = false;
+function switchTab(name) {
+  document.getElementById('view-tablet').style.display = name === 'tablet' ? 'block' : 'none';
+  document.getElementById('view-pos').style.display = name === 'pos' ? 'block' : 'none';
+  document.getElementById('pos-cart-bar').style.display = name === 'pos' ? 'flex' : 'none';
+  document.getElementById('tabbar-btn-tablet').classList.toggle('active', name === 'tablet');
+  document.getElementById('tabbar-btn-pos').classList.toggle('active', name === 'pos');
+  if (name === 'pos' && !posMenuRendered) { renderPosMenu(); posMenuRendered = true; }
+}
+
+// ---------------------------------------------------------------
+// POS功能：會員查詢/註冊
+// ---------------------------------------------------------------
+let selectedMember = null;
+const MEMBER_TIER_MULTIPLIER = { '一般會員': 1, '銅寶': 1, '銀寶': 2, '金寶': 3 };
+
+function lookupMember() {
+  const phone = document.getElementById('member-phone-input').value.trim();
+  if (!phone) return;
+  const el = document.getElementById('member-info');
+  el.textContent = '查詢中...';
+  apiGet({ action: 'getMember', phone: phone }).then(data => {
+    if (data.status === 'ok') {
+      selectedMember = data.member;
+      el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div>`;
+    } else if (data.status === 'not_found') {
+      selectedMember = null;
+      el.innerHTML = `
+        <div>查無此會員，是否建立新會員？</div>
+        <div class="row" style="margin-top:6px;">
+          <input type="text" id="member-new-name" placeholder="姓名">
+          <input type="text" id="member-new-birthday" placeholder="生日(選填)">
+          <button class="btn btn-primary" onclick="registerMember('${phone}')">建立</button>
+        </div>`;
+    } else {
+      selectedMember = null;
+      el.textContent = data.message || '查詢失敗';
+    }
+  });
+}
+
+function registerMember(phone) {
+  const name = document.getElementById('member-new-name').value.trim();
+  const birthday = document.getElementById('member-new-birthday').value.trim();
+  if (!name) { alert('請輸入姓名'); return; }
+  apiPost({ action: 'registerMember', phone: phone, name: name, birthday: birthday }).then(data => {
+    if (data.status === 'ok') {
+      selectedMember = data.member;
+      document.getElementById('member-info').innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $0　累計點數 0</div>`;
+    } else {
+      alert(data.message || '建立失敗');
+    }
+  });
+}
+
+// ---------------------------------------------------------------
+// POS功能：現場點餐 — 菜單/客製化資料直接複製自線上點餐系統_美寶美食館2026.html（現行菜單版），
+// 專案無build流程可共用資料，日後菜單異動這裡也要跟著改
+// ---------------------------------------------------------------
+const CATALOG = {"美式狂想套餐 SET MEALS ($129)": [{"name": "美式狂想套餐", "price": 129, "note": "主餐+薯餅+$25飲品乙杯"}], "PRIVATE FRIED NOODLES_私房炒麵系列": [{"name": "培根炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "香雞炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "烤肉炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "日式豬排炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "日式雞排炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "德式燻腸炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "泡菜燒肉炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "A-BAO SELECTED SET_A-bao嚴選定食": [{"name": "定01 炒麵加蛋＋鍋貼", "price": 97, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定02 美式湯餃＋烤肉蛋漢堡", "price": 129, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定03 炒麵加蛋＋雞塊", "price": 95, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定04 烤肉炒麵＋鍋貼", "price": 112, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯", "price": 119, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定06 玉米起司特酥蛋餅＋米花雞球", "price": 112, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定07 烤肉蛋漢堡＋鍋貼", "price": 105, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定08 烤肉炒麵＋黃金香酥雞", "price": 124, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定09 炒麵加蛋＋黃金香酥雞", "price": 109, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定10 烤肉炒麵＋米花雞球", "price": 115, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定11 美式湯餃＋雞塊", "price": 113, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定12 玉米起司特酥蛋餅＋鍋貼", "price": 105, "note": "套餐均附 $25 飲品乙杯"}], "KIMCHI FESTIVAL_泡菜祭": [{"name": "泡菜燒肉異國炒麵", "price": 80}, {"name": "泡菜豬排蛋堡", "price": 85}, {"name": "泡菜雞排捲", "price": 80}, {"name": "泡菜蛋餅", "price": 50}], "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡": [{"name": "韓風玫瑰醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "經典赤辣醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "蜂蜜芥末醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配": [{"name": "玉米起司", "price": 55, "price_set": 104, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "鮪魚玉米", "price": 65, "price_set": 114, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "鮪魚洋蔥", "price": 65, "price_set": 114, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "培根玉米起司", "price": 70, "price_set": 119, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "惡魔雙色拔絲", "price": 60, "price_set": 109, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿肉鬆蔬食", "price": 70, "price_set": 119, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿起司 佐花醬小黃瓜", "price": 60, "price_set": 109, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "和洋豬排蔬食", "price": 75, "price_set": 124, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "BURGERS_漢堡": [{"name": "玉米蛋", "price": 35}, {"name": "肉鬆蛋", "price": 35}, {"name": "豬肉蛋 (漢堡肉)", "price": 40}, {"name": "烤肉蛋 (里肌肉)", "price": 50}, {"name": "香雞蛋", "price": 45}, {"name": "牛肉蛋", "price": 45}, {"name": "總匯蛋 (里肌肉)", "price": 55}, {"name": "日式雞排蛋", "price": 55}, {"name": "日式豬排蛋", "price": 55}, {"name": "日式花枝排蛋", "price": 55}, {"name": "日式蝦排蛋", "price": 55}, {"name": "雞腿蛋 (原/辣)", "price": 60}], "TOAST_土司": [{"name": "煎蛋", "price": 30}, {"name": "玉米蛋", "price": 35}, {"name": "肉鬆蛋", "price": 35}, {"name": "起司蛋", "price": 35}, {"name": "火腿蛋", "price": 40}, {"name": "培根蛋", "price": 40}, {"name": "鮪魚蛋", "price": 45}, {"name": "烤肉蛋 (里肌肉)", "price": 50}, {"name": "香雞蛋", "price": 45}, {"name": "總匯蛋 (漢堡肉)", "price": 55}, {"name": "雞腿蛋 (原/辣)", "price": 60}], "JAN SERIES_果醬磚研系列": [{"name": "草莓", "price": 25}, {"name": "藍莓", "price": 25}, {"name": "奶酥", "price": 25}, {"name": "花生", "price": 25}, {"name": "奶油", "price": 25}, {"name": "巧克力", "price": 25}, {"name": "狠蒜", "price": 35}], "THICKCUT TOAST_厚片": [{"name": "起司奶油", "price": 35}, {"name": "鮪魚洋蔥", "price": 45}, {"name": "燻雞起司", "price": 50}], "CEREAL GRAIN BURGERS_日式穀堡": [{"name": "日式蔬食沙拉", "price": 40}, {"name": "日式咖哩", "price": 40}, {"name": "冰州魚排", "price": 55}, {"name": "大洋鮮魚", "price": 55}, {"name": "烤肉穀堡", "price": 55}, {"name": "孜然醬雞排", "price": 55}, {"name": "孜然醬豬排", "price": 55}], "SOFT FRENCH BREAD_法國麵包 ": [{"name": "火腿起司", "price": 50}, {"name": "蕃茄豬肉", "price": 50}, {"name": "苜蓿芽起司", "price": 50}, {"name": "陽光香雞", "price": 50}, {"name": "蔬食烤肉", "price": 60}, {"name": "日式燻雞", "price": 65}], "BURRITO_蔬食捲餅": [{"name": "香雞蕃茄", "price": 45}, {"name": "黃金烤肉", "price": 55}, {"name": "日式雞排", "price": 60}, {"name": "海味花枝", "price": 60}, {"name": "鮮味蝦排", "price": 60}, {"name": "美式雞腿 (原/辣)", "price": 65}], "PUFF PASTRY_起酥堡": [{"name": "草莓起酥", "price": 35}, {"name": "洋芋蔬食", "price": 40}, {"name": "苜蓿芽玉米", "price": 40}, {"name": "蕃茄蔬食", "price": 40}, {"name": "蔬食烤肉", "price": 55}], "PAIN PERDU_法國土司 ": [{"name": "日式培根", "price": 40}, {"name": "深海鮪魚", "price": 45}, {"name": "黃金烤肉", "price": 50}], "CHINESE OMELET_招牌蛋餅": [{"name": "原味", "price": 25}, {"name": "肉鬆", "price": 35}, {"name": "玉米", "price": 35}, {"name": "起司", "price": 35}, {"name": "蔬食", "price": 35}, {"name": "洋蔥", "price": 35}, {"name": "火腿", "price": 40}, {"name": "培根", "price": 40}, {"name": "熱狗", "price": 40}, {"name": "鮪魚", "price": 45}, {"name": "烤肉", "price": 50}], "SALAD VEGETABLE_田園蔬果": [{"name": "馬鈴薯土司", "price": 40}, {"name": "南瓜土司", "price": 40}, {"name": "全麥蔬食鮪魚", "price": 45}, {"name": "全麥苜蓿芽火腿", "price": 45}, {"name": "全麥蔬菜沙拉", "price": 45}, {"name": "田園蔬菜捲", "price": 45}], "CHINESE SNACKS_中式茶食": [{"name": "荷包蛋", "price": 15}, {"name": "熱狗 (4條)", "price": 30}, {"name": "玉米濃湯", "price": 30}, {"name": "炒麵", "price": 35}, {"name": "鍋貼(5個)", "price": 35}, {"name": "雞塊 (4個)", "price": 35}, {"name": "蘿蔔糕 (2片)", "price": 35}, {"name": "薯餅 (4片)", "price": 40}, {"name": "米花雞球 (8個)", "price": 45}, {"name": "野菜豚炸餃(8個)", "price": 45}, {"name": "脆薯", "price": 40}, {"name": "美式湯麵", "price": 45}, {"name": "義響鐵板麵 (紅醬/咖哩)", "price": 50}, {"name": "黃金香酥雞", "price": 50}, {"name": "二折雞翅(3入/7入)", "price": 55, "price_alt": 105}], "FRESH FRUIT TEA_鮮果茶 Cool": [{"name": "檸檬紅茶", "price_m": 40, "price_l": 45}, {"name": "檸檬綠茶", "price_m": 40, "price_l": 45}, {"name": "蜜漬鳳梨紅茶", "price_m": 45, "price_l": 50}], "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ": [{"name": "虎斑黑糖豆漿", "price_m": 35, "price_l": 45}, {"name": "虎斑黑糖薏仁", "price_m": 40, "price_l": 50}, {"name": "虎斑黑糖奶茶", "price_m": 40, "price_l": 50}, {"name": "虎斑黑糖紅茶牛奶", "price_m": 50, "price_l": 60}, {"name": "虎斑黑糖牛奶", "price_m": 65, "price_l": 75}, {"name": "虎斑黑糖檸檬飲", "price_m": 35, "price_l": 45}], "SOYBEAN MILK WITH GRAINS_多穀系列": [{"name": "多穀豆漿", "price_m": 30, "price_l": 40}, {"name": "多穀紅茶", "price_m": 30, "price_l": 40}, {"name": "多穀紅茶豆漿", "price_m": 30, "price_l": 40}, {"name": "多穀奶茶", "price_m": 35, "price_l": 45}, {"name": "多穀綠奶", "price_m": 35, "price_l": 45}, {"name": "多穀薏仁漿", "price_m": 40, "price_l": 50}], "PURE TEA_純味茶": [{"name": "阿薩姆紅茶", "price_m": 20, "price_l": 25}, {"name": "茉莉綠茶", "price_m": 20, "price_l": 25}, {"name": "高山青茶", "price_m": 20, "price_l": 25}, {"name": "東方美人 (現沏)", "price": 35}, {"name": "黃金烏龍 (現沏)", "price": 35}, {"name": "阿里山 (現沏)", "price": 35}, {"name": "玄米玉露 (現沏)", "price": 35}, {"name": "四季綠茶 (現沏)", "price": 35}], "MILK TEA_奶茶系列": [{"name": "阿薩姆奶茶", "price_m": 25, "price_l": 30}, {"name": "茉香奶綠", "price_m": 25, "price_l": 30}, {"name": "高山青奶", "price_m": 25, "price_l": 30}, {"name": "胚芽奶茶", "price_m": 30, "price_l": 35}, {"name": "茶珠青奶", "price_l": 55}, {"name": "茶珠綠奶", "price_l": 55}, {"name": "茶珠奶茶", "price_l": 55}], "SOYBEAN MILK_豆漿系列": [{"name": "研磨豆漿", "price_m": 20, "price_l": 25}, {"name": "紅茶豆漿", "price_m": 20, "price_l": 25}, {"name": "胚芽豆漿", "price_m": 25, "price_l": 30}, {"name": "薏仁豆漿", "price_m": 30, "price_l": 35}, {"name": "抹茶豆漿", "price_m": 30, "price_l": 35}, {"name": "養生薏仁漿", "price_m": 30, "price_l": 35}], "TEA LATTES_茶拿鐵": [{"name": "東方拿鐵", "price_m": 50}, {"name": "烏龍拿鐵", "price_m": 50}, {"name": "阿里山拿鐵", "price_m": 50}, {"name": "四季拿鐵", "price_m": 50}, {"name": "玄米拿鐵", "price_m": 50}, {"name": "紅茶拿鐵", "price_m": 40, "price_l": 50}, {"name": "綠茶拿鐵", "price_m": 40, "price_l": 50}, {"name": "青茶拿鐵", "price_m": 40, "price_l": 50}], "ITALIAN STYLE COFFEE_義式咖啡": [{"name": "豆奶拿鐵", "price_m": 40}, {"name": "特調咖啡", "price_m": 40}, {"name": "義式咖啡", "price_m": 40}, {"name": "小農拿鐵", "price_m": 55}, {"name": "卡布奇諾", "price_m": 55}], "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool": [{"name": "玄米檸檬綠茶", "price_l": 60}, {"name": "鳳梨美人茶", "price_l": 60}, {"name": "檸檬黃金烏龍", "price_l": 60}, {"name": "鳳梨美人鮮奶茶", "price_l": 75}, {"name": "鳳梨烏龍鮮奶茶", "price_l": 75}, {"name": "鳳梨玄米鮮奶綠", "price_l": 75}]};
+
+const OPTION_GROUPS = {
+  bread_sauce: { label: '麵包醬料選擇（可複選）', type: 'multi', options: [
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '不蕃', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  bread_addon: { label: '麵包加料選擇（可複選，額外加價）', type: 'multi', options: [
+    {name: '加起司', price: 10}, {name: '加二片起司', price: 18},
+    {name: '加蛋', price: 15}, {name: '加火腿', price: 15}, {name: '加培根', price: 20}
+  ]},
+  spicy_sauce: { label: '辣醬選擇（可複選）', type: 'multi', options: [{name: '甜辣包', price: 0}, {name: '特辣包', price: 0}] },
+  omelet_choice: { label: '蛋餅選擇', type: 'single', required: true, options: [{name: '一般', price: 0}, {name: '酥皮', price: 5}, {name: '特酥', price: 10}] },
+  omelet_sauce: { label: '蛋餅醬料選擇（可複選）', type: 'multi', options: [{name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}] },
+  omelet_addon: { label: '蛋餅加料選擇（可複選，額外加價）', type: 'multi', options: [
+    {name: '加起司', price: 10}, {name: '加二片起司', price: 18}, {name: '加火腿', price: 15}, {name: '加培根', price: 20}
+  ]},
+  cereal_sauce: { label: '穀堡醬料選擇（可複選）', type: 'multi', options: [
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  frenchbread_sauce: { label: '法包醬料選擇（可複選）', type: 'multi', options: [
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  burrito_sauce: { label: '捲餅醬料選擇（可複選）', type: 'multi', options: [
+    {name: '不菜', price: 0}, {name: '不千', price: 0},
+    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  chicken_flavor: { label: '雞腿口味選擇', type: 'single', required: true, options: [{name: '原味', price: 0}, {name: '辣味', price: 0}] },
+  egg_main_choice: { label: '總匯主食選擇', type: 'single', required: true, options: [{name: '漢堡肉', price: 0}, {name: '里肌肉', price: 10}] },
+  puffpastry_sauce: { label: '起酥醬料選擇（可複選）', type: 'multi', options: [
+    {name: '不菜', price: 0}, {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  tropical_sauce: { label: '熱帶鳳梨雞排堡醬料選擇（可複選）', type: 'multi', options: [
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  painperdu_sauce: { label: '法土醬料選擇（可複選）', type: 'multi', options: [
+    {name: '不沙', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  salad_sauce: { label: '田園蔬果醬料選擇（可複選）', type: 'multi', options: [{name: '不沙', price: 0}] },
+  salad_addon: { label: '加蛋（可複選，額外加價）', type: 'multi', options: [{name: '加蛋', price: 15}] },
+  hotplate_noodle_sauce: { label: '鐵板麵醬料', type: 'single', required: true, options: [{name: '紅醬', price: 0}, {name: '咖哩', price: 0}] },
+  noodle_addon: { label: '私房炒麵加料（可複選，額外加價）', type: 'multi', options: [{name: '加麵', price: 10}, {name: '加蛋', price: 15}, {name: '加起司', price: 10}] },
+  dine_set_addon: { label: '嚴選限定加購（限選一項，一組套餐限加購乙檔）', type: 'single', options: [{name: '薯餅(6入)', price: 50}, {name: '雞塊(6入)', price: 50}, {name: '二折雞翅(3入)', price: 50}] },
+  snack_choice: { label: '點心', type: 'single', required: true, options: [{name: '鍋貼(5個)', price: 0}, {name: '雞塊(4個)', price: 0}] },
+  noodle_snack_choice: { label: '美味加選', type: 'single', required: true, options: [{name: '野菜豚炸餃', price: 0}, {name: '米花雞球', price: 0}] },
+  small_drink: { label: '飲料', type: 'single', required: true, options: [
+    {name: '中杯紅茶', price: 0}, {name: '中杯綠茶', price: 0}, {name: '中杯青茶', price: 0},
+    {name: '大杯紅茶', price: 5}, {name: '大杯綠茶', price: 5}, {name: '大杯青茶', price: 5},
+    {name: '中杯鮮奶茶', price: 20}, {name: '中杯鮮奶綠', price: 20}, {name: '中杯鮮奶青', price: 20},
+    {name: '大杯鮮奶茶', price: 30}, {name: '大杯鮮奶綠', price: 30}, {name: '大杯鮮奶青', price: 30}
+  ]},
+  jam_bread_choice: { label: '果醬麵包選擇', type: 'single', required: true, options: [{name: '土司', price: 0}, {name: '法土', price: 5}, {name: '厚片', price: 5}, {name: '起酥堡', price: 10}] },
+  snacks_sauce: { label: '中式茶食醬料選擇（可複選）', type: 'multi', options: [{name: '不加醬油', price: 0}, {name: '不蕃包', price: 0}, {name: '不胡', price: 0}, {name: '加胡', price: 0}] },
+  soup_portion: { label: '濃湯份量選擇', type: 'single', required: true, options: [{name: '小', price: 0}, {name: '大', price: 10}] },
+  noodle_portion: { label: '炒麵份量選擇', type: 'single', required: true, options: [{name: '小', price: 0}, {name: '大', price: 10}] },
+  ice_level: { label: '冰量選擇', type: 'single', required: true, options: [
+    {name: '正常冰', price: 0}, {name: '少冰', price: 0}, {name: '微冰', price: 0}, {name: '小碎冰', price: 0}
+  ]},
+  sweetness: { label: '甜度選擇', type: 'single', required: true, options: [
+    {name: '正常糖', price: 0}, {name: '半糖', price: 0}, {name: '微糖', price: 0}, {name: '無糖', price: 0}
+  ]},
+  temperature_choice: { label: '溫度選擇', type: 'single', required: true, options: [
+    {name: '正常冰', price: 0}, {name: '少冰', price: 0}, {name: '微冰', price: 0}, {name: '小碎冰', price: 0},
+    {name: '溫', price: 0}, {name: '熱', price: 0}
+  ]},
+  brown_sugar_sweetness: { label: '黑糖甜度選擇', type: 'single', required: true, options: [{name: '正常糖', price: 0}, {name: '減黑糖', price: 0}] },
+  coffee_strength: { label: '咖啡濃度選擇', type: 'single', options: [{name: '加一份Espresso', price: 20}, {name: '加二份Espresso', price: 40}] },
+  drink_topping: { label: '飲品配料選擇（可複選，依尺寸加價）', type: 'multi', options: [
+    {name: '茶珠', priceL: 25}, {name: '多穀', priceM: 10, priceL: 15},
+    {name: '抹茶', priceM: 10, priceL: 10}, {name: '胚芽', priceM: 5, priceL: 10}
+  ]},
+  fruit_tea_sweetness: { label: '果汁甜度選擇', type: 'single', required: true, options: [{name: '正常糖', price: 0}, {name: '半糖', price: 0}] },
+  combo_main: { label: '主餐', type: 'single', required: true, options: [
+    {name: '美1 花醬 牛肉培根 起司蛋堡', price: 0}, {name: '美2 蜂蜜芥末 德式燻腸 捲餅', price: 0},
+    {name: '美3 日式白醬 酥炸魚排 蛋堡', price: 0}, {name: '美4 雙層澳洲牛肉 起司蛋堡', price: 0},
+    {name: '美5 雙層豬肉 起司蛋堡', price: 0}, {name: '美6 清爽薯泥培根 起司蛋堡', price: 0},
+    {name: '美7 泰式風味 鮮魚 起司蛋堡', price: 0}, {name: '美8 日式咖哩 豬排 起司蛋堡', price: 0},
+    {name: '美9 香濃雞排 起司法國土司', price: 0}, {name: '美10 美味豬排 起司蛋總匯土司', price: 0},
+    {name: '美11 千島醬 薯泥雞排 起司蛋土司', price: 0}, {name: '美12 甜辣泰式 雞排 起司蛋捲餅', price: 0}
+  ]},
+  combo_fries: { label: '薯餅', type: 'single', required: true, options: [{name: '薯餅(4片)', price: 0}] },
+  combo_sauce: { label: '美式狂想醬料選擇（可複選）', type: 'multi', options: [
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '不蕃', price: 0},
+    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  deluxe_upgrade: { label: '豪華經濟升級餐（限選一項，加購）', type: 'single', options: [
+    {name: '美式狂想 x 雙人脆薯', price: 70}, {name: '美式狂想 x 九塊雞塊', price: 70}, {name: '美式狂想 x 十粒鍋貼', price: 60}
+  ]}
+};
+
+const DRINK_FAMILY = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
+  'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
+  'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
+const SET_MEAL_CATEGORY = '美式狂想套餐 SET MEALS ($129)';
+function shortCatName(cat) {
+  if (cat === SET_MEAL_CATEGORY) return '美式狂想套餐';
+  return cat.split('_').pop().split('（')[0].trim();
+}
+const SET_BUNDLE_EXTRAS = {
+  'TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡': ['small_drink'],
+  'CRISPY OMELETTE SERIES_特酥系列 x 超值自由配': ['snack_choice', 'small_drink'],
+  'PRIVATE FRIED NOODLES_私房炒麵系列': ['noodle_snack_choice', 'small_drink']
+};
+const SET_BUNDLE_CATEGORIES = Object.keys(SET_BUNDLE_EXTRAS);
+
+const COMBO_DRINK_PRICES = {};
+const DRINK_ITEM_CATEGORY = {};
+function buildComboDrinkOptions() {
+  const opts = [];
+  DRINK_FAMILY.forEach(cat => {
+    (CATALOG[cat] || []).forEach(item => {
+      const m = item.price_m != null ? Math.max(0, item.price_m - 25) : null;
+      const l = item.price_l != null ? Math.max(0, item.price_l - 25) : null;
+      const single = (m == null && l == null && item.price != null) ? Math.max(0, item.price - 25) : null;
+      COMBO_DRINK_PRICES[item.name] = {m, l, single};
+      DRINK_ITEM_CATEGORY[item.name] = cat;
+      opts.push({name: item.name, price: 0});
+    });
+  });
+  return opts;
+}
+OPTION_GROUPS.combo_drink = {label: '飲料', type: 'single', required: true, options: buildComboDrinkOptions()};
+
+const CATEGORY_GROUPS = {
+  'BURGERS_漢堡': ['bread_sauce', 'bread_addon', 'spicy_sauce'],
+  'TOAST_土司': ['bread_sauce', 'bread_addon', 'spicy_sauce'],
+  'CHINESE OMELET_招牌蛋餅': ['omelet_choice', 'omelet_sauce', 'omelet_addon', 'spicy_sauce'],
+  'CEREAL GRAIN BURGERS_日式穀堡': ['cereal_sauce', 'salad_addon', 'spicy_sauce'],
+  'SOFT FRENCH BREAD_法國麵包 ': ['frenchbread_sauce', 'salad_addon', 'spicy_sauce'],
+  'BURRITO_蔬食捲餅': ['burrito_sauce', 'salad_addon', 'spicy_sauce'],
+  'PUFF PASTRY_起酥堡': ['puffpastry_sauce', 'salad_addon', 'spicy_sauce'],
+  'PAIN PERDU_法國土司 ': ['painperdu_sauce', 'spicy_sauce'],
+  'SALAD VEGETABLE_田園蔬果': ['salad_addon', 'salad_sauce', 'spicy_sauce'],
+  'CHINESE SNACKS_中式茶食': ['snacks_sauce', 'salad_addon', 'spicy_sauce'],
+  'JAN SERIES_果醬磚研系列': ['jam_bread_choice'],
+  'PRIVATE FRIED NOODLES_私房炒麵系列': ['noodle_addon', 'spicy_sauce'],
+  'A-BAO SELECTED SET_A-bao嚴選定食': ['combo_drink', 'dine_set_addon', 'spicy_sauce'],
+  'KIMCHI FESTIVAL_泡菜祭': [],
+  'CRISPY OMELETTE SERIES_特酥系列 x 超值自由配': ['omelet_sauce', 'omelet_addon'],
+  'TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡': ['tropical_sauce', 'bread_addon'],
+  'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ': ['temperature_choice', 'brown_sugar_sweetness', 'drink_topping'],
+  'FRESH FRUIT TEA_鮮果茶 Cool': ['ice_level', 'fruit_tea_sweetness'],
+  'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool': ['ice_level', 'fruit_tea_sweetness'],
+  'SOYBEAN MILK WITH GRAINS_多穀系列': ['temperature_choice', 'sweetness'],
+  'SOYBEAN MILK_豆漿系列': ['temperature_choice', 'sweetness', 'drink_topping'],
+  'PURE TEA_純味茶': ['temperature_choice', 'sweetness', 'drink_topping'],
+  'TEA LATTES_茶拿鐵': ['temperature_choice', 'sweetness', 'drink_topping'],
+  'MILK TEA_奶茶系列': ['temperature_choice', 'sweetness', 'drink_topping'],
+  'ITALIAN STYLE COFFEE_義式咖啡': ['temperature_choice', 'sweetness', 'coffee_strength']
+};
+
+const ITEM_SPECIFIC_GROUPS = {
+  '玉米濃湯': ['soup_portion'],
+  '炒麵': ['noodle_portion'],
+  '泡菜蛋餅': ['omelet_choice'],
+  '美式雞腿 (原/辣)': ['chicken_flavor'],
+  '雞腿蛋 (原/辣)': ['chicken_flavor'],
+  '定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯': ['chicken_flavor', 'soup_portion'],
+  '義響鐵板麵 (紅醬/咖哩)': ['hotplate_noodle_sauce'],
+  '定01 炒麵加蛋＋鍋貼': ['noodle_portion'],
+  '定03 炒麵加蛋＋雞塊': ['noodle_portion'],
+  '定09 炒麵加蛋＋黃金香酥雞': ['noodle_portion'],
+  '定04 烤肉炒麵＋鍋貼': ['noodle_addon'],
+  '定08 烤肉炒麵＋黃金香酥雞': ['noodle_addon'],
+  '定10 烤肉炒麵＋米花雞球': ['noodle_addon'],
+  '總匯蛋 (漢堡肉)': ['egg_main_choice']
+};
+
+function groupsForCategory(cat, itemName) {
+  if (cat === SET_MEAL_CATEGORY) return ['combo_main', 'combo_fries', 'combo_drink', 'combo_sauce', 'bread_addon', 'deluxe_upgrade'];
+  const base = CATEGORY_GROUPS[cat] || (DRINK_FAMILY.includes(cat) ? ['ice_level', 'sweetness'] : []);
+  const extra = itemName && ITEM_SPECIFIC_GROUPS[itemName] ? ITEM_SPECIFIC_GROUPS[itemName] : [];
+  return [...extra, ...base];
+}
+function drinkGroupsFor(drinkName) {
+  const cat = DRINK_ITEM_CATEGORY[drinkName];
+  return CATEGORY_GROUPS[cat] || ['ice_level', 'sweetness'];
+}
+
+let posCart = [];
+let currentPosModal = null;
+
+function renderPosMenu() {
+  const tabs = document.getElementById('pos-tabs');
+  const menu = document.getElementById('pos-menu');
+  const cats = Object.keys(CATALOG);
+  cats.forEach((cat, i) => {
+    const shortName = shortCatName(cat);
+    const btn = document.createElement('button');
+    btn.id = 'pos-tab-btn-' + i;
+    btn.textContent = shortName;
+    btn.className = i === 0 ? 'active' : '';
+    btn.onclick = () => goToPosCategory(i);
+    tabs.appendChild(btn);
+
+    const section = document.createElement('div');
+    section.className = 'pos-category';
+    section.id = 'pos-cat-' + i;
+    const h3 = document.createElement('h3');
+    h3.textContent = cat.split('_').pop();
+    section.appendChild(h3);
+    const catNote = CATALOG[cat][0] && CATALOG[cat][0].note;
+    if (catNote) {
+      const noteEl = document.createElement('div');
+      noteEl.style.cssText = 'font-size:0.78rem;color:var(--muted);margin:-4px 0 10px;';
+      noteEl.innerHTML = catNote;
+      section.appendChild(noteEl);
+    }
+    CATALOG[cat].forEach((item, j) => {
+      const div = document.createElement('div');
+      div.className = 'pos-item';
+      const key = 'c' + i + '_i' + j;
+      let priceLabel = '';
+      if (item.price_m && item.price_l) priceLabel = `M $${item.price_m} / L $${item.price_l}`;
+      else if (item.price_m) priceLabel = `限M $${item.price_m}`;
+      else if (item.price_l) priceLabel = `限L $${item.price_l}`;
+      else if (item.price_alt) priceLabel = `$${item.price} / $${item.price_alt}`;
+      else if (item.price_set) priceLabel = `單點 $${item.price} / 套餐 $${item.price_set}`;
+      else priceLabel = `$${item.price}`;
+      div.innerHTML = `
+        <div class="info">
+          <div class="name">${item.name}</div>
+          <div class="price">${priceLabel}</div>
+        </div>
+        <button class="add">加入</button>
+      `;
+      div.querySelector('.add').onclick = () => openPosItemModal(cat, key, item);
+      section.appendChild(div);
+    });
+    menu.appendChild(section);
+  });
+}
+
+function goToPosCategory(i) {
+  document.querySelectorAll('#pos-tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('pos-tab-btn-' + i).classList.add('active');
+  document.getElementById('pos-cat-' + i).scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+function openPosItemModal(cat, key, item) {
+  let size = null, price = item.price;
+  if (item.price_m && item.price_l) { size = 'M'; price = item.price_m; }
+  else if (item.price_m) { size = 'M'; price = item.price_m; }
+  else if (item.price_l) { size = 'L'; price = item.price_l; }
+
+  currentPosModal = {cat, key, item, size, basePrice: price, groups: {}, qty: 1, comboDrinkName: null, comboDrinkSize: null, comboDrinkPrice: 0};
+
+  document.getElementById('pos-item-modal-title').textContent = item.name;
+  document.getElementById('pos-item-modal-note').value = '';
+  document.getElementById('pos-item-modal-qty').textContent = '1';
+
+  const sizeEl = document.getElementById('pos-item-modal-size');
+  sizeEl.innerHTML = '';
+  if (item.price_m && item.price_l) {
+    sizeEl.innerHTML = `
+      <div class="pos-size-select">
+        <label><input type="radio" name="pos-size" value="M" autocomplete="off" checked> M $${item.price_m}</label>
+        <label><input type="radio" name="pos-size" value="L" autocomplete="off"> L $${item.price_l}</label>
+      </div>`;
+    sizeEl.querySelectorAll('input[name="pos-size"]').forEach(r => r.onchange = (e) => {
+      currentPosModal.size = e.target.value;
+      currentPosModal.basePrice = e.target.value === 'M' ? item.price_m : item.price_l;
+      refreshPosDrinkToppingIfPresent();
+      updatePosItemModalTotal();
+    });
+  } else if (item.price_m || item.price_l) {
+    const onlySize = item.price_m ? 'M' : 'L';
+    sizeEl.innerHTML = `<div style="font-size:0.8rem;color:var(--muted);">限${onlySize} $${item.price_m || item.price_l}</div>`;
+  } else if (item.price_alt) {
+    const m = item.name.match(/\(([^\/]+)\/([^)]+)\)/);
+    const label1 = m ? m[1] : '份量1', label2 = m ? m[2] : '份量2';
+    sizeEl.innerHTML = `
+      <div class="pos-size-select">
+        <div style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;">份量</div>
+        <label><input type="radio" name="pos-qty" value="a" autocomplete="off" checked> ${label1} $${item.price}</label>
+        <label><input type="radio" name="pos-qty" value="b" autocomplete="off"> ${label2} $${item.price_alt}</label>
+      </div>`;
+    sizeEl.querySelectorAll('input[name="pos-qty"]').forEach(r => r.onchange = (e) => {
+      currentPosModal.basePrice = e.target.value === 'a' ? item.price : item.price_alt;
+      updatePosItemModalTotal();
+    });
+  } else if (item.price_set) {
+    sizeEl.innerHTML = `
+      <div class="pos-size-select">
+        <label><input type="radio" name="pos-setform" value="single" autocomplete="off" checked> 單點 $${item.price}</label>
+        <label><input type="radio" name="pos-setform" value="set" autocomplete="off"> 套餐 $${item.price_set}</label>
+      </div>`;
+    sizeEl.querySelectorAll('input[name="pos-setform"]').forEach(r => r.onchange = (e) => {
+      currentPosModal.basePrice = e.target.value === 'set' ? item.price_set : item.price;
+      updatePosItemModalTotal();
+    });
+  }
+
+  const groupsEl = document.getElementById('pos-item-modal-groups');
+  groupsEl.innerHTML = '';
+  groupsForCategory(cat, item.name).forEach(gKey => renderPosOptionGroup(groupsEl, gKey));
+
+  if (item.price_set && SET_BUNDLE_CATEGORIES.includes(cat)) {
+    const comboExtraEl = document.createElement('div');
+    comboExtraEl.id = 'pos-combo-extra-groups';
+    groupsEl.appendChild(comboExtraEl);
+    const renderBundleExtras = () => {
+      comboExtraEl.innerHTML = '';
+      SET_BUNDLE_EXTRAS[cat].forEach(gk => delete currentPosModal.groups[gk]);
+      if (currentPosModal.basePrice === item.price_set) {
+        SET_BUNDLE_EXTRAS[cat].forEach(gk => renderPosOptionGroup(comboExtraEl, gk));
+      }
+      updatePosItemModalTotal();
+    };
+    sizeEl.querySelectorAll('input[name="pos-setform"]').forEach(r => r.addEventListener('change', renderBundleExtras));
+  }
+
+  updatePosItemModalTotal();
+  document.getElementById('pos-item-overlay').classList.add('open');
+}
+
+function renderPosOptionGroup(container, gKey) {
+  const g = OPTION_GROUPS[gKey];
+  currentPosModal.groups[gKey] = [];
+  const wrap = document.createElement('div');
+  wrap.style.marginTop = '12px';
+  if (gKey === 'drink_topping') wrap.id = 'pos-option-group-drink_topping';
+  wrap.innerHTML = `<div style="font-size:0.85rem;color:var(--muted);margin-bottom:4px;">${g.label}${g.required ? ' <span style=\"color:#c94f1f\">*必選</span>' : ''}</div>`;
+  const optWrap = document.createElement('div');
+  const sizeForFilter = (currentPosModal.comboDrinkSize != null && currentPosModal.comboDrinkSize !== '') ? currentPosModal.comboDrinkSize.toUpperCase() : currentPosModal.size;
+  const visibleOptions = g.options.filter(opt => {
+    if (opt.priceM === undefined && opt.priceL === undefined) return true;
+    if (sizeForFilter === 'M') return opt.priceM != null;
+    if (sizeForFilter === 'L') return opt.priceL != null;
+    return true;
+  });
+  const maxNameLen = Math.max(0, ...visibleOptions.map(o => o.name.length));
+  optWrap.style.cssText = maxNameLen > 8 ? 'display:block;' : 'display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;';
+  wrap.appendChild(optWrap);
+  const groupName = 'pos_' + gKey;
+  visibleOptions.forEach((opt) => {
+    const id = groupName + '_' + opt.name;
+    const label = document.createElement('label');
+    label.style.cssText = maxNameLen > 8 ? 'display:block;margin:2px 0;font-size:0.82rem;' : 'display:inline-block;margin:2px 6px 2px 0;font-size:0.82rem;';
+    const inputType = g.type === 'single' ? 'radio' : 'checkbox';
+    const autoCheck = g.required && g.type === 'single' && g.options.length === 1;
+    if (opt.priceM != null || opt.priceL != null) {
+      const sizeParts = [];
+      if (opt.priceM != null) sizeParts.push(`M +$${opt.priceM}`);
+      if (opt.priceL != null) sizeParts.push(`L +$${opt.priceL}`);
+      label.innerHTML = `<input type="${inputType}" name="${groupName}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''}> ${opt.name}<br><span style="margin-left:20px;color:var(--muted);font-size:0.76rem;">${sizeParts.join('　')}</span>`;
+    } else {
+      const priceLabel = opt.price ? ' +$' + opt.price : '';
+      label.innerHTML = `<input type="${inputType}" name="${groupName}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''}> ${opt.name}${priceLabel}`;
+    }
+    optWrap.appendChild(label);
+    if (autoCheck) currentPosModal.groups[gKey] = [opt.name];
+  });
+  container.appendChild(wrap);
+  wrap.querySelectorAll('input').forEach(inp => {
+    if (g.type === 'single') {
+      inp.addEventListener('mousedown', () => { inp.dataset.wasChecked = inp.checked ? '1' : ''; });
+      inp.addEventListener('click', (e) => {
+        if (inp.dataset.wasChecked === '1') {
+          e.preventDefault();
+          setTimeout(() => {
+            inp.checked = false;
+            currentPosModal.groups[gKey] = [];
+            if (gKey === 'combo_drink' || gKey === 'small_drink') clearPosDrinkCustom();
+            updatePosItemModalTotal();
+          }, 0);
+        }
+      });
+    }
+    inp.onchange = () => {
+      if (g.type === 'single') {
+        currentPosModal.groups[gKey] = inp.checked ? [inp.value] : [];
+      } else {
+        if (inp.checked) currentPosModal.groups[gKey].push(inp.value);
+        else currentPosModal.groups[gKey] = currentPosModal.groups[gKey].filter(v => v !== inp.value);
+      }
+      if (gKey === 'combo_drink') {
+        if (inp.checked) openPosDrinkCustom(inp.value);
+        else clearPosDrinkCustom();
+      } else if (gKey === 'small_drink') {
+        if (inp.checked) openPosSmallDrinkCustom(inp.value);
+        else clearPosDrinkCustom();
+      }
+      updatePosItemModalTotal();
+    };
+  });
+}
+
+function refreshPosDrinkToppingIfPresent() {
+  const old = document.getElementById('pos-option-group-drink_topping');
+  if (!old) return;
+  const container = old.parentElement;
+  old.remove();
+  renderPosOptionGroup(container, 'drink_topping');
+}
+
+function clearPosDrinkCustom() {
+  currentPosModal.comboDrinkName = null;
+  currentPosModal.comboDrinkSize = null;
+  currentPosModal.comboDrinkPrice = 0;
+  (currentPosModal.comboDrinkExtraGroups || []).forEach(gk => delete currentPosModal.groups[gk]);
+  currentPosModal.comboDrinkExtraGroups = [];
+}
+
+function openPosDrinkCustom(drinkName) {
+  clearPosDrinkCustom();
+  currentPosModal.activeDrinkGroupKey = 'combo_drink';
+  currentPosModal.comboDrinkName = drinkName;
+  const prices = COMBO_DRINK_PRICES[drinkName];
+  document.getElementById('pos-drink-modal-title').textContent = drinkName;
+  const body = document.getElementById('pos-drink-modal-body');
+  body.innerHTML = '';
+  if (!prices) { document.getElementById('pos-drink-overlay').classList.add('open'); return; }
+
+  const sizeEl = document.createElement('div');
+  sizeEl.style.marginBottom = '10px';
+  body.appendChild(sizeEl);
+  const availSizes = ['m', 'l'].filter(sz => prices[sz] != null);
+  if (prices.single != null || availSizes.length === 1) {
+    const only = prices.single != null ? prices.single : prices[availSizes[0]];
+    currentPosModal.comboDrinkSize = prices.single != null ? '' : availSizes[0];
+    currentPosModal.comboDrinkPrice = only;
+    const sizeLabel = prices.single != null ? '' : `限${availSizes[0].toUpperCase()} `;
+    sizeEl.innerHTML = `<div style="font-size:0.8rem;color:var(--muted);">${sizeLabel}+$${only}</div>`;
+  } else {
+    sizeEl.innerHTML = `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;">份量 <span style="color:#c94f1f">*必選</span></div>`;
+    ['m', 'l'].forEach(sz => {
+      if (prices[sz] == null) return;
+      const label = document.createElement('label');
+      label.style.cssText = 'display:inline-block;margin:2px 10px 2px 0;font-size:0.82rem;';
+      label.innerHTML = `<input type="radio" name="pos_combo_drink_size" value="${sz}" autocomplete="off"> ${sz.toUpperCase()} +$${prices[sz]}`;
+      sizeEl.appendChild(label);
+    });
+    sizeEl.querySelectorAll('input').forEach(inp => {
+      inp.onchange = () => {
+        currentPosModal.comboDrinkSize = inp.value;
+        currentPosModal.comboDrinkPrice = prices[inp.value];
+        refreshPosDrinkToppingIfPresent();
+        updatePosItemModalTotal();
+      };
+    });
+  }
+
+  const extraGroups = drinkGroupsFor(drinkName);
+  currentPosModal.comboDrinkExtraGroups = extraGroups;
+  extraGroups.forEach(gk => renderPosOptionGroup(body, gk));
+
+  updatePosItemModalTotal();
+  document.getElementById('pos-drink-overlay').classList.add('open');
+}
+
+function openPosSmallDrinkCustom(drinkName) {
+  clearPosDrinkCustom();
+  currentPosModal.activeDrinkGroupKey = 'small_drink';
+  currentPosModal.comboDrinkName = drinkName;
+  currentPosModal.comboDrinkSize = drinkName.includes('大杯') ? 'l' : 'm';
+  currentPosModal.comboDrinkPrice = 0;
+  document.getElementById('pos-drink-modal-title').textContent = drinkName;
+  const body = document.getElementById('pos-drink-modal-body');
+  body.innerHTML = '';
+  const extraGroups = ['temperature_choice', 'sweetness', 'drink_topping'];
+  currentPosModal.comboDrinkExtraGroups = extraGroups;
+  extraGroups.forEach(gk => renderPosOptionGroup(body, gk));
+  updatePosItemModalTotal();
+  document.getElementById('pos-drink-overlay').classList.add('open');
+}
+
+function confirmPosDrinkCustom() {
+  const prices = COMBO_DRINK_PRICES[currentPosModal.comboDrinkName];
+  if (prices && prices.single == null && !currentPosModal.comboDrinkSize) {
+    alert('請選擇飲料的「份量」（M/L）');
+    return;
+  }
+  for (const gk of (currentPosModal.comboDrinkExtraGroups || [])) {
+    const g = OPTION_GROUPS[gk];
+    if (g.required && (!currentPosModal.groups[gk] || !currentPosModal.groups[gk].length)) {
+      alert('請選擇飲料的「' + g.label + '」');
+      return;
+    }
+  }
+  document.getElementById('pos-drink-overlay').classList.remove('open');
+  updatePosItemModalTotal();
+}
+
+function cancelPosDrinkCustom() {
+  const gk = currentPosModal.activeDrinkGroupKey || 'combo_drink';
+  clearPosDrinkCustom();
+  currentPosModal.groups[gk] = [];
+  document.querySelectorAll(`input[name="pos_${gk}"]`).forEach(r => { r.checked = false; });
+  document.getElementById('pos-drink-overlay').classList.remove('open');
+  updatePosItemModalTotal();
+}
+
+function posItemModalQty(delta) {
+  if (!currentPosModal) return;
+  currentPosModal.qty = Math.max(1, currentPosModal.qty + delta);
+  document.getElementById('pos-item-modal-qty').textContent = currentPosModal.qty;
+  updatePosItemModalTotal();
+}
+
+function calcPosModalUnitPrice() {
+  if (!currentPosModal) return 0;
+  let price = currentPosModal.basePrice;
+  Object.keys(currentPosModal.groups).forEach(gKey => {
+    const g = OPTION_GROUPS[gKey];
+    currentPosModal.groups[gKey].forEach(name => {
+      const opt = g.options.find(o => o.name === name);
+      if (!opt) return;
+      if (opt.priceM != null) {
+        const sizeForPricing = (currentPosModal.comboDrinkSize != null && currentPosModal.comboDrinkSize !== '') ? currentPosModal.comboDrinkSize.toUpperCase() : currentPosModal.size;
+        price += (sizeForPricing === 'L' ? opt.priceL : opt.priceM);
+      }
+      else price += opt.price;
+    });
+  });
+  price += currentPosModal.comboDrinkPrice || 0;
+  return price;
+}
+
+function updatePosItemModalTotal() {
+  if (!currentPosModal) return;
+  const unit = calcPosModalUnitPrice();
+  document.getElementById('pos-item-modal-total').textContent = '$' + (unit * currentPosModal.qty);
+}
+
+function closePosItemModal() {
+  document.getElementById('pos-item-overlay').classList.remove('open');
+  currentPosModal = null;
+}
+
+function confirmAddToPosCart() {
+  if (!currentPosModal) return;
+  for (const gKey of groupsForCategory(currentPosModal.cat, currentPosModal.item.name)) {
+    const g = OPTION_GROUPS[gKey];
+    if (g.required && (!currentPosModal.groups[gKey] || currentPosModal.groups[gKey].length === 0)) {
+      alert('請選擇「' + g.label.replace('*必選','') + '」');
+      return;
+    }
+    if (gKey === 'combo_drink' && currentPosModal.groups[gKey].length) {
+      const prices = COMBO_DRINK_PRICES[currentPosModal.groups[gKey][0]];
+      if (prices && prices.single == null && !currentPosModal.comboDrinkSize) {
+        alert('請選擇飲料的「份量」（M/L）');
+        return;
+      }
+      for (const dgk of (currentPosModal.comboDrinkExtraGroups || [])) {
+        const dg = OPTION_GROUPS[dgk];
+        if (dg.required && (!currentPosModal.groups[dgk] || !currentPosModal.groups[dgk].length)) {
+          alert('請選擇飲料的「' + dg.label + '」');
+          return;
+        }
+      }
+    }
+  }
+  if (currentPosModal.item.price_set && SET_BUNDLE_CATEGORIES.includes(currentPosModal.cat) && currentPosModal.basePrice === currentPosModal.item.price_set) {
+    for (const gk of SET_BUNDLE_EXTRAS[currentPosModal.cat]) {
+      if (!currentPosModal.groups[gk] || !currentPosModal.groups[gk].length) {
+        alert('請選擇「' + OPTION_GROUPS[gk].label + '」');
+        return;
+      }
+      if (gk === 'small_drink') {
+        for (const dgk of (currentPosModal.comboDrinkExtraGroups || [])) {
+          const dg = OPTION_GROUPS[dgk];
+          if (dg.required && (!currentPosModal.groups[dgk] || !currentPosModal.groups[dgk].length)) {
+            alert('請選擇飲料的「' + dg.label + '」');
+            return;
+          }
+        }
+      }
+    }
+  }
+  const note = document.getElementById('pos-item-modal-note').value.trim();
+  const unit = calcPosModalUnitPrice();
+  const optionParts = [];
+  Object.keys(currentPosModal.groups).forEach(gKey => {
+    if (!currentPosModal.groups[gKey].length) return;
+    if (gKey === 'combo_drink' && currentPosModal.comboDrinkSize) {
+      optionParts.push(currentPosModal.groups[gKey][0] + ' ' + currentPosModal.comboDrinkSize.toUpperCase());
+    } else {
+      optionParts.push(currentPosModal.groups[gKey].join('/'));
+    }
+  });
+  const lineKey = currentPosModal.key + (currentPosModal.size || '') + '|' + optionParts.join(',') + '|' + note;
+  const displayName = currentPosModal.item.name + (optionParts.length ? '（' + optionParts.join('、') + '）' : '');
+
+  const existing = posCart.find(c => c.lineKey === lineKey);
+  if (existing) existing.qty += currentPosModal.qty;
+  else posCart.push({lineKey, name: displayName, size: currentPosModal.size, price: unit, qty: currentPosModal.qty, note});
+  updatePosCartBar();
+  closePosItemModal();
+}
+
+function updatePosCartBar() {
+  const count = posCart.reduce((s, c) => s + c.qty, 0);
+  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
+  document.getElementById('pos-cart-count').textContent = count;
+  document.getElementById('pos-cart-total-bar').textContent = '$' + total;
+}
+
+function renderPosCart() {
+  const linesEl = document.getElementById('pos-cart-lines');
+  linesEl.innerHTML = '';
+  if (posCart.length === 0) {
+    linesEl.innerHTML = '<div class="pos-empty-cart">尚未選購品項</div>';
+  }
+  posCart.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'pos-cart-line';
+    div.innerHTML = `
+      <div>${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="qty-btn" data-act="dec">-</button>
+        <span>${c.qty}</span>
+        <button class="qty-btn" data-act="inc">+</button>
+      </div>
+    `;
+    div.querySelector('[data-act="dec"]').onclick = () => changePosQty(c.lineKey, -1);
+    div.querySelector('[data-act="inc"]').onclick = () => changePosQty(c.lineKey, 1);
+    linesEl.appendChild(div);
+  });
+  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
+  document.getElementById('pos-cart-total').textContent = '$' + total;
+}
+
+function changePosQty(lineKey, delta) {
+  const idx = posCart.findIndex(c => c.lineKey === lineKey);
+  if (idx === -1) return;
+  posCart[idx].qty += delta;
+  if (posCart[idx].qty <= 0) posCart.splice(idx, 1);
+  renderPosCart();
+  updatePosCartBar();
+}
+
+function openPosCart() {
+  renderPosCart();
+  document.getElementById('pos-cart-view').style.display = 'block';
+  document.getElementById('pos-checkout-view').style.display = 'none';
+  document.getElementById('pos-confirm-view').style.display = 'none';
+  document.getElementById('pos-cart-overlay').classList.add('open');
+}
+function closePosCart() { document.getElementById('pos-cart-overlay').classList.remove('open'); }
+
+function showPosCheckout() {
+  if (posCart.length === 0) { alert('請先選購品項'); return; }
+  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
+  document.getElementById('pos-checkout-member').textContent = selectedMember
+    ? `已選會員：${selectedMember.name}（${selectedMember.tier}，本次預估可得 ${Math.floor(total / 100) * (MEMBER_TIER_MULTIPLIER[selectedMember.tier] || 1)} 點）`
+    : '未選會員（不累計點數）';
+  document.getElementById('pos-checkout-total').textContent = '$' + total;
+  document.getElementById('pos-cart-view').style.display = 'none';
+  document.getElementById('pos-checkout-view').style.display = 'block';
+}
+function backToPosCart() {
+  document.getElementById('pos-checkout-view').style.display = 'none';
+  document.getElementById('pos-cart-view').style.display = 'block';
+}
+function closePosCartAll() {
+  document.getElementById('pos-cart-overlay').classList.remove('open');
+  posCart = [];
+  updatePosCartBar();
+  document.getElementById('member-phone-input').value = '';
+  document.getElementById('member-info').innerHTML = '';
+  selectedMember = null;
+}
+
+function submitPosOrder() {
+  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
+  const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price }));
+  const paymentMethod = document.getElementById('pos-payment-method').value;
+  apiPost({
+    action: 'posCheckout',
+    storeId: STORE_ID,
+    items: items,
+    totalAmount: total,
+    paymentMethod: paymentMethod,
+    memberPhone: selectedMember ? selectedMember.phone : ''
+  }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '結帳失敗'); return; }
+    document.getElementById('pos-confirm-order-no').textContent = data.orderId;
+    document.getElementById('pos-confirm-points').textContent = data.pointsEarned ? `本次消費獲得 ${data.pointsEarned} 點` : '';
+    document.getElementById('pos-checkout-view').style.display = 'none';
+    document.getElementById('pos-confirm-view').style.display = 'block';
+    loadRevenue();
+  });
+}
 </script>
 </body>
 </html>
