@@ -442,7 +442,7 @@ const OPTION_GROUPS = {
   // 2026-08-30發現原本解析漏掉這組(欄位比對失敗)，依老闆截圖補齊完整清單，含唯一有價格的「不蛋」-$5
   bread_sauce: { label: '麵包醬料選擇（可複選）', type: 'multi', options: [
     {name: '不要烤', price: 0}, {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '沙少', price: 0}, {name: '沙多', price: 0},
-    {name: '不蕃', price: 0}, {name: '蕃少', price: 0}, {name: '蕃多', price: 0}, {name: '只沙', price: 0},
+    {name: '不蕃', price: 0}, {name: '蕃少', price: 0}, {name: '蕃多', price: 0}, {name: '不千（漢堡）', price: 0}, {name: '只沙', price: 0},
     {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0},
     {name: '不蛋', price: -5}
   ]},
@@ -450,9 +450,9 @@ const OPTION_GROUPS = {
     {name: '加起司', price: 10}, {name: '加二片起司', price: 18},
     {name: '加蛋', price: 15}, {name: '加火腿', price: 15}, {name: '加培根', price: 20}
   ]},
-  spicy_sauce: { label: '辣醬選擇（可複選）', type: 'multi', options: [{name: '甜辣包', price: 0}, {name: '特辣包', price: 0}] },
+  spicy_sauce: { label: '辣醬選擇（可複選）', type: 'multi', options: [{name: '加甜辣', price: 0}, {name: '加特辣少', price: 0}, {name: '加特辣多', price: 0}, {name: '甜辣包', price: 0}, {name: '特辣包', price: 0}] },
   omelet_choice: { label: '蛋餅選擇', type: 'single', required: true, options: [{name: '一般', price: 0}, {name: '酥皮', price: 5}, {name: '特酥', price: 10}] },
-  omelet_sauce: { label: '蛋餅醬料選擇（可複選）', type: 'multi', options: [{name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}] },
+  omelet_sauce: { label: '蛋餅醬料選擇（可複選）', type: 'multi', options: [{name: '不切', price: 0}, {name: '不胡', price: 0}, {name: '醬油少', price: 0}, {name: '醬油多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}] },
   omelet_addon: { label: '蛋餅加料選擇（可複選，額外加價）', type: 'multi', options: [
     {name: '加起司', price: 10}, {name: '加二片起司', price: 18}, {name: '加火腿', price: 15}, {name: '加培根', price: 20}
   ]},
@@ -491,7 +491,7 @@ const OPTION_GROUPS = {
     {name: '不沙', price: 0}, {name: '只沙', price: 0}, {name: '沙少', price: 0}, {name: '沙多', price: 0},
     {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
   ]},
-  salad_sauce: { label: '田園蔬果醬料選擇（可複選）', type: 'multi', options: [{name: '不沙', price: 0}] },
+  salad_sauce: { label: '田園蔬果醬料選擇（可複選）', type: 'multi', options: [{name: '不沙', price: 0}, {name: '沙少', price: 0}, {name: '沙多', price: 0}] },
   salad_addon: { label: '加蛋（可複選，額外加價）', type: 'multi', options: [{name: '加蛋', price: 15}] },
   hotplate_noodle_sauce: { label: '鐵板麵醬料', type: 'single', required: true, options: [{name: '紅醬', price: 0}, {name: '咖哩', price: 0}] },
   noodle_addon: { label: '私房炒麵加料（可複選，額外加價）', type: 'multi', options: [{name: '加麵', price: 10}, {name: '加蛋', price: 15}, {name: '加起司', price: 10}] },
@@ -540,9 +540,11 @@ const OPTION_GROUPS = {
     {name: '美11 千島醬 薯泥雞排 起司蛋土司', price: 0}, {name: '美12 甜辣泰式 雞排 起司蛋捲餅', price: 0}
   ]},
   combo_fries: { label: '薯餅', type: 'single', required: true, options: [{name: '薯餅(4片)', price: 0}] },
+  // 2026-08-30補齊「少/多」細緻程度(原本只有二分法)，比照bread_sauce同一輪修正
   combo_sauce: { label: '美式狂想醬料選擇（可複選）', type: 'multi', options: [
-    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '不蕃', price: 0},
-    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '沙少', price: 0}, {name: '沙多', price: 0},
+    {name: '不蕃', price: 0}, {name: '蕃少', price: 0}, {name: '蕃多', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
   ]},
   // 美式狂想套餐各主餐專屬醬料（2026-08-30依POS機台用.xlsx新增，非每個主餐都用共用combo_sauce）
   combo_sauce_mei1: { label: '美1醬料選擇（可複選）', type: 'multi', options: [{name: '不花醬', price: 0}, {name: '花醬少', price: 0}, {name: '花醬多', price: 0}] },
@@ -614,7 +616,7 @@ const CATEGORY_GROUPS = {
   'PRIVATE FRIED NOODLES_私房炒麵系列': ['noodle_addon', 'spicy_sauce'],
   'A-BAO SELECTED SET_A-bao嚴選定食': ['combo_drink', 'dine_set_addon', 'spicy_sauce'],
   'KIMCHI FESTIVAL_泡菜祭': [],
-  'CRISPY OMELETTE SERIES_特酥系列 x 超值自由配': ['omelet_sauce', 'omelet_addon'],
+  'CRISPY OMELETTE SERIES_特酥系列 x 超值自由配': ['omelet_sauce', 'omelet_addon', 'spicy_sauce'],
   'TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡': ['tropical_sauce', 'tropical_sauce2', 'bread_addon'],
   'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ': ['temperature_choice', 'brown_sugar_sweetness', 'drink_topping'],
   'FRESH FRUIT TEA_鮮果茶 Cool': ['ice_level', 'fruit_tea_sweetness'],
@@ -818,8 +820,9 @@ function openPosItemModal(cat, key, item) {
       sauceEl.innerHTML = '';
       Object.keys(currentPosModal.groups).forEach(k => { if (k.indexOf('combo_sauce') === 0) delete currentPosModal.groups[k]; });
       const mainChoice = (currentPosModal.groups['combo_main'] || [])[0];
-      const gk = COMBO_MAIN_SAUCE_MAP[mainChoice] || 'combo_sauce';
-      renderPosOptionGroup(sauceEl, gk);
+      const extraKey = COMBO_MAIN_SAUCE_MAP[mainChoice];
+      renderPosOptionGroup(sauceEl, 'combo_sauce');
+      if (extraKey) renderPosOptionGroup(sauceEl, extraKey);
       updatePosItemModalTotal();
     };
     currentPosModal.updateComboSauce();
