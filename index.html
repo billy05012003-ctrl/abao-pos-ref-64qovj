@@ -937,6 +937,18 @@ function openItemModal(cat, key, item) {
   document.getElementById('item-overlay').classList.add('open');
 }
 
+// 多欄格線的選項名稱以2字一組包成不可拆的nowrap區塊，避免CJK預設逐字斷行在空間不夠時
+// 斷出"不醬只"+孤字"胡"這種難看的斷點；同時不強制整個名稱nowrap，短名稱仍可整行顯示，
+// 真的空間不夠需要換行時也只會斷在區塊之間，不會撐爆grid欄寬（跟強制nowrap相比不會溢出容器）
+function chunkNameForWrap(name) {
+  const chars = [...name];
+  let out = '';
+  for (let i = 0; i < chars.length; i += 2) {
+    out += `<span style="white-space:nowrap">${chars.slice(i, i + 2).join('')}</span>`;
+  }
+  return out;
+}
+
 function renderOptionGroup(container, gKey) {
   const g = OPTION_GROUPS[gKey];
   const optCatShort = shortCatName(currentModal.cat);
@@ -956,29 +968,44 @@ function renderOptionGroup(container, gKey) {
   });
   // 名稱太長（例如主餐"美1 花醬 牛肉培根 起司蛋堡"）硬塞2欄手機上會換行、左右列對不齊，
   // 改成單欄；短名稱（醬料/飲料等）才用2欄格線（老闆反饋2欄排版在長名稱選項上「文字行數跑掉」）
+  // 部分群組老闆指定固定欄數(不用長度自動判斷)：加料類(選項多但單項短)改1欄比較好讀，醬料類選項多改3欄減少高度
+  const OPTION_GROUP_COLUMNS = {
+    bread_addon: 1, noodle_addon: 1, dine_set_addon: 1, omelet_addon: 1, jam_bread_choice: 1,
+    omelet_choice: 1, drink_topping: 1, small_drink: 1,
+    combo_sauce: 3, spicy_sauce: 3, tropical_sauce: 3, tropical_sauce2: 3, omelet_sauce: 3,
+    bread_sauce: 3, cereal_sauce: 3, frenchbread_sauce: 3, burrito_sauce: 3, puffpastry_sauce: 3,
+    painperdu_sauce: 3, salad_sauce: 3
+  };
   const maxNameLen = Math.max(0, ...visibleOptions.map(o => o.name.length));
-  optWrap.style.cssText = maxNameLen > 8
+  const cols = OPTION_GROUP_COLUMNS[gKey] || (maxNameLen > 8 ? 1 : 2);
+  // minmax(0,1fr)而非單純1fr：避免nowrap選項的內容最小寬度把某欄擠得比平分寬度還大，導致整個grid溢出容器
+  optWrap.style.cssText = cols === 1
     ? 'display:block;'
-    : 'display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;';
+    : `display:grid;grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:4px 10px;`;
   wrap.appendChild(optWrap);
   visibleOptions.forEach((opt) => {
     const id = gKey + '_' + opt.name;
     const label = document.createElement('label');
-    label.style.cssText = maxNameLen > 8
+    // 欄位間距已經靠grid的column-gap處理，label自己的右margin是舊版inline-block排版留下來的多餘空間，
+    // 3欄較窄時會白白吃掉每欄的可用寬度，改成靠grid gap本身留白即可，不再額外加margin-right
+    label.style.cssText = cols === 1
       ? 'display:block;margin:2px 0;font-size:0.82rem;'
-      : 'display:inline-block;margin:2px 6px 2px 0;font-size:0.82rem;';
+      : 'display:inline-block;min-width:0;max-width:100%;margin:2px 0;font-size:0.82rem;';
     const inputType = g.type === 'single' ? 'radio' : 'checkbox';
     const autoCheck = g.required && g.type === 'single' && g.options.length === 1;
     const optThumb = `<img src="images/${encodeURIComponent(optCatShort)}/${encodeURIComponent(imgSafeName(opt.name))}.jpg" alt="" loading="lazy" onerror="this.style.display='none'" style="width:32px;height:32px;object-fit:cover;border-radius:6px;vertical-align:middle;margin-right:6px;">`;
+    // 多欄排版時名稱以2字為單位包成不可拆的區塊，換行只會發生在區塊之間(例如"不醬只胡"→"不醬"/"只胡")，
+    // 不會再出現斷成"不醬只"+單一孤字"胡"這種奇怪的斷點；名稱夠短能塞進一行時仍會維持單行
+    const displayName = cols === 1 ? opt.name : chunkNameForWrap(opt.name);
     if (opt.priceM != null || opt.priceL != null) {
       // M/L價格分開一行顯示，不擠在同一行（老闆反饋原本"(M+$10/L+$15)"太擠）；只有其中一種尺寸就只顯示那一行
       const sizeParts = [];
       if (opt.priceM != null) sizeParts.push(`M +$${opt.priceM}`);
       if (opt.priceL != null) sizeParts.push(`L +$${opt.priceL}`);
-      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''}> ${opt.name}<br><span style="margin-left:20px;color:var(--muted);font-size:0.76rem;">${sizeParts.join('　')}</span>`;
+      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''}> ${displayName}<br><span style="margin-left:20px;color:var(--muted);font-size:0.76rem;">${sizeParts.join('　')}</span>`;
     } else {
       const priceLabel = opt.price ? ' +$' + opt.price : '';
-      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''}> ${opt.name}${priceLabel}`;
+      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''}> ${displayName}${priceLabel}`;
     }
     optWrap.appendChild(label);
     if (autoCheck) currentModal.groups[gKey] = [opt.name];
