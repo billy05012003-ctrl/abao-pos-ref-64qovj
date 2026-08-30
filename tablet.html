@@ -7,32 +7,38 @@
 <style>
   :root { --brand: #e8632c; --bg: #f5f5f5; --muted: #888; --border: #eee0d4; --card: #fff; }
   * { box-sizing: border-box; }
-  body { margin:0; font-family:-apple-system,"Microsoft JhengHei",sans-serif; background:var(--bg); color:#222; padding-bottom:90px; }
-  header { background:var(--brand); color:#fff; padding:16px; }
+  body { margin:0; font-family:-apple-system,"Microsoft JhengHei",sans-serif; background:var(--bg); color:#222; height:100vh; overflow:hidden; display:flex; flex-direction:column; }
+  header { background:var(--brand); color:#fff; padding:16px; flex:none; }
   header h1 { margin:0; font-size:1.2rem; }
   header .sub { font-size:0.85rem; opacity:0.9; margin-top:2px; }
-  .tabbar { display:flex; background:#fff; border-bottom:1px solid #eee; position:sticky; top:0; z-index:15; }
+  .tabbar { display:flex; background:#fff; border-bottom:1px solid #eee; flex:none; }
   .tabbar button { flex:1; border:none; background:none; padding:12px; font-size:0.95rem; font-weight:600; color:#888; cursor:pointer; border-bottom:3px solid transparent; }
   .tabbar button.active { color:var(--brand); border-bottom-color:var(--brand); }
-  /* ---- POS功能區塊樣式（比照線上點餐頁的點餐/購物車/彈窗排版） ---- */
-  #pos-tabs { display:flex; overflow-x:auto; gap:6px; padding:10px 0; -webkit-overflow-scrolling:touch; }
-  #pos-tabs button { flex:none; border:1px solid var(--border); background:#fff; color:#222; padding:6px 12px; border-radius:999px; font-size:0.8rem; cursor:pointer; white-space:nowrap; }
-  #pos-tabs button.active { background:var(--brand); color:#fff; border-color:var(--brand); }
-  .pos-category h3 { font-size:0.95rem; margin:14px 0 8px; padding-bottom:6px; border-bottom:2px solid var(--brand); display:inline-block; }
-  .pos-item { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
-  .pos-item .info { flex:1; min-width:0; }
-  .pos-item .name { font-size:0.92rem; }
-  .pos-item .price { font-size:0.85rem; color:var(--muted); margin-top:2px; }
-  .pos-item button.add { background:var(--brand); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:0.78rem; cursor:pointer; flex-shrink:0; }
-  #pos-cart-bar { position:fixed; bottom:0; left:0; right:0; background:var(--brand); color:#fff; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; cursor:pointer; box-shadow:0 -2px 10px rgba(0,0,0,0.15); z-index:12; }
-  #pos-cart-bar span.count { background:#fff; color:var(--brand); border-radius:999px; padding:2px 8px; font-size:0.8rem; margin-right:8px; }
-  .pos-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:20; align-items:flex-end; justify-content:center; }
+  #view-tablet { flex:1; overflow-y:auto; }
+  /* ---- POS功能：大麥POS參考版面，分類/品項/客製化/訂單四欄並排（平板橫屏），2026-08-30改版 ---- */
+  .pos-layout { flex:1; display:flex; overflow:hidden; }
+  .pos-col { overflow-y:auto; padding:10px; box-sizing:border-box; }
+  .pos-col-title { font-size:0.85rem; font-weight:600; color:var(--muted); margin:10px 0 6px; }
+  .pos-col-categories { width:130px; flex:none; background:#faf6f1; border-right:1px solid var(--border); padding:6px; }
+  .pos-cat-btn { display:block; width:100%; text-align:left; border:none; background:none; padding:10px 8px; font-size:0.83rem; border-radius:8px; cursor:pointer; margin-bottom:2px; color:#333; }
+  .pos-cat-btn.active { background:var(--brand); color:#fff; font-weight:600; }
+  .pos-col-items { flex:1 1 auto; min-width:180px; border-right:1px solid var(--border); }
+  .pos-item-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; align-content:start; }
+  .pos-grid-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:8px; text-align:center; cursor:pointer; }
+  .pos-grid-card.active { border-color:var(--brand); box-shadow:0 0 0 2px rgba(232,99,44,0.3); }
+  .pos-grid-card .name { font-size:0.82rem; }
+  .pos-grid-card .price { font-size:0.76rem; color:var(--muted); margin-top:4px; }
+  .pos-col-detail { width:280px; flex:none; border-right:1px solid var(--border); }
+  .pos-detail-empty { color:var(--muted); text-align:center; padding:40px 10px; font-size:0.85rem; }
+  .pos-col-cart { width:250px; flex:none; display:flex; flex-direction:column; }
+  .pos-cart-lines-scroll { flex:1 1 auto; overflow-y:auto; min-height:60px; }
+  .pos-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:20; align-items:center; justify-content:center; }
   .pos-overlay.open { display:flex; }
   #pos-drink-overlay { z-index:25; }
-  .pos-sheet { background:#fff; width:100%; max-width:640px; max-height:85vh; overflow-y:auto; border-radius:16px 16px 0 0; padding:16px; }
+  .pos-sheet { background:#fff; width:100%; max-width:420px; max-height:85vh; overflow-y:auto; border-radius:16px; padding:16px; }
   .pos-cart-line { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
   .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:26px; height:26px; border-radius:6px; font-size:1rem; cursor:pointer; }
-  .pos-cart-total { display:flex; justify-content:space-between; font-size:1.1rem; font-weight:bold; padding:12px 0; }
+  .pos-cart-total { display:flex; justify-content:space-between; font-size:1.05rem; font-weight:bold; padding:10px 0; flex:none; }
   .pos-size-select { font-size:0.78rem; margin-top:4px; }
   .pos-size-select label { margin-right:6px; cursor:pointer; }
   .pos-empty-cart { color:var(--muted); text-align:center; padding:20px 0; }
@@ -157,44 +163,44 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 </section>
 </div>
 
-<div id="view-pos" style="display:none">
-  <section>
-    <h2>會員查詢/註冊</h2>
+<div id="view-pos" class="pos-layout" style="display:none">
+  <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
+  <div class="pos-col pos-col-items" id="pos-col-items">
+    <div class="pos-detail-empty">請從左側選擇分類</div>
+  </div>
+  <div class="pos-col pos-col-detail" id="pos-col-detail">
+    <div class="pos-detail-empty">請選擇品項</div>
+  </div>
+  <div class="pos-col pos-col-cart">
+    <div class="pos-col-title">會員</div>
     <div class="row">
-      <input type="tel" id="member-phone-input" placeholder="輸入客人電話">
+      <input type="tel" id="member-phone-input" placeholder="客人電話" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
       <button class="btn btn-primary" onclick="lookupMember()">查詢</button>
     </div>
     <div id="member-info"></div>
-  </section>
+    <div class="pos-col-title">目前訂單</div>
+    <div id="pos-cart-lines" class="pos-cart-lines-scroll"></div>
+    <div class="pos-cart-total"><span>總計</span><span id="pos-cart-total">$0</span></div>
 
-  <section>
-    <h2>現場點餐</h2>
-    <div id="pos-tabs"></div>
-    <div id="pos-menu"></div>
-  </section>
-</div>
-
-<div id="pos-cart-bar" style="display:none" onclick="openPosCart()">
-  <div><span class="count" id="pos-cart-count">0</span>查看訂單</div>
-  <strong id="pos-cart-total-bar">$0</strong>
-</div>
-
-<div class="pos-overlay" id="pos-item-overlay">
-  <div class="pos-sheet">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button type="button" onclick="closePosItemModal()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
-      <h2 id="pos-item-modal-title" style="margin:0; flex:1; font-size:1rem;"></h2>
+    <div id="pos-checkout-panel" style="display:none">
+      <div id="pos-checkout-member" style="font-size:0.85rem;margin-bottom:8px;"></div>
+      <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">付款方式</label>
+      <select id="pos-payment-method" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;">
+        <option value="LinePay現場">LinePay現場</option>
+        <option value="現金">現金</option>
+        <option value="其他">其他</option>
+      </select>
+      <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:10px;" onclick="submitPosOrder()">確認結帳</button>
+      <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="backToPosCart()">返回</button>
     </div>
-    <div id="pos-item-modal-size"></div>
-    <div id="pos-item-modal-groups"></div>
-    <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填）</label>
-    <textarea id="pos-item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem;" maxlength="100" placeholder="例如：不要洋蔥"></textarea>
-    <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:14px;">
-      <button type="button" class="qty-btn" onclick="posItemModalQty(-1)" style="width:34px;height:34px;font-size:1.2rem;">-</button>
-      <span id="pos-item-modal-qty" style="font-size:1.1rem; min-width:20px; text-align:center;">1</span>
-      <button type="button" class="qty-btn" onclick="posItemModalQty(1)" style="width:34px;height:34px;font-size:1.2rem;">+</button>
+
+    <div id="pos-confirm-panel" style="display:none;text-align:center;">
+      <div style="font-size:1.2rem;font-weight:bold;color:var(--brand);margin:10px 0;" id="pos-confirm-order-no"></div>
+      <p id="pos-confirm-points" style="color:#888;font-size:0.85rem;"></p>
+      <button class="btn btn-primary" style="width:100%;padding:10px;" onclick="closePosCartAll()">開始新訂單</button>
     </div>
-    <button class="btn-primary" style="width:100%;margin-top:12px;padding:12px;" onclick="confirmAddToPosCart()">新增至購物車　<span id="pos-item-modal-total"></span></button>
+
+    <button class="btn btn-primary" id="pos-checkout-btn" style="width:100%;padding:12px;margin-top:10px;" onclick="showPosCheckout()">結帳</button>
   </div>
 </div>
 
@@ -206,39 +212,6 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </div>
     <div id="pos-drink-modal-body"></div>
     <button class="btn-primary" style="width:100%;margin-top:8px;padding:12px;" onclick="confirmPosDrinkCustom()">確定</button>
-  </div>
-</div>
-
-<div class="pos-overlay" id="pos-cart-overlay">
-  <div class="pos-sheet">
-    <div id="pos-cart-view">
-      <h2>現場訂單</h2>
-      <div id="pos-cart-lines"></div>
-      <div class="pos-cart-total"><span>總計</span><span id="pos-cart-total">$0</span></div>
-      <button class="btn-primary" style="width:100%;padding:12px;" onclick="showPosCheckout()">結帳</button>
-      <button class="btn-secondary" style="width:100%;padding:12px;margin-top:8px;background:#fff;border:1px solid var(--brand);color:var(--brand);border-radius:8px;" onclick="closePosCart()">繼續點餐</button>
-    </div>
-
-    <div id="pos-checkout-view" style="display:none">
-      <h2>結帳</h2>
-      <div id="pos-checkout-member" style="font-size:0.9rem;margin-bottom:10px;"></div>
-      <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">付款方式</label>
-      <select id="pos-payment-method" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;">
-        <option value="LinePay現場">LinePay現場</option>
-        <option value="現金">現金</option>
-        <option value="其他">其他</option>
-      </select>
-      <div class="pos-cart-total"><span>應收金額</span><span id="pos-checkout-total">$0</span></div>
-      <button class="btn-primary" style="width:100%;padding:12px;" onclick="submitPosOrder()">確認結帳</button>
-      <button class="btn-secondary" style="width:100%;padding:12px;margin-top:8px;background:#fff;border:1px solid var(--brand);color:var(--brand);border-radius:8px;" onclick="backToPosCart()">返回訂單</button>
-    </div>
-
-    <div id="pos-confirm-view" style="display:none; text-align:center; padding:10px 0;">
-      <h2>結帳完成</h2>
-      <div style="font-size:1.4rem; font-weight:bold; color:var(--brand); margin:12px 0;" id="pos-confirm-order-no"></div>
-      <p id="pos-confirm-points" style="color:#888; font-size:0.9rem;"></p>
-      <button class="btn-primary" style="width:100%;padding:12px;" onclick="closePosCartAll()">完成，關閉視窗</button>
-    </div>
   </div>
 </div>
 
@@ -377,8 +350,7 @@ loadOrders();
 let posMenuRendered = false;
 function switchTab(name) {
   document.getElementById('view-tablet').style.display = name === 'tablet' ? 'block' : 'none';
-  document.getElementById('view-pos').style.display = name === 'pos' ? 'block' : 'none';
-  document.getElementById('pos-cart-bar').style.display = name === 'pos' ? 'flex' : 'none';
+  document.getElementById('view-pos').style.display = name === 'pos' ? 'flex' : 'none';
   document.getElementById('tabbar-btn-tablet').classList.toggle('active', name === 'tablet');
   document.getElementById('tabbar-btn-pos').classList.toggle('active', name === 'pos');
   if (name === 'pos' && !posMenuRendered) { renderPosMenu(); posMenuRendered = true; }
@@ -619,64 +591,82 @@ function drinkGroupsFor(drinkName) {
 let posCart = [];
 let currentPosModal = null;
 
+// 大麥POS參考版面：左欄分類清單，點分類才在中欄顯示該分類品項格線（不是全部分類一次全部攤開）
 function renderPosMenu() {
-  const tabs = document.getElementById('pos-tabs');
-  const menu = document.getElementById('pos-menu');
+  const catCol = document.getElementById('pos-col-categories');
   const cats = Object.keys(CATALOG);
   cats.forEach((cat, i) => {
-    const shortName = shortCatName(cat);
     const btn = document.createElement('button');
-    btn.id = 'pos-tab-btn-' + i;
-    btn.textContent = shortName;
-    btn.className = i === 0 ? 'active' : '';
+    btn.id = 'pos-cat-btn-' + i;
+    btn.className = 'pos-cat-btn';
+    btn.textContent = shortCatName(cat);
     btn.onclick = () => goToPosCategory(i);
-    tabs.appendChild(btn);
-
-    const section = document.createElement('div');
-    section.className = 'pos-category';
-    section.id = 'pos-cat-' + i;
-    const h3 = document.createElement('h3');
-    h3.textContent = cat.split('_').pop();
-    section.appendChild(h3);
-    const catNote = CATALOG[cat][0] && CATALOG[cat][0].note;
-    if (catNote) {
-      const noteEl = document.createElement('div');
-      noteEl.style.cssText = 'font-size:0.78rem;color:var(--muted);margin:-4px 0 10px;';
-      noteEl.innerHTML = catNote;
-      section.appendChild(noteEl);
-    }
-    CATALOG[cat].forEach((item, j) => {
-      const div = document.createElement('div');
-      div.className = 'pos-item';
-      const key = 'c' + i + '_i' + j;
-      let priceLabel = '';
-      if (item.price_m && item.price_l) priceLabel = `M $${item.price_m} / L $${item.price_l}`;
-      else if (item.price_m) priceLabel = `限M $${item.price_m}`;
-      else if (item.price_l) priceLabel = `限L $${item.price_l}`;
-      else if (item.price_alt) priceLabel = `$${item.price} / $${item.price_alt}`;
-      else if (item.price_set) priceLabel = `單點 $${item.price} / 套餐 $${item.price_set}`;
-      else priceLabel = `$${item.price}`;
-      div.innerHTML = `
-        <div class="info">
-          <div class="name">${item.name}</div>
-          <div class="price">${priceLabel}</div>
-        </div>
-        <button class="add">加入</button>
-      `;
-      div.querySelector('.add').onclick = () => openPosItemModal(cat, key, item);
-      section.appendChild(div);
-    });
-    menu.appendChild(section);
+    catCol.appendChild(btn);
   });
+  if (cats.length) goToPosCategory(0);
 }
 
 function goToPosCategory(i) {
-  document.querySelectorAll('#pos-tabs button').forEach(b => b.classList.remove('active'));
-  document.getElementById('pos-tab-btn-' + i).classList.add('active');
-  document.getElementById('pos-cat-' + i).scrollIntoView({behavior: 'smooth', block: 'start'});
+  document.querySelectorAll('.pos-cat-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('pos-cat-btn-' + i).classList.add('active');
+
+  const cat = Object.keys(CATALOG)[i];
+  const itemsCol = document.getElementById('pos-col-items');
+  itemsCol.innerHTML = '';
+
+  const catNote = CATALOG[cat][0] && CATALOG[cat][0].note;
+  if (catNote) {
+    const noteEl = document.createElement('div');
+    noteEl.style.cssText = 'font-size:0.78rem;color:var(--muted);margin-bottom:10px;';
+    noteEl.innerHTML = catNote;
+    itemsCol.appendChild(noteEl);
+  }
+
+  const grid = document.createElement('div');
+  grid.className = 'pos-item-grid';
+  CATALOG[cat].forEach((item, j) => {
+    const key = 'c' + i + '_i' + j;
+    let priceLabel = '';
+    if (item.price_m && item.price_l) priceLabel = `M $${item.price_m} / L $${item.price_l}`;
+    else if (item.price_m) priceLabel = `限M $${item.price_m}`;
+    else if (item.price_l) priceLabel = `限L $${item.price_l}`;
+    else if (item.price_alt) priceLabel = `$${item.price} / $${item.price_alt}`;
+    else if (item.price_set) priceLabel = `單點 $${item.price} / 套餐 $${item.price_set}`;
+    else priceLabel = `$${item.price}`;
+    const card = document.createElement('div');
+    card.className = 'pos-grid-card';
+    card.id = 'pos-grid-card-' + key;
+    card.innerHTML = `<div class="name">${item.name}</div><div class="price">${priceLabel}</div>`;
+    card.onclick = () => openPosItemModal(cat, key, item);
+    grid.appendChild(card);
+  });
+  itemsCol.appendChild(grid);
 }
 
+// 大麥POS參考版面：點品項不跳彈窗，直接在右側「客製化」欄位就地展開
 function openPosItemModal(cat, key, item) {
+  document.querySelectorAll('.pos-grid-card').forEach(c => c.classList.remove('active'));
+  const card = document.getElementById('pos-grid-card-' + key);
+  if (card) card.classList.add('active');
+
+  const detailCol = document.getElementById('pos-col-detail');
+  detailCol.innerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button type="button" onclick="closePosItemModal()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <h2 id="pos-item-modal-title" style="margin:0; flex:1; font-size:0.95rem;"></h2>
+    </div>
+    <div id="pos-item-modal-size"></div>
+    <div id="pos-item-modal-groups"></div>
+    <label style="display:block; font-size:0.8rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填）</label>
+    <textarea id="pos-item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.85rem;" maxlength="100" placeholder="例如：不要洋蔥"></textarea>
+    <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:14px;">
+      <button type="button" class="qty-btn" onclick="posItemModalQty(-1)" style="width:34px;height:34px;font-size:1.2rem;">-</button>
+      <span id="pos-item-modal-qty" style="font-size:1.1rem; min-width:20px; text-align:center;">1</span>
+      <button type="button" class="qty-btn" onclick="posItemModalQty(1)" style="width:34px;height:34px;font-size:1.2rem;">+</button>
+    </div>
+    <button class="btn-primary" style="width:100%;margin-top:12px;padding:12px;" onclick="confirmAddToPosCart()">加入訂單　<span id="pos-item-modal-total"></span></button>
+  `;
+
   let size = null, price = item.price;
   if (item.price_m && item.price_l) { size = 'M'; price = item.price_m; }
   else if (item.price_m) { size = 'M'; price = item.price_m; }
@@ -685,8 +675,6 @@ function openPosItemModal(cat, key, item) {
   currentPosModal = {cat, key, item, size, basePrice: price, groups: {}, qty: 1, comboDrinkName: null, comboDrinkSize: null, comboDrinkPrice: 0};
 
   document.getElementById('pos-item-modal-title').textContent = item.name;
-  document.getElementById('pos-item-modal-note').value = '';
-  document.getElementById('pos-item-modal-qty').textContent = '1';
 
   const sizeEl = document.getElementById('pos-item-modal-size');
   sizeEl.innerHTML = '';
@@ -750,7 +738,6 @@ function openPosItemModal(cat, key, item) {
   }
 
   updatePosItemModalTotal();
-  document.getElementById('pos-item-overlay').classList.add('open');
 }
 
 function renderPosOptionGroup(container, gKey) {
@@ -963,7 +950,8 @@ function updatePosItemModalTotal() {
 }
 
 function closePosItemModal() {
-  document.getElementById('pos-item-overlay').classList.remove('open');
+  document.querySelectorAll('.pos-grid-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('pos-col-detail').innerHTML = '<div class="pos-detail-empty">請選擇品項</div>';
   currentPosModal = null;
 }
 
@@ -1024,15 +1012,8 @@ function confirmAddToPosCart() {
   const existing = posCart.find(c => c.lineKey === lineKey);
   if (existing) existing.qty += currentPosModal.qty;
   else posCart.push({lineKey, name: displayName, size: currentPosModal.size, price: unit, qty: currentPosModal.qty, note});
-  updatePosCartBar();
   closePosItemModal();
-}
-
-function updatePosCartBar() {
-  const count = posCart.reduce((s, c) => s + c.qty, 0);
-  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
-  document.getElementById('pos-cart-count').textContent = count;
-  document.getElementById('pos-cart-total-bar').textContent = '$' + total;
+  renderPosCart();
 }
 
 function renderPosCart() {
@@ -1066,39 +1047,30 @@ function changePosQty(lineKey, delta) {
   posCart[idx].qty += delta;
   if (posCart[idx].qty <= 0) posCart.splice(idx, 1);
   renderPosCart();
-  updatePosCartBar();
 }
 
-function openPosCart() {
-  renderPosCart();
-  document.getElementById('pos-cart-view').style.display = 'block';
-  document.getElementById('pos-checkout-view').style.display = 'none';
-  document.getElementById('pos-confirm-view').style.display = 'none';
-  document.getElementById('pos-cart-overlay').classList.add('open');
-}
-function closePosCart() { document.getElementById('pos-cart-overlay').classList.remove('open'); }
-
+// 大麥POS參考版面：訂單/結帳固定顯示在右側第四欄，不用彈窗打開/關閉
 function showPosCheckout() {
   if (posCart.length === 0) { alert('請先選購品項'); return; }
   const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
   document.getElementById('pos-checkout-member').textContent = selectedMember
     ? `已選會員：${selectedMember.name}（${selectedMember.tier}，本次預估可得 ${Math.floor(total / 100) * (MEMBER_TIER_MULTIPLIER[selectedMember.tier] || 1)} 點）`
     : '未選會員（不累計點數）';
-  document.getElementById('pos-checkout-total').textContent = '$' + total;
-  document.getElementById('pos-cart-view').style.display = 'none';
-  document.getElementById('pos-checkout-view').style.display = 'block';
+  document.getElementById('pos-checkout-btn').style.display = 'none';
+  document.getElementById('pos-checkout-panel').style.display = 'block';
 }
 function backToPosCart() {
-  document.getElementById('pos-checkout-view').style.display = 'none';
-  document.getElementById('pos-cart-view').style.display = 'block';
+  document.getElementById('pos-checkout-panel').style.display = 'none';
+  document.getElementById('pos-checkout-btn').style.display = 'block';
 }
 function closePosCartAll() {
-  document.getElementById('pos-cart-overlay').classList.remove('open');
   posCart = [];
-  updatePosCartBar();
+  renderPosCart();
   document.getElementById('member-phone-input').value = '';
   document.getElementById('member-info').innerHTML = '';
   selectedMember = null;
+  document.getElementById('pos-confirm-panel').style.display = 'none';
+  document.getElementById('pos-checkout-btn').style.display = 'block';
 }
 
 function submitPosOrder() {
@@ -1116,8 +1088,8 @@ function submitPosOrder() {
     if (data.status !== 'ok') { alert(data.message || '結帳失敗'); return; }
     document.getElementById('pos-confirm-order-no').textContent = data.orderId;
     document.getElementById('pos-confirm-points').textContent = data.pointsEarned ? `本次消費獲得 ${data.pointsEarned} 點` : '';
-    document.getElementById('pos-checkout-view').style.display = 'none';
-    document.getElementById('pos-confirm-view').style.display = 'block';
+    document.getElementById('pos-checkout-panel').style.display = 'none';
+    document.getElementById('pos-confirm-panel').style.display = 'block';
     loadRevenue();
   });
 }
