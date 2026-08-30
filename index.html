@@ -334,6 +334,10 @@ const CATALOG ={"美式狂想套餐 SET MEALS ($129)": [{"name": "美式狂想�
 const STORE_NAME = "美寶美食館（A-Bao溪湖培英店）";
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
 let cart = []; // {key, name, size, price, qty}
+// 品項上下架狀態快取(品項名稱→'本日售完'/'永久下架')，由applyItemAvailability()載入頁面時抓一次，
+// 供renderOptionGroup渲染客製化選項時同步查詢(選項本身沒有獨立的.item DOM節點，不能沿用原本只對付
+// 主分類清單的disable邏輯，改用這份全站共用的名稱對照表)
+let itemAvailabilityMap = {};
 
 // 營業時間/接單時段規則（2026-08-27老闆確認：05:20開店、13:00打烊、打烊前15分鐘停止接單、下單後最少留10分鐘備餐）
 const STORE_OPEN_MIN = 5 * 60 + 20;   // 05:20
@@ -992,20 +996,25 @@ function renderOptionGroup(container, gKey) {
       ? 'display:block;margin:2px 0;font-size:0.82rem;'
       : 'display:inline-block;min-width:0;max-width:100%;margin:2px 0;font-size:0.82rem;';
     const inputType = g.type === 'single' ? 'radio' : 'checkbox';
-    const autoCheck = g.required && g.type === 'single' && g.options.length === 1;
+    // 客製化選項本身也可能被雲端平板標記上下架(例如加購配料/美式狂想套餐主餐美1~12)，
+    // 用跟主分類清單同一份名稱對照表擋掉，不能選也不會自動勾選
+    const unavailStatus = itemAvailabilityMap[opt.name];
+    const autoCheck = g.required && g.type === 'single' && g.options.length === 1 && !unavailStatus;
     const optThumb = `<img src="images/${encodeURIComponent(optCatShort)}/${encodeURIComponent(imgSafeName(opt.name))}.jpg" alt="" loading="lazy" onerror="this.style.display='none'" style="width:32px;height:32px;object-fit:cover;border-radius:6px;vertical-align:middle;margin-right:6px;">`;
     // 多欄排版時名稱以2字為單位包成不可拆的區塊，換行只會發生在區塊之間(例如"不醬只胡"→"不醬"/"只胡")，
     // 不會再出現斷成"不醬只"+單一孤字"胡"這種奇怪的斷點；名稱夠短能塞進一行時仍會維持單行
     const displayName = cols === 1 ? opt.name : chunkNameForWrap(opt.name);
+    if (unavailStatus) label.style.opacity = '0.5';
+    const unavailLabel = unavailStatus ? `<span style="color:#A32D2D;font-size:0.72rem;">（${unavailStatus === '永久下架' ? '已下架' : '本日售完'}）</span>` : '';
     if (opt.priceM != null || opt.priceL != null) {
       // M/L價格分開一行顯示，不擠在同一行（老闆反饋原本"(M+$10/L+$15)"太擠）；只有其中一種尺寸就只顯示那一行
       const sizeParts = [];
       if (opt.priceM != null) sizeParts.push(`M +$${opt.priceM}`);
       if (opt.priceL != null) sizeParts.push(`L +$${opt.priceL}`);
-      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''}> ${displayName}<br><span style="margin-left:20px;color:var(--muted);font-size:0.76rem;">${sizeParts.join('　')}</span>`;
+      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''} ${unavailStatus ? 'disabled' : ''}> ${displayName}${unavailLabel}<br><span style="margin-left:20px;color:var(--muted);font-size:0.76rem;">${sizeParts.join('　')}</span>`;
     } else {
       const priceLabel = opt.price ? ' +$' + opt.price : '';
-      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''}> ${displayName}${priceLabel}`;
+      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''} ${unavailStatus ? 'disabled' : ''}> ${displayName}${priceLabel}${unavailLabel}`;
     }
     optWrap.appendChild(label);
     if (autoCheck) currentModal.groups[gKey] = [opt.name];
@@ -1493,6 +1502,7 @@ applyItemAvailability();
 function applyItemAvailability() {
   fetch(`${ORDER_BACKEND_URL}?action=storeStatus&storeId=meibao`).then(r => r.json()).then(data => {
     if (data.status !== 'ok' || !data.items) return;
+    itemAvailabilityMap = data.items;
     Object.keys(data.items).forEach(name => {
       const div = document.querySelector(`.item[data-item-name="${CSS.escape(name)}"]`);
       if (!div) return;
