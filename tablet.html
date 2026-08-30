@@ -249,7 +249,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 <script>
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
 const STORE_ID = "meibao";
-const ITEM_LIST = [{"category": "美式狂想套餐 SET MEALS ($129)", "name": "美式狂想套餐"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "培根炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "香雞炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "火腿炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "烤肉炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "日式豬排炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "日式雞排炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "德式燻腸炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "泡菜燒肉炒麵"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定01 炒麵加蛋＋鍋貼"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定02 美式湯餃＋烤肉蛋漢堡"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定03 炒麵加蛋＋雞塊"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定04 烤肉炒麵＋鍋貼"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定06 玉米起司特酥蛋餅＋米花雞球"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定07 烤肉蛋漢堡＋鍋貼"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定08 烤肉炒麵＋黃金香酥雞"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定09 炒麵加蛋＋黃金香酥雞"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定10 烤肉炒麵＋米花雞球"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定11 美式湯餃＋雞塊"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定12 玉米起司特酥蛋餅＋鍋貼"}, {"category": "KIMCHI FESTIVAL_泡菜祭", "name": "泡菜燒肉異國炒麵"}, {"category": "KIMCHI FESTIVAL_泡菜祭", "name": "泡菜豬排蛋堡"}, {"category": "KIMCHI FESTIVAL_泡菜祭", "name": "泡菜雞排捲"}, {"category": "KIMCHI FESTIVAL_泡菜祭", "name": "泡菜蛋餅"}, {"category": "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡", "name": "韓風玫瑰醬 鳳梨雞排堡"}, {"category": "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡", "name": "經典赤辣醬 鳳梨雞排堡"}, {"category": "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡", "name": "蜂蜜芥末醬 鳳梨雞排堡"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "玉米起司"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "鮪魚玉米"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "鮪魚洋蔥"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "培根玉米起司"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "惡魔雙色拔絲"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "火腿肉鬆蔬食"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "火腿起司 佐花醬小黃瓜"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "和洋豬排蔬食"}, {"category": "BURGERS_漢堡", "name": "玉米蛋"}, {"category": "BURGERS_漢堡", "name": "肉鬆蛋"}, {"category": "BURGERS_漢堡", "name": "豬肉蛋 (漢堡肉)"}, {"category": "BURGERS_漢堡", "name": "烤肉蛋 (里肌肉)"}, {"category": "BURGERS_漢堡", "name": "香雞蛋"}, {"category": "BURGERS_漢堡", "name": "牛肉蛋"}, {"category": "BURGERS_漢堡", "name": "總匯蛋"}, {"category": "BURGERS_漢堡", "name": "日式雞排蛋"}, {"category": "BURGERS_漢堡", "name": "日式豬排蛋"}, {"category": "BURGERS_漢堡", "name": "日式花枝排蛋"}, {"category": "BURGERS_漢堡", "name": "日式蝦排蛋"}, {"category": "BURGERS_漢堡", "name": "雞腿蛋 (原/辣)"}, {"category": "TOAST_土司", "name": "煎蛋"}, {"category": "TOAST_土司", "name": "玉米蛋"}, {"category": "TOAST_土司", "name": "肉鬆蛋"}, {"category": "TOAST_土司", "name": "起司蛋"}, {"category": "TOAST_土司", "name": "火腿蛋"}, {"category": "TOAST_土司", "name": "培根蛋"}, {"category": "TOAST_土司", "name": "鮪魚蛋"}, {"category": "TOAST_土司", "name": "烤肉蛋 (里肌肉)"}, {"category": "TOAST_土司", "name": "香雞蛋"}, {"category": "TOAST_土司", "name": "總匯蛋"}, {"category": "TOAST_土司", "name": "雞腿蛋 (原/辣)"}, {"category": "JAN SERIES_果醬磚研系列", "name": "草莓"}, {"category": "JAN SERIES_果醬磚研系列", "name": "藍莓"}, {"category": "JAN SERIES_果醬磚研系列", "name": "奶酥"}, {"category": "JAN SERIES_果醬磚研系列", "name": "花生"}, {"category": "JAN SERIES_果醬磚研系列", "name": "奶油"}, {"category": "JAN SERIES_果醬磚研系列", "name": "巧克力"}, {"category": "JAN SERIES_果醬磚研系列", "name": "狠蒜"}, {"category": "THICKCUT TOAST_厚片", "name": "起司奶油"}, {"category": "THICKCUT TOAST_厚片", "name": "鮪魚洋蔥"}, {"category": "THICKCUT TOAST_厚片", "name": "燻雞起司"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "日式蔬食沙拉"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "日式咖哩"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "冰州魚排"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "大洋鮮魚"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "烤肉穀堡"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "孜然醬雞排"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "孜然醬豬排"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "火腿起司"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "蕃茄豬肉"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "苜蓿芽起司"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "陽光香雞"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "蔬食烤肉"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "日式燻雞"}, {"category": "BURRITO_蔬食捲餅", "name": "香雞蕃茄"}, {"category": "BURRITO_蔬食捲餅", "name": "黃金烤肉"}, {"category": "BURRITO_蔬食捲餅", "name": "日式雞排"}, {"category": "BURRITO_蔬食捲餅", "name": "海味花枝"}, {"category": "BURRITO_蔬食捲餅", "name": "鮮味蝦排"}, {"category": "BURRITO_蔬食捲餅", "name": "美式雞腿 (原/辣)"}, {"category": "PUFF PASTRY_起酥堡", "name": "草莓起酥"}, {"category": "PUFF PASTRY_起酥堡", "name": "洋芋蔬食"}, {"category": "PUFF PASTRY_起酥堡", "name": "苜蓿芽玉米"}, {"category": "PUFF PASTRY_起酥堡", "name": "蕃茄蔬食"}, {"category": "PUFF PASTRY_起酥堡", "name": "蔬食烤肉"}, {"category": "PAIN PERDU_法國土司 ", "name": "日式培根"}, {"category": "PAIN PERDU_法國土司 ", "name": "深海鮪魚"}, {"category": "PAIN PERDU_法國土司 ", "name": "黃金烤肉"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "原味"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "肉鬆"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "玉米"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "起司"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "蔬食"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "洋蔥"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "火腿"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "培根"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "熱狗"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "鮪魚"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "烤肉"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "馬鈴薯土司"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "南瓜土司"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "全麥蔬食鮪魚"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "全麥苜蓿芽火腿"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "全麥蔬菜沙拉"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "田園蔬菜捲"}, {"category": "CHINESE SNACKS_中式茶食", "name": "荷包蛋"}, {"category": "CHINESE SNACKS_中式茶食", "name": "熱狗 (4條)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "玉米濃湯"}, {"category": "CHINESE SNACKS_中式茶食", "name": "炒麵"}, {"category": "CHINESE SNACKS_中式茶食", "name": "鍋貼(5個)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "雞塊 (4個)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "蘿蔔糕 (2片)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "薯餅 (4片)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "米花雞球 (8個)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "野菜豚炸餃(8個)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "脆薯"}, {"category": "CHINESE SNACKS_中式茶食", "name": "美式湯麵"}, {"category": "CHINESE SNACKS_中式茶食", "name": "義響鐵板麵 (紅醬/咖哩)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "黃金香酥雞"}, {"category": "CHINESE SNACKS_中式茶食", "name": "二折雞翅(3入/7入)"}, {"category": "FRESH FRUIT TEA_鮮果茶 Cool", "name": "檸檬紅茶"}, {"category": "FRESH FRUIT TEA_鮮果茶 Cool", "name": "檸檬綠茶"}, {"category": "FRESH FRUIT TEA_鮮果茶 Cool", "name": "蜜漬鳳梨紅茶"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖豆漿"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖薏仁"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖奶茶"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖紅茶牛奶"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖牛奶"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖檸檬飲"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀豆漿"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀紅茶"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀紅茶豆漿"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀奶茶"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀綠奶"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀薏仁漿"}, {"category": "PURE TEA_純味茶", "name": "阿薩姆紅茶"}, {"category": "PURE TEA_純味茶", "name": "茉莉綠茶"}, {"category": "PURE TEA_純味茶", "name": "高山青茶"}, {"category": "PURE TEA_純味茶", "name": "東方美人 (現沏)"}, {"category": "PURE TEA_純味茶", "name": "黃金烏龍 (現沏)"}, {"category": "PURE TEA_純味茶", "name": "阿里山 (現沏)"}, {"category": "PURE TEA_純味茶", "name": "玄米玉露 (現沏)"}, {"category": "PURE TEA_純味茶", "name": "四季綠茶 (現沏)"}, {"category": "MILK TEA_奶茶系列", "name": "阿薩姆奶茶"}, {"category": "MILK TEA_奶茶系列", "name": "茉香奶綠"}, {"category": "MILK TEA_奶茶系列", "name": "高山青奶"}, {"category": "MILK TEA_奶茶系列", "name": "胚芽奶茶"}, {"category": "MILK TEA_奶茶系列", "name": "茶珠青奶"}, {"category": "MILK TEA_奶茶系列", "name": "茶珠綠奶"}, {"category": "MILK TEA_奶茶系列", "name": "茶珠奶茶"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "研磨豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "紅茶豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "胚芽豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "薏仁豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "抹茶豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "養生薏仁漿"}, {"category": "TEA LATTES_茶拿鐵", "name": "東方拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "烏龍拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "阿里山拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "四季拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "玄米拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "紅茶拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "綠茶拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "青茶拿鐵"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "豆奶拿鐵"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "特調咖啡"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "義式咖啡"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "小農拿鐵"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "卡布奇諾"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "玄米檸檬綠茶"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "鳳梨美人茶"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "檸檬黃金烏龍"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "鳳梨美人鮮奶茶"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "鳳梨烏龍鮮奶茶"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "鳳梨玄米鮮奶綠"}];
+const ITEM_LIST = [{"category": "美式狂想套餐 SET MEALS ($129)", "name": "美式狂想套餐"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美1 花醬 牛肉培根 起司蛋堡"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美2 蜂蜜芥末 德式燻腸 捲餅"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美3 日式白醬 酥炸魚排 蛋堡"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美4 雙層澳洲牛肉 起司蛋堡"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美5 雙層豬肉 起司蛋堡"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美6 清爽薯泥培根 起司蛋堡"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美7 泰式風味 鮮魚 起司蛋堡"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美8 日式咖哩 豬排 起司蛋堡"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美9 香濃雞排 起司法國土司"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美10 美味豬排 起司蛋總匯土司"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美11 千島醬 薯泥雞排 起司蛋土司"}, {"category": "美式狂想套餐 SET MEALS ($129)", "name": "美12 甜辣泰式 雞排 起司蛋捲餅"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "培根炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "香雞炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "火腿炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "烤肉炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "日式豬排炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "日式雞排炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "德式燻腸炒麵"}, {"category": "PRIVATE FRIED NOODLES_私房炒麵系列", "name": "泡菜燒肉炒麵"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定01 炒麵加蛋＋鍋貼"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定02 美式湯餃＋烤肉蛋漢堡"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定03 炒麵加蛋＋雞塊"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定04 烤肉炒麵＋鍋貼"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定06 玉米起司特酥蛋餅＋米花雞球"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定07 烤肉蛋漢堡＋鍋貼"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定08 烤肉炒麵＋黃金香酥雞"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定09 炒麵加蛋＋黃金香酥雞"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定10 烤肉炒麵＋米花雞球"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定11 美式湯餃＋雞塊"}, {"category": "A-BAO SELECTED SET_A-bao嚴選定食", "name": "定12 玉米起司特酥蛋餅＋鍋貼"}, {"category": "KIMCHI FESTIVAL_泡菜祭", "name": "泡菜燒肉異國炒麵"}, {"category": "KIMCHI FESTIVAL_泡菜祭", "name": "泡菜豬排蛋堡"}, {"category": "KIMCHI FESTIVAL_泡菜祭", "name": "泡菜雞排捲"}, {"category": "KIMCHI FESTIVAL_泡菜祭", "name": "泡菜蛋餅"}, {"category": "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡", "name": "韓風玫瑰醬 鳳梨雞排堡"}, {"category": "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡", "name": "經典赤辣醬 鳳梨雞排堡"}, {"category": "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡", "name": "蜂蜜芥末醬 鳳梨雞排堡"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "玉米起司"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "鮪魚玉米"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "鮪魚洋蔥"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "培根玉米起司"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "惡魔雙色拔絲"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "火腿肉鬆蔬食"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "火腿起司 佐花醬小黃瓜"}, {"category": "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配", "name": "和洋豬排蔬食"}, {"category": "BURGERS_漢堡", "name": "玉米蛋"}, {"category": "BURGERS_漢堡", "name": "肉鬆蛋"}, {"category": "BURGERS_漢堡", "name": "豬肉蛋 (漢堡肉)"}, {"category": "BURGERS_漢堡", "name": "烤肉蛋 (里肌肉)"}, {"category": "BURGERS_漢堡", "name": "香雞蛋"}, {"category": "BURGERS_漢堡", "name": "牛肉蛋"}, {"category": "BURGERS_漢堡", "name": "總匯蛋"}, {"category": "BURGERS_漢堡", "name": "日式雞排蛋"}, {"category": "BURGERS_漢堡", "name": "日式豬排蛋"}, {"category": "BURGERS_漢堡", "name": "日式花枝排蛋"}, {"category": "BURGERS_漢堡", "name": "日式蝦排蛋"}, {"category": "BURGERS_漢堡", "name": "雞腿蛋 (原/辣)"}, {"category": "TOAST_土司", "name": "煎蛋"}, {"category": "TOAST_土司", "name": "玉米蛋"}, {"category": "TOAST_土司", "name": "肉鬆蛋"}, {"category": "TOAST_土司", "name": "起司蛋"}, {"category": "TOAST_土司", "name": "火腿蛋"}, {"category": "TOAST_土司", "name": "培根蛋"}, {"category": "TOAST_土司", "name": "鮪魚蛋"}, {"category": "TOAST_土司", "name": "烤肉蛋 (里肌肉)"}, {"category": "TOAST_土司", "name": "香雞蛋"}, {"category": "TOAST_土司", "name": "總匯蛋"}, {"category": "TOAST_土司", "name": "雞腿蛋 (原/辣)"}, {"category": "JAN SERIES_果醬磚研系列", "name": "草莓"}, {"category": "JAN SERIES_果醬磚研系列", "name": "藍莓"}, {"category": "JAN SERIES_果醬磚研系列", "name": "奶酥"}, {"category": "JAN SERIES_果醬磚研系列", "name": "花生"}, {"category": "JAN SERIES_果醬磚研系列", "name": "奶油"}, {"category": "JAN SERIES_果醬磚研系列", "name": "巧克力"}, {"category": "JAN SERIES_果醬磚研系列", "name": "狠蒜"}, {"category": "THICKCUT TOAST_厚片", "name": "起司奶油"}, {"category": "THICKCUT TOAST_厚片", "name": "鮪魚洋蔥"}, {"category": "THICKCUT TOAST_厚片", "name": "燻雞起司"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "日式蔬食沙拉"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "日式咖哩"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "冰州魚排"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "大洋鮮魚"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "烤肉穀堡"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "孜然醬雞排"}, {"category": "CEREAL GRAIN BURGERS_日式穀堡", "name": "孜然醬豬排"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "火腿起司"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "蕃茄豬肉"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "苜蓿芽起司"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "陽光香雞"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "蔬食烤肉"}, {"category": "SOFT FRENCH BREAD_法國麵包 ", "name": "日式燻雞"}, {"category": "BURRITO_蔬食捲餅", "name": "香雞蕃茄"}, {"category": "BURRITO_蔬食捲餅", "name": "黃金烤肉"}, {"category": "BURRITO_蔬食捲餅", "name": "日式雞排"}, {"category": "BURRITO_蔬食捲餅", "name": "海味花枝"}, {"category": "BURRITO_蔬食捲餅", "name": "鮮味蝦排"}, {"category": "BURRITO_蔬食捲餅", "name": "美式雞腿 (原/辣)"}, {"category": "PUFF PASTRY_起酥堡", "name": "草莓起酥"}, {"category": "PUFF PASTRY_起酥堡", "name": "洋芋蔬食"}, {"category": "PUFF PASTRY_起酥堡", "name": "苜蓿芽玉米"}, {"category": "PUFF PASTRY_起酥堡", "name": "蕃茄蔬食"}, {"category": "PUFF PASTRY_起酥堡", "name": "蔬食烤肉"}, {"category": "PAIN PERDU_法國土司 ", "name": "日式培根"}, {"category": "PAIN PERDU_法國土司 ", "name": "深海鮪魚"}, {"category": "PAIN PERDU_法國土司 ", "name": "黃金烤肉"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "原味"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "肉鬆"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "玉米"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "起司"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "蔬食"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "洋蔥"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "火腿"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "培根"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "熱狗"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "鮪魚"}, {"category": "CHINESE OMELET_招牌蛋餅", "name": "烤肉"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "馬鈴薯土司"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "南瓜土司"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "全麥蔬食鮪魚"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "全麥苜蓿芽火腿"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "全麥蔬菜沙拉"}, {"category": "SALAD VEGETABLE_田園蔬果", "name": "田園蔬菜捲"}, {"category": "CHINESE SNACKS_中式茶食", "name": "荷包蛋"}, {"category": "CHINESE SNACKS_中式茶食", "name": "熱狗 (4條)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "玉米濃湯"}, {"category": "CHINESE SNACKS_中式茶食", "name": "炒麵"}, {"category": "CHINESE SNACKS_中式茶食", "name": "鍋貼(5個)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "雞塊 (4個)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "蘿蔔糕 (2片)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "薯餅 (4片)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "米花雞球 (8個)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "野菜豚炸餃(8個)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "脆薯"}, {"category": "CHINESE SNACKS_中式茶食", "name": "美式湯麵"}, {"category": "CHINESE SNACKS_中式茶食", "name": "義響鐵板麵 (紅醬/咖哩)"}, {"category": "CHINESE SNACKS_中式茶食", "name": "黃金香酥雞"}, {"category": "CHINESE SNACKS_中式茶食", "name": "二折雞翅(3入/7入)"}, {"category": "FRESH FRUIT TEA_鮮果茶 Cool", "name": "檸檬紅茶"}, {"category": "FRESH FRUIT TEA_鮮果茶 Cool", "name": "檸檬綠茶"}, {"category": "FRESH FRUIT TEA_鮮果茶 Cool", "name": "蜜漬鳳梨紅茶"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖豆漿"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖薏仁"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖奶茶"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖紅茶牛奶"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖牛奶"}, {"category": "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ", "name": "虎斑黑糖檸檬飲"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀豆漿"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀紅茶"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀紅茶豆漿"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀奶茶"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀綠奶"}, {"category": "SOYBEAN MILK WITH GRAINS_多穀系列", "name": "多穀薏仁漿"}, {"category": "PURE TEA_純味茶", "name": "阿薩姆紅茶"}, {"category": "PURE TEA_純味茶", "name": "茉莉綠茶"}, {"category": "PURE TEA_純味茶", "name": "高山青茶"}, {"category": "PURE TEA_純味茶", "name": "東方美人 (現沏)"}, {"category": "PURE TEA_純味茶", "name": "黃金烏龍 (現沏)"}, {"category": "PURE TEA_純味茶", "name": "阿里山 (現沏)"}, {"category": "PURE TEA_純味茶", "name": "玄米玉露 (現沏)"}, {"category": "PURE TEA_純味茶", "name": "四季綠茶 (現沏)"}, {"category": "MILK TEA_奶茶系列", "name": "阿薩姆奶茶"}, {"category": "MILK TEA_奶茶系列", "name": "茉香奶綠"}, {"category": "MILK TEA_奶茶系列", "name": "高山青奶"}, {"category": "MILK TEA_奶茶系列", "name": "胚芽奶茶"}, {"category": "MILK TEA_奶茶系列", "name": "茶珠青奶"}, {"category": "MILK TEA_奶茶系列", "name": "茶珠綠奶"}, {"category": "MILK TEA_奶茶系列", "name": "茶珠奶茶"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "研磨豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "紅茶豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "胚芽豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "薏仁豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "抹茶豆漿"}, {"category": "SOYBEAN MILK_豆漿系列", "name": "養生薏仁漿"}, {"category": "TEA LATTES_茶拿鐵", "name": "東方拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "烏龍拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "阿里山拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "四季拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "玄米拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "紅茶拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "綠茶拿鐵"}, {"category": "TEA LATTES_茶拿鐵", "name": "青茶拿鐵"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "豆奶拿鐵"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "特調咖啡"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "義式咖啡"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "小農拿鐵"}, {"category": "ITALIAN STYLE COFFEE_義式咖啡", "name": "卡布奇諾"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "玄米檸檬綠茶"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "鳳梨美人茶"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "檸檬黃金烏龍"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "鳳梨美人鮮奶茶"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "鳳梨烏龍鮮奶茶"}, {"category": "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool", "name": "鳳梨玄米鮮奶綠"}, {"category": "加購品項/配料選擇", "name": "加起司"}, {"category": "加購品項/配料選擇", "name": "加二片起司"}, {"category": "加購品項/配料選擇", "name": "加蛋"}, {"category": "加購品項/配料選擇", "name": "加火腿"}, {"category": "加購品項/配料選擇", "name": "加培根"}, {"category": "加購品項/配料選擇", "name": "加麵"}, {"category": "加購品項/配料選擇", "name": "薯餅(6入)"}, {"category": "加購品項/配料選擇", "name": "雞塊(6入)"}, {"category": "加購品項/配料選擇", "name": "二折雞翅(3入)"}, {"category": "加購品項/配料選擇", "name": "茶珠"}, {"category": "加購品項/配料選擇", "name": "多穀"}, {"category": "加購品項/配料選擇", "name": "抹茶"}, {"category": "加購品項/配料選擇", "name": "胚芽"}, {"category": "加購品項/配料選擇", "name": "美式狂想 x 雙人脆薯"}, {"category": "加購品項/配料選擇", "name": "美式狂想 x 九塊雞塊"}, {"category": "加購品項/配料選擇", "name": "美式狂想 x 十粒鍋貼"}, {"category": "加購品項/配料選擇", "name": "加一份Espresso"}, {"category": "加購品項/配料選擇", "name": "加二份Espresso"}, {"category": "加購品項/配料選擇", "name": "多二匙奶"}, {"category": "加購品項/配料選擇", "name": "野菜豚炸餃"}, {"category": "加購品項/配料選擇", "name": "米花雞球"}];
 
 function apiGet(params) {
   const qs = new URLSearchParams(params).toString();
@@ -453,30 +453,40 @@ const OPTION_GROUPS = {
   omelet_addon: { label: '蛋餅加料選擇（可複選，額外加價）', type: 'multi', options: [
     {name: '加起司', price: 10}, {name: '加二片起司', price: 18}, {name: '加火腿', price: 15}, {name: '加培根', price: 20}
   ]},
+  // 2026-08-30依POS機台用.xlsx新版客製化資料補齊各醬料選項的「少/多」細緻程度（原本只有二分法，例如不沙/只沙）
   cereal_sauce: { label: '穀堡醬料選擇（可複選）', type: 'multi', options: [
-    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '只沙', price: 0},
-    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '沙少', price: 0}, {name: '沙多', price: 0},
+    {name: '不白醬', price: 0}, {name: '不咖醬', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
   ]},
   frenchbread_sauce: { label: '法包醬料選擇（可複選）', type: 'multi', options: [
-    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '只沙', price: 0},
-    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '沙少', price: 0}, {name: '沙多', price: 0},
+    {name: '不茄片', price: 0}, {name: '不黃醬', price: 0}, {name: '黃醬直接加', price: 0}, {name: '黃醬包', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
   ]},
   burrito_sauce: { label: '捲餅醬料選擇（可複選）', type: 'multi', options: [
-    {name: '不菜', price: 0}, {name: '不千', price: 0},
-    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+    {name: '不菜', price: 0}, {name: '不茄片', price: 0}, {name: '不千', price: 0}, {name: '千醬直接加', price: 0},
+    {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
   ]},
   chicken_flavor: { label: '雞腿口味選擇', type: 'single', required: true, options: [{name: '原味', price: 0}, {name: '辣味', price: 0}] },
   egg_main_choice: { label: '總匯主食選擇', type: 'single', required: true, options: [{name: '漢堡肉', price: 0}, {name: '里肌肉', price: 10}] },
   puffpastry_sauce: { label: '起酥醬料選擇（可複選）', type: 'multi', options: [
-    {name: '不菜', price: 0}, {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+    {name: '不菜', price: 0}, {name: '不沙（洋芋）', price: 0}, {name: '不白醬', price: 0},
+    {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
   ]},
   tropical_sauce: { label: '熱帶鳳梨雞排堡醬料選擇（可複選）', type: 'multi', options: [
-    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '只沙', price: 0},
-    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+    {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '沙少', price: 0}, {name: '沙多', price: 0}, {name: '只沙', price: 0},
+    {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+  ]},
+  // 熱帶鳳梨雞排堡專屬第二組醬料（依品項本身的醬料口味：玫瑰醬/赤辣醬/黃醬，各有少/多可調）
+  tropical_sauce2: { label: '熱帶鳳梨雞排堡醬料選擇2（可複選）', type: 'multi', options: [
+    {name: '不玫瑰醬', price: 0}, {name: '玫瑰醬少', price: 0}, {name: '玫瑰醬多', price: 0},
+    {name: '不赤辣醬', price: 0}, {name: '赤辣醬少', price: 0}, {name: '赤辣醬多', price: 0},
+    {name: '不黃醬', price: 0}, {name: '黃醬少', price: 0}, {name: '黃醬多', price: 0}
   ]},
   painperdu_sauce: { label: '法土醬料選擇（可複選）', type: 'multi', options: [
-    {name: '不沙', price: 0}, {name: '只沙', price: 0},
-    {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
+    {name: '不沙', price: 0}, {name: '只沙', price: 0}, {name: '沙少', price: 0}, {name: '沙多', price: 0},
+    {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
   ]},
   salad_sauce: { label: '田園蔬果醬料選擇（可複選）', type: 'multi', options: [{name: '不沙', price: 0}] },
   salad_addon: { label: '加蛋（可複選，額外加價）', type: 'multi', options: [{name: '加蛋', price: 15}] },
@@ -492,7 +502,13 @@ const OPTION_GROUPS = {
     {name: '大杯鮮奶茶', price: 30}, {name: '大杯鮮奶綠', price: 30}, {name: '大杯鮮奶青', price: 30}
   ]},
   jam_bread_choice: { label: '果醬麵包選擇', type: 'single', required: true, options: [{name: '土司', price: 0}, {name: '法土', price: 5}, {name: '厚片', price: 5}, {name: '起酥堡', price: 10}] },
-  snacks_sauce: { label: '中式茶食醬料選擇（可複選）', type: 'multi', options: [{name: '不加醬油', price: 0}, {name: '不蕃包', price: 0}, {name: '不胡', price: 0}, {name: '加胡', price: 0}] },
+  snacks_sauce: { label: '中式茶食醬料選擇（可複選）', type: 'multi', options: [
+    {name: '醬油直接加', price: 0}, {name: '不加醬油', price: 0}, {name: '醬油包', price: 0},
+    {name: '蕃醬直接加', price: 0}, {name: '不蕃包', price: 0}, {name: '蕃包', price: 0},
+    {name: '不胡', price: 0}, {name: '胡少', price: 0}, {name: '胡多', price: 0}
+  ]},
+  // 奶茶系列專屬濃度選擇（2026-08-30新增，POS機台用.xlsx新資料）
+  milk_tea_richness: { label: '奶茶濃度選擇', type: 'single', options: [{name: '少一匙奶', price: 0}, {name: '多一匙奶', price: 0}, {name: '多二匙奶', price: 5}] },
   soup_portion: { label: '濃湯份量選擇', type: 'single', required: true, options: [{name: '小', price: 0}, {name: '大', price: 10}] },
   noodle_portion: { label: '炒麵份量選擇', type: 'single', required: true, options: [{name: '小', price: 0}, {name: '大', price: 10}] },
   ice_level: { label: '冰量選擇', type: 'single', required: true, options: [
@@ -525,6 +541,13 @@ const OPTION_GROUPS = {
     {name: '不菜', price: 0}, {name: '不沙', price: 0}, {name: '不蕃', price: 0},
     {name: '不胡', price: 0}, {name: '不醬只胡', price: 0}, {name: '不醬不胡', price: 0}
   ]},
+  // 美式狂想套餐各主餐專屬醬料（2026-08-30依POS機台用.xlsx新增，非每個主餐都用共用combo_sauce）
+  combo_sauce_mei1: { label: '美1醬料選擇（可複選）', type: 'multi', options: [{name: '不花醬', price: 0}, {name: '花醬少', price: 0}, {name: '花醬多', price: 0}] },
+  combo_sauce_mei2: { label: '美2醬料選擇（可複選）', type: 'multi', options: [{name: '不黃醬', price: 0}, {name: '黃醬少', price: 0}, {name: '黃醬多', price: 0}, {name: '黃醬包', price: 0}] },
+  combo_sauce_mei3: { label: '美3醬料選擇（可複選）', type: 'multi', options: [{name: '不白醬', price: 0}, {name: '白醬少', price: 0}, {name: '白醬多', price: 0}] },
+  combo_sauce_mei7_12: { label: '美7、美12醬料選擇（可複選）', type: 'multi', options: [{name: '不泰醬', price: 0}, {name: '泰醬少', price: 0}, {name: '泰醬多', price: 0}] },
+  combo_sauce_mei8: { label: '美8醬料選擇（可複選）', type: 'multi', options: [{name: '不咖醬', price: 0}, {name: '咖醬少', price: 0}, {name: '咖醬多', price: 0}] },
+  combo_sauce_mei11: { label: '美11醬料選擇（可複選）', type: 'multi', options: [{name: '不千醬', price: 0}, {name: '千醬少', price: 0}, {name: '千醬多', price: 0}] },
   deluxe_upgrade: { label: '豪華經濟升級餐（限選一項，加購）', type: 'single', options: [
     {name: '美式狂想 x 雙人脆薯', price: 70}, {name: '美式狂想 x 九塊雞塊', price: 70}, {name: '美式狂想 x 十粒鍋貼', price: 60}
   ]}
@@ -534,6 +557,16 @@ const DRINK_FAMILY = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIE
   'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
   'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
 const SET_MEAL_CATEGORY = '美式狂想套餐 SET MEALS ($129)';
+// 選定的主餐(美1~美12)決定要用哪組專屬醬料，沒對應到的主餐(美4/5/6/9/10)用共用combo_sauce
+const COMBO_MAIN_SAUCE_MAP = {
+  '美1 花醬 牛肉培根 起司蛋堡': 'combo_sauce_mei1',
+  '美2 蜂蜜芥末 德式燻腸 捲餅': 'combo_sauce_mei2',
+  '美3 日式白醬 酥炸魚排 蛋堡': 'combo_sauce_mei3',
+  '美7 泰式風味 鮮魚 起司蛋堡': 'combo_sauce_mei7_12',
+  '美8 日式咖哩 豬排 起司蛋堡': 'combo_sauce_mei8',
+  '美11 千島醬 薯泥雞排 起司蛋土司': 'combo_sauce_mei11',
+  '美12 甜辣泰式 雞排 起司蛋捲餅': 'combo_sauce_mei7_12'
+};
 function shortCatName(cat) {
   if (cat === SET_MEAL_CATEGORY) return '美式狂想套餐';
   return cat.split('_').pop().split('（')[0].trim();
@@ -579,7 +612,7 @@ const CATEGORY_GROUPS = {
   'A-BAO SELECTED SET_A-bao嚴選定食': ['combo_drink', 'dine_set_addon', 'spicy_sauce'],
   'KIMCHI FESTIVAL_泡菜祭': [],
   'CRISPY OMELETTE SERIES_特酥系列 x 超值自由配': ['omelet_sauce', 'omelet_addon'],
-  'TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡': ['tropical_sauce', 'bread_addon'],
+  'TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡': ['tropical_sauce', 'tropical_sauce2', 'bread_addon'],
   'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ': ['temperature_choice', 'brown_sugar_sweetness', 'drink_topping'],
   'FRESH FRUIT TEA_鮮果茶 Cool': ['ice_level', 'fruit_tea_sweetness'],
   'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool': ['ice_level', 'fruit_tea_sweetness'],
@@ -587,7 +620,7 @@ const CATEGORY_GROUPS = {
   'SOYBEAN MILK_豆漿系列': ['temperature_choice', 'sweetness', 'drink_topping'],
   'PURE TEA_純味茶': ['temperature_choice', 'sweetness', 'drink_topping'],
   'TEA LATTES_茶拿鐵': ['temperature_choice', 'sweetness', 'drink_topping'],
-  'MILK TEA_奶茶系列': ['temperature_choice', 'sweetness', 'drink_topping'],
+  'MILK TEA_奶茶系列': ['temperature_choice', 'sweetness', 'drink_topping', 'milk_tea_richness'],
   'ITALIAN STYLE COFFEE_義式咖啡': ['temperature_choice', 'sweetness', 'coffee_strength']
 };
 
@@ -609,7 +642,8 @@ const ITEM_SPECIFIC_GROUPS = {
 };
 
 function groupsForCategory(cat, itemName) {
-  if (cat === SET_MEAL_CATEGORY) return ['combo_main', 'combo_fries', 'combo_drink', 'combo_sauce', 'bread_addon', 'deluxe_upgrade'];
+  // combo_sauce不在這裡固定回傳，改成依選定的主餐(美1~美12)動態決定要用哪組專屬醬料(見updateComboSauce)
+  if (cat === SET_MEAL_CATEGORY) return ['combo_main', 'combo_fries', 'combo_drink', 'bread_addon', 'deluxe_upgrade'];
   const base = CATEGORY_GROUPS[cat] || (DRINK_FAMILY.includes(cat) ? ['ice_level', 'sweetness'] : []);
   const extra = itemName && ITEM_SPECIFIC_GROUPS[itemName] ? ITEM_SPECIFIC_GROUPS[itemName] : [];
   return [...extra, ...base];
@@ -659,6 +693,9 @@ function goToPosCategory(i) {
   const cat = Object.keys(CATALOG)[i];
   const itemsCol = document.getElementById('pos-col-items');
   itemsCol.innerHTML = '';
+  // 切換分類時，右側客製化欄位如果還停留在上一個品項的內容要清掉，避免跟新分類的品項對不上
+  document.getElementById('pos-col-detail').innerHTML = '<div class="pos-detail-empty">請選擇品項</div>';
+  currentPosModal = null;
   setPosStep('items');
 
   const catNote = CATALOG[cat][0] && CATALOG[cat][0].note;
@@ -769,6 +806,22 @@ function openPosItemModal(cat, key, item) {
   groupsEl.innerHTML = '';
   groupsForCategory(cat, item.name).forEach(gKey => renderPosOptionGroup(groupsEl, gKey));
 
+  // 美式狂想套餐：選定的主餐(美1~美12)決定跳出哪組專屬醬料，選其他主餐則用共用combo_sauce
+  if (cat === SET_MEAL_CATEGORY) {
+    const sauceEl = document.createElement('div');
+    sauceEl.id = 'pos-combo-sauce-container';
+    groupsEl.appendChild(sauceEl);
+    currentPosModal.updateComboSauce = () => {
+      sauceEl.innerHTML = '';
+      Object.keys(currentPosModal.groups).forEach(k => { if (k.indexOf('combo_sauce') === 0) delete currentPosModal.groups[k]; });
+      const mainChoice = (currentPosModal.groups['combo_main'] || [])[0];
+      const gk = COMBO_MAIN_SAUCE_MAP[mainChoice] || 'combo_sauce';
+      renderPosOptionGroup(sauceEl, gk);
+      updatePosItemModalTotal();
+    };
+    currentPosModal.updateComboSauce();
+  }
+
   if (item.price_set && SET_BUNDLE_CATEGORIES.includes(cat)) {
     const comboExtraEl = document.createElement('div');
     comboExtraEl.id = 'pos-combo-extra-groups';
@@ -854,6 +907,8 @@ function renderPosOptionGroup(container, gKey) {
       } else if (gKey === 'small_drink') {
         if (inp.checked) openPosSmallDrinkCustom(inp.value);
         else clearPosDrinkCustom();
+      } else if (gKey === 'combo_main' && currentPosModal.updateComboSauce) {
+        currentPosModal.updateComboSauce();
       }
       updatePosItemModalTotal();
     };
