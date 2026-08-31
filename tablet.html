@@ -206,6 +206,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div id="member-info"></div>
     <div class="pos-col-title">目前訂單</div>
     <div id="pos-cart-lines" class="pos-cart-lines-scroll"></div>
+    <div id="pos-cart-voucher"></div>
     <div class="pos-cart-total"><span>總計</span><span id="pos-cart-total">$0</span></div>
 
     <div id="pos-checkout-panel" style="display:none">
@@ -243,6 +244,16 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </div>
     <div id="pos-drink-modal-body"></div>
     <button class="btn-primary" style="width:100%;margin-top:8px;padding:12px;" onclick="confirmPosDrinkCustom()">確定</button>
+  </div>
+</div>
+
+<div class="pos-overlay" id="pos-voucher-picker-overlay" style="z-index:26;">
+  <div class="pos-sheet">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button type="button" onclick="closeVoucherItemPicker()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <h2 id="pos-voucher-picker-title" style="margin:0; flex:1; font-size:1rem;"></h2>
+    </div>
+    <div id="pos-voucher-picker-list"></div>
   </div>
 </div>
 
@@ -393,6 +404,40 @@ function switchTab(name) {
 let selectedMember = null;
 const MEMBER_TIER_MULTIPLIER = { '一般會員': 1, '銅寶': 1, '銀寶': 2, '金寶': 3 };
 
+// ---------------------------------------------------------------
+// 兌換券系統（2026-08-31老闆定案）：mode='fixed'直接折抵金額，不用選購物車品項；
+// mode='item'要先選購物車裡的哪一項套用，effect決定套用方式(免費/打6折/加一元多一件)
+// ---------------------------------------------------------------
+const VOUCHER_BEHAVIOR = {
+  '20元兌換券': { mode: 'fixed', amount: 20 },
+  '50元兌換券': { mode: 'fixed', amount: 50 },
+  '荷包蛋兌換券': { mode: 'item', effect: 'free', minQty: 1 },
+  '中杯紅茶兌換券': { mode: 'item', effect: 'free', minQty: 1 },
+  '中杯義式咖啡兌換券': { mode: 'item', effect: 'free', minQty: 1 },
+  '中杯鮮奶茶兌換券': { mode: 'item', effect: 'free', minQty: 1 },
+  '脆薯兌換券': { mode: 'item', effect: 'free', minQty: 1 },
+  '米花雞球兌換券': { mode: 'item', effect: 'free', minQty: 1 },
+  '中杯黑糖牛奶兌換券': { mode: 'item', effect: 'free', minQty: 1 },
+  '美式狂想乙套兌換券': { mode: 'item', effect: 'free', minQty: 1 },
+  '買一送一': { mode: 'item', effect: 'free', minQty: 2 },
+  '第二件六折': { mode: 'item', effect: 'discount60', minQty: 2 },
+  '加一元多一件': { mode: 'item', effect: 'addOne', minQty: 1 }
+};
+// 集點兌換目錄：跟後端Code.gs的POINT_REDEMPTION_CATALOG一致，只用於前端顯示門檻
+const POINT_REDEMPTION_CATALOG = [
+  { points: 3, voucherType: '荷包蛋兌換券' },
+  { points: 5, voucherType: '中杯鮮奶茶兌換券' },
+  { points: 8, voucherType: '脆薯兌換券' },
+  { points: 8, voucherType: '米花雞球兌換券' },
+  { points: 10, voucherType: '中杯黑糖牛奶兌換券' },
+  { points: 20, voucherType: '美式狂想乙套兌換券' }
+];
+const MANUAL_GRANT_VOUCHER_TYPES = ['20元兌換券', '50元兌換券', '第二件六折', '買一送一', '加一元多一件'];
+
+let memberVouchers = []; // 目前查到的會員兌換券清單(getMemberVouchers回傳)
+let appliedVoucher = null; // {voucherId, type, mode, discountAmount, targetLineKey?}
+let pendingVoucherForItemPick = null; // item模式兌換券選好後、等待店員點選購物車品項時的暫存
+
 function lookupMember() {
   const phone = document.getElementById('member-phone-input').value.trim();
   if (!phone) return;
@@ -401,7 +446,8 @@ function lookupMember() {
   apiGet({ action: 'getMember', phone: phone }).then(data => {
     if (data.status === 'ok') {
       selectedMember = data.member;
-      el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div>`;
+      el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div><div id="member-voucher-panel"></div>`;
+      loadMemberVouchers();
     } else if (data.status === 'not_found') {
       selectedMember = null;
       el.innerHTML = `
@@ -425,11 +471,143 @@ function registerMember(phone) {
   apiPost({ action: 'registerMember', phone: phone, name: name, birthday: birthday }).then(data => {
     if (data.status === 'ok') {
       selectedMember = data.member;
-      document.getElementById('member-info').innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $0　累計點數 0</div>`;
+      document.getElementById('member-info').innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $0　累計點數 0</div><div id="member-voucher-panel"></div>`;
+      loadMemberVouchers();
     } else {
       alert(data.message || '建立失敗');
     }
   });
+}
+
+// ---------------------------------------------------------------
+// 兌換券系統：查詢會員後載入其兌換券清單+集點兌換目錄+店員手動贈送按鈕
+// ---------------------------------------------------------------
+function loadMemberVouchers() {
+  if (!selectedMember) return;
+  apiGet({ action: 'getMemberVouchers', phone: selectedMember.phone }).then(data => {
+    memberVouchers = (data.status === 'ok') ? data.vouchers : [];
+    renderMemberVoucherPanel();
+  });
+}
+
+function renderMemberVoucherPanel() {
+  const panel = document.getElementById('member-voucher-panel');
+  if (!panel || !selectedMember) return;
+
+  const usable = memberVouchers.filter(v => v.usable);
+  const usableHtml = usable.length
+    ? usable.map(v => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.8rem;">
+          <span>${v.type}<span style="color:var(--muted);font-size:0.72rem;">（${v.source}）</span></span>
+          <button class="btn" style="padding:3px 8px;font-size:0.76rem;" onclick="selectVoucherToApply('${v.voucherId}','${v.type}')">使用</button>
+        </div>`).join('')
+    : '<div style="color:var(--muted);font-size:0.78rem;">目前無可用兌換券</div>';
+
+  const redeemableHtml = POINT_REDEMPTION_CATALOG.map(entry => {
+    const enough = selectedMember.points >= entry.points;
+    return `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:0.78rem;${enough ? '' : 'opacity:0.5;'}">
+        <span>${entry.points}點 → ${entry.voucherType}</span>
+        <button class="btn" style="padding:2px 7px;font-size:0.74rem;" ${enough ? '' : 'disabled'} onclick="redeemPointsForVoucher('${entry.voucherType}')">兌換</button>
+      </div>`;
+  }).join('');
+
+  const grantHtml = MANUAL_GRANT_VOUCHER_TYPES.map(type => `
+    <button class="btn" style="padding:4px 8px;font-size:0.76rem;margin:2px 4px 2px 0;" onclick="grantVoucherToMember('${type}')">贈送：${type}</button>
+  `).join('');
+
+  panel.innerHTML = `
+    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px;">
+      <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:2px;">目前可用兌換券</div>
+      ${usableHtml}
+    </div>
+    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px;">
+      <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:2px;">集點兌換</div>
+      ${redeemableHtml}
+    </div>
+    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px;">
+      <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:4px;">店員贈送兌換券</div>
+      ${grantHtml}
+    </div>
+  `;
+}
+
+function grantVoucherToMember(type) {
+  if (!selectedMember) { alert('請先查詢/選擇會員'); return; }
+  apiPost({ action: 'grantVoucher', phone: selectedMember.phone, type: type }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '贈送失敗'); return; }
+    alert(`已贈送「${type}」給${selectedMember.name}`);
+    loadMemberVouchers();
+  });
+}
+
+function redeemPointsForVoucher(voucherType) {
+  if (!selectedMember) return;
+  apiPost({ action: 'redeemPoints', phone: selectedMember.phone, voucherType: voucherType }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '兌換失敗'); return; }
+    selectedMember.points = data.remainingPoints;
+    alert(`已兌換「${voucherType}」，剩餘點數 ${data.remainingPoints}`);
+    loadMemberVouchers();
+  });
+}
+
+// 選定一張兌換券要套用在這筆訂單：fixed類直接套用扣總金額；item類要再選購物車裡哪一項
+function selectVoucherToApply(voucherId, type) {
+  if (appliedVoucher) { alert('本次結帳已套用過一張兌換券，如需更換請重新開始訂單'); return; }
+  const behavior = VOUCHER_BEHAVIOR[type];
+  if (!behavior) { alert('未知的兌換券類型：' + type); return; }
+  if (behavior.mode === 'fixed') {
+    appliedVoucher = { voucherId, type, mode: 'fixed', discountAmount: behavior.amount };
+    renderPosCart();
+    alert(`已套用「${type}」，結帳金額折抵 $${behavior.amount}`);
+  } else {
+    if (posCart.length === 0) { alert('購物車是空的，請先選購要套用兌換券的品項'); return; }
+    pendingVoucherForItemPick = { voucherId, type, effect: behavior.effect, minQty: behavior.minQty };
+    showVoucherItemPicker();
+  }
+}
+
+function showVoucherItemPicker() {
+  const listEl = document.getElementById('pos-voucher-picker-list');
+  listEl.innerHTML = posCart.map(c => `
+    <button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 10px;" onclick="applyVoucherToLine('${c.lineKey}')">
+      ${c.name}${c.size ? ' ('+c.size+')' : ''}　$${c.price} x ${c.qty}
+    </button>
+  `).join('');
+  document.getElementById('pos-voucher-picker-title').textContent = '套用「' + pendingVoucherForItemPick.type + '」於哪個品項？';
+  document.getElementById('pos-voucher-picker-overlay').classList.add('open');
+}
+
+function closeVoucherItemPicker() {
+  document.getElementById('pos-voucher-picker-overlay').classList.remove('open');
+  pendingVoucherForItemPick = null;
+}
+
+function applyVoucherToLine(lineKey) {
+  const v = pendingVoucherForItemPick;
+  if (!v) return;
+  const line = posCart.find(c => c.lineKey === lineKey);
+  if (!line) return;
+  if (line.qty < v.minQty) { alert(`此品項需要有${v.minQty}件以上才能套用「${v.type}」`); return; }
+
+  let discountAmount = 0;
+  if (v.effect === 'free') {
+    discountAmount = line.price;
+  } else if (v.effect === 'discount60') {
+    discountAmount = Math.round(line.price * 0.4); // 第二件六折＝其中一件折抵4成
+  } else if (v.effect === 'addOne') {
+    changePosQty(lineKey, 1); // 直接多加一件到購物車
+    discountAmount = line.price - 1; // 這一件只收$1，其餘折抵
+  }
+  appliedVoucher = { voucherId: v.voucherId, type: v.type, mode: 'item', targetLineKey: lineKey, discountAmount: discountAmount };
+  closeVoucherItemPicker();
+  renderPosCart();
+  alert(`已套用「${v.type}」`);
+}
+
+function clearAppliedVoucher() {
+  appliedVoucher = null;
+  renderPosCart();
 }
 
 // ---------------------------------------------------------------
@@ -1173,9 +1351,24 @@ function renderPosCart() {
     div.querySelector('[data-act="inc"]').onclick = () => changePosQty(c.lineKey, 1);
     linesEl.appendChild(div);
   });
-  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
-  document.getElementById('pos-cart-total').textContent = '$' + total;
+  const voucherEl = document.getElementById('pos-cart-voucher');
+  if (voucherEl) {
+    voucherEl.innerHTML = appliedVoucher
+      ? `<div style="display:flex;align-items:center;justify-content:space-between;font-size:0.8rem;color:var(--brand);padding:4px 0;">
+           <span>已套用兌換券：${appliedVoucher.type} -$${appliedVoucher.discountAmount}</span>
+           <button class="btn" style="padding:2px 7px;font-size:0.72rem;" onclick="clearAppliedVoucher()">取消</button>
+         </div>`
+      : '';
+  }
+  document.getElementById('pos-cart-total').textContent = '$' + getPosCartFinalTotal();
   updateMobileCartBar();
+}
+
+// 購物車原始總額扣掉本次套用的兌換券折抵金額(若有)，下限為$0
+function getPosCartFinalTotal() {
+  const rawTotal = posCart.reduce((s, c) => s + c.qty * c.price, 0);
+  const discount = appliedVoucher ? appliedVoucher.discountAmount : 0;
+  return Math.max(0, rawTotal - discount);
 }
 
 function changePosQty(lineKey, delta) {
@@ -1189,7 +1382,7 @@ function changePosQty(lineKey, delta) {
 // 大麥POS參考版面：訂單/結帳固定顯示在右側第四欄，不用彈窗打開/關閉
 function showPosCheckout() {
   if (posCart.length === 0) { alert('請先選購品項'); return; }
-  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
+  const total = getPosCartFinalTotal();
   document.getElementById('pos-checkout-member').textContent = selectedMember
     ? `已選會員：${selectedMember.name}（${selectedMember.tier}，本次預估可得 ${Math.floor(total / 100) * (MEMBER_TIER_MULTIPLIER[selectedMember.tier] || 1)} 點）`
     : '未選會員（不累計點數）';
@@ -1202,6 +1395,9 @@ function backToPosCart() {
 }
 function closePosCartAll() {
   posCart = [];
+  memberVouchers = [];
+  appliedVoucher = null;
+  pendingVoucherForItemPick = null;
   renderPosCart();
   document.getElementById('member-phone-input').value = '';
   document.getElementById('member-info').innerHTML = '';
@@ -1212,7 +1408,7 @@ function closePosCartAll() {
 }
 
 function submitPosOrder() {
-  const total = posCart.reduce((s, c) => s + c.qty * c.price, 0);
+  const total = getPosCartFinalTotal();
   const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price }));
   const paymentMethod = document.getElementById('pos-payment-method').value;
   apiPost({
@@ -1221,7 +1417,8 @@ function submitPosOrder() {
     items: items,
     totalAmount: total,
     paymentMethod: paymentMethod,
-    memberPhone: selectedMember ? selectedMember.phone : ''
+    memberPhone: selectedMember ? selectedMember.phone : '',
+    voucherId: appliedVoucher ? appliedVoucher.voucherId : ''
   }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '結帳失敗'); return; }
     document.getElementById('pos-confirm-order-no').textContent = data.orderId;
