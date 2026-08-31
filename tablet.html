@@ -24,9 +24,9 @@
   .pos-cat-btn.active { background:var(--brand); color:#fff; font-weight:600; }
   .pos-col-items { flex:1 1 auto; min-width:180px; border-right:1px solid var(--border); }
   .pos-item-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:8px; align-content:start; }
-  .pos-grid-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:8px; text-align:center; cursor:pointer; }
+  .pos-grid-card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:8px; text-align:center; cursor:pointer; display:flex; flex-direction:column; justify-content:space-between; }
   .pos-grid-card.active { border-color:var(--brand); box-shadow:0 0 0 2px rgba(232,99,44,0.3); }
-  .pos-grid-card .name { font-size:0.82rem; }
+  .pos-grid-card .name { font-size:0.82rem; line-height:1.3; }
   .pos-grid-card .price { font-size:0.76rem; color:var(--muted); margin-top:4px; }
   .pos-col-detail { width:280px; flex:none; border-right:1px solid var(--border); }
   .pos-detail-empty { color:var(--muted); text-align:center; padding:40px 10px; font-size:0.85rem; }
@@ -1004,12 +1004,23 @@ function goToPosCategory(i) {
     const card = document.createElement('div');
     card.className = 'pos-grid-card';
     card.id = 'pos-grid-card-' + key;
+    // 品名本身帶空格或全形＋的（例如"韓風玫瑰醬 鳳梨雞排堡"、"定01 炒麵加蛋＋鍋貼"）在該處強制換行，
+    // ＋號換行點留在前一行結尾（"...加蛋＋"）不留在下一行開頭，避免瀏覽器依字寬自動換行、每張卡片斷行點不一致看起來凌亂
+    // 少數定食名稱是兩道品項名稱直接黏在一起、中間沒有空格或＋號（例如"卡拉雞腿起司巧巴達"＝卡拉雞腿+起司巧巴達"），
+    // 只在卡片顯示時額外插入換行點，不改item.name本身（CATEGORY_GROUPS等處仍用原始字串當key比對，避免連動壞掉）
+    // 括號附註(例如"(原/辣)")整段包成不可拆的區塊，避免被硬斷成"(原/"+"辣)"這種怪斷點
+    const cardNameHtml = item.name
+      .replace(/卡拉雞腿起司巧巴達/g, '卡拉雞腿<br>起司巧巴達')
+      .replace(/玉米起司特酥蛋餅/g, '玉米起司<br>特酥蛋餅')
+      .replace(/＋/g, '＋<br>')
+      .replace(/ /g, '<br>')
+      .replace(/(\([^)]*\))/g, '<span style="white-space:nowrap">$1</span>');
     const localStatus = getPosLocalItemStatus(cat, item.name);
     if (localStatus) {
       card.style.opacity = '0.5';
-      card.innerHTML = `<div class="name">${item.name}</div><div class="price" style="color:#A32D2D;">${localStatus === '永久下架' ? '已下架' : '本日售完'}</div>`;
+      card.innerHTML = `<div class="name">${cardNameHtml}</div><div class="price" style="color:#A32D2D;">${localStatus === '永久下架' ? '已下架' : '本日售完'}</div>`;
     } else {
-      card.innerHTML = `<div class="name">${item.name}</div><div class="price">${priceLabel}</div>`;
+      card.innerHTML = `<div class="name">${cardNameHtml}</div><div class="price">${priceLabel}</div>`;
       card.onclick = () => openPosItemModal(cat, key, item);
     }
     grid.appendChild(card);
@@ -1159,16 +1170,15 @@ function renderPosOptionGroup(container, gKey) {
     if (sizeForFilter === 'L') return opt.priceL != null;
     return true;
   });
-  // 部分群組老闆指定固定欄數(不用長度自動判斷)：加料類(選項多但單項短)改1欄比較好讀，醬料類選項多改3欄減少高度
+  // 老闆反饋(2026-08-31)：欄數依名稱長度動態判斷會讓不同品項的客製化選單忽1忽2忽3欄、看起來跳來跳去，
+  // 且醬料類群組固定3欄時，混進4個字的長選項（如"不醬只胡"）會被拆成2行跟旁邊1行的選項對不齊。
+  // 改為固定二選一：加料類(選項多但單項短，價格常換行顯示)維持單欄；其餘一律固定2欄，不再依名稱長度或群組類型跳欄數
+  // combo_main/deluxe_upgrade例外：選項本身是完整餐點敘述(例如"美1 花醬 牛肉培根 起司蛋堡")，2欄會硬拆成2行，維持單欄
   const OPTION_GROUP_COLUMNS = {
     bread_addon: 1, noodle_addon: 1, dine_set_addon: 1, omelet_addon: 1, jam_bread_choice: 1,
-    omelet_choice: 1, drink_topping: 1, small_drink: 1,
-    combo_sauce: 3, spicy_sauce: 3, tropical_sauce: 3, tropical_sauce2: 3, omelet_sauce: 3,
-    bread_sauce: 3, cereal_sauce: 3, frenchbread_sauce: 3, burrito_sauce: 3, puffpastry_sauce: 3,
-    painperdu_sauce: 3, salad_sauce: 3
+    omelet_choice: 1, drink_topping: 1, small_drink: 1, combo_main: 1, deluxe_upgrade: 1
   };
-  const maxNameLen = Math.max(0, ...visibleOptions.map(o => o.name.length));
-  const cols = OPTION_GROUP_COLUMNS[gKey] || (maxNameLen > 8 ? 1 : 2);
+  const cols = OPTION_GROUP_COLUMNS[gKey] || 2;
   // minmax(0,1fr)而非單純1fr：避免nowrap選項的內容最小寬度把某欄擠得比平分寬度還大，導致整個grid溢出容器
   optWrap.style.cssText = cols === 1 ? 'display:block;' : `display:grid;grid-template-columns:repeat(${cols}, minmax(0, 1fr));gap:4px 10px;`;
   wrap.appendChild(optWrap);
