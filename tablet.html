@@ -257,6 +257,17 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   </div>
 </div>
 
+<div class="pos-overlay" id="pos-item-status-overlay" style="z-index:27;">
+  <div class="pos-sheet" style="max-width:480px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
+      <button type="button" onclick="closePosLocalItemStatusManager()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <h2 style="margin:0; flex:1; font-size:1rem;">POS功能 品項上下架</h2>
+    </div>
+    <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px 30px;">只影響這台平板，不影響顧客點餐頁</div>
+    <div id="pos-item-status-list"></div>
+  </div>
+</div>
+
 <script>
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
 const STORE_ID = "meibao";
@@ -839,9 +850,99 @@ function drinkGroupsFor(drinkName) {
 let posCart = [];
 let currentPosModal = null;
 
+// ---------------------------------------------------------------
+// POS功能專屬的品項上下架管理：故意只存在這台平板本機(localStorage)，不寫進後端試算表，
+// 跟雲端平板／顧客點餐頁共用的「品項狀態」完全獨立、互不影響(2026-08-31老闆定案)
+// ---------------------------------------------------------------
+const POS_LOCAL_ITEM_STATUS_KEY = 'pos_local_item_status';
+
+function getPosLocalItemStatusMap() {
+  try { return JSON.parse(localStorage.getItem(POS_LOCAL_ITEM_STATUS_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+function savePosLocalItemStatusMap(map) {
+  localStorage.setItem(POS_LOCAL_ITEM_STATUS_KEY, JSON.stringify(map));
+}
+function posLocalStatusKey(cat, name) { return cat + '||' + name; }
+
+function setPosLocalItemStatus(cat, name, status) {
+  const map = getPosLocalItemStatusMap();
+  const key = posLocalStatusKey(cat, name);
+  if (status === '供應中') {
+    delete map[key];
+  } else {
+    map[key] = { status: status, date: new Date().toISOString().slice(0, 10) };
+  }
+  savePosLocalItemStatusMap(map);
+}
+
+// 本日售完隔天自動恢復供應，比照雲端平板既有的品項狀態規則
+function getPosLocalItemStatus(cat, name) {
+  const map = getPosLocalItemStatusMap();
+  const key = posLocalStatusKey(cat, name);
+  const entry = map[key];
+  if (!entry) return null;
+  if (entry.status === '本日售完') {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (entry.date !== todayStr) {
+      delete map[key];
+      savePosLocalItemStatusMap(map);
+      return null;
+    }
+  }
+  return entry.status;
+}
+
+function openPosLocalItemStatusManager() {
+  renderPosLocalItemStatusManager();
+  document.getElementById('pos-item-status-overlay').classList.add('open');
+}
+function closePosLocalItemStatusManager() {
+  document.getElementById('pos-item-status-overlay').classList.remove('open');
+  // 關閉時重新整理目前分類的品項格線，讓剛剛的下架設定立刻反映
+  const activeBtn = document.querySelector('.pos-cat-btn.active');
+  if (activeBtn) activeBtn.click();
+}
+
+function renderPosLocalItemStatusManager() {
+  const listEl = document.getElementById('pos-item-status-list');
+  listEl.innerHTML = '';
+  Object.keys(CATALOG).forEach(cat => {
+    const catTitle = document.createElement('div');
+    catTitle.style.cssText = 'font-size:0.85rem;font-weight:700;color:var(--muted);margin:14px 0 6px;';
+    catTitle.textContent = shortCatName(cat);
+    listEl.appendChild(catTitle);
+    CATALOG[cat].forEach(item => {
+      const current = getPosLocalItemStatus(cat, item.name) || '供應中';
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.85rem;';
+      const select = document.createElement('select');
+      select.style.cssText = 'padding:4px 6px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;';
+      ['供應中', '本日售完', '永久下架'].forEach(opt => {
+        const optEl = document.createElement('option');
+        optEl.value = opt;
+        optEl.textContent = opt;
+        if (opt === current) optEl.selected = true;
+        select.appendChild(optEl);
+      });
+      select.onchange = () => setPosLocalItemStatus(cat, item.name, select.value);
+      row.innerHTML = `<span>${item.name}</span>`;
+      row.appendChild(select);
+      listEl.appendChild(row);
+    });
+  });
+}
+
 // 大麥POS參考版面：左欄分類清單，點分類才在中欄顯示該分類品項格線（不是全部分類一次全部攤開）
 function renderPosMenu() {
   const catCol = document.getElementById('pos-col-categories');
+  // POS功能自己的品項上下架管理，只存在這台平板本機(localStorage)，故意不跟雲端平板的品項狀態連動
+  const manageBtn = document.createElement('button');
+  manageBtn.className = 'pos-cat-btn';
+  manageBtn.style.cssText = 'color:var(--brand);font-weight:700;border-bottom:1px solid var(--border);margin-bottom:6px;padding-bottom:10px;';
+  manageBtn.textContent = '⚙ 品項上下架';
+  manageBtn.onclick = openPosLocalItemStatusManager;
+  catCol.appendChild(manageBtn);
   const cats = Object.keys(CATALOG);
   cats.forEach((cat, i) => {
     const btn = document.createElement('button');
@@ -903,8 +1004,14 @@ function goToPosCategory(i) {
     const card = document.createElement('div');
     card.className = 'pos-grid-card';
     card.id = 'pos-grid-card-' + key;
-    card.innerHTML = `<div class="name">${item.name}</div><div class="price">${priceLabel}</div>`;
-    card.onclick = () => openPosItemModal(cat, key, item);
+    const localStatus = getPosLocalItemStatus(cat, item.name);
+    if (localStatus) {
+      card.style.opacity = '0.5';
+      card.innerHTML = `<div class="name">${item.name}</div><div class="price" style="color:#A32D2D;">${localStatus === '永久下架' ? '已下架' : '本日售完'}</div>`;
+    } else {
+      card.innerHTML = `<div class="name">${item.name}</div><div class="price">${priceLabel}</div>`;
+      card.onclick = () => openPosItemModal(cat, key, item);
+    }
     grid.appendChild(card);
   });
   itemsCol.appendChild(grid);
