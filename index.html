@@ -225,13 +225,15 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 
 <header>
   <button id="cat-menu-btn" onclick="openCategoryMenu()" aria-label="餐點分類" style="position:absolute; left:12px; top:14px; background:none; border:none; color:#fff; font-size:1.4rem; cursor:pointer; padding:4px 6px; line-height:1;">☰</button>
-  <div style="padding-left:34px;">
+  <button id="voucher-menu-btn" onclick="openVoucherLookup()" aria-label="我的兌換券" style="position:absolute; right:12px; top:14px; background:none; border:none; color:#fff; font-size:1.4rem; cursor:pointer; padding:4px 6px; line-height:1;">🎫</button>
+  <div style="padding-left:34px; padding-right:34px;">
     <h1>A-Bao溪湖培英店</h1>
     <p>線上點餐（測試版）</p>
   </div>
 </header>
 <div class="notice">⚠️ 目前僅供測試：本頁只做「點餐＋送出訂單」，尚未串接LINE Pay線上金流。取餐時請至現場以LINE Pay QR結帳。</div>
 <div class="notice" id="closed-notice" style="display:none; background:#ffe0e0; border-color:#ffb3b3; color:#a30000;"></div>
+<div class="notice" id="store-status-notice" style="display:none; background:#ffe0e0; border-color:#ffb3b3; color:#a30000;"></div>
 
 <div class="overlay" id="category-overlay">
   <div class="sheet" style="max-height:80vh;">
@@ -240,6 +242,20 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <button type="button" onclick="closeCategoryMenu()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
     </div>
     <div id="category-list"></div>
+  </div>
+</div>
+
+<div class="overlay" id="voucher-overlay">
+  <div class="sheet" style="max-height:80vh;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <h2 style="margin:0;">我的兌換券</h2>
+      <button type="button" onclick="closeVoucherLookup()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <div class="row" style="display:flex; gap:8px; margin-bottom:12px;">
+      <input type="tel" id="voucher-lookup-phone" placeholder="輸入您的手機號碼" style="flex:1; min-width:0; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.95rem;">
+      <button type="button" class="btn-primary" style="width:auto; margin-top:0; padding:8px 16px;" onclick="queryMyVouchers()">查詢</button>
+    </div>
+    <div id="voucher-lookup-result"></div>
   </div>
 </div>
 
@@ -794,6 +810,63 @@ function goToCategory(i) {
 }
 function openCategoryMenu() { document.getElementById('category-overlay').classList.add('open'); }
 function closeCategoryMenu() { document.getElementById('category-overlay').classList.remove('open'); }
+
+// ---------------------------------------------------------------
+// 兌換券顧客自助查詢：輸入電話直接查(比照POS功能查會員的信任情境，沒有額外驗證步驟)，
+// 純查詢不能核銷，核銷仍要到現場由店員在POS功能操作
+// ---------------------------------------------------------------
+function openVoucherLookup() {
+  document.getElementById('voucher-overlay').classList.add('open');
+}
+function closeVoucherLookup() {
+  document.getElementById('voucher-overlay').classList.remove('open');
+}
+
+function queryMyVouchers() {
+  const phone = document.getElementById('voucher-lookup-phone').value.trim();
+  const resultEl = document.getElementById('voucher-lookup-result');
+  if (!phone) { resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">請輸入手機號碼</div>'; return; }
+  resultEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">查詢中...</div>';
+
+  Promise.all([
+    fetch(`${ORDER_BACKEND_URL}?action=getMember&phone=${encodeURIComponent(phone)}`).then(r => r.json()),
+    fetch(`${ORDER_BACKEND_URL}?action=getMemberVouchers&phone=${encodeURIComponent(phone)}`).then(r => r.json())
+  ]).then(([memberData, voucherData]) => {
+    if (memberData.status === 'not_found') {
+      resultEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">查無此會員，請確認電話號碼，或到門市加入LINE好友完成入會。</div>';
+      return;
+    }
+    if (memberData.status !== 'ok') {
+      resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">查詢失敗，請稍後再試。</div>';
+      return;
+    }
+    const m = memberData.member;
+    const vouchers = (voucherData.status === 'ok') ? voucherData.vouchers : [];
+    let html = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+      <strong>${m.name}</strong>（${m.tier}）<br>
+      <span style="font-size:0.85rem;color:var(--muted);">半年內累積消費 $${m.periodSpend}　累計點數 ${m.points}</span>
+    </div>`;
+    if (vouchers.length === 0) {
+      html += '<div style="color:var(--muted);font-size:0.85rem;">目前沒有兌換券紀錄</div>';
+    } else {
+      html += vouchers.map(v => {
+        const dim = !v.usable;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);${dim ? 'opacity:0.5;' : ''}">
+          <div>
+            <div>${v.type}<span style="color:var(--muted);font-size:0.72rem;">（${v.source}）</span></div>
+            <div style="font-size:0.72rem;color:var(--muted);">效期 ${v.effectiveDate} ～ ${v.expiryDate}</div>
+          </div>
+          <span style="font-size:0.8rem;font-weight:600;${v.usable ? 'color:var(--brand);' : 'color:var(--muted);'}">${v.statusText}</span>
+        </div>`;
+      }).join('');
+      html += '<div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">＊兌換券請至現場結帳時由店員核銷使用，此頁僅供查詢</div>';
+    }
+    resultEl.innerHTML = html;
+  }).catch(err => {
+    console.warn('查詢兌換券失敗', err);
+    resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">查詢失敗，請確認網路連線後再試。</div>';
+  });
+}
 
 function renderMenu() {
   const tabs = document.getElementById('tabs');
@@ -1496,11 +1569,23 @@ loadCartSession();
 updateCartBar();
 applyItemAvailability();
 
-// 讀取雲端平板設定的品項上下架狀態，同步反映到點餐頁（本日售完/永久下架→擋掉加入按鈕）
-// 失敗就當作全部品項供應中，不擋顧客點餐
+// 讀取雲端平板設定的品項上下架狀態，同步反映到點餐頁（本日售完/永久下架→擋掉加入按鈕）；
+// 順便讀暫停接單/設為忙碌狀態，顯示非阻斷式提示（真正擋單是送出訂單時後端做，這裡只是提早讓客人知道）
+// 失敗就當作全部品項供應中、正常接單，不擋顧客點餐
 function applyItemAvailability() {
   fetch(`${ORDER_BACKEND_URL}?action=storeStatus&storeId=meibao`).then(r => r.json()).then(data => {
-    if (data.status !== 'ok' || !data.items) return;
+    if (data.status !== 'ok') return;
+    const storeEl = document.getElementById('store-status-notice');
+    if (data.paused) {
+      storeEl.textContent = '⛔ 門市目前暫停接單中，暫時無法送出訂單，請稍後再回來下單。';
+      storeEl.style.display = 'block';
+    } else if (data.busy && data.busyIntervalMinutes > 0) {
+      storeEl.textContent = `⚠️ 門市目前忙碌中，線上點餐每${data.busyIntervalMinutes}分鐘只能接受1張新單，送出訂單時若剛好額滿會請你稍後再試。`;
+      storeEl.style.display = 'block';
+    } else {
+      storeEl.style.display = 'none';
+    }
+    if (!data.items) return;
     itemAvailabilityMap = data.items;
     Object.keys(data.items).forEach(name => {
       const div = document.querySelector(`.item[data-item-name="${CSS.escape(name)}"]`);
