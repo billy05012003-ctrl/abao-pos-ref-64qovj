@@ -174,6 +174,52 @@
     vertical-align: middle;
   }
 </style>
+<script>
+if(new Date()>new Date('2026-12-31T23:59:59')){
+  document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:'Microsoft JhengHei',sans-serif;text-align:center;padding:20px">
+    <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
+      <div style="font-size:40px;margin-bottom:12px">⏳</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">「美寶美食館線上點餐（202701新菜單測試版）」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
+    </div>
+  </div>`;
+  document.title='已過期 - 美寶美食館線上點餐';
+  throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
+}
+// 密碼門檻（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
+(function(){
+  const SITE_PASSWORD='3345678';
+  const AUTH_KEY='mk_auth_meibao_202701';
+  if(localStorage.getItem(AUTH_KEY)==='1')return;
+  const gate=document.createElement('div');
+  gate.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:-apple-system,"Microsoft JhengHei",sans-serif';
+  gate.innerHTML=`
+    <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
+      <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館線上點餐</div>
+      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（202701新菜單測試版）</div>
+      <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
+      <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
+      <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
+      <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
+    </div>`;
+  document.body.appendChild(gate);
+  function trySubmit(){
+    const val=document.getElementById('gate-pw').value;
+    if(val===SITE_PASSWORD){
+      localStorage.setItem(AUTH_KEY,'1');
+      gate.remove();
+    }else{
+      document.getElementById('gate-err').textContent='密碼錯誤，請再試一次';
+      document.getElementById('gate-pw').value='';
+      document.getElementById('gate-pw').focus();
+    }
+  }
+  document.getElementById('gate-btn').onclick=trySubmit;
+  document.getElementById('gate-pw').addEventListener('keydown',e=>{if(e.key==='Enter')trySubmit();});
+  document.getElementById('gate-pw').focus();
+})();
+</script>
 </head>
 <body>
 
@@ -285,51 +331,7 @@
 </div>
 
 <script>
-if(new Date()>new Date('2026-12-31T23:59:59')){
-  document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:'Microsoft JhengHei',sans-serif;text-align:center;padding:20px">
-    <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
-      <div style="font-size:40px;margin-bottom:12px">⏳</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">「美寶美食館線上點餐（202701新菜單測試版）」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
-    </div>
-  </div>`;
-  document.title='已過期 - 美寶美食館線上點餐';
-  throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
-}
-// 密碼門檻（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
-(function(){
-  const SITE_PASSWORD='3345678';
-  const AUTH_KEY='mk_auth_meibao_202701';
-  if(localStorage.getItem(AUTH_KEY)==='1')return;
-  const gate=document.createElement('div');
-  gate.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:-apple-system,"Microsoft JhengHei",sans-serif';
-  gate.innerHTML=`
-    <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
-      <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館線上點餐</div>
-      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（202701新菜單測試版）</div>
-      <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
-      <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
-      <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
-      <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
-    </div>`;
-  document.body.appendChild(gate);
-  function trySubmit(){
-    const val=document.getElementById('gate-pw').value;
-    if(val===SITE_PASSWORD){
-      localStorage.setItem(AUTH_KEY,'1');
-      gate.remove();
-    }else{
-      document.getElementById('gate-err').textContent='密碼錯誤，請再試一次';
-      document.getElementById('gate-pw').value='';
-      document.getElementById('gate-pw').focus();
-    }
-  }
-  document.getElementById('gate-btn').onclick=trySubmit;
-  document.getElementById('gate-pw').addEventListener('keydown',e=>{if(e.key==='Enter')trySubmit();});
-  document.getElementById('gate-pw').focus();
-})();
-const CATALOG ={"美式狂想套餐 SET MEALS ($129)": [{"name": "美式狂想套餐", "price": 129, "note": "主餐+薯餅+$25飲品乙杯"}], "PRIVATE FRIED NOODLES_私房炒麵系列": [{"name": "培根炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "香雞炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "烤肉炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "日式豬排炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "日式雞排炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "德式燻腸炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "泡菜燒肉炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "A-BAO SELECTED SET_A-bao嚴選定食": [{"name": "定01 炒麵加蛋＋鍋貼", "price": 97, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定02 美式湯餃＋烤肉蛋漢堡", "price": 129, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定03 炒麵加蛋＋雞塊", "price": 95, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定04 烤肉炒麵＋鍋貼", "price": 112, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯", "price": 119, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定06 玉米起司特酥蛋餅＋米花雞球", "price": 112, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定07 烤肉蛋漢堡＋鍋貼", "price": 105, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定08 烤肉炒麵＋黃金香酥雞", "price": 124, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定09 炒麵加蛋＋黃金香酥雞", "price": 109, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定10 烤肉炒麵＋米花雞球", "price": 115, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定11 美式湯餃＋雞塊", "price": 113, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定12 玉米起司特酥蛋餅＋鍋貼", "price": 105, "note": "套餐均附 $25 飲品乙杯"}], "KIMCHI FESTIVAL_泡菜祭": [{"name": "泡菜燒肉異國炒麵", "price": 80}, {"name": "泡菜豬排蛋堡", "price": 85}, {"name": "泡菜雞排捲", "price": 80}, {"name": "泡菜蛋餅", "price": 50}], "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡": [{"name": "韓風玫瑰醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "經典赤辣醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "蜂蜜芥末醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配": [{"name": "玉米起司", "price": 55, "price_set": 104, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "鮪魚玉米", "price": 65, "price_set": 114, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "鮪魚洋蔥", "price": 65, "price_set": 114, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "培根玉米起司", "price": 70, "price_set": 119, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "惡魔雙色拔絲", "price": 60, "price_set": 109, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿肉鬆蔬食", "price": 70, "price_set": 119, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿起司 佐花醬小黃瓜", "price": 60, "price_set": 109, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "和洋豬排蔬食", "price": 75, "price_set": 124, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "BURGERS_漢堡": [{"name": "玉米蛋", "price": 35}, {"name": "肉鬆蛋", "price": 35}, {"name": "豬肉蛋 (漢堡肉)", "price": 40}, {"name": "烤肉蛋 (里肌肉)", "price": 50}, {"name": "香雞蛋", "price": 45}, {"name": "牛肉蛋", "price": 45}, {"name": "總匯蛋 (里肌肉)", "price": 55}, {"name": "日式雞排蛋", "price": 55}, {"name": "日式豬排蛋", "price": 55}, {"name": "日式花枝排蛋", "price": 55}, {"name": "日式蝦排蛋", "price": 55}, {"name": "雞腿蛋 (原/辣)", "price": 60}], "TOAST_土司": [{"name": "煎蛋", "price": 30}, {"name": "玉米蛋", "price": 35}, {"name": "肉鬆蛋", "price": 35}, {"name": "起司蛋", "price": 35}, {"name": "火腿蛋", "price": 40}, {"name": "培根蛋", "price": 40}, {"name": "鮪魚蛋", "price": 45}, {"name": "烤肉蛋 (里肌肉)", "price": 50}, {"name": "香雞蛋", "price": 45}, {"name": "總匯蛋 (漢堡肉)", "price": 55}, {"name": "雞腿蛋 (原/辣)", "price": 60}], "JAN SERIES_果醬磚研系列": [{"name": "草莓", "price": 25}, {"name": "藍莓", "price": 25}, {"name": "奶酥", "price": 25}, {"name": "花生", "price": 25}, {"name": "奶油", "price": 25}, {"name": "巧克力", "price": 25}, {"name": "狠蒜", "price": 35}], "THICKCUT TOAST_厚片": [{"name": "起司奶油", "price": 35}, {"name": "鮪魚洋蔥", "price": 45}, {"name": "燻雞起司", "price": 50}], "CEREAL GRAIN BURGERS_日式穀堡": [{"name": "日式蔬食沙拉", "price": 40}, {"name": "日式咖哩", "price": 40}, {"name": "冰州魚排", "price": 55}, {"name": "大洋鮮魚", "price": 55}, {"name": "烤肉穀堡", "price": 55}, {"name": "孜然醬雞排", "price": 55}, {"name": "孜然醬豬排", "price": 55}], "SOFT FRENCH BREAD_法國麵包 ": [{"name": "火腿起司", "price": 50}, {"name": "蕃茄豬肉", "price": 50}, {"name": "苜蓿芽起司", "price": 50}, {"name": "陽光香雞", "price": 50}, {"name": "蔬食烤肉", "price": 60}, {"name": "日式燻雞", "price": 65}], "BURRITO_蔬食捲餅": [{"name": "香雞蕃茄", "price": 45}, {"name": "黃金烤肉", "price": 55}, {"name": "日式雞排", "price": 60}, {"name": "海味花枝", "price": 60}, {"name": "鮮味蝦排", "price": 60}, {"name": "美式雞腿 (原/辣)", "price": 65}], "PUFF PASTRY_起酥堡": [{"name": "草莓起酥", "price": 35}, {"name": "洋芋蔬食", "price": 40}, {"name": "苜蓿芽玉米", "price": 40}, {"name": "蕃茄蔬食", "price": 40}, {"name": "蔬食烤肉", "price": 55}], "PAIN PERDU_法國土司 ": [{"name": "日式培根", "price": 40}, {"name": "深海鮪魚", "price": 45}, {"name": "黃金烤肉", "price": 50}], "CHINESE OMELET_招牌蛋餅": [{"name": "原味", "price": 25}, {"name": "肉鬆", "price": 35}, {"name": "玉米", "price": 35}, {"name": "起司", "price": 35}, {"name": "蔬食", "price": 35}, {"name": "洋蔥", "price": 35}, {"name": "火腿", "price": 40}, {"name": "培根", "price": 40}, {"name": "熱狗", "price": 40}, {"name": "鮪魚", "price": 45}, {"name": "烤肉", "price": 50}], "SALAD VEGETABLE_田園蔬果": [{"name": "馬鈴薯土司", "price": 40}, {"name": "南瓜土司", "price": 40}, {"name": "全麥蔬食鮪魚", "price": 45}, {"name": "全麥苜蓿芽火腿", "price": 45}, {"name": "全麥蔬菜沙拉", "price": 45}, {"name": "田園蔬菜捲", "price": 45}], "CHINESE SNACKS_中式茶食": [{"name": "荷包蛋", "price": 15}, {"name": "熱狗 (4條)", "price": 30}, {"name": "玉米濃湯", "price": 30}, {"name": "炒麵", "price": 35}, {"name": "鍋貼(5個)", "price": 35}, {"name": "雞塊 (4個)", "price": 35}, {"name": "蘿蔔糕 (2片)", "price": 35}, {"name": "薯餅 (4片)", "price": 40}, {"name": "米花雞球 (8個)", "price": 45}, {"name": "野菜豚炸餃(8個)", "price": 45}, {"name": "脆薯", "price": 40}, {"name": "美式湯麵", "price": 45}, {"name": "義響鐵板麵", "price": 50}, {"name": "黃金香酥雞", "price": 50}, {"name": "二折雞翅(3入/7入)", "price": 55, "price_alt": 105}], "FRESH FRUIT TEA_鮮果茶 Cool": [{"name": "檸檬紅茶", "price_m": 40, "price_l": 45}, {"name": "檸檬綠茶", "price_m": 40, "price_l": 45}, {"name": "蜜漬鳳梨紅茶", "price_m": 45, "price_l": 50}], "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ": [{"name": "虎斑黑糖豆漿", "price_m": 35, "price_l": 45}, {"name": "虎斑黑糖薏仁", "price_m": 40, "price_l": 50}, {"name": "虎斑黑糖奶茶", "price_m": 40, "price_l": 50}, {"name": "虎斑黑糖紅茶牛奶", "price_m": 50, "price_l": 60}, {"name": "虎斑黑糖牛奶", "price_m": 65, "price_l": 75}, {"name": "虎斑黑糖檸檬飲", "price_m": 35, "price_l": 45}], "SOYBEAN MILK WITH GRAINS_多穀系列": [{"name": "多穀豆漿", "price_m": 30, "price_l": 40}, {"name": "多穀紅茶", "price_m": 30, "price_l": 40}, {"name": "多穀紅茶豆漿", "price_m": 30, "price_l": 40}, {"name": "多穀奶茶", "price_m": 35, "price_l": 45}, {"name": "多穀綠奶", "price_m": 35, "price_l": 45}, {"name": "多穀薏仁漿", "price_m": 40, "price_l": 50}], "PURE TEA_純味茶": [{"name": "阿薩姆紅茶", "price_m": 20, "price_l": 25}, {"name": "茉莉綠茶", "price_m": 20, "price_l": 25}, {"name": "高山青茶", "price_m": 20, "price_l": 25}, {"name": "東方美人 (現沏)", "price": 35}, {"name": "黃金烏龍 (現沏)", "price": 35}, {"name": "阿里山 (現沏)", "price": 35}, {"name": "玄米玉露 (現沏)", "price": 35}, {"name": "四季綠茶 (現沏)", "price": 35}], "MILK TEA_奶茶系列": [{"name": "阿薩姆奶茶", "price_m": 25, "price_l": 30}, {"name": "茉香奶綠", "price_m": 25, "price_l": 30}, {"name": "高山青奶", "price_m": 25, "price_l": 30}, {"name": "胚芽奶茶", "price_m": 30, "price_l": 35}, {"name": "茶珠青奶", "price_l": 55}, {"name": "茶珠綠奶", "price_l": 55}, {"name": "茶珠奶茶", "price_l": 55}], "SOYBEAN MILK_豆漿系列": [{"name": "研磨豆漿", "price_m": 20, "price_l": 25}, {"name": "紅茶豆漿", "price_m": 20, "price_l": 25}, {"name": "胚芽豆漿", "price_m": 25, "price_l": 30}, {"name": "薏仁豆漿", "price_m": 30, "price_l": 35}, {"name": "抹茶豆漿", "price_m": 30, "price_l": 35}, {"name": "養生薏仁漿", "price_m": 30, "price_l": 35}], "TEA LATTES_茶拿鐵": [{"name": "東方拿鐵", "price_m": 50}, {"name": "烏龍拿鐵", "price_m": 50}, {"name": "阿里山拿鐵", "price_m": 50}, {"name": "四季拿鐵", "price_m": 50}, {"name": "玄米拿鐵", "price_m": 50}, {"name": "紅茶拿鐵", "price_m": 40, "price_l": 50}, {"name": "綠茶拿鐵", "price_m": 40, "price_l": 50}, {"name": "青茶拿鐵", "price_m": 40, "price_l": 50}], "ITALIAN STYLE COFFEE_義式咖啡": [{"name": "豆奶拿鐵", "price_m": 40}, {"name": "特調咖啡", "price_m": 40}, {"name": "義式咖啡", "price_m": 40}, {"name": "小農拿鐵", "price_m": 55}, {"name": "卡布奇諾", "price_m": 55}], "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool": [{"name": "玄米檸檬綠茶", "price_l": 60}, {"name": "鳳梨美人茶", "price_l": 60}, {"name": "檸檬黃金烏龍", "price_l": 60}, {"name": "鳳梨美人鮮奶茶", "price_l": 75}, {"name": "鳳梨烏龍鮮奶茶", "price_l": 75}, {"name": "鳳梨玄米鮮奶綠", "price_l": 75}]};
+const CATALOG = {"美式狂想套餐 SET MEALS ($129)": [{"name": "美式狂想套餐", "price": 129, "note": "主餐+薯餅+$25飲品乙杯"}], "PRIVATE FRIED NOODLES_私房炒麵系列": [{"name": "培根炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "香雞炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "烤肉炒麵", "price": 55, "price_set": 110, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "日式豬排炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "日式雞排炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "德式燻腸炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "泡菜燒肉炒麵", "price": 80, "price_set": 135, "note": "升級套餐：點心二選一（野菜豚炸餃/米花雞球）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "A-BAO SELECTED SET_A-bao嚴選定食": [{"name": "定01 炒麵加蛋＋鍋貼", "price": 97, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定02 美式湯餃＋烤肉蛋漢堡", "price": 129, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定03 炒麵加蛋＋雞塊", "price": 95, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定04 烤肉炒麵＋鍋貼", "price": 112, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯", "price": 119, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定06 玉米起司特酥蛋餅＋米花雞球", "price": 112, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定07 烤肉蛋漢堡＋鍋貼", "price": 105, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定08 烤肉炒麵＋黃金香酥雞", "price": 124, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定09 炒麵加蛋＋黃金香酥雞", "price": 109, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定10 烤肉炒麵＋米花雞球", "price": 115, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定11 美式湯餃＋雞塊", "price": 113, "note": "套餐均附 $25 飲品乙杯"}, {"name": "定12 玉米起司特酥蛋餅＋鍋貼", "price": 105, "note": "套餐均附 $25 飲品乙杯"}], "KIMCHI FESTIVAL_泡菜祭": [{"name": "泡菜燒肉異國炒麵", "price": 80}, {"name": "泡菜豬排蛋堡", "price": 85}, {"name": "泡菜雞排捲", "price": 80}, {"name": "泡菜蛋餅", "price": 50}], "TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡": [{"name": "韓風玫瑰醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "經典赤辣醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "蜂蜜芥末醬 鳳梨雞排堡", "price": 85, "price_set": 89, "note": "升級套餐：飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "CRISPY OMELETTE SERIES_特酥系列 x 超值自由配": [{"name": "玉米起司", "price": 55, "price_set": 104, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "鮪魚玉米", "price": 65, "price_set": 114, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "鮪魚洋蔥", "price": 65, "price_set": 114, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "培根玉米起司", "price": 70, "price_set": 119, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "惡魔雙色拔絲", "price": 60, "price_set": 109, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿肉鬆蔬食", "price": 70, "price_set": 119, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "火腿起司 佐花醬小黃瓜", "price": 60, "price_set": 109, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}, {"name": "和洋豬排蔬食", "price": 75, "price_set": 124, "note": "升級套餐：點心二選一（鍋貼/雞塊）<br>飲料乙杯（中杯紅茶，可換綠茶或青茶）<br>+$20升級鮮奶茶"}], "BURGERS_漢堡": [{"name": "玉米蛋", "price": 35}, {"name": "肉鬆蛋", "price": 35}, {"name": "豬肉蛋 (漢堡肉)", "price": 40}, {"name": "烤肉蛋 (里肌肉)", "price": 50}, {"name": "香雞蛋", "price": 45}, {"name": "牛肉蛋", "price": 45}, {"name": "總匯蛋 (里肌肉)", "price": 55}, {"name": "日式雞排蛋", "price": 55}, {"name": "日式豬排蛋", "price": 55}, {"name": "日式花枝排蛋", "price": 55}, {"name": "日式蝦排蛋", "price": 55}, {"name": "雞腿蛋 (原/辣)", "price": 60}], "TOAST_土司": [{"name": "煎蛋", "price": 30}, {"name": "玉米蛋", "price": 35}, {"name": "肉鬆蛋", "price": 35}, {"name": "起司蛋", "price": 35}, {"name": "火腿蛋", "price": 40}, {"name": "培根蛋", "price": 40}, {"name": "鮪魚蛋", "price": 45}, {"name": "烤肉蛋 (里肌肉)", "price": 50}, {"name": "香雞蛋", "price": 45}, {"name": "總匯蛋 (漢堡肉)", "price": 55}, {"name": "雞腿蛋 (原/辣)", "price": 60}], "JAN SERIES_果醬磚研系列": [{"name": "草莓", "price": 25}, {"name": "藍莓", "price": 25}, {"name": "奶酥", "price": 25}, {"name": "花生", "price": 25}, {"name": "奶油", "price": 25}, {"name": "巧克力", "price": 25}, {"name": "狠蒜", "price": 35}], "THICKCUT TOAST_厚片": [{"name": "起司奶油", "price": 35}, {"name": "鮪魚洋蔥", "price": 45}, {"name": "燻雞起司", "price": 50}], "CEREAL GRAIN BURGERS_日式穀堡": [{"name": "日式蔬食沙拉", "price": 40}, {"name": "日式咖哩", "price": 40}, {"name": "冰州魚排", "price": 55}, {"name": "大洋鮮魚", "price": 55}, {"name": "烤肉穀堡", "price": 55}, {"name": "孜然醬雞排", "price": 55}, {"name": "孜然醬豬排", "price": 55}], "SOFT FRENCH BREAD_法國麵包 ": [{"name": "火腿起司", "price": 50}, {"name": "蕃茄豬肉", "price": 50}, {"name": "苜蓿芽起司", "price": 50}, {"name": "陽光香雞", "price": 50}, {"name": "蔬食烤肉", "price": 60}, {"name": "日式燻雞", "price": 65}], "BURRITO_蔬食捲餅": [{"name": "香雞蕃茄", "price": 45}, {"name": "黃金烤肉", "price": 55}, {"name": "日式雞排", "price": 60}, {"name": "海味花枝", "price": 60}, {"name": "鮮味蝦排", "price": 60}, {"name": "美式雞腿 (原/辣)", "price": 65}], "PUFF PASTRY_起酥堡": [{"name": "草莓起酥", "price": 35}, {"name": "洋芋蔬食", "price": 40}, {"name": "苜蓿芽玉米", "price": 40}, {"name": "蕃茄蔬食", "price": 40}, {"name": "蔬食烤肉", "price": 55}], "PAIN PERDU_法國土司 ": [{"name": "日式培根", "price": 40}, {"name": "深海鮪魚", "price": 45}, {"name": "黃金烤肉", "price": 50}], "CHINESE OMELET_招牌蛋餅": [{"name": "原味", "price": 25}, {"name": "肉鬆", "price": 35}, {"name": "玉米", "price": 35}, {"name": "起司", "price": 35}, {"name": "蔬食", "price": 35}, {"name": "洋蔥", "price": 35}, {"name": "火腿", "price": 40}, {"name": "培根", "price": 40}, {"name": "熱狗", "price": 40}, {"name": "鮪魚", "price": 45}, {"name": "烤肉", "price": 50}], "SALAD VEGETABLE_田園蔬果": [{"name": "馬鈴薯土司", "price": 40}, {"name": "南瓜土司", "price": 40}, {"name": "全麥蔬食鮪魚", "price": 45}, {"name": "全麥苜蓿芽火腿", "price": 45}, {"name": "全麥蔬菜沙拉", "price": 45}, {"name": "田園蔬菜捲", "price": 45}], "CHINESE SNACKS_中式茶食": [{"name": "荷包蛋", "price": 15}, {"name": "熱狗 (4條)", "price": 30}, {"name": "玉米濃湯", "price": 30}, {"name": "炒麵", "price": 35}, {"name": "鍋貼(5個)", "price": 35}, {"name": "雞塊 (4個)", "price": 35}, {"name": "蘿蔔糕 (2片)", "price": 35}, {"name": "薯餅 (4片)", "price": 40}, {"name": "米花雞球 (8個)", "price": 45}, {"name": "野菜豚炸餃(8個)", "price": 45}, {"name": "脆薯", "price": 40}, {"name": "美式湯麵", "price": 45}, {"name": "義響鐵板麵", "price": 50}, {"name": "黃金香酥雞", "price": 50}, {"name": "二折雞翅(3入/7入)", "price": 55, "price_alt": 105}], "FRESH FRUIT TEA_鮮果茶 Cool": [{"name": "檸檬紅茶", "price_m": 40, "price_l": 45}, {"name": "檸檬綠茶", "price_m": 40, "price_l": 45}, {"name": "蜜漬鳳梨紅茶", "price_m": 45, "price_l": 50}], "TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ": [{"name": "虎斑黑糖豆漿", "price_m": 35, "price_l": 45}, {"name": "虎斑黑糖薏仁", "price_m": 40, "price_l": 50}, {"name": "虎斑黑糖奶茶", "price_m": 40, "price_l": 50}, {"name": "虎斑黑糖紅茶牛奶", "price_m": 50, "price_l": 60}, {"name": "虎斑黑糖牛奶", "price_m": 65, "price_l": 75}, {"name": "虎斑黑糖檸檬飲", "price_m": 35, "price_l": 45}], "SOYBEAN MILK WITH GRAINS_多穀系列": [{"name": "多穀豆漿", "price_m": 30, "price_l": 40}, {"name": "多穀紅茶", "price_m": 30, "price_l": 40}, {"name": "多穀紅茶豆漿", "price_m": 30, "price_l": 40}, {"name": "多穀奶茶", "price_m": 35, "price_l": 45}, {"name": "多穀綠奶", "price_m": 35, "price_l": 45}, {"name": "多穀薏仁漿", "price_m": 40, "price_l": 50}], "PURE TEA_純味茶": [{"name": "阿薩姆紅茶", "price_m": 20, "price_l": 25}, {"name": "茉莉綠茶", "price_m": 20, "price_l": 25}, {"name": "高山青茶", "price_m": 20, "price_l": 25}, {"name": "東方美人 (現沏)", "price": 35}, {"name": "黃金烏龍 (現沏)", "price": 35}, {"name": "阿里山 (現沏)", "price": 35}, {"name": "玄米玉露 (現沏)", "price": 35}, {"name": "四季綠茶 (現沏)", "price": 35}], "MILK TEA_奶茶系列": [{"name": "阿薩姆奶茶", "price_m": 25, "price_l": 30}, {"name": "茉香奶綠", "price_m": 25, "price_l": 30}, {"name": "高山青奶", "price_m": 25, "price_l": 30}, {"name": "胚芽奶茶", "price_m": 30, "price_l": 35}, {"name": "茶珠青奶", "price_l": 55}, {"name": "茶珠綠奶", "price_l": 55}, {"name": "茶珠奶茶", "price_l": 55}], "SOYBEAN MILK_豆漿系列": [{"name": "研磨豆漿", "price_m": 20, "price_l": 25}, {"name": "紅茶豆漿", "price_m": 20, "price_l": 25}, {"name": "胚芽豆漿", "price_m": 25, "price_l": 30}, {"name": "薏仁豆漿", "price_m": 30, "price_l": 35}, {"name": "抹茶豆漿", "price_m": 30, "price_l": 35}, {"name": "養生薏仁漿", "price_m": 30, "price_l": 35}], "TEA LATTES_茶拿鐵": [{"name": "東方拿鐵", "price_m": 50}, {"name": "烏龍拿鐵", "price_m": 50}, {"name": "阿里山拿鐵", "price_m": 50}, {"name": "四季拿鐵", "price_m": 50}, {"name": "玄米拿鐵", "price_m": 50}, {"name": "紅茶拿鐵", "price_m": 40, "price_l": 50}, {"name": "綠茶拿鐵", "price_m": 40, "price_l": 50}, {"name": "青茶拿鐵", "price_m": 40, "price_l": 50}], "ITALIAN STYLE COFFEE_義式咖啡": [{"name": "豆奶拿鐵", "price_m": 40}, {"name": "特調咖啡", "price_m": 40}, {"name": "義式咖啡", "price_m": 40}, {"name": "小農拿鐵", "price_m": 55}, {"name": "卡布奇諾", "price_m": 55}], "FRESH FRUIT TEA COOL 2_果然鮮粹 Cool": [{"name": "玄米檸檬綠茶", "price_l": 60}, {"name": "鳳梨美人茶", "price_l": 60}, {"name": "檸檬黃金烏龍", "price_l": 60}, {"name": "鳳梨美人鮮奶茶", "price_l": 75}, {"name": "鳳梨烏龍鮮奶茶", "price_l": 75}, {"name": "鳳梨玄米鮮奶綠", "price_l": 75}]};
 
 const STORE_NAME = "美寶美食館（A-Bao溪湖培英店）";
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
@@ -344,7 +346,7 @@ const STORE_OPEN_MIN = 5 * 60 + 20;   // 05:20
 const STORE_CLOSE_MIN = 13 * 60;      // 13:00
 const ORDER_CUTOFF_MIN = STORE_CLOSE_MIN - 15; // 12:45 停止接單
 const MIN_LEAD_MIN = 10; // 下單後最少10分鐘才能取餐
-const SLOT_STEP_MIN = 10; // 取餐時段間隔改成10分鐘一格（10/20/30/40/50/00），不要有5分尾數
+const SLOT_STEP_MIN = 15; // 取餐時段間隔改成15分鐘一格（15/30/45/00），老闆反饋改成整點+一刻鐘的常見時段刻度
 
 function getNowMinutes() {
   const d = new Date();
@@ -970,18 +972,15 @@ function renderOptionGroup(container, gKey) {
     if (sizeForFilter === 'L') return opt.priceL != null;
     return true;
   });
-  // 名稱太長（例如主餐"美1 花醬 牛肉培根 起司蛋堡"）硬塞2欄手機上會換行、左右列對不齊，
-  // 改成單欄；短名稱（醬料/飲料等）才用2欄格線（老闆反饋2欄排版在長名稱選項上「文字行數跑掉」）
-  // 部分群組老闆指定固定欄數(不用長度自動判斷)：加料類(選項多但單項短)改1欄比較好讀，醬料類選項多改3欄減少高度
+  // 老闆反饋(2026-08-31)：欄數依名稱長度動態判斷會讓不同品項的客製化選單忽1忽2忽3欄、看起來跳來跳去，
+  // 且醬料類群組固定3欄時，混進4個字的長選項（如"不醬只胡"）會被拆成2行跟旁邊1行的選項對不齊。
+  // 改為固定二選一：加料類(選項多但單項短，價格常換行顯示)維持單欄；其餘一律固定2欄，不再依名稱長度或群組類型跳欄數
+  // combo_main/deluxe_upgrade例外：選項本身是完整餐點敘述(例如"美1 花醬 牛肉培根 起司蛋堡")，2欄會硬拆成2行，維持單欄
   const OPTION_GROUP_COLUMNS = {
     bread_addon: 1, noodle_addon: 1, dine_set_addon: 1, omelet_addon: 1, jam_bread_choice: 1,
-    omelet_choice: 1, drink_topping: 1, small_drink: 1,
-    combo_sauce: 3, spicy_sauce: 3, tropical_sauce: 3, tropical_sauce2: 3, omelet_sauce: 3,
-    bread_sauce: 3, cereal_sauce: 3, frenchbread_sauce: 3, burrito_sauce: 3, puffpastry_sauce: 3,
-    painperdu_sauce: 3, salad_sauce: 3
+    omelet_choice: 1, drink_topping: 1, small_drink: 1, combo_main: 1, deluxe_upgrade: 1
   };
-  const maxNameLen = Math.max(0, ...visibleOptions.map(o => o.name.length));
-  const cols = OPTION_GROUP_COLUMNS[gKey] || (maxNameLen > 8 ? 1 : 2);
+  const cols = OPTION_GROUP_COLUMNS[gKey] || 2;
   // minmax(0,1fr)而非單純1fr：避免nowrap選項的內容最小寬度把某欄擠得比平分寬度還大，導致整個grid溢出容器
   optWrap.style.cssText = cols === 1
     ? 'display:block;'
