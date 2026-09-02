@@ -351,6 +351,16 @@ const CATALOG = {"美式狂想套餐 SET MEALS ($129)":[{"name":"美式狂想套
 
 const STORE_NAME = "美寶美食館（A-Bao溪湖培英店）";
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
+// 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡集中兩個小函式自動帶上，
+// 全站呼叫後端一律走這兩個函式，之後新增任何呼叫都自動套用，不用每處各自補
+const APP_KEY = 'abao-meibao-2026';
+function apiGet_(params) {
+  const qs = new URLSearchParams({ ...params, appKey: APP_KEY }).toString();
+  return fetch(`${ORDER_BACKEND_URL}?${qs}`).then(r => r.json());
+}
+function apiPost_(payload) {
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) }).then(r => r.json());
+}
 let cart = []; // {key, name, size, price, qty}
 // 品項上下架狀態快取(品項名稱→'本日售完'/'永久下架')，由applyItemAvailability()載入頁面時抓一次，
 // 供renderOptionGroup渲染客製化選項時同步查詢(選項本身沒有獨立的.item DOM節點，不能沿用原本只對付
@@ -394,11 +404,11 @@ function getPickupDateISO(offsetDays) {
 
 // 建立「待付款」訂單，回傳後端orderId供後續confirmPayment使用
 function createPendingOrderOnBackend(payload) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify(payload) }).then(r => r.json());
+  return apiPost_(payload);
 }
 // 標記訂單為已付款（現階段由「模擬付款」按鈕觸發，之後改由藍新付款完成通知呼叫）
 function confirmPaymentOnBackend(orderId) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'confirmPayment', orderId }) }).then(r => r.json());
+  return apiPost_({ action: 'confirmPayment', orderId });
 }
 
 // 客製化選項群組，來源：溪湖菜單_202610.xlsx「雲端客製化」分頁 + imenu.com.tw 參考頁面互動實測（2026-08-27）
@@ -829,8 +839,8 @@ function queryMyVouchers() {
   resultEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">查詢中...</div>';
 
   Promise.all([
-    fetch(`${ORDER_BACKEND_URL}?action=getMember&phone=${encodeURIComponent(phone)}`).then(r => r.json()),
-    fetch(`${ORDER_BACKEND_URL}?action=getMemberVouchers&phone=${encodeURIComponent(phone)}`).then(r => r.json())
+    apiGet_({ action: 'getMember', phone }),
+    apiGet_({ action: 'getMemberVouchers', phone })
   ]).then(([memberData, voucherData]) => {
     if (memberData.status === 'not_found') {
       resultEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">查無此會員，請確認電話號碼，或到門市加入LINE好友完成入會。</div>';
@@ -1535,7 +1545,7 @@ function populatePickupTime(dateValue) {
 // 失敗就當作沒有容量限制、不擋顧客選時段，不能因為網路問題擋單
 function applySlotCapacity(dateValue) {
   const dateISO = getPickupDateISO(dateValue === 'today' ? 0 : 1);
-  fetch(`${ORDER_BACKEND_URL}?action=slotCounts&storeId=meibao&date=${dateISO}`).then(r => r.json()).then(data => {
+  apiGet_({ action: 'slotCounts', storeId: 'meibao', date: dateISO }).then(data => {
     if (data.status !== 'ok' || !data.counts) return;
     const sel = document.getElementById('pickup-time');
     if (document.getElementById('pickup-date').value !== dateValue) return; // 使用者已經切換到別的日期，這批結果過期不套用
@@ -1573,7 +1583,7 @@ applyItemAvailability();
 // 順便讀暫停接單/設為忙碌狀態，顯示非阻斷式提示（真正擋單是送出訂單時後端做，這裡只是提早讓客人知道）
 // 失敗就當作全部品項供應中、正常接單，不擋顧客點餐
 function applyItemAvailability() {
-  fetch(`${ORDER_BACKEND_URL}?action=storeStatus&storeId=meibao`).then(r => r.json()).then(data => {
+  apiGet_({ action: 'storeStatus', storeId: 'meibao' }).then(data => {
     if (data.status !== 'ok') return;
     const storeEl = document.getElementById('store-status-notice');
     if (data.paused) {
