@@ -1044,6 +1044,15 @@ function renderPosMenu() {
   discountBtn.textContent = '優惠券';
   discountBtn.onclick = () => goToPosDiscountCategory();
   catCol.appendChild(discountBtn);
+  // 「快速出單」放在最後（2026-09-03新增）：熊貓/581/日系外送平台訂單，店員看平台App金額手動輸入登記，
+  // 不進購物車、只記總金額，順便登記發票類型供之後手動開立實際發票參照
+  const quickOrderBtn = document.createElement('button');
+  quickOrderBtn.id = 'pos-cat-btn-quickorder';
+  quickOrderBtn.className = 'pos-cat-btn';
+  quickOrderBtn.style.color = 'var(--brand)';
+  quickOrderBtn.textContent = '快速出單';
+  quickOrderBtn.onclick = () => goToPosQuickOrderCategory();
+  catCol.appendChild(quickOrderBtn);
   if (cats.length) goToPosCategory(0);
   setPosStep('categories'); // 手機直向初始畫面固定停在分類清單，不要一開始就跳到品項
 }
@@ -1069,6 +1078,94 @@ function goToPosDiscountCategory() {
     grid.appendChild(card);
   });
   itemsCol.appendChild(grid);
+}
+
+// ---------------------------------------------------------------
+// 快速出單（POS功能分類，2026-09-03新增）：熊貓/581/日系外送平台訂單登記，
+// 不進購物車/不逐項選品項，只記總金額+來源+發票類型(供之後手動開立實際發票參照)，
+// 「今日營收」不會算進這幾筆(後端getTodayRevenue_已排除)，改在這個分類自己顯示今日各平台累計
+// ---------------------------------------------------------------
+const QUICK_ORDER_SOURCES = ['熊貓', '581', '日系'];
+const INVOICE_TYPES = ['無統編/無載具', '有公司統編', '有手機載具'];
+
+function goToPosQuickOrderCategory() {
+  document.querySelectorAll('.pos-cat-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('pos-cat-btn-quickorder').classList.add('active');
+
+  const itemsCol = document.getElementById('pos-col-items');
+  document.getElementById('pos-col-detail').innerHTML = '<div class="pos-detail-empty">請選擇品項</div>';
+  currentPosModal = null;
+  setPosStep('items');
+
+  itemsCol.innerHTML = `
+    <div style="max-width:360px;">
+      <div class="pos-col-title">快速出單（熊貓/581/日系）</div>
+      <div style="font-size:0.78rem;color:var(--muted);margin-bottom:10px;">只記總金額，不進購物車；不計入門市總金額，另外累計。發票類型供之後手動開立實際發票參照，這裡不會真的開發票。</div>
+      <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">來源</label>
+      <select id="quick-order-source" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;">
+        ${QUICK_ORDER_SOURCES.map(s => `<option value="${s}">${s}</option>`).join('')}
+      </select>
+      <label style="display:block;font-size:0.8rem;margin:10px 0 4px;color:var(--muted)">總金額</label>
+      <input type="number" id="quick-order-amount" placeholder="顧客實付金額" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+      <label style="display:block;font-size:0.8rem;margin:10px 0 4px;color:var(--muted)">發票類型</label>
+      <select id="quick-order-invoice-type" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onchange="updateQuickOrderInvoiceNumberVisibility()">
+        ${INVOICE_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
+      </select>
+      <div id="quick-order-invoice-number-wrap" style="display:none;">
+        <label style="display:block;font-size:0.8rem;margin:10px 0 4px;color:var(--muted)" id="quick-order-invoice-number-label">統編/載具號碼</label>
+        <input type="text" id="quick-order-invoice-number" placeholder="請輸入號碼" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:14px;" onclick="submitQuickOrder()">出單</button>
+      <div id="quick-order-summary" style="margin-top:16px;padding-top:10px;border-top:1px dashed var(--border);font-size:0.82rem;color:var(--muted);">載入今日累計中...</div>
+    </div>
+  `;
+  loadQuickOrderSummary();
+}
+
+function updateQuickOrderInvoiceNumberVisibility() {
+  const type = document.getElementById('quick-order-invoice-type').value;
+  const wrap = document.getElementById('quick-order-invoice-number-wrap');
+  const label = document.getElementById('quick-order-invoice-number-label');
+  if (type === '無統編/無載具') {
+    wrap.style.display = 'none';
+  } else {
+    wrap.style.display = 'block';
+    label.textContent = type === '有公司統編' ? '公司統編' : '手機載具號碼';
+  }
+}
+
+function loadQuickOrderSummary() {
+  const el = document.getElementById('quick-order-summary');
+  if (!el) return;
+  apiGet({ action: 'todayQuickOrderSummary', storeId: STORE_ID }).then(data => {
+    if (data.status !== 'ok' || !el.isConnected) return;
+    el.innerHTML = '<div style="font-weight:600;margin-bottom:4px;">今日各平台累計</div>' +
+      QUICK_ORDER_SOURCES.map(s => `<div>${s}：${data.summary[s].count}筆　$${data.summary[s].total}</div>`).join('');
+  });
+}
+
+function submitQuickOrder() {
+  const source = document.getElementById('quick-order-source').value;
+  const amount = Number(document.getElementById('quick-order-amount').value);
+  const invoiceType = document.getElementById('quick-order-invoice-type').value;
+  const invoiceNumberInput = document.getElementById('quick-order-invoice-number');
+  const invoiceNumber = invoiceNumberInput ? invoiceNumberInput.value.trim() : '';
+  if (!amount || amount <= 0) { alert('請輸入有效的金額'); return; }
+  if (invoiceType !== '無統編/無載具' && !invoiceNumber) { alert('請輸入統編或手機載具號碼'); return; }
+  apiPost({
+    action: 'quickOrder',
+    storeId: STORE_ID,
+    source: source,
+    totalAmount: amount,
+    invoiceType: invoiceType,
+    invoiceNumber: invoiceNumber
+  }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '出單失敗'); return; }
+    alert(`已登記「${source}」訂單，訂單編號：${data.orderId}`);
+    document.getElementById('quick-order-amount').value = '';
+    if (invoiceNumberInput) invoiceNumberInput.value = '';
+    loadQuickOrderSummary();
+  });
 }
 
 // 手機直向螢幕太窄，四欄擠不下，改成一次只顯示一層（分類/品項/客製化/訂單），
