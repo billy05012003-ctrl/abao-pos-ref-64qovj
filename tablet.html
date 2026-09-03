@@ -64,7 +64,7 @@
     #pos-mobile-cartbar { display:flex; position:fixed; bottom:0; left:0; right:0; background:var(--brand); color:#fff; padding:12px 16px; justify-content:space-between; align-items:center; cursor:pointer; z-index:11; box-shadow:0 -2px 10px rgba(0,0,0,0.15); }
     #pos-mobile-cartbar span.count { background:#fff; color:var(--brand); border-radius:999px; padding:2px 8px; font-size:0.8rem; margin-right:8px; }
     .pos-layout[data-step="cart"] #pos-mobile-cartbar { display:none; }
-    .pos-col-cart, .pos-col-detail, .pos-col-items { padding-bottom:70px; }
+    .pos-col-cart, .pos-col-detail, .pos-col-items, .pos-col-categories { padding-bottom:70px; }
   }
   #member-info { margin-top:10px; font-size:0.88rem; }
   #member-info .member-card { background:#fff8f2; border:1px solid #ffd699; border-radius:8px; padding:10px; }
@@ -91,52 +91,6 @@
 </style>
 </head>
 <body>
-<script>
-if(new Date()>new Date('2026-12-31T23:59:59')){
-  document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:'Microsoft JhengHei',sans-serif;text-align:center;padding:20px">
-    <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
-      <div style="font-size:40px;margin-bottom:12px">⏳</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">「雲端平板（店家端）測試版」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
-    </div>
-  </div>`;
-  document.title='已過期 - 雲端平板';
-  throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
-}
-// 密碼門檻（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
-(function(){
-  const SITE_PASSWORD='3345678';
-  const AUTH_KEY='mk_auth_meibao_tablet';
-  if(localStorage.getItem(AUTH_KEY)==='1')return;
-  const gate=document.createElement('div');
-  gate.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:-apple-system,"Microsoft JhengHei",sans-serif';
-  gate.innerHTML=`
-    <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
-      <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">雲端平板（店家端）</div>
-      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（測試版）</div>
-      <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
-      <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
-      <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
-      <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
-    </div>`;
-  document.body.appendChild(gate);
-  function trySubmit(){
-    const val=document.getElementById('gate-pw').value;
-    if(val===SITE_PASSWORD){
-      localStorage.setItem(AUTH_KEY,'1');
-      gate.remove();
-    }else{
-      document.getElementById('gate-err').textContent='密碼錯誤，請再試一次';
-      document.getElementById('gate-pw').value='';
-      document.getElementById('gate-pw').focus();
-    }
-  }
-  document.getElementById('gate-btn').onclick=trySubmit;
-  document.getElementById('gate-pw').addEventListener('keydown',e=>{if(e.key==='Enter')trySubmit();});
-  document.getElementById('gate-pw').focus();
-})();
-</script>
 
 <header>
   <h1>A-Bao溪湖培英店</h1>
@@ -207,6 +161,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div class="pos-col-title">目前訂單</div>
     <div id="pos-cart-lines" class="pos-cart-lines-scroll"></div>
     <div id="pos-cart-voucher"></div>
+    <div id="pos-cart-direct-discount"></div>
     <div class="pos-cart-total"><span>總計</span><span id="pos-cart-total">$0</span></div>
 
     <div id="pos-checkout-panel" style="display:none">
@@ -254,6 +209,16 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <h2 id="pos-voucher-picker-title" style="margin:0; flex:1; font-size:1rem;"></h2>
     </div>
     <div id="pos-voucher-picker-list"></div>
+  </div>
+</div>
+
+<div class="pos-overlay" id="pos-direct-picker-overlay" style="z-index:26;">
+  <div class="pos-sheet">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button type="button" onclick="closeDirectDiscountItemPicker()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <h2 id="pos-direct-picker-title" style="margin:0; flex:1; font-size:1rem;"></h2>
+    </div>
+    <div id="pos-direct-picker-list"></div>
   </div>
 </div>
 
@@ -435,7 +400,11 @@ const VOUCHER_BEHAVIOR = {
   '美式狂想乙套兌換券': { mode: 'item', effect: 'free', minQty: 1 },
   '買一送一': { mode: 'item', effect: 'free', minQty: 2 },
   '第二件六折': { mode: 'item', effect: 'discount60', minQty: 2 },
-  '加一元多一件': { mode: 'item', effect: 'addOne', minQty: 1 }
+  '加一元多一件': { mode: 'item', effect: 'addOne', minQty: 1 },
+  '單品免費': { mode: 'item', effect: 'free', minQty: 1 },
+  '週二第二件五折': { mode: 'item', effect: 'discount50', minQty: 2 },
+  '週四雞塊免費': { mode: 'item', effect: 'free', minQty: 1, autoAddChicken: true },
+  '公關費': { mode: 'item', effect: 'free', minQty: 1 } // 跟「單品免費」效果相同(選品項、全額折抵)，只是分類標籤不同，方便之後區分公關招待/門市促銷活動
 };
 // 集點兌換目錄：跟後端Code.gs的POINT_REDEMPTION_CATALOG一致，只用於前端顯示門檻
 const POINT_REDEMPTION_CATALOG = [
@@ -446,11 +415,20 @@ const POINT_REDEMPTION_CATALOG = [
   { points: 10, voucherType: '中杯黑糖牛奶兌換券' },
   { points: 20, voucherType: '美式狂想乙套兌換券' }
 ];
-const MANUAL_GRANT_VOUCHER_TYPES = ['20元兌換券', '50元兌換券', '第二件六折', '買一送一', '加一元多一件'];
+// 2026-09-03老闆定案拆分「優惠券」跟「POS按鈕」兩種概念：
+// 優惠券＝贈送給會員成一筆持久記錄(可以現在用也可以下次消費才用)，只有20元/50元屬於這種
+// POS按鈕＝門市活動直接折抵，點了立刻套用購物車品項、不經過贈送/使用兩步驟、不留兌換券記錄
+const MANUAL_GRANT_VOUCHER_TYPES = ['20元兌換券', '50元兌換券'];
+const DIRECT_DISCOUNT_TYPES = ['20元兌換券', '50元兌換券', '第二件六折', '買一送一', '加一元多一件', '單品免費', '週二第二件五折', '週四雞塊免費', '公關費'];
+// 「優惠券」分類（POS功能左側分類清單，2026-09-03新增）：涵蓋全部門市活動折抵/加價按鈕，
+// 含不走VOUCHER_BEHAVIOR的「活動飲品升級」(加價，見promptDrinkUpgrade)
+const DISCOUNT_CATEGORY_ITEMS = [...DIRECT_DISCOUNT_TYPES, '活動飲品升級'];
 
 let memberVouchers = []; // 目前查到的會員兌換券清單(getMemberVouchers回傳)
-let appliedVouchers = []; // 本次結帳已套用的兌換券，可複選多張：[{voucherId, type, mode, discountAmount, targetLineKey?}, ...]
+let appliedVouchers = []; // 本次結帳已套用的兌換券(有backend voucherId的持久記錄)，可複選多張：[{voucherId, type, mode, discountAmount, targetLineKey?}, ...]
 let pendingVoucherForItemPick = null; // item模式兌換券選好後、等待店員點選購物車品項時的暫存
+let directDiscounts = []; // 門市活動直接折抵(POS按鈕)，不對應任何backend voucherId、不留兌換券記錄：[{type, discountAmount, targetLineKey?}, ...]
+let pendingDirectDiscount = null; // item模式折抵選好後、等待店員點選購物車品項時的暫存
 
 function lookupMember() {
   const phone = document.getElementById('member-phone-input').value.trim();
@@ -611,6 +589,8 @@ function applyVoucherToLine(lineKey) {
     discountAmount = line.price;
   } else if (v.effect === 'discount60') {
     discountAmount = Math.round(line.price * 0.4); // 第二件六折＝其中一件折抵4成
+  } else if (v.effect === 'discount50') {
+    discountAmount = Math.round(line.price * 0.5); // 週二第二件五折＝其中一件折抵5成
   } else if (v.effect === 'addOne') {
     changePosQty(lineKey, 1); // 直接多加一件到購物車
     discountAmount = line.price - 1; // 這一件只收$1，其餘折抵
@@ -620,6 +600,89 @@ function applyVoucherToLine(lineKey) {
   renderPosCart();
   renderMemberVoucherPanel();
   alert(`已套用「${v.type}」`);
+}
+
+// ---------------------------------------------------------------
+// 門市活動直接折抵（POS按鈕，2026-09-03新增，改成左側「優惠券」分類點選觸發）：
+// 跟上面兌換券系統分開，點了立刻套用、不呼叫後端grantVoucher、不產生任何兌換券記錄，不需要先查會員
+// ---------------------------------------------------------------
+
+// 活動飲品升級：跟上面折抵類按鈕相反，是加價，不用選購物車特定品項，直接加進總金額
+// 用負數discountAmount代表加價，跟其他正數(折抵)共用同一個directDiscounts陣列+總額計算
+function promptDrinkUpgrade() {
+  if (posCart.length === 0) { alert('請先選購品項'); return; }
+  const input = prompt('活動飲品升級，要加收多少元？');
+  if (input === null) return;
+  const amount = Number(input);
+  if (!amount || amount <= 0 || !Number.isInteger(amount)) { alert('請輸入有效的正整數金額'); return; }
+  directDiscounts.push({ type: '活動飲品升級', discountAmount: -amount });
+  renderPosCart();
+}
+
+function applyDirectDiscount(type) {
+  const behavior = VOUCHER_BEHAVIOR[type];
+  if (!behavior) { alert('未知的折抵類型：' + type); return; }
+  if (!behavior.autoAddChicken && posCart.length === 0) { alert('請先選購品項'); return; }
+  if (behavior.mode === 'fixed') {
+    directDiscounts.push({ type, discountAmount: behavior.amount });
+    renderPosCart();
+    return;
+  }
+  if (behavior.autoAddChicken) {
+    // 週四雞塊免費：專屬折抵「雞塊 (4個)」，購物車沒有就自動加一份再折抵，不用店員自己選品項
+    let line = posCart.find(c => c.name === '雞塊 (4個)');
+    if (!line) {
+      line = { lineKey: '雞塊(4個)|free|', name: '雞塊 (4個)', size: null, price: 35, qty: 1, note: '' };
+      posCart.push(line);
+    }
+    applyDirectDiscountEffect_(type, behavior.effect, line.lineKey);
+    return;
+  }
+  pendingDirectDiscount = { type, effect: behavior.effect, minQty: behavior.minQty };
+  showDirectDiscountItemPicker();
+}
+
+function showDirectDiscountItemPicker() {
+  const listEl = document.getElementById('pos-direct-picker-list');
+  listEl.innerHTML = posCart.map(c => `
+    <button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 10px;" onclick="applyDirectDiscountEffect_(pendingDirectDiscount.type, pendingDirectDiscount.effect, '${c.lineKey}')">
+      ${c.name}${c.size ? ' ('+c.size+')' : ''}　$${c.price} x ${c.qty}
+    </button>
+  `).join('');
+  document.getElementById('pos-direct-picker-title').textContent = '折抵「' + pendingDirectDiscount.type + '」於哪個品項？';
+  document.getElementById('pos-direct-picker-overlay').classList.add('open');
+}
+
+function closeDirectDiscountItemPicker() {
+  document.getElementById('pos-direct-picker-overlay').classList.remove('open');
+  pendingDirectDiscount = null;
+}
+
+function applyDirectDiscountEffect_(type, effect, lineKey) {
+  const behavior = VOUCHER_BEHAVIOR[type];
+  const line = posCart.find(c => c.lineKey === lineKey);
+  if (!line) return;
+  if (behavior.minQty && line.qty < behavior.minQty) { alert(`此品項需要有${behavior.minQty}件以上才能套用「${type}」`); return; }
+
+  let discountAmount = 0;
+  if (effect === 'free') {
+    discountAmount = line.price;
+  } else if (effect === 'discount60') {
+    discountAmount = Math.round(line.price * 0.4);
+  } else if (effect === 'discount50') {
+    discountAmount = Math.round(line.price * 0.5);
+  } else if (effect === 'addOne') {
+    changePosQty(lineKey, 1);
+    discountAmount = line.price - 1;
+  }
+  directDiscounts.push({ type, discountAmount, targetLineKey: lineKey });
+  closeDirectDiscountItemPicker();
+  renderPosCart();
+}
+
+function clearDirectDiscount(index) {
+  directDiscounts.splice(index, 1);
+  renderPosCart();
 }
 
 function clearAppliedVoucher(voucherId) {
@@ -972,8 +1035,40 @@ function renderPosMenu() {
     btn.onclick = () => goToPosCategory(i);
     catCol.appendChild(btn);
   });
+  // 「優惠券」放在最後一個分類，涵蓋全部門市活動折抵/加價按鈕，2026-09-03改成分類瀏覽，
+  // 不再嵌在購物車欄位（跟其他品項分類一樣從左側選、不佔購物車空間）
+  const discountBtn = document.createElement('button');
+  discountBtn.id = 'pos-cat-btn-discount';
+  discountBtn.className = 'pos-cat-btn';
+  discountBtn.style.color = 'var(--brand)';
+  discountBtn.textContent = '優惠券';
+  discountBtn.onclick = () => goToPosDiscountCategory();
+  catCol.appendChild(discountBtn);
   if (cats.length) goToPosCategory(0);
   setPosStep('categories'); // 手機直向初始畫面固定停在分類清單，不要一開始就跳到品項
+}
+
+// 「優惠券」分類：不是CATALOG裡的真實品項，點了直接觸發折抵/加價動作，不開客製化彈窗
+function goToPosDiscountCategory() {
+  document.querySelectorAll('.pos-cat-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('pos-cat-btn-discount').classList.add('active');
+
+  const itemsCol = document.getElementById('pos-col-items');
+  itemsCol.innerHTML = '';
+  document.getElementById('pos-col-detail').innerHTML = '<div class="pos-detail-empty">請選擇品項</div>';
+  currentPosModal = null;
+  setPosStep('items');
+
+  const grid = document.createElement('div');
+  grid.className = 'pos-item-grid';
+  DISCOUNT_CATEGORY_ITEMS.forEach(type => {
+    const card = document.createElement('div');
+    card.className = 'pos-grid-card';
+    card.innerHTML = `<div class="name">${type}</div>`;
+    card.onclick = () => (type === '活動飲品升級' ? promptDrinkUpgrade() : applyDirectDiscount(type));
+    grid.appendChild(card);
+  });
+  itemsCol.appendChild(grid);
 }
 
 // 手機直向螢幕太窄，四欄擠不下，改成一次只顯示一層（分類/品項/客製化/訂單），
@@ -1504,14 +1599,23 @@ function renderPosCart() {
         <button class="btn" style="padding:2px 7px;font-size:0.72rem;" onclick="clearAppliedVoucher('${v.voucherId}')">取消</button>
       </div>`).join('');
   }
+  const directEl = document.getElementById('pos-cart-direct-discount');
+  if (directEl) {
+    directEl.innerHTML = directDiscounts.map((d, i) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;font-size:0.8rem;color:var(--brand);padding:4px 0;">
+        <span>門市活動：${d.type} ${d.discountAmount >= 0 ? '-' : '+'}$${Math.abs(d.discountAmount)}</span>
+        <button class="btn" style="padding:2px 7px;font-size:0.72rem;" onclick="clearDirectDiscount(${i})">取消</button>
+      </div>`).join('');
+  }
   document.getElementById('pos-cart-total').textContent = '$' + getPosCartFinalTotal();
   updateMobileCartBar();
 }
 
-// 購物車原始總額扣掉本次套用的所有兌換券折抵金額加總(可複選多張)，下限為$0
+// 購物車原始總額扣掉本次套用的所有兌換券+門市活動折抵金額加總(可複選多筆)，下限為$0
 function getPosCartFinalTotal() {
   const rawTotal = posCart.reduce((s, c) => s + c.qty * c.price, 0);
-  const discount = appliedVouchers.reduce((s, v) => s + v.discountAmount, 0);
+  const discount = appliedVouchers.reduce((s, v) => s + v.discountAmount, 0)
+    + directDiscounts.reduce((s, d) => s + d.discountAmount, 0);
   return Math.max(0, rawTotal - discount);
 }
 
@@ -1542,6 +1646,8 @@ function closePosCartAll() {
   memberVouchers = [];
   appliedVouchers = [];
   pendingVoucherForItemPick = null;
+  directDiscounts = [];
+  pendingDirectDiscount = null;
   renderPosCart();
   document.getElementById('member-phone-input').value = '';
   document.getElementById('member-info').innerHTML = '';
