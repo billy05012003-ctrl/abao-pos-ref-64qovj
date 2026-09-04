@@ -268,6 +268,11 @@
       <input type="text" id="cust-name" required>
       <label>手機</label>
       <input type="tel" id="cust-phone" required>
+      <div style="margin:6px 0 10px;">
+        <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:0;font-size:0.85rem;" onclick="loadCheckoutVouchers()">查詢可用兌換券</button>
+        <div id="checkout-voucher-list" style="margin-top:8px;"></div>
+        <div id="checkout-total-preview" style="font-size:0.85rem;color:var(--brand);margin-top:6px;"></div>
+      </div>
       <label>取餐方式</label>
       <select id="pickup-type">
         <option value="自取">自取</option>
@@ -315,6 +320,34 @@ function apiGet_(params) {
 function apiPost_(payload) {
   return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) }).then(r => r.json());
 }
+// ---------------------------------------------------------------
+// 顧客自助兌換券系統（2026-09-03新增）：跟POS功能共用同一套後端API(getMember/getMemberVouchers/
+// redeemPoints/redeemVoucher)，客人名下能有的券只會是「贈送/註冊禮/生日禮/集點兌換」這幾種來源，
+// 對應的效果只有mode:'fixed'(20/50元)跟mode:'item',effect:'free'(食物券)兩種，
+// 不會有第二件六折/五折這類POS專屬促銷券(那些只走POS按鈕即時折抵，不會贈送成持久記錄)
+// ---------------------------------------------------------------
+const VOUCHER_BEHAVIOR = {
+  '20元兌換券': { mode: 'fixed', amount: 20 },
+  '50元兌換券': { mode: 'fixed', amount: 50 },
+  '荷包蛋兌換券': { mode: 'item', effect: 'free' },
+  '中杯紅茶兌換券': { mode: 'item', effect: 'free' },
+  '中杯義式咖啡兌換券': { mode: 'item', effect: 'free' },
+  '中杯鮮奶茶兌換券': { mode: 'item', effect: 'free' },
+  '脆薯兌換券': { mode: 'item', effect: 'free' },
+  '米花雞球兌換券': { mode: 'item', effect: 'free' },
+  '中杯黑糖牛奶兌換券': { mode: 'item', effect: 'free' },
+  '美式狂想乙套兌換券': { mode: 'item', effect: 'free' }
+};
+// 集點兌換目錄：跟後端Code.gs的POINT_REDEMPTION_CATALOG一致，只用於前端顯示門檻
+const POINT_REDEMPTION_CATALOG = [
+  { points: 3, voucherType: '荷包蛋兌換券' },
+  { points: 5, voucherType: '中杯鮮奶茶兌換券' },
+  { points: 8, voucherType: '脆薯兌換券' },
+  { points: 8, voucherType: '米花雞球兌換券' },
+  { points: 10, voucherType: '中杯黑糖牛奶兌換券' },
+  { points: 20, voucherType: '美式狂想乙套兌換券' }
+];
+
 let cart = []; // {key, name, size, price, qty}
 // 品項上下架狀態快取(品項名稱→'本日售完'/'永久下架')，由applyItemAvailability()載入頁面時抓一次，
 // 供renderOptionGroup渲染客製化選項時同步查詢(選項本身沒有獨立的.item DOM節點，不能沿用原本只對付
@@ -810,13 +843,131 @@ function queryMyVouchers() {
           <span style="font-size:0.8rem;font-weight:600;${v.usable ? 'color:var(--brand);' : 'color:var(--muted);'}">${v.statusText}</span>
         </div>`;
       }).join('');
-      html += '<div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">＊兌換券請至現場結帳時由店員核銷使用，此頁僅供查詢</div>';
     }
+    // 集點兌換（2026-09-03新增）：顧客自己也能兌換，不用等店員提醒；扣點成功後發放的券不限時使用
+    const redeemableHtml = POINT_REDEMPTION_CATALOG.map(entry => {
+      const enough = m.points >= entry.points;
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.85rem;${enough ? '' : 'opacity:0.5;'}">
+          <span>${entry.points}點 → ${entry.voucherType}</span>
+          <button type="button" class="btn-primary" style="width:auto;padding:4px 12px;margin-top:0;font-size:0.8rem;" ${enough ? '' : 'disabled'} onclick="redeemMyPoints('${phone}','${entry.voucherType}')">兌換</button>
+        </div>`;
+    }).join('');
+    html += `<div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;">
+      <div style="font-size:0.85rem;font-weight:600;color:var(--muted);margin-bottom:4px;">集點兌換</div>
+      ${redeemableHtml}
+    </div>`;
+    html += '<div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">＊兌換券可在填寫取餐資訊時自己選擇套用折抵，或到現場結帳時由店員核銷</div>';
     resultEl.innerHTML = html;
   }).catch(err => {
     console.warn('查詢兌換券失敗', err);
     resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">查詢失敗，請確認網路連線後再試。</div>';
   });
+}
+
+function redeemMyPoints(phone, voucherType) {
+  apiPost_({ action: 'redeemPoints', phone, voucherType }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '兌換失敗'); return; }
+    alert(`已兌換「${voucherType}」，剩餘點數 ${data.remainingPoints}`);
+    queryMyVouchers();
+  }).catch(() => alert('兌換失敗，請確認網路連線後再試'));
+}
+
+// ---------------------------------------------------------------
+// 結帳頁自助套用兌換券（2026-09-03新增）：客人填手機後查自己的可用券，勾選套用折抵訂單金額，
+// 不用等現場店員操作。食物類兌換券用關鍵字自動比對購物車品項(自動配對，沒有對應品項就不能用，
+// 不讓客人自己選要折哪一項)，跟POS功能一樣只免基準價(客製化加購仍要收錢)
+// ---------------------------------------------------------------
+let checkoutMemberVouchers = []; // 查回來的可用券清單
+let checkoutSelectedVouchers = []; // 已勾選要套用的：[{voucherId, type, discountAmount, targetLineKey}]
+
+const VOUCHER_ITEM_MATCH_KEYWORD = {
+  '荷包蛋兌換券': '荷包蛋',
+  '中杯紅茶兌換券': '紅茶',
+  '中杯義式咖啡兌換券': '義式咖啡',
+  '中杯鮮奶茶兌換券': '鮮奶茶',
+  '脆薯兌換券': '脆薯',
+  '米花雞球兌換券': '米花雞球',
+  '中杯黑糖牛奶兌換券': '黑糖牛奶'
+};
+
+// 找購物車裡符合這張券的品項：美式狂想乙套兌換券比對SET_MEAL_CATEGORY底下任一主餐(拆分後有12個獨立品項)，
+// 其餘用關鍵字比對baseName，找不到就回傳null(前端會擋掉不能套用)
+function findCartLineForVoucher(type) {
+  if (type === '美式狂想乙套兌換券') {
+    const mainNames = (CATALOG[SET_MEAL_CATEGORY] || []).map(it => it.name);
+    return cart.find(c => mainNames.includes(c.baseName));
+  }
+  const keyword = VOUCHER_ITEM_MATCH_KEYWORD[type];
+  if (!keyword) return null;
+  return cart.find(c => c.baseName && c.baseName.includes(keyword));
+}
+
+function loadCheckoutVouchers() {
+  const phone = document.getElementById('cust-phone').value.trim();
+  const listEl = document.getElementById('checkout-voucher-list');
+  if (!phone) { listEl.innerHTML = '<div style="color:#a30000;font-size:0.8rem;">請先輸入手機號碼</div>'; return; }
+  listEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;">查詢中...</div>';
+  apiGet_({ action: 'getMemberVouchers', phone }).then(data => {
+    checkoutMemberVouchers = (data.status === 'ok') ? data.vouchers.filter(v => v.usable) : [];
+    checkoutSelectedVouchers = []; // 重新查詢視為換一輪，清空先前選擇避免對到舊資料
+    renderCheckoutVoucherList();
+    updateCheckoutTotalDisplay();
+  }).catch(() => {
+    listEl.innerHTML = '<div style="color:#a30000;font-size:0.8rem;">查詢失敗，請確認網路連線後再試</div>';
+  });
+}
+
+function renderCheckoutVoucherList() {
+  const listEl = document.getElementById('checkout-voucher-list');
+  if (checkoutMemberVouchers.length === 0) {
+    listEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;">目前沒有可用兌換券</div>';
+    return;
+  }
+  const selectedIds = new Set(checkoutSelectedVouchers.map(v => v.voucherId));
+  listEl.innerHTML = checkoutMemberVouchers.map(v => {
+    const behavior = VOUCHER_BEHAVIOR[v.type];
+    if (!behavior) return '';
+    if (behavior.mode === 'item' && !findCartLineForVoucher(v.type)) {
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.5;">
+        <span>${v.type}</span><span style="color:var(--muted);font-size:0.74rem;">購物車沒有對應品項</span>
+      </div>`;
+    }
+    const isSelected = selectedIds.has(v.voucherId);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;">
+      <span>${v.type}</span>
+      <button type="button" class="btn-${isSelected ? 'primary' : 'secondary'}" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" onclick="toggleCheckoutVoucher('${v.voucherId}','${v.type}')">${isSelected ? '取消套用' : '套用'}</button>
+    </div>`;
+  }).join('');
+}
+
+function toggleCheckoutVoucher(voucherId, type) {
+  const idx = checkoutSelectedVouchers.findIndex(v => v.voucherId === voucherId);
+  if (idx !== -1) {
+    checkoutSelectedVouchers.splice(idx, 1);
+  } else {
+    const behavior = VOUCHER_BEHAVIOR[type];
+    if (behavior.mode === 'fixed') {
+      checkoutSelectedVouchers.push({ voucherId, type, discountAmount: behavior.amount, targetLineKey: null });
+    } else {
+      const line = findCartLineForVoucher(type);
+      if (!line) { alert('購物車裡沒有對應的品項，無法套用此券'); return; }
+      const base = line.basePrice != null ? line.basePrice : line.price;
+      checkoutSelectedVouchers.push({ voucherId, type, discountAmount: base, targetLineKey: line.lineKey });
+    }
+  }
+  renderCheckoutVoucherList();
+  updateCheckoutTotalDisplay();
+}
+
+function updateCheckoutTotalDisplay() {
+  const el = document.getElementById('checkout-total-preview');
+  if (!el) return;
+  if (checkoutSelectedVouchers.length === 0) { el.textContent = ''; return; }
+  const rawTotal = cart.reduce((s, c) => s + c.qty * c.price, 0);
+  const discount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
+  const total = Math.max(0, rawTotal - discount);
+  el.textContent = `已套用兌換券折抵 -$${discount}，應付金額 $${total}`;
 }
 
 function renderMenu() {
@@ -1291,7 +1442,8 @@ function confirmAddToCart() {
 
   const existing = cart.find(c => c.lineKey === lineKey);
   if (existing) existing.qty += currentModal.qty;
-  else cart.push({lineKey, name: displayName, size: currentModal.size, price: unit, qty: currentModal.qty, note});
+  // baseName/basePrice供顧客自助套用兌換券折抵用：只免基準價(客製化加購仍要收錢)，見queryMyVouchers/checkout流程
+  else cart.push({lineKey, name: displayName, baseName: currentModal.item.name, size: currentModal.size, price: unit, basePrice: currentModal.basePrice, qty: currentModal.qty, note});
   saveCartSession();
   updateCartBar();
   closeItemModal();
@@ -1352,6 +1504,11 @@ function showCheckout() {
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
   populatePickupDate();
   populatePickupTime(document.getElementById('pickup-date').value);
+  // 每次進結帳頁重置兌換券選擇，避免購物車內容改變後targetLineKey對不上舊的選擇
+  checkoutMemberVouchers = [];
+  checkoutSelectedVouchers = [];
+  document.getElementById('checkout-voucher-list').innerHTML = '';
+  document.getElementById('checkout-total-preview').textContent = '';
   document.getElementById('cart-view').style.display = 'none';
   document.getElementById('checkout-form').style.display = 'block';
 }
@@ -1362,6 +1519,8 @@ function backToCart() {
 function closeAll() {
   document.getElementById('cart-overlay').classList.remove('open');
   cart = [];
+  checkoutMemberVouchers = [];
+  checkoutSelectedVouchers = [];
   saveCartSession();
   updateCartBar();
 }
@@ -1384,12 +1543,16 @@ function submitOrder(e) {
   const dateLabel = formatDateLabel(dateValue === 'today' ? 0 : 1);
   const time = `${dateLabel} ${document.getElementById('pickup-time').value}`;
   const note = document.getElementById('cust-note').value;
-  const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
+  const rawTotal = cart.reduce((s, c) => s + c.qty * c.price, 0);
+  const voucherDiscount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
+  const total = Math.max(0, rawTotal - voucherDiscount);
+  const appliedVoucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price }));
 
   const lines = cart.map(c => `- ${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
-  const summary = `【${STORE_NAME}】線上點餐訂單\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${time}\n---\n${lines}\n---\n總計：$${total}\n備註：${note || '無'}\n（取餐時請至現場以LINE Pay QR結帳，此頁尚未串接線上金流）`;
+  const discountLine = voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '';
+  const summary = `【${STORE_NAME}】線上點餐訂單\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${time}\n---\n${lines}\n---\n${discountLine}總計：$${total}\n備註：${note || '無'}\n（取餐時請至現場以LINE Pay QR結帳，此頁尚未串接線上金流）`;
 
   try {
     let log = JSON.parse(localStorage.getItem('abao_orders_' + 'meibao') || '[]');
@@ -1399,7 +1562,9 @@ function submitOrder(e) {
   } catch (err) {}
 
   const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓客人重選時段
-  pendingOrderContext = { orderNo, summary, total, backendOrderId: null };
+  // voucherIds/phone先存著，等「模擬付款」(未來是藍新真實付款成功)那一步才真的呼叫後端核銷，
+  // 避免客人填完折抵資訊卻棄單，兌換券卻已經被扣掉的情況
+  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone };
   cart = [];
   saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
   document.getElementById('checkout-form').style.display = 'none';
@@ -1444,11 +1609,23 @@ function confirmMockPayment() {
     document.getElementById('order-summary').textContent = ctx.summary;
     document.getElementById('confirm-view').style.display = 'block';
   };
-  if (ctx && ctx.backendOrderId) {
-    confirmPaymentOnBackend(ctx.backendOrderId).then(finish).catch(finish);
-  } else {
-    finish();
-  }
+  // 付款確認成功才真的核銷兌換券(對應未來藍新真實付款成功通知的同一個時間點)；
+  // 核銷失敗不擋訂單完成流程(客人已經看到折抵後金額，不應該卡在這裡)，只記log供事後排查
+  const redeemAppliedVouchers = () => {
+    if (!ctx || !ctx.voucherIds || !ctx.voucherIds.length) return Promise.resolve();
+    return Promise.all(ctx.voucherIds.map(voucherId =>
+      apiPost_({ action: 'redeemVoucher', voucherId, phone: ctx.voucherPhone }).then(data => {
+        if (data.status !== 'ok') console.warn('兌換券核銷失敗(不影響訂單完成)', voucherId, data.message);
+      }).catch(err => console.warn('兌換券核銷失敗(不影響訂單完成，可能網路問題)', voucherId, err))
+    ));
+  };
+  redeemAppliedVouchers().then(() => {
+    if (ctx && ctx.backendOrderId) {
+      confirmPaymentOnBackend(ctx.backendOrderId).then(finish).catch(finish);
+    } else {
+      finish();
+    }
+  });
 }
 
 // 取餐日期：今天(若還在營業/接單時段內)或明天，兩選一（2026-08-27老闆確認規則）
