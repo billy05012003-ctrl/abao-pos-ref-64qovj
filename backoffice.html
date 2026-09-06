@@ -194,6 +194,14 @@ function mcShortCatName(cat) {
 const MC_DRINK_CATEGORIES = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
   'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
   'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
+// 2026-09-07老闆反饋：這三個分類的品項有「單點/套餐」二選一，選套餐才會多出點心/飲料客製化，
+// 這是獨立於一般「客製化選項掛載」的另一套機制(寫死在雲端平板/線上點餐的原始碼裡，跟後台的
+// 掛載清單無關)，這裡只用來在編輯畫面顯示提示文字，不是真的可以在後台調整這個對照關係
+const MC_SET_BUNDLE_EXTRAS = {
+  'TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡': ['small_drink'],
+  'CRISPY OMELETTE SERIES_特酥系列 x 超值自由配': ['snack_choice', 'small_drink'],
+  'PRIVATE FRIED NOODLES_私房炒麵系列': ['noodle_snack_choice', 'small_drink']
+};
 
 let tabletStatusMap = {};   // 雲端平板/線上點餐共用狀態，key=品項名稱
 let posStatusMap = {};      // POS功能獨立狀態，key=分類||品項名稱
@@ -486,9 +494,16 @@ function renderMcGroupTagsHtml() {
   }).join('') || '<span style="font-size:0.78rem;color:var(--muted);">目前沒有掛載任何客製化選項</span>';
   const availableGroups = Object.keys(mcOptionGroups).filter(c => codes.indexOf(c) === -1);
   const optionsHtml = availableGroups.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(mcOptionGroups[c].label)}</option>`).join('');
+  const bundleExtraCodes = MC_SET_BUNDLE_EXTRAS[mcCurrentItem.category];
+  const bundleNote = bundleExtraCodes ? `
+    <p style="font-size:0.78rem;color:#c94f1f;background:#fff5ee;border-radius:6px;padding:8px 10px;margin:0 0 10px;">
+      ⚠️ 這個分類的品項有「單點／套餐」二選一，選套餐才會額外出現：${bundleExtraCodes.map(c => escapeHtml((mcOptionGroups[c] || {}).label || c)).join('、')}。
+      這是寫在原始碼裡的獨立機制，不在下面這份掛載清單裡，這裡改不到它。
+    </p>` : '';
   return `
     <div class="mc-section">
       <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">客製化選項掛載</h4>
+      ${bundleNote}
       <div class="mc-tags" id="mc-tags">${tagsHtml}</div>
       <div class="mc-field-row">
         <select id="mc-add-group-select"><option value="">+ 掛上選項群組...</option>${optionsHtml}</select>
