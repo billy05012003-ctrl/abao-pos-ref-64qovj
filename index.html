@@ -935,6 +935,9 @@ function renderOptionGroup(container, gKey) {
   // 部分選項只在特定尺寸才有賣（例如茶珠只有L），依目前已知尺寸過濾掉不適用的選項
   const sizeForFilter = (currentModal.comboDrinkSize != null && currentModal.comboDrinkSize !== '') ? currentModal.comboDrinkSize.toUpperCase() : currentModal.size;
   const visibleOptions = g.options.filter(opt => {
+    // 菜單CMS化Phase 2追加：後台可以把特定選項標成「只在POS功能顯示」(onlineVisible===false)，
+    // 這種選項在線上點餐頁直接濾掉不給選；POS功能(雲端平板_美寶美食館.html)不套用這個過濾，永遠顯示全部
+    if (opt.onlineVisible === false) return false;
     if (opt.priceM === undefined && opt.priceL === undefined) return true;
     if (sizeForFilter === 'M') return opt.priceM != null;
     if (sizeForFilter === 'L') return opt.priceL != null;

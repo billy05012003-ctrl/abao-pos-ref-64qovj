@@ -182,6 +182,19 @@ function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// 分類名稱顯示用短名稱(去掉英文前綴)，比照線上點餐頁/POS功能的shortCatName()規則，
+// 分類本身(當API的key)還是用完整英文+中文的原始字串，只有畫面顯示這裡轉換
+const MC_SET_MEAL_CATEGORY = '美式狂想套餐 SET MEALS ($129)';
+function mcShortCatName(cat) {
+  if (cat === MC_SET_MEAL_CATEGORY) return '美式狂想套餐';
+  return cat.split('_').pop().split('（')[0].trim();
+}
+// 只有這幾個分類的品項會用中杯/大杯計價，其餘分類品項一律單一價格，
+// 品項編輯畫面依此決定要不要顯示中杯/大杯價格欄位(比照原本DRINK_FAMILY定義)
+const MC_DRINK_CATEGORIES = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
+  'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
+  'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
+
 let tabletStatusMap = {};   // 雲端平板/線上點餐共用狀態，key=品項名稱
 let posStatusMap = {};      // POS功能獨立狀態，key=分類||品項名稱
 
@@ -314,7 +327,7 @@ function renderMcCategories() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mc-cat-btn' + (cat === mcCurrentCat ? ' active' : '');
-    btn.textContent = cat;
+    btn.textContent = mcShortCatName(cat);
     btn.onclick = () => { mcCurrentCat = cat; mcCurrentItem = null; renderMcCategories(); renderMcItems(); renderMcItemEditor(); };
     el.appendChild(btn);
   });
@@ -347,13 +360,18 @@ function renderMcItemEditor() {
   if (!mcCurrentItem) { el.innerHTML = '<div class="empty-hint">選一個品項來編輯，或點「新增品項」</div>'; return; }
   const isNew = !mcCurrentItem.name;
   const item = isNew ? {} : ((mcCatalog[mcCurrentItem.category] || []).find(i => i.name === mcCurrentItem.name) || {});
+  // 中杯/大杯價格只有飲料分類的品項才有意義，其餘分類(漢堡/蛋餅/套餐...)一律只用單一價格，
+  // 顯示這兩個欄位只會讓店員誤以為每個品項都要填，改成依分類決定要不要顯示
+  const isDrinkItem = MC_DRINK_CATEGORIES.includes(mcCurrentItem.category);
   el.innerHTML = `
-    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增品項（分類：' + escapeHtml(mcCurrentItem.category) + '）' : '編輯品項'}</h3>
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增品項（分類：' + escapeHtml(mcShortCatName(mcCurrentItem.category)) + '）' : '編輯品項'}</h3>
     <label class="mc-field">品項名稱<input id="mc-f-name" value="${escapeHtml(item.name || '')}"></label>
     <div class="mc-field-row">
       <label class="mc-field">價格<input id="mc-f-price" type="number" value="${item.price ?? ''}"></label>
+      ${isDrinkItem ? `
       <label class="mc-field">中杯價格<input id="mc-f-pricem" type="number" value="${item.price_m ?? ''}"></label>
       <label class="mc-field">大杯價格<input id="mc-f-pricel" type="number" value="${item.price_l ?? ''}"></label>
+      ` : ''}
     </div>
     <div class="mc-field-row">
       <label class="mc-field">套餐價格<input id="mc-f-priceset" type="number" value="${item.price_set ?? ''}"></label>
@@ -422,6 +440,11 @@ function deleteMcPhoto() {
   }).catch(err => alert('刪除失敗：' + err.message));
 }
 
+function mcFieldValue(id) {
+  const el = document.getElementById(id);
+  return el ? el.value : ''; // 中杯/大杯價格欄位只有飲料分類才會渲染，非飲料分類這裡會抓不到元素，當空值處理
+}
+
 function saveMcItem() {
   const name = document.getElementById('mc-f-name').value.trim();
   if (!name) { alert('請輸入品項名稱'); return; }
@@ -429,12 +452,12 @@ function saveMcItem() {
     category: mcCurrentItem.category,
     originalName: mcCurrentItem.name || undefined,
     name: name,
-    price: document.getElementById('mc-f-price').value,
-    priceM: document.getElementById('mc-f-pricem').value,
-    priceL: document.getElementById('mc-f-pricel').value,
-    priceSet: document.getElementById('mc-f-priceset').value,
-    priceAlt: document.getElementById('mc-f-pricealt').value,
-    note: document.getElementById('mc-f-note').value
+    price: mcFieldValue('mc-f-price'),
+    priceM: mcFieldValue('mc-f-pricem'),
+    priceL: mcFieldValue('mc-f-pricel'),
+    priceSet: mcFieldValue('mc-f-priceset'),
+    priceAlt: mcFieldValue('mc-f-pricealt'),
+    note: mcFieldValue('mc-f-note')
   };
   apiPost({ action: 'upsertMenuItem', item: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
@@ -592,12 +615,20 @@ function renderGroupEditor() {
 }
 
 function renderMcOptionValuesHtml(g) {
+  // 這個群組要不要顯示中杯/大杯加價欄位，用「目前選項值裡有沒有人已經在用M/L定價」判斷，
+  // 不用另外開一個「依尺寸定價」開關讓老闆多想一件事——目前全部45組裡只有combo_drink/drink_topping
+  // 這兩組真的有用到，新建的群組預設就是單一加價，跟大多數群組(醬料/加料選擇等)行為一致
+  const sizeBased = (g.options || []).some(o => o.priceM != null || o.priceL != null);
   const rows = (g.options || []).map(opt => `
     <div class="mc-value-row">
       <input class="mc-v-name" value="${escapeHtml(opt.name)}" data-orig="${escapeHtml(opt.name)}">
-      <input class="mc-v-price" type="number" placeholder="加價" value="${opt.price ?? ''}">
+      ${sizeBased ? `
       <input class="mc-v-pricem" type="number" placeholder="中杯加價" value="${opt.priceM ?? ''}">
       <input class="mc-v-pricel" type="number" placeholder="大杯加價" value="${opt.priceL ?? ''}">
+      ` : `<input class="mc-v-price" type="number" placeholder="加價" value="${opt.price ?? ''}">`}
+      <label style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--muted);white-space:nowrap;">
+        <input type="checkbox" class="mc-v-online" ${opt.onlineVisible === false ? '' : 'checked'}>線上點餐顯示
+      </label>
       <button type="button" onclick="saveMcOptionValueRow(this)">儲存</button>
       <button type="button" onclick="deleteMcOptionValueRow(this)">刪除</button>
     </div>
@@ -605,12 +636,17 @@ function renderMcOptionValuesHtml(g) {
   return `
     <div class="mc-section">
       <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">選項值</h4>
+      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">「線上點餐顯示」沒打勾的話，這個選項只有POS功能看得到，線上點餐頁的客人選不到、也看不到。</p>
       <div id="mc-value-list">${rows}</div>
       <div class="mc-value-row">
         <input class="mc-v-name" id="mc-newv-name" placeholder="新選項名稱">
-        <input class="mc-v-price" id="mc-newv-price" type="number" placeholder="加價">
+        ${sizeBased ? `
         <input class="mc-v-pricem" id="mc-newv-pricem" type="number" placeholder="中杯加價">
         <input class="mc-v-pricel" id="mc-newv-pricel" type="number" placeholder="大杯加價">
+        ` : `<input class="mc-v-price" id="mc-newv-price" type="number" placeholder="加價">`}
+        <label style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--muted);white-space:nowrap;">
+          <input type="checkbox" id="mc-newv-online" checked>線上點餐顯示
+        </label>
         <button type="button" onclick="addMcOptionValue()">新增</button>
       </div>
     </div>
@@ -622,13 +658,15 @@ function saveMcOptionValueRow(btn) {
   const nameInput = row.querySelector('.mc-v-name');
   const name = nameInput.value.trim();
   if (!name) { alert('請輸入選項名稱'); return; }
+  const priceEl = row.querySelector('.mc-v-price');
   const payload = {
     groupCode: mcCurrentGroupCode,
     originalName: nameInput.getAttribute('data-orig'),
     name: name,
-    price: row.querySelector('.mc-v-price').value,
-    priceM: row.querySelector('.mc-v-pricem').value,
-    priceL: row.querySelector('.mc-v-pricel').value
+    price: priceEl ? priceEl.value : '',
+    priceM: (row.querySelector('.mc-v-pricem') || {}).value || '',
+    priceL: (row.querySelector('.mc-v-pricel') || {}).value || '',
+    onlineVisible: row.querySelector('.mc-v-online').checked
   };
   apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
@@ -652,9 +690,10 @@ function addMcOptionValue() {
   const payload = {
     groupCode: mcCurrentGroupCode,
     name: name,
-    price: document.getElementById('mc-newv-price').value,
-    priceM: document.getElementById('mc-newv-pricem').value,
-    priceL: document.getElementById('mc-newv-pricel').value
+    price: mcFieldValue('mc-newv-price'),
+    priceM: mcFieldValue('mc-newv-pricem'),
+    priceL: mcFieldValue('mc-newv-pricel'),
+    onlineVisible: document.getElementById('mc-newv-online').checked
   };
   apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '新增失敗');
