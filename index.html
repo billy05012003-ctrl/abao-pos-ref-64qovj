@@ -176,6 +176,53 @@
 </style>
 </head>
 <body>
+<script>
+if(new Date()>new Date('2026-12-31T23:59:59')){
+  document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:'Microsoft JhengHei',sans-serif;text-align:center;padding:20px">
+    <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
+      <div style="font-size:40px;margin-bottom:12px">⏳</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">「美寶美食館線上點餐（202701新菜單測試版）」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
+    </div>
+  </div>`;
+  document.title='已過期 - 美寶美食館線上點餐（202701新菜單測試版）';
+  throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
+}
+// 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
+(function(){
+  const SITE_PASSWORD='3345678';
+  const AUTH_KEY='mk_auth_meibao_202701';
+  if(localStorage.getItem(AUTH_KEY)==='1')return;
+  const gate=document.createElement('div');
+  gate.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:-apple-system,"Microsoft JhengHei",sans-serif';
+  gate.innerHTML=`
+    <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
+      <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館線上點餐</div>
+      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（美寶美食館線上點餐（202701新菜單測試版））</div>
+      <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
+      <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
+      <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
+      <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
+    </div>`;
+  document.body.appendChild(gate);
+  function trySubmit(){
+    const val=document.getElementById('gate-pw').value;
+    if(val===SITE_PASSWORD){
+      localStorage.setItem(AUTH_KEY,'1');
+      gate.remove();
+    }else{
+      document.getElementById('gate-err').textContent='密碼錯誤，請再試一次';
+      document.getElementById('gate-pw').value='';
+      document.getElementById('gate-pw').focus();
+    }
+  }
+  document.getElementById('gate-btn').onclick=trySubmit;
+  document.getElementById('gate-pw').addEventListener('keydown',e=>{if(e.key==='Enter')trySubmit();});
+  document.getElementById('gate-pw').focus();
+})();
+</script>
+
 
 <header>
   <button id="cat-menu-btn" onclick="openCategoryMenu()" aria-label="餐點分類" style="position:absolute; left:12px; top:14px; background:none; border:none; color:#fff; font-size:1.4rem; cursor:pointer; padding:4px 6px; line-height:1;">☰</button>

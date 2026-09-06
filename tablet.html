@@ -91,6 +91,53 @@
 </style>
 </head>
 <body>
+<script>
+if(new Date()>new Date('2026-12-31T23:59:59')){
+  document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:'Microsoft JhengHei',sans-serif;text-align:center;padding:20px">
+    <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
+      <div style="font-size:40px;margin-bottom:12px">⏳</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">「美寶美食館雲端平板/POS功能」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
+    </div>
+  </div>`;
+  document.title='已過期 - 美寶美食館雲端平板/POS功能';
+  throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
+}
+// 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
+(function(){
+  const SITE_PASSWORD='3345678';
+  const AUTH_KEY='mk_auth_meibao_tablet';
+  if(localStorage.getItem(AUTH_KEY)==='1')return;
+  const gate=document.createElement('div');
+  gate.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:-apple-system,"Microsoft JhengHei",sans-serif';
+  gate.innerHTML=`
+    <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
+      <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館雲端平板</div>
+      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（美寶美食館雲端平板/POS功能）</div>
+      <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
+      <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
+      <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
+      <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
+    </div>`;
+  document.body.appendChild(gate);
+  function trySubmit(){
+    const val=document.getElementById('gate-pw').value;
+    if(val===SITE_PASSWORD){
+      localStorage.setItem(AUTH_KEY,'1');
+      gate.remove();
+    }else{
+      document.getElementById('gate-err').textContent='密碼錯誤，請再試一次';
+      document.getElementById('gate-pw').value='';
+      document.getElementById('gate-pw').focus();
+    }
+  }
+  document.getElementById('gate-btn').onclick=trySubmit;
+  document.getElementById('gate-pw').addEventListener('keydown',e=>{if(e.key==='Enter')trySubmit();});
+  document.getElementById('gate-pw').focus();
+})();
+</script>
+
 
 <header>
   <h1>A-Bao溪湖培英店</h1>
@@ -374,7 +421,10 @@ function switchTab(name) {
   document.getElementById('view-pos').style.display = name === 'pos' ? 'flex' : 'none';
   document.getElementById('tabbar-btn-tablet').classList.toggle('active', name === 'tablet');
   document.getElementById('tabbar-btn-pos').classList.toggle('active', name === 'pos');
-  if (name === 'pos' && !posMenuRendered) { renderPosMenu(); posMenuRendered = true; }
+  if (name === 'pos' && !posMenuRendered) {
+    posMenuRendered = true;
+    loadPosItemStatus().then(renderPosMenu); // 先抓雲端上下架狀態，再渲染品項格線，避免先顯示錯誤狀態又閃一次
+  }
 }
 
 // ---------------------------------------------------------------
@@ -928,50 +978,35 @@ let posCart = [];
 let currentPosModal = null;
 
 // ---------------------------------------------------------------
-// POS功能專屬的品項上下架管理：故意只存在這台平板本機(localStorage)，不寫進後端試算表，
-// 跟雲端平板／顧客點餐頁共用的「品項狀態」完全獨立、互不影響(2026-08-31老闆定案)
+// POS功能專屬的品項上下架管理：2026-09-06改成存雲端(獨立於雲端平板/顧客點餐頁共用的那份品項狀態，
+// 完全不互相影響)，讓新增的「POS後台」能遠端看到並控制。原本存在瀏覽器localStorage，現在改抓後端
+// posItemStatus/setPosItemStatus這兩個action，本日售完隔天自動恢復的邏輯後端已經處理好，前端不用重算
 // ---------------------------------------------------------------
-const POS_LOCAL_ITEM_STATUS_KEY = 'pos_local_item_status';
+let posItemStatusMap = {}; // 從雲端抓回來的快取，key格式跟後端getAllPosItemStatus_一致："分類||名稱"
 
-function getPosLocalItemStatusMap() {
-  try { return JSON.parse(localStorage.getItem(POS_LOCAL_ITEM_STATUS_KEY) || '{}'); }
-  catch (e) { return {}; }
+function loadPosItemStatus() {
+  return apiGet({ action: 'posItemStatus' }).then(data => {
+    if (data.status === 'ok') posItemStatusMap = data.items || {};
+  }).catch(() => {}); // 讀取失敗就當作全部供應中，不擋POS功能運作
 }
-function savePosLocalItemStatusMap(map) {
-  localStorage.setItem(POS_LOCAL_ITEM_STATUS_KEY, JSON.stringify(map));
-}
+
 function posLocalStatusKey(cat, name) { return cat + '||' + name; }
 
 function setPosLocalItemStatus(cat, name, status) {
-  const map = getPosLocalItemStatusMap();
   const key = posLocalStatusKey(cat, name);
-  if (status === '供應中') {
-    delete map[key];
-  } else {
-    map[key] = { status: status, date: new Date().toISOString().slice(0, 10) };
-  }
-  savePosLocalItemStatusMap(map);
+  if (status === '供應中') delete posItemStatusMap[key];
+  else posItemStatusMap[key] = status;
+  apiPost({ action: 'setPosItemStatus', category: cat, name: name, status: status })
+    .catch(err => console.warn('POS功能上下架同步雲端失敗', err));
 }
 
-// 本日售完隔天自動恢復供應，比照雲端平板既有的品項狀態規則
 function getPosLocalItemStatus(cat, name) {
-  const map = getPosLocalItemStatusMap();
-  const key = posLocalStatusKey(cat, name);
-  const entry = map[key];
-  if (!entry) return null;
-  if (entry.status === '本日售完') {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    if (entry.date !== todayStr) {
-      delete map[key];
-      savePosLocalItemStatusMap(map);
-      return null;
-    }
-  }
-  return entry.status;
+  return posItemStatusMap[posLocalStatusKey(cat, name)] || null;
 }
 
 function openPosLocalItemStatusManager() {
-  renderPosLocalItemStatusManager();
+  // 每次打開都重新抓一次雲端最新狀態，避免看到「POS後台」剛改過但這裡還沒同步到的舊資料
+  loadPosItemStatus().then(renderPosLocalItemStatusManager);
   document.getElementById('pos-item-status-overlay').classList.add('open');
 }
 function closePosLocalItemStatusManager() {
@@ -983,8 +1018,9 @@ function closePosLocalItemStatusManager() {
 
 // 品項上下架管理清單改參照雲端平板既有的ITEM_LIST（雲端平板tab底下「品項狀態」用的同一份完整清單），
 // 這份清單本來就有主餐(美1~美12)、加起司、茶珠等CATALOG沒收錄的客製化選項細項，不用自己另外維護一份。
-// 注意：這裡只是借用ITEM_LIST的「品項名單」，狀態儲存本身仍是POS功能自己的localStorage，
-// 跟雲端平板/顧客點餐頁共用的品項狀態(setItemStatus/storeStatus)完全獨立、不連動。
+// 注意：這裡只是借用ITEM_LIST的「品項名單」，狀態儲存改存雲端(2026-09-06)但仍是獨立的一份資料，
+// 跟雲端平板/顧客點餐頁共用的品項狀態(setItemStatus/storeStatus)完全獨立、不連動，只是現在雙方
+// 都能被新增的「POS後台」遠端看到並控制。
 // 加購品項/配料選擇這個分類底下的名稱，同時對應到好幾組客製化選項(bread_addon/omelet_addon/drink_topping...)，
 // 用同一個key管理，只要選項名稱相同(例如"加起司")就共用同一個上下架狀態
 const POS_LOCAL_ADDON_STATUS_CATEGORY = '加購品項/配料選擇';
