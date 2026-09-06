@@ -1,3 +1,6 @@
+<!-- 部署前必讀：這份原始碼故意不含密碼閘門(方便本機測試不用每次輸密碼)。
+     部署到GitHub Pages前一定要用 05_腳本/inject_password_gate.py 產生含密碼閘門的版本再推上去，
+     不要直接複製這份原始碼上去覆蓋——2026-09-06曾經忘記這步，導致線上一度沒有密碼保護。 -->
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -994,10 +997,17 @@ function posLocalStatusKey(cat, name) { return cat + '||' + name; }
 
 function setPosLocalItemStatus(cat, name, status) {
   const key = posLocalStatusKey(cat, name);
+  const previous = posItemStatusMap[key]; // 記住寫入前的值，同步失敗時復原，避免畫面看起來改成功、雲端其實沒改到
   if (status === '供應中') delete posItemStatusMap[key];
   else posItemStatusMap[key] = status;
   apiPost({ action: 'setPosItemStatus', category: cat, name: name, status: status })
-    .catch(err => console.warn('POS功能上下架同步雲端失敗', err));
+    .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+    .catch(err => {
+      console.warn('POS功能上下架同步雲端失敗', err);
+      if (previous === undefined) delete posItemStatusMap[key]; else posItemStatusMap[key] = previous;
+      alert(`「${name}」上下架狀態同步雲端失敗，請確認網路連線後重試(畫面已還原)`);
+      renderPosLocalItemStatusManager();
+    });
 }
 
 function getPosLocalItemStatus(cat, name) {

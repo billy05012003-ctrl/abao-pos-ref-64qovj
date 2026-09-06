@@ -1,3 +1,6 @@
+<!-- 部署前必讀：這份原始碼故意不含密碼閘門(方便本機測試不用每次輸密碼)。
+     部署到GitHub Pages前一定要用 05_腳本/inject_password_gate.py 產生含密碼閘門的版本再推上去，
+     不要直接複製這份原始碼上去覆蓋——2026-09-06曾經忘記這步，導致線上一度沒有密碼保護。 -->
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
@@ -152,20 +155,34 @@ function renderAvailabilityList() {
     const tabletGroup = document.createElement('div');
     tabletGroup.className = 'control-group';
     tabletGroup.innerHTML = '<span class="label">雲端平板／線上點餐</span>';
-    const tabletSelect = buildStatusSelect(tabletCurrent, (val) => {
-      apiPost({ action: 'setItemStatus', name: it.name, status: val })
-        .catch(err => console.warn('雲端平板狀態同步失敗', err));
+    const tabletSelect = buildStatusSelect(tabletCurrent, (val, selectEl) => {
+      const previous = tabletCurrent;
       tabletStatusMap[it.name] = val === '供應中' ? undefined : val;
+      apiPost({ action: 'setItemStatus', name: it.name, status: val })
+        .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+        .catch(err => {
+          console.warn('雲端平板狀態同步失敗', err);
+          tabletStatusMap[it.name] = previous === '供應中' ? undefined : previous;
+          selectEl.value = previous;
+          alert(`「${it.name}」雲端平板／線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+        });
     });
     tabletGroup.appendChild(tabletSelect);
 
     const posGroup = document.createElement('div');
     posGroup.className = 'control-group';
     posGroup.innerHTML = '<span class="label">POS功能</span>';
-    const posSelect = buildStatusSelect(posCurrent, (val) => {
-      apiPost({ action: 'setPosItemStatus', category: it.category, name: it.name, status: val })
-        .catch(err => console.warn('POS功能狀態同步失敗', err));
+    const posSelect = buildStatusSelect(posCurrent, (val, selectEl) => {
+      const previous = posCurrent;
       posStatusMap[posStatusKey(it.category, it.name)] = val === '供應中' ? undefined : val;
+      apiPost({ action: 'setPosItemStatus', category: it.category, name: it.name, status: val })
+        .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+        .catch(err => {
+          console.warn('POS功能狀態同步失敗', err);
+          posStatusMap[posStatusKey(it.category, it.name)] = previous === '供應中' ? undefined : previous;
+          selectEl.value = previous;
+          alert(`「${it.name}」POS功能狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+        });
     });
     posGroup.appendChild(posSelect);
 
@@ -185,7 +202,7 @@ function buildStatusSelect(current, onChange) {
     if (opt === current) optEl.selected = true;
     select.appendChild(optEl);
   });
-  select.onchange = () => onChange(select.value);
+  select.onchange = () => onChange(select.value, select);
   return select;
 }
 
