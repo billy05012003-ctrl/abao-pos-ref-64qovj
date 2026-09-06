@@ -816,7 +816,7 @@ function renderMenu() {
       else priceLabel = `$${item.price}`;
 
       div.innerHTML = `
-        <img class="thumb" src="images/${encodeURIComponent(shortName)}/${encodeURIComponent(imgSafeName(item.name))}.jpg" alt="" loading="lazy" onerror="this.style.display='none'">
+        <img class="thumb" src="${item.photoUrl || ('images/' + encodeURIComponent(shortName) + '/' + encodeURIComponent(imgSafeName(item.name)) + '.jpg')}" alt="" loading="lazy" onerror="this.style.display='none'">
         <div class="info">
           <div class="name">${item.name}</div>
           <div class="price">${priceLabel}</div>

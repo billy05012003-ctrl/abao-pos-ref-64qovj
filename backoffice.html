@@ -360,6 +360,7 @@ function renderMcItemEditor() {
       <label class="mc-field">副價格<input id="mc-f-pricealt" type="number" value="${item.price_alt ?? ''}"></label>
     </div>
     <label class="mc-field">備註<textarea id="mc-f-note" rows="2">${escapeHtml(item.note || '')}</textarea></label>
+    ${!isNew ? renderMcPhotoHtml(item) : ''}
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMcItem()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteMcItem()">刪除品項</button>' : ''}
@@ -367,6 +368,58 @@ function renderMcItemEditor() {
     ${!isNew ? renderMcGroupTagsHtml() : '<p style="font-size:0.8rem;color:var(--muted);">先儲存品項後才能設定客製化選項</p>'}
   `;
   if (!isNew) bindMcGroupTagControls();
+}
+
+function renderMcPhotoHtml(item) {
+  const hasPhoto = !!item.photoUrl;
+  return `
+    <div class="mc-section">
+      <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">照片</h4>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        ${hasPhoto
+          ? `<img src="${escapeHtml(item.photoUrl)}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--border);">`
+          : `<div style="width:72px;height:72px;border-radius:8px;background:#f0ede8;display:flex;align-items:center;justify-content:center;font-size:0.72rem;color:var(--muted);text-align:center;">尚無照片</div>`}
+        <div>
+          <input type="file" id="mc-photo-input" accept="image/*" style="display:none;" onchange="onMcPhotoFileSelected()">
+          <button type="button" class="mc-save-btn" style="padding:7px 12px;" onclick="document.getElementById('mc-photo-input').click()">${hasPhoto ? '取代' : '上傳'}</button>
+          ${hasPhoto ? '<button type="button" class="mc-delete-btn" style="padding:7px 12px;" onclick="deleteMcPhoto()">刪除</button>' : ''}
+          <div id="mc-photo-status" style="font-size:0.75rem;color:var(--muted);margin-top:4px;"></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function onMcPhotoFileSelected() {
+  const input = document.getElementById('mc-photo-input');
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('mc-photo-status');
+  statusEl.textContent = '上傳中…';
+  const reader = new FileReader();
+  reader.onload = () => {
+    const b64 = reader.result.split(',')[1]; // data:image/xxx;base64,XXXX 只取逗號後面的部分
+    apiPost({
+      action: 'uploadItemPhoto',
+      photo: { category: mcCurrentItem.category, name: mcCurrentItem.name, imageBase64: b64, mimeType: file.type || 'image/jpeg' }
+    }).then(data => {
+      if (data.status !== 'ok') throw new Error(data.message || '上傳失敗');
+      return loadMenuCms();
+    }).catch(err => {
+      statusEl.textContent = '';
+      alert('照片上傳失敗：' + err.message);
+    });
+  };
+  reader.onerror = () => { statusEl.textContent = ''; alert('讀取檔案失敗，請重新選擇照片'); };
+  reader.readAsDataURL(file);
+}
+
+function deleteMcPhoto() {
+  if (!confirm('確定要刪除這張照片嗎？（只會移除品項的照片顯示，不會刪除雲端硬碟裡的檔案本身）')) return;
+  apiPost({ action: 'deleteItemPhoto', category: mcCurrentItem.category, name: mcCurrentItem.name }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
+    return loadMenuCms();
+  }).catch(err => alert('刪除失敗：' + err.message));
 }
 
 function saveMcItem() {
