@@ -627,7 +627,7 @@ function renderMcOptionValuesHtml(g) {
       <input class="mc-v-pricel" type="number" placeholder="大杯加價" value="${opt.priceL ?? ''}">
       ` : `<input class="mc-v-price" type="number" placeholder="加價" value="${opt.price ?? ''}">`}
       <label style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--muted);white-space:nowrap;">
-        <input type="checkbox" class="mc-v-online" ${opt.onlineVisible === false ? '' : 'checked'}>線上點餐顯示
+        <input type="checkbox" class="mc-v-online" ${opt.onlineVisible === false ? '' : 'checked'} onchange="toggleMcOptionOnlineVisible(this)">線上點餐顯示
       </label>
       <button type="button" onclick="saveMcOptionValueRow(this)">儲存</button>
       <button type="button" onclick="deleteMcOptionValueRow(this)">刪除</button>
@@ -651,6 +651,36 @@ function renderMcOptionValuesHtml(g) {
       </div>
     </div>
   `;
+}
+
+// 「線上點餐顯示」勾選框勾/取消當下就立刻存檔，不用等按「儲存」——跟品名/加價金額不同，
+// 這是單純的開關不是還在輸入中的文字，勾了當下就是老闆確定要的狀態，即時生效比較直覺
+function toggleMcOptionOnlineVisible(checkbox) {
+  const row = checkbox.closest('.mc-value-row');
+  const nameInput = row.querySelector('.mc-v-name');
+  const name = nameInput.value.trim();
+  if (!name) return; // 理論上不會發生(現有列一定有名字)，防呆用
+  const priceEl = row.querySelector('.mc-v-price');
+  const payload = {
+    groupCode: mcCurrentGroupCode,
+    originalName: nameInput.getAttribute('data-orig') || name,
+    name: name,
+    price: priceEl ? priceEl.value : '',
+    priceM: (row.querySelector('.mc-v-pricem') || {}).value || '',
+    priceL: (row.querySelector('.mc-v-pricel') || {}).value || '',
+    onlineVisible: checkbox.checked
+  };
+  const wasChecked = !checkbox.checked;
+  apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '更新失敗');
+    // 直接改記憶體裡的資料就好，不整個重新loadMenuCms()重繪，避免這排勾選勾到一半畫面跳動
+    const g = mcOptionGroups[mcCurrentGroupCode];
+    const opt = g && (g.options || []).find(o => o.name === name);
+    if (opt) { if (checkbox.checked) delete opt.onlineVisible; else opt.onlineVisible = false; }
+  }).catch(err => {
+    checkbox.checked = wasChecked;
+    alert('更新失敗，請確認網路連線後重試：' + err.message);
+  });
 }
 
 function saveMcOptionValueRow(btn) {
