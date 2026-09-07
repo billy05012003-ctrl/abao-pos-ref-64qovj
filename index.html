@@ -477,14 +477,14 @@ function shortCatName(cat) {
 function imgSafeName(s) {
   return s.replace(/[\\/:*?"<>|]/g, '-');
 }
-// 選「套餐」時才需要點心+飲料客製化的分類（2026-08-27依大麥實測畫面確認結構，base價與部分品項加價以xlsx為準）
-// 熱帶鳳梨雞排堡套餐只有「飲料」沒有「點心」（依大麥實測畫面確認，兩分類結構不同）
-const SET_BUNDLE_EXTRAS = {
-  'TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡': ['small_drink'],
-  'CRISPY OMELETTE SERIES_特酥系列 x 超值自由配': ['snack_choice', 'small_drink'],
-  'PRIVATE FRIED NOODLES_私房炒麵系列': ['noodle_snack_choice', 'small_drink']
-};
-const SET_BUNDLE_CATEGORIES = Object.keys(SET_BUNDLE_EXTRAS);
+// 菜單CMS化「套餐限定客製化」資料驅動化（2026-09-07）：原本這裡寫死3個分類(SET_BUNDLE_EXTRAS)，
+// 老闆反饋沒辦法自己在後台調整、也套用不到其他有套餐定價的品項，改成跟一般客製化掛載一樣從雲端讀取，
+// 老闆在POS後台就能自己決定哪些品項選「套餐」要多掛哪些選項，不用再改程式碼。
+// ITEM_COMBO_GROUPS_MAP在applyMenuCmsData_()裡從雲端資料填入，comboOnlyGroupsFor()取代原本查表寫法
+let ITEM_COMBO_GROUPS_MAP = {};
+function comboOnlyGroupsFor(cat, itemName) {
+  return ITEM_COMBO_GROUPS_MAP[cat + '||' + itemName] || [];
+}
 
 // 菜單CMS化Phase 1（2026-09-06）：以下改成向雲端讀取，取代原本寫死的CATEGORY_GROUPS/ITEM_SPECIFIC_GROUPS
 // 疊加邏輯——後端已經用POS功能那份(更完整)的疊加邏輯把每個品項的完整掛載清單算好存進ITEM_GROUPS_MAP，
@@ -529,6 +529,7 @@ function applyMenuCmsData_(data) {
   CATALOG = filteredCatalog;
   OPTION_GROUPS = data.optionGroups;
   ITEM_GROUPS_MAP = data.itemGroups;
+  ITEM_COMBO_GROUPS_MAP = data.itemComboGroups || {};
   rebuildDrinkComboDerivedData_();
 }
 
@@ -891,16 +892,18 @@ function openItemModal(cat, key, item) {
   groupsEl.innerHTML = '';
   groupsForCategory(cat, item.name).forEach(gKey => renderOptionGroup(groupsEl, gKey));
 
-  // 套餐版「特酥系列/熱帶鳳梨雞排堡」：選「套餐」才需要點心+飲料，選「單點」則不用
-  if (item.price_set && SET_BUNDLE_CATEGORIES.includes(cat)) {
+  // 套餐版品項：選「套餐」才需要多出的客製化選項(例如點心+飲料)，選「單點」則不用；
+  // 哪些品項有這種套餐限定選項、要多掛哪些群組，現在是後台可以自己設定的資料(見comboOnlyGroupsFor)
+  const comboExtraGroups = comboOnlyGroupsFor(cat, item.name);
+  if (item.price_set && comboExtraGroups.length) {
     const comboExtraEl = document.createElement('div');
     comboExtraEl.id = 'combo-extra-groups';
     groupsEl.appendChild(comboExtraEl);
     const renderBundleExtras = () => {
       comboExtraEl.innerHTML = '';
-      SET_BUNDLE_EXTRAS[cat].forEach(gk => delete currentModal.groups[gk]);
+      comboExtraGroups.forEach(gk => delete currentModal.groups[gk]);
       if (currentModal.basePrice === item.price_set) {
-        SET_BUNDLE_EXTRAS[cat].forEach(gk => renderOptionGroup(comboExtraEl, gk));
+        comboExtraGroups.forEach(gk => renderOptionGroup(comboExtraEl, gk));
       }
       updateItemModalTotal();
     };
@@ -1204,8 +1207,9 @@ function confirmAddToCart() {
       }
     }
   }
-  if (currentModal.item.price_set && SET_BUNDLE_CATEGORIES.includes(currentModal.cat) && currentModal.basePrice === currentModal.item.price_set) {
-    for (const gk of SET_BUNDLE_EXTRAS[currentModal.cat]) {
+  const comboExtraGroupsForConfirm = comboOnlyGroupsFor(currentModal.cat, currentModal.item.name);
+  if (currentModal.item.price_set && comboExtraGroupsForConfirm.length && currentModal.basePrice === currentModal.item.price_set) {
+    for (const gk of comboExtraGroupsForConfirm) {
       if (!currentModal.groups[gk] || !currentModal.groups[gk].length) {
         alert('請選擇「' + OPTION_GROUPS[gk].label + '」');
         return;

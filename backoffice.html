@@ -194,14 +194,6 @@ function mcShortCatName(cat) {
 const MC_DRINK_CATEGORIES = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
   'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
   'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
-// 2026-09-07老闆反饋：這三個分類的品項有「單點/套餐」二選一，選套餐才會多出點心/飲料客製化，
-// 這是獨立於一般「客製化選項掛載」的另一套機制(寫死在雲端平板/線上點餐的原始碼裡，跟後台的
-// 掛載清單無關)，這裡只用來在編輯畫面顯示提示文字，不是真的可以在後台調整這個對照關係
-const MC_SET_BUNDLE_EXTRAS = {
-  'TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡': ['small_drink'],
-  'CRISPY OMELETTE SERIES_特酥系列 x 超值自由配': ['snack_choice', 'small_drink'],
-  'PRIVATE FRIED NOODLES_私房炒麵系列': ['noodle_snack_choice', 'small_drink']
-};
 
 let tabletStatusMap = {};   // 雲端平板/線上點餐共用狀態，key=品項名稱
 let posStatusMap = {};      // POS功能獨立狀態，key=分類||品項名稱
@@ -306,6 +298,7 @@ loadAvailability();
 let mcCatalog = {};
 let mcOptionGroups = {};
 let mcItemGroups = {}; // "分類||名稱" -> [群組代碼,...]
+let mcItemComboGroups = {}; // "分類||名稱" -> [群組代碼,...]，只有選「套餐」才會多出來的客製化選項
 let mcCurrentCat = null;
 let mcCurrentItem = null;   // {category, name} ，name為null代表正在新增
 let mcCurrentGroupCode = null; // 'NEW'代表正在新增群組
@@ -316,6 +309,7 @@ function loadMenuCms() {
     mcCatalog = data.catalog;
     mcOptionGroups = data.optionGroups;
     mcItemGroups = data.itemGroups;
+    mcItemComboGroups = data.itemComboGroups || {};
     renderMcCategories();
     renderMcItems();
     renderMcItemEditor();
@@ -391,7 +385,7 @@ function renderMcItemEditor() {
       <button type="button" class="mc-save-btn" onclick="saveMcItem()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteMcItem()">刪除品項</button>' : ''}
     </div>
-    ${!isNew ? renderMcGroupTagsHtml() : '<p style="font-size:0.8rem;color:var(--muted);">先儲存品項後才能設定客製化選項</p>'}
+    ${!isNew ? renderMcGroupTagsHtml() + renderMcComboGroupTagsHtml(item) : '<p style="font-size:0.8rem;color:var(--muted);">先儲存品項後才能設定客製化選項</p>'}
   `;
   if (!isNew) bindMcGroupTagControls();
 }
@@ -494,16 +488,9 @@ function renderMcGroupTagsHtml() {
   }).join('') || '<span style="font-size:0.78rem;color:var(--muted);">目前沒有掛載任何客製化選項</span>';
   const availableGroups = Object.keys(mcOptionGroups).filter(c => codes.indexOf(c) === -1);
   const optionsHtml = availableGroups.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(mcOptionGroups[c].label)}</option>`).join('');
-  const bundleExtraCodes = MC_SET_BUNDLE_EXTRAS[mcCurrentItem.category];
-  const bundleNote = bundleExtraCodes ? `
-    <p style="font-size:0.78rem;color:#c94f1f;background:#fff5ee;border-radius:6px;padding:8px 10px;margin:0 0 10px;">
-      ⚠️ 這個分類的品項有「單點／套餐」二選一，選套餐才會額外出現：${bundleExtraCodes.map(c => escapeHtml((mcOptionGroups[c] || {}).label || c)).join('、')}。
-      這是寫在原始碼裡的獨立機制，不在下面這份掛載清單裡，這裡改不到它。
-    </p>` : '';
   return `
     <div class="mc-section">
       <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">客製化選項掛載</h4>
-      ${bundleNote}
       <div class="mc-tags" id="mc-tags">${tagsHtml}</div>
       <div class="mc-field-row">
         <select id="mc-add-group-select"><option value="">+ 掛上選項群組...</option>${optionsHtml}</select>
@@ -515,6 +502,98 @@ function renderMcGroupTagsHtml() {
       </div>
     </div>
   `;
+}
+
+// ---- 品項的「套餐限定」客製化選項掛載 ----
+// 只有選「套餐」才會出現的客製化選項(例如私房炒麵系列選套餐才有點心+飲料可選)，
+// 老闆2026-09-07反饋原本寫死3個分類沒辦法自己調整，改成跟一般掛載平行的獨立資料，
+// 只要品項有「套餐價格」就能自己決定要掛哪些套餐限定選項，不限於原本那3個分類
+function renderMcComboGroupTagsHtml(item) {
+  if (item.price_set == null) return ''; // 沒有套餐價格的品項用不到這塊，不顯示
+  const key = mcCurrentItem.category + '||' + mcCurrentItem.name;
+  const codes = mcItemComboGroups[key] || [];
+  const tagsHtml = codes.map(code => {
+    const g = mcOptionGroups[code];
+    const label = g ? g.label : (code + '（定義不存在）');
+    return `<span class="mc-tag">${escapeHtml(label)}<button type="button" class="mc-tag-x mc-combo-tag-x" data-code="${escapeHtml(code)}">×</button></span>`;
+  }).join('') || '<span style="font-size:0.78rem;color:var(--muted);">目前沒有掛載任何套餐限定選項</span>';
+  const availableGroups = Object.keys(mcOptionGroups).filter(c => codes.indexOf(c) === -1);
+  const optionsHtml = availableGroups.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(mcOptionGroups[c].label)}</option>`).join('');
+  return `
+    <div class="mc-section">
+      <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">套餐限定客製化選項掛載</h4>
+      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">這個品項有「套餐$${item.price_set}」的定價，這裡掛的選項只有客人選「套餐」才會出現，選「單點」不會看到。</p>
+      <div class="mc-tags" id="mc-combo-tags">${tagsHtml}</div>
+      <div class="mc-field-row">
+        <select id="mc-add-combo-group-select"><option value="">+ 掛上套餐限定選項群組...</option>${optionsHtml}</select>
+        <button type="button" class="mc-save-btn" style="padding:7px 12px;" onclick="addMcComboGroupTag()">加入</button>
+      </div>
+      <div class="mc-field-row" style="margin-top:10px;">
+        <select id="mc-copy-combo-from-select">${renderCopyComboFromOptions()}</select>
+        <button type="button" class="mc-save-btn" style="padding:7px 12px;" onclick="copyMcComboGroupTags()">複製這個品項的套餐限定設定</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCopyComboFromOptions() {
+  let html = '<option value="">選擇要複製設定來源的品項...</option>';
+  Object.keys(mcCatalog).forEach(cat => {
+    mcCatalog[cat].forEach(item => {
+      if (item.price_set == null) return; // 沒有套餐價格的品項不會有套餐限定設定可複製
+      if (cat === mcCurrentItem.category && item.name === mcCurrentItem.name) return;
+      const key = cat + '||' + item.name;
+      if (!mcItemComboGroups[key] || !mcItemComboGroups[key].length) return;
+      html += `<option value="${escapeHtml(cat)}||${escapeHtml(item.name)}">${escapeHtml(cat)} - ${escapeHtml(item.name)}</option>`;
+    });
+  });
+  return html;
+}
+
+function currentMcComboGroupCodes() {
+  const key = mcCurrentItem.category + '||' + mcCurrentItem.name;
+  return (mcItemComboGroups[key] || []).slice();
+}
+
+function addMcComboGroupTag() {
+  const sel = document.getElementById('mc-add-combo-group-select');
+  if (!sel.value) return;
+  saveMcComboGroupLinks(currentMcComboGroupCodes().concat([sel.value]));
+}
+
+function removeMcComboGroupTag(code) {
+  saveMcComboGroupLinks(currentMcComboGroupCodes().filter(c => c !== code));
+}
+
+function saveMcComboGroupLinks(codes) {
+  const key = mcCurrentItem.category + '||' + mcCurrentItem.name;
+  const previous = (mcItemComboGroups[key] || []).slice();
+  mcItemComboGroups[key] = codes; // 樂觀更新
+  renderMcItemEditor();
+  apiPost({ action: 'setItemComboGroupLinks', category: mcCurrentItem.category, name: mcCurrentItem.name, groupCodes: codes })
+    .then(data => { if (data.status !== 'ok') throw new Error(data.message || '同步失敗'); })
+    .catch(err => {
+      mcItemComboGroups[key] = previous;
+      renderMcItemEditor();
+      alert('套餐限定選項設定同步失敗，請確認網路連線後重試（畫面已還原）：' + err.message);
+    });
+}
+
+function copyMcComboGroupTags() {
+  const sel = document.getElementById('mc-copy-combo-from-select');
+  if (!sel.value) return;
+  const idx = sel.value.indexOf('||');
+  const srcCategory = sel.value.slice(0, idx);
+  const srcName = sel.value.slice(idx + 2);
+  apiPost({ action: 'copyItemComboGroupLinks', srcCategory, srcName, category: mcCurrentItem.category, name: mcCurrentItem.name })
+    .then(data => {
+      if (data.status !== 'ok') throw new Error(data.message || '複製失敗');
+      const key = mcCurrentItem.category + '||' + mcCurrentItem.name;
+      const srcKey = srcCategory + '||' + srcName;
+      mcItemComboGroups[key] = (mcItemComboGroups[srcKey] || []).slice();
+      renderMcItemEditor();
+    })
+    .catch(err => alert('複製失敗：' + err.message));
 }
 
 function renderCopyFromOptions() {
@@ -531,8 +610,13 @@ function renderCopyFromOptions() {
 }
 
 function bindMcGroupTagControls() {
-  document.querySelectorAll('.mc-tag-x').forEach(btn => {
+  // 一般掛載跟套餐限定掛載共用.mc-tag(x)樣式，用.mc-combo-tag-x再細分是哪一種，
+  // 避免兩份標籤的×按鈕都被同一個selector綁到，導致點到套餐限定的標籤卻刪到一般掛載
+  document.querySelectorAll('.mc-tag-x:not(.mc-combo-tag-x)').forEach(btn => {
     btn.onclick = () => removeMcGroupTag(btn.getAttribute('data-code'));
+  });
+  document.querySelectorAll('.mc-combo-tag-x').forEach(btn => {
+    btn.onclick = () => removeMcComboGroupTag(btn.getAttribute('data-code'));
   });
 }
 
