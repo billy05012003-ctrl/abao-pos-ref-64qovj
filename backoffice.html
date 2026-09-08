@@ -804,8 +804,58 @@ function renderGroupEditor() {
       <button type="button" class="mc-save-btn" onclick="saveMcGroup()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteMcGroup()">刪除整個群組</button>' : ''}
     </div>
+    ${!isNew ? renderMcBulkAttachHtml() : ''}
     ${!isNew ? renderMcOptionValuesHtml(g) : '<p style="font-size:0.8rem;color:var(--muted);">先儲存群組後才能新增選項值</p>'}
   `;
+}
+
+// 整批掛載到分類（2026-09-09新增）：老闆反饋一個一個品項掛同一組客製化選項太慢，改成選一個分類，
+// 一次把這組客製化選項掛到該分類底下所有品項。是「加掛」不是「取代」——已經掛過的品項不會重複掛、
+// 其他既有掛載也不受影響，跟「複製這個品項的設定」(整批取代單一品項)是互補的兩種操作
+function renderMcBulkAttachHtml() {
+  const catOptions = Object.keys(mcCatalog).map(c => `<option value="${escapeHtml(c)}">${escapeHtml(mcShortCatName(c))}</option>`).join('');
+  return `
+    <div class="mc-section">
+      <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">整批掛載到分類</h4>
+      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">選一個分類，把這組客製化選項一次掛到該分類底下所有品項，不用逐一品項手動加。已經掛過的品項不會重複掛，其他既有掛載不受影響。</p>
+      <div class="mc-field-row">
+        <select id="mc-bulk-attach-cat"><option value="">選擇分類...</option>${catOptions}</select>
+        <button type="button" class="mc-save-btn" style="padding:7px 12px;" onclick="bulkAttachMcGroup()">套用到整個分類</button>
+      </div>
+      <div id="mc-bulk-attach-status" style="font-size:0.78rem;color:var(--muted);margin-top:6px;"></div>
+    </div>
+  `;
+}
+
+function bulkAttachMcGroup() {
+  const sel = document.getElementById('mc-bulk-attach-cat');
+  if (!sel.value) { alert('請先選擇分類'); return; }
+  const catLabel = mcShortCatName(sel.value);
+  const groupLabel = mcOptionGroups[mcCurrentGroupCode].label;
+  if (!confirm(`確定要把「${groupLabel}」整批掛到「${catLabel}」底下所有品項嗎？`)) return;
+  const statusEl = document.getElementById('mc-bulk-attach-status');
+  statusEl.textContent = '套用中...';
+  apiPost({ action: 'bulkAttachGroupToCategory', category: sel.value, groupCode: mcCurrentGroupCode }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '套用失敗');
+    // loadMenuCms()會重繪整個群組編輯畫面(包含這個狀態列)，所以結果用alert顯示，不能只寫statusEl文字，
+    // 不然還沒看到就被重繪蓋掉了
+    return loadMenuCms().then(() => {
+      alert(`已套用：新掛上 ${data.attached} 個品項，${data.skipped} 個品項本來就掛過了。`);
+    });
+  }).catch(err => {
+    statusEl.textContent = '';
+    alert('套用失敗：' + err.message);
+  });
+}
+
+// combo_drink的選項名稱剛好是主頁飲料品項名稱，可以查到原價當對照參考；其他群組(醬料/加料選擇等)
+// 的選項值不是真正的菜單品項，查不到也查不該查，只有combo_drink這組顯示這個提示欄
+function findCatalogItemPriceRef_(name) {
+  for (const cat in mcCatalog) {
+    const item = (mcCatalog[cat] || []).find(i => i.name === name);
+    if (item) return item;
+  }
+  return null;
 }
 
 function renderMcOptionValuesHtml(g) {
@@ -813,6 +863,17 @@ function renderMcOptionValuesHtml(g) {
   // 不用另外開一個「依尺寸定價」開關讓老闆多想一件事——目前全部45組裡只有combo_drink/drink_topping
   // 這兩組真的有用到，新建的群組預設就是單一加價，跟大多數群組(醬料/加料選擇等)行為一致
   const sizeBased = (g.options || []).some(o => o.priceM != null || o.priceL != null);
+  // 2026-09-09新增(萃取分析參考大麥「原始金額/加價金額」雙欄顯示)：combo_drink這組額外顯示
+  // 對照的主頁飲料原價，方便老闆核對加價金額算得對不對，不用自己再去翻主頁品項價格
+  const showPriceRef = mcCurrentGroupCode === 'combo_drink';
+  function priceRefHtml(name) {
+    if (!showPriceRef) return '';
+    const item = findCatalogItemPriceRef_(name);
+    if (!item) return '<span class="mc-item-price">(查無原價)</span>';
+    const text = item.price != null ? ('原價$' + item.price)
+      : [item.price_m != null ? 'M$'+item.price_m : '', item.price_l != null ? 'L$'+item.price_l : ''].filter(Boolean).join(' ');
+    return `<span class="mc-item-price">原價 ${escapeHtml(text)}</span>`;
+  }
   const rows = (g.options || []).map(opt => `
     <div class="mc-value-row">
       <input class="mc-v-name" value="${escapeHtml(opt.name)}" data-orig="${escapeHtml(opt.name)}">
@@ -820,6 +881,7 @@ function renderMcOptionValuesHtml(g) {
       <input class="mc-v-pricem" type="number" placeholder="中杯加價" value="${opt.priceM ?? ''}">
       <input class="mc-v-pricel" type="number" placeholder="大杯加價" value="${opt.priceL ?? ''}">
       ` : `<input class="mc-v-price" type="number" placeholder="加價" value="${opt.price ?? ''}">`}
+      ${priceRefHtml(opt.name)}
       <label style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--muted);white-space:nowrap;">
         <input type="checkbox" class="mc-v-online" ${opt.onlineVisible === false ? '' : 'checked'} onchange="toggleMcOptionOnlineVisible(this)">線上點餐
       </label>
@@ -877,6 +939,12 @@ function toggleMcOptionOnlineVisible(checkbox) {
   });
 }
 
+// 價格防呆(2026-09-09新增，萃取分析參考大麥「加價不低於0」規則)：只擋負數，前端先擋一次省一趟API來回，
+// 後端upsertOptionValue_也有同一道檢查(防止繞過前端直接呼叫API)
+function mcHasNegativePrice_(payload) {
+  return [payload.price, payload.priceM, payload.priceL].some(v => v !== '' && Number(v) < 0);
+}
+
 function saveMcOptionValueRow(btn) {
   const row = btn.closest('.mc-value-row');
   const nameInput = row.querySelector('.mc-v-name');
@@ -892,6 +960,7 @@ function saveMcOptionValueRow(btn) {
     priceL: (row.querySelector('.mc-v-pricel') || {}).value || '',
     onlineVisible: row.querySelector('.mc-v-online').checked
   };
+  if (mcHasNegativePrice_(payload)) { alert('加價金額不能是負數'); return; }
   apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     return loadMenuCms();
@@ -919,6 +988,7 @@ function addMcOptionValue() {
     priceL: mcFieldValue('mc-newv-pricel'),
     onlineVisible: document.getElementById('mc-newv-online').checked
   };
+  if (mcHasNegativePrice_(payload)) { alert('加價金額不能是負數'); return; }
   apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '新增失敗');
     return loadMenuCms();
