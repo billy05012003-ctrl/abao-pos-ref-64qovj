@@ -705,6 +705,9 @@ function renderGroupEditor() {
         <input type="checkbox" id="mc-g-required" ${g.required ? 'checked' : ''}> 必選
       </label>
     </div>
+    <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
+      <input type="checkbox" id="mc-g-online" ${g.onlineVisible === false ? '' : 'checked'}> 線上點餐顯示（整組客製化選項，取消勾選後線上點餐頁完全不會出現這一組，POS功能不受影響）
+    </label>
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMcGroup()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteMcGroup()">刪除整個群組</button>' : ''}
@@ -837,7 +840,8 @@ function saveMcGroup() {
     code: mcCurrentGroupCode === 'NEW' ? null : mcCurrentGroupCode,
     label: label,
     type: document.getElementById('mc-g-type').value,
-    required: document.getElementById('mc-g-required').checked
+    required: document.getElementById('mc-g-required').checked,
+    onlineVisible: document.getElementById('mc-g-online').checked
   };
   apiPost({ action: 'upsertOptionGroup', group: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');

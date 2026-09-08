@@ -483,7 +483,8 @@ function imgSafeName(s) {
 // ITEM_COMBO_GROUPS_MAP在applyMenuCmsData_()裡從雲端資料填入，comboOnlyGroupsFor()取代原本查表寫法
 let ITEM_COMBO_GROUPS_MAP = {};
 function comboOnlyGroupsFor(cat, itemName) {
-  return ITEM_COMBO_GROUPS_MAP[cat + '||' + itemName] || [];
+  const codes = ITEM_COMBO_GROUPS_MAP[cat + '||' + itemName] || [];
+  return codes.filter(gk => (OPTION_GROUPS[gk] || {}).onlineVisible !== false);
 }
 
 // 菜單CMS化Phase 1（2026-09-06）：以下改成向雲端讀取，取代原本寫死的CATEGORY_GROUPS/ITEM_SPECIFIC_GROUPS
@@ -555,7 +556,11 @@ function loadMenuCmsData() {
 }
 
 function groupsForCategory(cat, itemName) {
-  return ITEM_GROUPS_MAP[cat + '||' + itemName] || [];
+  const codes = ITEM_GROUPS_MAP[cat + '||' + itemName] || [];
+  // 菜單CMS化追加(2026-09-08)：群組本身可以整組設「線上點餐顯示=否」(比照大麥的做法)，
+  // 這裡統一濾掉，render/驗證必填/巢狀飲料客製化都共用這個函式，濾一次全部生效，
+  // 不用擔心被濾掉的必選群組還卡在送出訂單的驗證邏輯裡(因為這裡回傳的清單本來就不包含它了)
+  return codes.filter(gk => (OPTION_GROUPS[gk] || {}).onlineVisible !== false);
 }
 
 // 套餐內選定某杯飲料後，該飲料自己所屬分類的冰量/甜度群組（例如虎斑黑糖系列要溫度選擇+黑糖甜度選擇）
@@ -1113,7 +1118,7 @@ function openSmallDrinkCustom(drinkName) {
   document.getElementById('drink-modal-title').textContent = drinkName;
   const body = document.getElementById('drink-modal-body');
   body.innerHTML = '';
-  const extraGroups = ['temperature_choice', 'sweetness', 'drink_topping'];
+  const extraGroups = ['temperature_choice', 'sweetness', 'drink_topping'].filter(gk => (OPTION_GROUPS[gk] || {}).onlineVisible !== false);
   currentModal.comboDrinkExtraGroups = extraGroups;
   extraGroups.forEach(gk => renderOptionGroup(body, gk));
   updateItemModalTotal();
