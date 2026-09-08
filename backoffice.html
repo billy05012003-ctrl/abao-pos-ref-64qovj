@@ -769,7 +769,7 @@ function renderGroupEditor() {
       </label>
     </div>
     <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
-      <input type="checkbox" id="mc-g-online" ${g.onlineVisible === false ? '' : 'checked'}> 線上點餐顯示（整組客製化選項，取消勾選後線上點餐頁完全不會出現這一組，POS功能不受影響）
+      <input type="checkbox" id="mc-g-online" ${g.onlineVisible === false ? '' : 'checked'}> 線上點餐（取消勾選，代表線上點餐整組不顯示）
     </label>
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMcGroup()">儲存</button>
@@ -792,7 +792,7 @@ function renderMcOptionValuesHtml(g) {
       <input class="mc-v-pricel" type="number" placeholder="大杯加價" value="${opt.priceL ?? ''}">
       ` : `<input class="mc-v-price" type="number" placeholder="加價" value="${opt.price ?? ''}">`}
       <label style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--muted);white-space:nowrap;">
-        <input type="checkbox" class="mc-v-online" ${opt.onlineVisible === false ? '' : 'checked'} onchange="toggleMcOptionOnlineVisible(this)">線上點餐顯示
+        <input type="checkbox" class="mc-v-online" ${opt.onlineVisible === false ? '' : 'checked'} onchange="toggleMcOptionOnlineVisible(this)">線上點餐
       </label>
       <button type="button" onclick="saveMcOptionValueRow(this)">儲存</button>
       <button type="button" onclick="deleteMcOptionValueRow(this)">刪除</button>
@@ -801,7 +801,7 @@ function renderMcOptionValuesHtml(g) {
   return `
     <div class="mc-section">
       <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">選項值</h4>
-      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">「線上點餐顯示」沒打勾的話，這個選項只有POS功能看得到，線上點餐頁的客人選不到、也看不到。</p>
+      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">「線上點餐」沒打勾的話，代表線上點餐不顯示這個選項，只有POS功能看得到，線上點餐頁的客人選不到、也看不到。</p>
       <div id="mc-value-list">${rows}</div>
       <div class="mc-value-row">
         <input class="mc-v-name" id="mc-newv-name" placeholder="新選項名稱">
@@ -810,7 +810,7 @@ function renderMcOptionValuesHtml(g) {
         <input class="mc-v-pricel" id="mc-newv-pricel" type="number" placeholder="大杯加價">
         ` : `<input class="mc-v-price" id="mc-newv-price" type="number" placeholder="加價">`}
         <label style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--muted);white-space:nowrap;">
-          <input type="checkbox" id="mc-newv-online" checked>線上點餐顯示
+          <input type="checkbox" id="mc-newv-online" checked>線上點餐
         </label>
         <button type="button" onclick="addMcOptionValue()">新增</button>
       </div>
