@@ -32,9 +32,13 @@
   .mc-col { flex:1; min-width:180px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px; max-height:480px; overflow-y:auto; }
   .mc-col h4 { margin:0 0 8px; font-size:0.85rem; color:var(--muted); }
   .mc-col-wide { flex:2; min-width:260px; max-height:none; }
-  .mc-cat-row { display:flex; align-items:stretch; gap:2px; background:#fff; }
-  .mc-cat-row.mc-cat-dragging { opacity:0.5; }
-  .mc-cat-handle { flex:0 0 auto; display:flex; align-items:center; padding:0 6px; color:var(--muted); cursor:grab; touch-action:none; user-select:none; font-size:0.95rem; }
+  .mc-cat-row, .mt-row { display:flex; align-items:stretch; gap:2px; background:#fff; }
+  .mc-cat-row.mc-cat-dragging, .mt-row.mt-dragging { opacity:0.5; }
+  .mc-cat-handle, .mt-handle { flex:0 0 auto; display:flex; align-items:center; padding:0 6px; color:var(--muted); cursor:grab; touch-action:none; user-select:none; font-size:0.95rem; }
+  .mt-row.locked .mt-handle { visibility:hidden; }
+  .mt-row-label { display:block; flex:1; min-width:0; text-align:left; border:none; background:none; padding:8px 6px; font-size:0.85rem; cursor:pointer; border-radius:6px; color:#222; }
+  .mt-row-label.active { background:#FFF0E8; color:var(--brand); font-weight:600; }
+  .mt-row-label .mt-count { color:var(--muted); font-size:0.75rem; margin-left:6px; }
   .mc-cat-btn { display:block; flex:1; min-width:0; text-align:left; border:none; background:none; padding:8px 6px; font-size:0.85rem; cursor:pointer; border-radius:6px; color:#222; }
   .mc-cat-btn.active, .mc-item-row.active { background:#FFF0E8; color:var(--brand); font-weight:600; }
   .mc-cat-btn:hover, .mc-item-row:hover { background:#faf6f2; }
@@ -113,6 +117,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 <div class="tabbar" id="tabbar">
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">品項上下架</button>
   <button id="tab-btn-menucms" onclick="switchBackofficeTab('menucms')">菜單管理</button>
+  <button id="tab-btn-membertiers" onclick="switchBackofficeTab('membertiers')">會員分級</button>
 </div>
 <div id="view-availability" class="view">
   <p style="font-size:0.8rem;color:var(--muted);">
@@ -154,6 +159,23 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </div>
   </div>
 </div>
+<div id="view-membertiers" class="view" style="display:none;">
+  <p style="font-size:0.8rem;color:var(--muted);">
+    升等/續等門檻、點數倍率都在這裡改，改完立刻生效，會直接套用到所有會員下次查詢/消費時的等級判定。
+    <b>「一般會員」是新會員註冊的預設等級，不能刪除、不能調整順序，只能改名稱。</b>
+  </p>
+  <div class="mc-layout">
+    <div class="mc-col" style="max-height:none;">
+      <h4>等級（可拖曳排序，一般會員鎖在最前）</h4>
+      <div id="mt-list"><div class="empty-hint">載入中...</div></div>
+      <button type="button" class="mc-add-btn" onclick="mtCurrentName='NEW';renderMtEditor();">+ 新增等級</button>
+    </div>
+    <div class="mc-col mc-col-wide" style="max-height:none;">
+      <h4>編輯等級</h4>
+      <div id="mt-editor"><div class="empty-hint">選一個等級來編輯，或點「新增等級」</div></div>
+    </div>
+  </div>
+</div>
 
 <script>
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
@@ -170,14 +192,21 @@ function apiPost(payload) {
 const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美1 花醬 牛肉培根 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美2 蜂蜜芥末 德式燻腸 捲餅"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美3 日式白醬 酥炸魚排 蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美4 雙層澳洲牛肉 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美5 雙層豬肉 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美6 清爽薯泥培根 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美7 泰式風味 鮮魚 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美8 日式咖哩 豬排 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美9 香濃雞排 起司法國土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美10 美味豬排 起司蛋總匯土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美11 千島醬 薯泥雞排 起司蛋土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美12 甜辣泰式 雞排 起司蛋捲餅"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"培根炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"香雞炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"火腿炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"烤肉炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"日式豬排炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"日式雞排炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"德式燻腸炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"泡菜燒肉炒麵"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定01 炒麵加蛋＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定02 美式湯餃＋烤肉蛋漢堡"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定03 炒麵加蛋＋雞塊"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定04 烤肉炒麵＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定06 玉米起司特酥蛋餅＋米花雞球"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定07 烤肉蛋漢堡＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定08 烤肉炒麵＋黃金香酥雞"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定09 炒麵加蛋＋黃金香酥雞"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定10 烤肉炒麵＋米花雞球"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定11 美式湯餃＋雞塊"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定12 玉米起司特酥蛋餅＋鍋貼"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜燒肉異國炒麵"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜豬排蛋堡"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜雞排捲"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜蛋餅"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"韓風玫瑰醬 鳳梨雞排堡"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"經典赤辣醬 鳳梨雞排堡"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"蜂蜜芥末醬 鳳梨雞排堡"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"玉米起司"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"鮪魚玉米"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"鮪魚洋蔥"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"培根玉米起司"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"惡魔雙色拔絲"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"火腿肉鬆蔬食"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"火腿起司 佐花醬小黃瓜"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"和洋豬排蔬食"},{"category":"BURGERS_漢堡","name":"玉米蛋"},{"category":"BURGERS_漢堡","name":"肉鬆蛋"},{"category":"BURGERS_漢堡","name":"豬肉蛋 (漢堡肉)"},{"category":"BURGERS_漢堡","name":"烤肉蛋 (里肌肉)"},{"category":"BURGERS_漢堡","name":"香雞蛋"},{"category":"BURGERS_漢堡","name":"牛肉蛋"},{"category":"BURGERS_漢堡","name":"總匯蛋 (里肌肉)"},{"category":"BURGERS_漢堡","name":"日式雞排蛋"},{"category":"BURGERS_漢堡","name":"日式豬排蛋"},{"category":"BURGERS_漢堡","name":"日式花枝排蛋"},{"category":"BURGERS_漢堡","name":"日式蝦排蛋"},{"category":"BURGERS_漢堡","name":"雞腿蛋 (原/辣)"},{"category":"TOAST_土司","name":"煎蛋"},{"category":"TOAST_土司","name":"玉米蛋"},{"category":"TOAST_土司","name":"肉鬆蛋"},{"category":"TOAST_土司","name":"起司蛋"},{"category":"TOAST_土司","name":"火腿蛋"},{"category":"TOAST_土司","name":"培根蛋"},{"category":"TOAST_土司","name":"鮪魚蛋"},{"category":"TOAST_土司","name":"烤肉蛋 (里肌肉)"},{"category":"TOAST_土司","name":"香雞蛋"},{"category":"TOAST_土司","name":"總匯蛋 (漢堡肉)"},{"category":"TOAST_土司","name":"雞腿蛋 (原/辣)"},{"category":"JAN SERIES_果醬磚研系列","name":"草莓"},{"category":"JAN SERIES_果醬磚研系列","name":"藍莓"},{"category":"JAN SERIES_果醬磚研系列","name":"奶酥"},{"category":"JAN SERIES_果醬磚研系列","name":"花生"},{"category":"JAN SERIES_果醬磚研系列","name":"奶油"},{"category":"JAN SERIES_果醬磚研系列","name":"巧克力"},{"category":"JAN SERIES_果醬磚研系列","name":"狠蒜"},{"category":"THICKCUT TOAST_厚片","name":"起司奶油"},{"category":"THICKCUT TOAST_厚片","name":"鮪魚洋蔥"},{"category":"THICKCUT TOAST_厚片","name":"燻雞起司"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"日式蔬食沙拉"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"日式咖哩"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"冰州魚排"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"大洋鮮魚"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"烤肉穀堡"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"孜然醬雞排"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"孜然醬豬排"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"火腿起司"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"蕃茄豬肉"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"苜蓿芽起司"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"陽光香雞"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"蔬食烤肉"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"日式燻雞"},{"category":"BURRITO_蔬食捲餅","name":"香雞蕃茄"},{"category":"BURRITO_蔬食捲餅","name":"黃金烤肉"},{"category":"BURRITO_蔬食捲餅","name":"日式雞排"},{"category":"BURRITO_蔬食捲餅","name":"海味花枝"},{"category":"BURRITO_蔬食捲餅","name":"鮮味蝦排"},{"category":"BURRITO_蔬食捲餅","name":"美式雞腿 (原/辣)"},{"category":"PUFF PASTRY_起酥堡","name":"草莓起酥"},{"category":"PUFF PASTRY_起酥堡","name":"洋芋蔬食"},{"category":"PUFF PASTRY_起酥堡","name":"苜蓿芽玉米"},{"category":"PUFF PASTRY_起酥堡","name":"蕃茄蔬食"},{"category":"PUFF PASTRY_起酥堡","name":"蔬食烤肉"},{"category":"PAIN PERDU_法國土司 ","name":"日式培根"},{"category":"PAIN PERDU_法國土司 ","name":"深海鮪魚"},{"category":"PAIN PERDU_法國土司 ","name":"黃金烤肉"},{"category":"CHINESE OMELET_招牌蛋餅","name":"原味"},{"category":"CHINESE OMELET_招牌蛋餅","name":"肉鬆"},{"category":"CHINESE OMELET_招牌蛋餅","name":"玉米"},{"category":"CHINESE OMELET_招牌蛋餅","name":"起司"},{"category":"CHINESE OMELET_招牌蛋餅","name":"蔬食"},{"category":"CHINESE OMELET_招牌蛋餅","name":"洋蔥"},{"category":"CHINESE OMELET_招牌蛋餅","name":"火腿"},{"category":"CHINESE OMELET_招牌蛋餅","name":"培根"},{"category":"CHINESE OMELET_招牌蛋餅","name":"熱狗"},{"category":"CHINESE OMELET_招牌蛋餅","name":"鮪魚"},{"category":"CHINESE OMELET_招牌蛋餅","name":"烤肉"},{"category":"SALAD VEGETABLE_田園蔬果","name":"馬鈴薯土司"},{"category":"SALAD VEGETABLE_田園蔬果","name":"南瓜土司"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥蔬食鮪魚"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥苜蓿芽火腿"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥蔬菜沙拉"},{"category":"SALAD VEGETABLE_田園蔬果","name":"田園蔬菜捲"},{"category":"CHINESE SNACKS_中式茶食","name":"荷包蛋"},{"category":"CHINESE SNACKS_中式茶食","name":"熱狗 (4條)"},{"category":"CHINESE SNACKS_中式茶食","name":"玉米濃湯"},{"category":"CHINESE SNACKS_中式茶食","name":"炒麵"},{"category":"CHINESE SNACKS_中式茶食","name":"鍋貼(5個)"},{"category":"CHINESE SNACKS_中式茶食","name":"雞塊 (4個)"},{"category":"CHINESE SNACKS_中式茶食","name":"蘿蔔糕 (2片)"},{"category":"CHINESE SNACKS_中式茶食","name":"薯餅 (4片)"},{"category":"CHINESE SNACKS_中式茶食","name":"米花雞球 (8個)"},{"category":"CHINESE SNACKS_中式茶食","name":"野菜豚炸餃(8個)"},{"category":"CHINESE SNACKS_中式茶食","name":"脆薯"},{"category":"CHINESE SNACKS_中式茶食","name":"美式湯麵"},{"category":"CHINESE SNACKS_中式茶食","name":"義響鐵板麵"},{"category":"CHINESE SNACKS_中式茶食","name":"黃金香酥雞"},{"category":"CHINESE SNACKS_中式茶食","name":"二折雞翅(3入/7入)"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"玄米檸檬綠茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨美人茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"檸檬黃金烏龍"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨美人鮮奶茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨烏龍鮮奶茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨玄米鮮奶綠"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"檸檬紅茶"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"檸檬綠茶"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"蜜漬鳳梨紅茶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖豆漿"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖薏仁"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖奶茶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖紅茶牛奶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖牛奶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖檸檬飲"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀豆漿"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀紅茶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀紅茶豆漿"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀奶茶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀綠奶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀薏仁漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"研磨豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"紅茶豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"胚芽豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"薏仁豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"抹茶豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"養生薏仁漿"},{"category":"PURE TEA_純味茶","name":"阿薩姆紅茶"},{"category":"PURE TEA_純味茶","name":"茉莉綠茶"},{"category":"PURE TEA_純味茶","name":"高山青茶"},{"category":"PURE TEA_純味茶","name":"東方美人 (現沏)"},{"category":"PURE TEA_純味茶","name":"黃金烏龍 (現沏)"},{"category":"PURE TEA_純味茶","name":"阿里山 (現沏)"},{"category":"PURE TEA_純味茶","name":"玄米玉露 (現沏)"},{"category":"PURE TEA_純味茶","name":"四季綠茶 (現沏)"},{"category":"MILK TEA_奶茶系列","name":"阿薩姆奶茶"},{"category":"MILK TEA_奶茶系列","name":"茉香奶綠"},{"category":"MILK TEA_奶茶系列","name":"高山青奶"},{"category":"MILK TEA_奶茶系列","name":"胚芽奶茶"},{"category":"MILK TEA_奶茶系列","name":"茶珠青奶"},{"category":"MILK TEA_奶茶系列","name":"茶珠綠奶"},{"category":"MILK TEA_奶茶系列","name":"茶珠奶茶"},{"category":"TEA LATTES_茶拿鐵","name":"東方拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"烏龍拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"阿里山拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"四季拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"玄米拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"紅茶拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"綠茶拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"青茶拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"豆奶拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"特調咖啡"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"義式咖啡"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"小農拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"卡布奇諾"},{"category":"加購品項/配料選擇","name":"加起司"},{"category":"加購品項/配料選擇","name":"加二片起司"},{"category":"加購品項/配料選擇","name":"加蛋"},{"category":"加購品項/配料選擇","name":"加火腿"},{"category":"加購品項/配料選擇","name":"加培根"},{"category":"加購品項/配料選擇","name":"加麵"},{"category":"加購品項/配料選擇","name":"薯餅(6入)"},{"category":"加購品項/配料選擇","name":"雞塊(6入)"},{"category":"加購品項/配料選擇","name":"二折雞翅(3入)"},{"category":"加購品項/配料選擇","name":"茶珠"},{"category":"加購品項/配料選擇","name":"多穀"},{"category":"加購品項/配料選擇","name":"抹茶"},{"category":"加購品項/配料選擇","name":"胚芽"},{"category":"加購品項/配料選擇","name":"美式狂想 x 雙人脆薯"},{"category":"加購品項/配料選擇","name":"美式狂想 x 九塊雞塊"},{"category":"加購品項/配料選擇","name":"美式狂想 x 十粒鍋貼"},{"category":"加購品項/配料選擇","name":"加一份Espresso"},{"category":"加購品項/配料選擇","name":"加二份Espresso"},{"category":"加購品項/配料選擇","name":"多二匙奶"},{"category":"加購品項/配料選擇","name":"野菜豚炸餃"},{"category":"加購品項/配料選擇","name":"米花雞球"}];
 
 let mcLoaded = false;
+let mtLoaded = false;
 function switchBackofficeTab(name) {
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
+  document.getElementById('tab-btn-membertiers').classList.toggle('active', name === 'membertiers');
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
+  document.getElementById('view-membertiers').style.display = name === 'membertiers' ? 'block' : 'none';
   if (name === 'menucms' && !mcLoaded) {
     mcLoaded = true;
     loadMenuCms();
+  }
+  if (name === 'membertiers' && !mtLoaded) {
+    mtLoaded = true;
+    loadMemberTiers();
   }
 }
 
@@ -919,6 +948,151 @@ function deleteMcGroup() {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     mcCurrentGroupCode = null;
     return loadMenuCms();
+  }).catch(err => alert('刪除失敗：' + err.message));
+}
+
+// ---------------------------------------------------------------
+// 會員分級管理（2026-09-08新增，萃取分析參考大麥後台後老闆定案）：升等/續等門檻、點數倍率
+// 原本寫死在Code.gs的MEMBER_TIERS，改成後台可編輯。「一般會員」(排序=1)是新會員預設等級，鎖住
+// 不能刪除/調整順序，UI上不給拖曳把手、不給刪除按鈕，門檻欄位也鎖住唯讀(固定$0)
+// ---------------------------------------------------------------
+let mtTiers = [];
+let mtStats = {};
+let mtCurrentName = null; // 'NEW'代表正在新增
+
+function loadMemberTiers() {
+  document.getElementById('mt-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  return apiGet({ action: 'memberTierData' }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    mtTiers = data.tiers;
+    mtStats = data.stats || {};
+    renderMtList();
+    renderMtEditor();
+  }).catch(err => {
+    document.getElementById('mt-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
+    console.warn('會員分級資料讀取失敗', err);
+  });
+}
+
+function renderMtList() {
+  const el = document.getElementById('mt-list');
+  el.innerHTML = '';
+  mtTiers.forEach((t, idx) => {
+    const isLocked = idx === 0; // 排序=1的一般會員鎖住
+    const row = document.createElement('div');
+    row.className = 'mt-row' + (isLocked ? ' locked' : '');
+    row.dataset.name = t.name;
+
+    const handle = document.createElement('span');
+    handle.className = 'mt-handle';
+    handle.textContent = '⠿';
+    if (!isLocked) handle.addEventListener('pointerdown', e => startMtDrag(e, row));
+    row.appendChild(handle);
+
+    const label = document.createElement('button');
+    label.type = 'button';
+    label.className = 'mt-row-label' + (t.name === mtCurrentName ? ' active' : '');
+    label.innerHTML = `${escapeHtml(t.name)}<span class="mt-count">${mtStats[t.name] || 0}人</span>`;
+    label.onclick = () => { mtCurrentName = t.name; renderMtList(); renderMtEditor(); };
+    row.appendChild(label);
+
+    el.appendChild(row);
+  });
+}
+
+// 拖曳排序邏輯完全比照分類拖曳(startCatDrag)，只是換一組id/資料來源。第一列鎖住不掛把手事件，
+// 所以永遠不會被拖走；就算硬是把別的等級拖到它前面，送到後端reorderMemberTiers_也會強制把它排回第一位
+function startMtDrag(e, row) {
+  e.preventDefault();
+  const container = document.getElementById('mt-list');
+  const beforeOrder = mtTiers.map(t => t.name);
+  row.classList.add('mt-dragging');
+  const pointerId = e.pointerId;
+  try { row.setPointerCapture(pointerId); } catch (err) {}
+
+  function onMove(ev) {
+    const siblings = Array.from(container.querySelectorAll('.mt-row')).filter(el => el !== row && !el.classList.contains('locked'));
+    let target = null;
+    for (const sib of siblings) {
+      const rect = sib.getBoundingClientRect();
+      if (ev.clientY < rect.top + rect.height / 2) { target = sib; break; }
+    }
+    if (target) container.insertBefore(row, target);
+    else {
+      const lockedRow = container.querySelector('.mt-row.locked');
+      container.appendChild(row);
+      if (lockedRow) container.insertBefore(lockedRow, container.firstChild); // 鎖住的第一列永遠留在最前面
+    }
+  }
+
+  function onUp() {
+    row.classList.remove('mt-dragging');
+    try { row.releasePointerCapture(pointerId); } catch (err) {}
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    const newOrder = Array.from(container.querySelectorAll('.mt-row')).map(el => el.dataset.name);
+    mtTiers = newOrder.map(name => mtTiers.find(t => t.name === name));
+    apiPost({ action: 'reorderMemberTiers', order: newOrder }).then(data => {
+      if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    }).catch(err => {
+      alert('等級順序儲存失敗，已還原：' + err.message);
+      mtTiers = beforeOrder.map(name => mtTiers.find(t => t.name === name) || { name });
+      renderMtList();
+    });
+  }
+
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+}
+
+function renderMtEditor() {
+  const el = document.getElementById('mt-editor');
+  if (!mtCurrentName) { el.innerHTML = '<div class="empty-hint">選一個等級來編輯，或點「新增等級」</div>'; return; }
+  const isNew = mtCurrentName === 'NEW';
+  const t = isNew ? {} : (mtTiers.find(x => x.name === mtCurrentName) || {});
+  const idx = isNew ? -1 : mtTiers.findIndex(x => x.name === mtCurrentName);
+  const isLocked = idx === 0; // 一般會員：門檻鎖住唯讀，只能改名稱
+  el.innerHTML = `
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增等級' : '編輯等級'}</h3>
+    <label class="mc-field">等級名稱<input id="mt-f-name" value="${escapeHtml(t.name || '')}"></label>
+    <div class="mc-field-row">
+      <label class="mc-field">升級門檻(半年內累積消費)<input id="mt-f-threshold" type="number" value="${t.threshold ?? 0}" ${isLocked ? 'disabled' : ''}></label>
+      <label class="mc-field">續等門檻<input id="mt-f-cont" type="number" placeholder="留空=無續等保護" value="${t.continuationThreshold ?? ''}" ${isLocked ? 'disabled' : ''}></label>
+      <label class="mc-field">點數倍率<input id="mt-f-mult" type="number" value="${t.multiplier ?? 1}"></label>
+    </div>
+    ${isLocked ? '<p style="font-size:0.75rem;color:var(--muted);">這是新會員註冊的預設等級，門檻鎖定為$0，只能改名稱。</p>' : ''}
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="saveMtTier()">儲存</button>
+      ${!isNew && !isLocked ? '<button type="button" class="mc-delete-btn" onclick="deleteMtTier()">刪除等級</button>' : ''}
+    </div>
+  `;
+}
+
+function saveMtTier() {
+  const name = document.getElementById('mt-f-name').value.trim();
+  if (!name) { alert('請輸入等級名稱'); return; }
+  if (!confirm('此修改會立即套用到所有會員，確定要儲存嗎？')) return;
+  const isNew = mtCurrentName === 'NEW';
+  const payload = {
+    originalName: isNew ? undefined : mtCurrentName,
+    name: name,
+    threshold: document.getElementById('mt-f-threshold').value,
+    continuationThreshold: document.getElementById('mt-f-cont').value,
+    multiplier: document.getElementById('mt-f-mult').value
+  };
+  apiPost({ action: 'upsertMemberTier', tier: payload }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    mtCurrentName = name;
+    return loadMemberTiers();
+  }).catch(err => alert('儲存失敗：' + err.message));
+}
+
+function deleteMtTier() {
+  if (!confirm('確定要刪除「' + mtCurrentName + '」這個等級嗎？此動作無法復原。')) return;
+  apiPost({ action: 'deleteMemberTier', name: mtCurrentName }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
+    mtCurrentName = null;
+    return loadMemberTiers();
   }).catch(err => alert('刪除失敗：' + err.message));
 }
 </script>
