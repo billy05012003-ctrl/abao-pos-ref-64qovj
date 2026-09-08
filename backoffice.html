@@ -32,7 +32,10 @@
   .mc-col { flex:1; min-width:180px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px; max-height:480px; overflow-y:auto; }
   .mc-col h4 { margin:0 0 8px; font-size:0.85rem; color:var(--muted); }
   .mc-col-wide { flex:2; min-width:260px; max-height:none; }
-  .mc-cat-btn { display:block; width:100%; text-align:left; border:none; background:none; padding:8px 6px; font-size:0.85rem; cursor:pointer; border-radius:6px; color:#222; }
+  .mc-cat-row { display:flex; align-items:stretch; gap:2px; background:#fff; }
+  .mc-cat-row.mc-cat-dragging { opacity:0.5; }
+  .mc-cat-handle { flex:0 0 auto; display:flex; align-items:center; padding:0 6px; color:var(--muted); cursor:grab; touch-action:none; user-select:none; font-size:0.95rem; }
+  .mc-cat-btn { display:block; flex:1; min-width:0; text-align:left; border:none; background:none; padding:8px 6px; font-size:0.85rem; cursor:pointer; border-radius:6px; color:#222; }
   .mc-cat-btn.active, .mc-item-row.active { background:#FFF0E8; color:var(--brand); font-weight:600; }
   .mc-cat-btn:hover, .mc-item-row:hover { background:#faf6f2; }
   .mc-item-row { display:flex; justify-content:space-between; gap:8px; padding:8px 6px; font-size:0.85rem; cursor:pointer; border-radius:6px; }
@@ -299,6 +302,7 @@ let mcCatalog = {};
 let mcOptionGroups = {};
 let mcItemGroups = {}; // "分類||名稱" -> [群組代碼,...]
 let mcItemComboGroups = {}; // "分類||名稱" -> [群組代碼,...]，只有選「套餐」才會多出來的客製化選項
+let mcCategoryOrder = []; // 分類顯示順序(可拖曳調整)，來源見後端「分類排序」表
 let mcCurrentCat = null;
 let mcCurrentItem = null;   // {category, name} ，name為null代表正在新增
 let mcCurrentGroupCode = null; // 'NEW'代表正在新增群組
@@ -310,6 +314,7 @@ function loadMenuCms() {
     mcOptionGroups = data.optionGroups;
     mcItemGroups = data.itemGroups;
     mcItemComboGroups = data.itemComboGroups || {};
+    mcCategoryOrder = data.categoryOrder || Object.keys(data.catalog);
     renderMcCategories();
     renderMcItems();
     renderMcItemEditor();
@@ -325,14 +330,72 @@ function loadMenuCms() {
 function renderMcCategories() {
   const el = document.getElementById('mc-categories');
   el.innerHTML = '';
-  Object.keys(mcCatalog).forEach(cat => {
+  mcCategoryOrder.filter(cat => mcCatalog.hasOwnProperty(cat)).forEach(cat => {
+    const row = document.createElement('div');
+    row.className = 'mc-cat-row';
+    row.dataset.cat = cat;
+
+    const handle = document.createElement('span');
+    handle.className = 'mc-cat-handle';
+    handle.textContent = '⠿';
+    handle.addEventListener('pointerdown', e => startCatDrag(e, row));
+    row.appendChild(handle);
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mc-cat-btn' + (cat === mcCurrentCat ? ' active' : '');
     btn.textContent = mcShortCatName(cat);
     btn.onclick = () => { mcCurrentCat = cat; mcCurrentItem = null; renderMcCategories(); renderMcItems(); renderMcItemEditor(); };
-    el.appendChild(btn);
+    row.appendChild(btn);
+
+    el.appendChild(row);
   });
+}
+
+// 分類拖曳排序（2026-09-08新增，老闆定案用拖曳而非上下箭頭）：抓住左側「⠿」把手才能拖，
+// 避免跟點選分類的click事件互相干擾。拖曳中直接搬動DOM節點做即時視覺回饋，放開時把目前DOM順序
+// 存回mcCategoryOrder並整批送後端；送失敗就跳alert還原成拖曳前的順序，比照這份系統其他地方
+// 「樂觀更新+失敗還原」的既有規則，不讓老闆以為存到了實際上沒存到
+function startCatDrag(e, row) {
+  e.preventDefault();
+  const container = document.getElementById('mc-categories');
+  const beforeOrder = mcCategoryOrder.slice();
+  row.classList.add('mc-cat-dragging');
+  const pointerId = e.pointerId;
+  // setPointerCapture偶爾會丟例外(例如瀏覽器認定這個pointerId當下不是「活躍」狀態)，
+  // 沒有pointer capture只是拖曳中手指/滑鼠移出這顆按鈕範圍時比較容易失焦，不是拖曳功能本身失效，
+  // 所以失敗不能讓整個拖曳直接中斷(不then就不會註冊下面的move/up監聽器，拖了也沒反應)
+  try { row.setPointerCapture(pointerId); } catch (err) {}
+
+  function onMove(ev) {
+    const siblings = Array.from(container.querySelectorAll('.mc-cat-row')).filter(el => el !== row);
+    let target = null;
+    for (const sib of siblings) {
+      const rect = sib.getBoundingClientRect();
+      if (ev.clientY < rect.top + rect.height / 2) { target = sib; break; }
+    }
+    if (target) container.insertBefore(row, target);
+    else container.appendChild(row);
+  }
+
+  function onUp() {
+    row.classList.remove('mc-cat-dragging');
+    try { row.releasePointerCapture(pointerId); } catch (err) {}
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    const newOrder = Array.from(container.querySelectorAll('.mc-cat-row')).map(el => el.dataset.cat);
+    mcCategoryOrder = newOrder;
+    apiPost({ action: 'reorderMenuCategories', order: newOrder }).then(data => {
+      if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    }).catch(err => {
+      alert('分類順序儲存失敗，已還原：' + err.message);
+      mcCategoryOrder = beforeOrder;
+      renderMcCategories();
+    });
+  }
+
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
 }
 
 function renderMcItems() {
