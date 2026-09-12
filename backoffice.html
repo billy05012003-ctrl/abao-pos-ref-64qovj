@@ -69,10 +69,10 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
       <div style="font-size:40px;margin-bottom:12px">⏳</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">「POS後台」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">「美寶美食館POS後台」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
     </div>
   </div>`;
-  document.title='已過期 - POS後台';
+  document.title='已過期 - 美寶美食館POS後台';
   throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
 }
 // 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
@@ -85,8 +85,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館POS後台</div>
-      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（POS後台）</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">POS後台</div>
+      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（美寶美食館POS後台）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
       <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
@@ -127,6 +127,25 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   <div id="availability-list"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-menucms" class="view" style="display:none;">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+    <label style="font-size:0.8rem;color:var(--muted);">目前編輯：</label>
+    <select id="mc-store-select" onchange="mcSwitchStore(this.value)"></select>
+  </div>
+  <p style="font-size:0.8rem;color:var(--muted);">
+    這裡改的是<b>草稿</b>版本，不會馬上讓顧客/POS看到——改完要按「發布到正式版」才會真的生效。
+    品牌範本則是用來推送給分店的來源，本身不會直接被顧客看到。
+  </p>
+  <div id="mc-publish-row" style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
+    <button type="button" id="mc-publish-btn" class="mc-save-btn" onclick="publishMcStore()">發布到正式版</button>
+  </div>
+  <div id="mc-sync-row" style="display:none;flex-direction:column;gap:8px;margin-bottom:16px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+    <div style="font-size:0.82rem;font-weight:600;">同步到分店</div>
+    <div id="mc-sync-store-list" style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.85rem;"></div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(false)">同步（只到草稿）</button>
+      <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(true)">同步且發布</button>
+    </div>
+  </div>
   <p style="font-size:0.8rem;color:var(--muted);">
     改品項名稱/價格、新增/刪除品項、調整品項要用哪些客製化選項都在這裡。改完立刻生效，線上點餐頁/POS功能下次讀取菜單就會拿到最新版本。
   </p>
@@ -188,6 +207,20 @@ function apiPost(payload) {
   return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) }).then(r => r.json());
 }
 
+// 2026-09-12品牌菜單多店架構：「菜單管理」頁籤現在可以切換編輯對象——自己的門市(meibao)草稿，
+// 或品牌範本(__brand__)。後台一律只寫draft層，要上線一律走「發布」按鈕，不會直接改live。
+// 之後複製這份檔案給其他分店用時，把預設值('meibao')換成該店代號即可
+let MC_STORE_ID = 'meibao';
+const MC_STATUS = 'draft';
+// 目前僅美寶正式運作，其餘三店代號先保留欄位，等分店真的建立後再補上正確代號
+const MC_STORE_OPTIONS = [
+  { id: 'meibao', label: '美寶美食館（自己的門市）' },
+  { id: '__brand__', label: '品牌範本（推送到分店用）' }
+];
+const MC_SYNC_TARGET_STORES = [
+  { id: 'meibao', label: '美寶美食館' }
+];
+
 // 品項清單跟雲端平板/POS功能共用同一份(手動同步，來源見05_腳本/build_backoffice.py)
 const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美1 花醬 牛肉培根 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美2 蜂蜜芥末 德式燻腸 捲餅"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美3 日式白醬 酥炸魚排 蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美4 雙層澳洲牛肉 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美5 雙層豬肉 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美6 清爽薯泥培根 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美7 泰式風味 鮮魚 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美8 日式咖哩 豬排 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美9 香濃雞排 起司法國土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美10 美味豬排 起司蛋總匯土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美11 千島醬 薯泥雞排 起司蛋土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美12 甜辣泰式 雞排 起司蛋捲餅"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"培根炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"香雞炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"火腿炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"烤肉炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"日式豬排炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"日式雞排炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"德式燻腸炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"泡菜燒肉炒麵"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定01 炒麵加蛋＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定02 美式湯餃＋烤肉蛋漢堡"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定03 炒麵加蛋＋雞塊"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定04 烤肉炒麵＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定06 玉米起司特酥蛋餅＋米花雞球"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定07 烤肉蛋漢堡＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定08 烤肉炒麵＋黃金香酥雞"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定09 炒麵加蛋＋黃金香酥雞"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定10 烤肉炒麵＋米花雞球"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定11 美式湯餃＋雞塊"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定12 玉米起司特酥蛋餅＋鍋貼"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜燒肉異國炒麵"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜豬排蛋堡"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜雞排捲"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜蛋餅"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"韓風玫瑰醬 鳳梨雞排堡"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"經典赤辣醬 鳳梨雞排堡"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"蜂蜜芥末醬 鳳梨雞排堡"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"玉米起司"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"鮪魚玉米"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"鮪魚洋蔥"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"培根玉米起司"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"惡魔雙色拔絲"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"火腿肉鬆蔬食"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"火腿起司 佐花醬小黃瓜"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"和洋豬排蔬食"},{"category":"BURGERS_漢堡","name":"玉米蛋"},{"category":"BURGERS_漢堡","name":"肉鬆蛋"},{"category":"BURGERS_漢堡","name":"豬肉蛋 (漢堡肉)"},{"category":"BURGERS_漢堡","name":"烤肉蛋 (里肌肉)"},{"category":"BURGERS_漢堡","name":"香雞蛋"},{"category":"BURGERS_漢堡","name":"牛肉蛋"},{"category":"BURGERS_漢堡","name":"總匯蛋 (里肌肉)"},{"category":"BURGERS_漢堡","name":"日式雞排蛋"},{"category":"BURGERS_漢堡","name":"日式豬排蛋"},{"category":"BURGERS_漢堡","name":"日式花枝排蛋"},{"category":"BURGERS_漢堡","name":"日式蝦排蛋"},{"category":"BURGERS_漢堡","name":"雞腿蛋 (原/辣)"},{"category":"TOAST_土司","name":"煎蛋"},{"category":"TOAST_土司","name":"玉米蛋"},{"category":"TOAST_土司","name":"肉鬆蛋"},{"category":"TOAST_土司","name":"起司蛋"},{"category":"TOAST_土司","name":"火腿蛋"},{"category":"TOAST_土司","name":"培根蛋"},{"category":"TOAST_土司","name":"鮪魚蛋"},{"category":"TOAST_土司","name":"烤肉蛋 (里肌肉)"},{"category":"TOAST_土司","name":"香雞蛋"},{"category":"TOAST_土司","name":"總匯蛋 (漢堡肉)"},{"category":"TOAST_土司","name":"雞腿蛋 (原/辣)"},{"category":"JAN SERIES_果醬磚研系列","name":"草莓"},{"category":"JAN SERIES_果醬磚研系列","name":"藍莓"},{"category":"JAN SERIES_果醬磚研系列","name":"奶酥"},{"category":"JAN SERIES_果醬磚研系列","name":"花生"},{"category":"JAN SERIES_果醬磚研系列","name":"奶油"},{"category":"JAN SERIES_果醬磚研系列","name":"巧克力"},{"category":"JAN SERIES_果醬磚研系列","name":"狠蒜"},{"category":"THICKCUT TOAST_厚片","name":"起司奶油"},{"category":"THICKCUT TOAST_厚片","name":"鮪魚洋蔥"},{"category":"THICKCUT TOAST_厚片","name":"燻雞起司"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"日式蔬食沙拉"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"日式咖哩"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"冰州魚排"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"大洋鮮魚"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"烤肉穀堡"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"孜然醬雞排"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"孜然醬豬排"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"火腿起司"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"蕃茄豬肉"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"苜蓿芽起司"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"陽光香雞"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"蔬食烤肉"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"日式燻雞"},{"category":"BURRITO_蔬食捲餅","name":"香雞蕃茄"},{"category":"BURRITO_蔬食捲餅","name":"黃金烤肉"},{"category":"BURRITO_蔬食捲餅","name":"日式雞排"},{"category":"BURRITO_蔬食捲餅","name":"海味花枝"},{"category":"BURRITO_蔬食捲餅","name":"鮮味蝦排"},{"category":"BURRITO_蔬食捲餅","name":"美式雞腿 (原/辣)"},{"category":"PUFF PASTRY_起酥堡","name":"草莓起酥"},{"category":"PUFF PASTRY_起酥堡","name":"洋芋蔬食"},{"category":"PUFF PASTRY_起酥堡","name":"苜蓿芽玉米"},{"category":"PUFF PASTRY_起酥堡","name":"蕃茄蔬食"},{"category":"PUFF PASTRY_起酥堡","name":"蔬食烤肉"},{"category":"PAIN PERDU_法國土司 ","name":"日式培根"},{"category":"PAIN PERDU_法國土司 ","name":"深海鮪魚"},{"category":"PAIN PERDU_法國土司 ","name":"黃金烤肉"},{"category":"CHINESE OMELET_招牌蛋餅","name":"原味"},{"category":"CHINESE OMELET_招牌蛋餅","name":"肉鬆"},{"category":"CHINESE OMELET_招牌蛋餅","name":"玉米"},{"category":"CHINESE OMELET_招牌蛋餅","name":"起司"},{"category":"CHINESE OMELET_招牌蛋餅","name":"蔬食"},{"category":"CHINESE OMELET_招牌蛋餅","name":"洋蔥"},{"category":"CHINESE OMELET_招牌蛋餅","name":"火腿"},{"category":"CHINESE OMELET_招牌蛋餅","name":"培根"},{"category":"CHINESE OMELET_招牌蛋餅","name":"熱狗"},{"category":"CHINESE OMELET_招牌蛋餅","name":"鮪魚"},{"category":"CHINESE OMELET_招牌蛋餅","name":"烤肉"},{"category":"SALAD VEGETABLE_田園蔬果","name":"馬鈴薯土司"},{"category":"SALAD VEGETABLE_田園蔬果","name":"南瓜土司"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥蔬食鮪魚"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥苜蓿芽火腿"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥蔬菜沙拉"},{"category":"SALAD VEGETABLE_田園蔬果","name":"田園蔬菜捲"},{"category":"CHINESE SNACKS_中式茶食","name":"荷包蛋"},{"category":"CHINESE SNACKS_中式茶食","name":"熱狗 (4條)"},{"category":"CHINESE SNACKS_中式茶食","name":"玉米濃湯"},{"category":"CHINESE SNACKS_中式茶食","name":"炒麵"},{"category":"CHINESE SNACKS_中式茶食","name":"鍋貼(5個)"},{"category":"CHINESE SNACKS_中式茶食","name":"雞塊 (4個)"},{"category":"CHINESE SNACKS_中式茶食","name":"蘿蔔糕 (2片)"},{"category":"CHINESE SNACKS_中式茶食","name":"薯餅 (4片)"},{"category":"CHINESE SNACKS_中式茶食","name":"米花雞球 (8個)"},{"category":"CHINESE SNACKS_中式茶食","name":"野菜豚炸餃(8個)"},{"category":"CHINESE SNACKS_中式茶食","name":"脆薯"},{"category":"CHINESE SNACKS_中式茶食","name":"美式湯麵"},{"category":"CHINESE SNACKS_中式茶食","name":"義響鐵板麵"},{"category":"CHINESE SNACKS_中式茶食","name":"黃金香酥雞"},{"category":"CHINESE SNACKS_中式茶食","name":"二折雞翅(3入/7入)"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"玄米檸檬綠茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨美人茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"檸檬黃金烏龍"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨美人鮮奶茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨烏龍鮮奶茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨玄米鮮奶綠"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"檸檬紅茶"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"檸檬綠茶"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"蜜漬鳳梨紅茶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖豆漿"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖薏仁"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖奶茶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖紅茶牛奶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖牛奶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖檸檬飲"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀豆漿"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀紅茶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀紅茶豆漿"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀奶茶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀綠奶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀薏仁漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"研磨豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"紅茶豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"胚芽豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"薏仁豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"抹茶豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"養生薏仁漿"},{"category":"PURE TEA_純味茶","name":"阿薩姆紅茶"},{"category":"PURE TEA_純味茶","name":"茉莉綠茶"},{"category":"PURE TEA_純味茶","name":"高山青茶"},{"category":"PURE TEA_純味茶","name":"東方美人 (現沏)"},{"category":"PURE TEA_純味茶","name":"黃金烏龍 (現沏)"},{"category":"PURE TEA_純味茶","name":"阿里山 (現沏)"},{"category":"PURE TEA_純味茶","name":"玄米玉露 (現沏)"},{"category":"PURE TEA_純味茶","name":"四季綠茶 (現沏)"},{"category":"MILK TEA_奶茶系列","name":"阿薩姆奶茶"},{"category":"MILK TEA_奶茶系列","name":"茉香奶綠"},{"category":"MILK TEA_奶茶系列","name":"高山青奶"},{"category":"MILK TEA_奶茶系列","name":"胚芽奶茶"},{"category":"MILK TEA_奶茶系列","name":"茶珠青奶"},{"category":"MILK TEA_奶茶系列","name":"茶珠綠奶"},{"category":"MILK TEA_奶茶系列","name":"茶珠奶茶"},{"category":"TEA LATTES_茶拿鐵","name":"東方拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"烏龍拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"阿里山拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"四季拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"玄米拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"紅茶拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"綠茶拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"青茶拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"豆奶拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"特調咖啡"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"義式咖啡"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"小農拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"卡布奇諾"},{"category":"加購品項/配料選擇","name":"加起司"},{"category":"加購品項/配料選擇","name":"加二片起司"},{"category":"加購品項/配料選擇","name":"加蛋"},{"category":"加購品項/配料選擇","name":"加火腿"},{"category":"加購品項/配料選擇","name":"加培根"},{"category":"加購品項/配料選擇","name":"加麵"},{"category":"加購品項/配料選擇","name":"薯餅(6入)"},{"category":"加購品項/配料選擇","name":"雞塊(6入)"},{"category":"加購品項/配料選擇","name":"二折雞翅(3入)"},{"category":"加購品項/配料選擇","name":"茶珠"},{"category":"加購品項/配料選擇","name":"多穀"},{"category":"加購品項/配料選擇","name":"抹茶"},{"category":"加購品項/配料選擇","name":"胚芽"},{"category":"加購品項/配料選擇","name":"美式狂想 x 雙人脆薯"},{"category":"加購品項/配料選擇","name":"美式狂想 x 九塊雞塊"},{"category":"加購品項/配料選擇","name":"美式狂想 x 十粒鍋貼"},{"category":"加購品項/配料選擇","name":"加一份Espresso"},{"category":"加購品項/配料選擇","name":"加二份Espresso"},{"category":"加購品項/配料選擇","name":"多二匙奶"},{"category":"加購品項/配料選擇","name":"野菜豚炸餃"},{"category":"加購品項/配料選擇","name":"米花雞球"}];
 
@@ -202,6 +235,12 @@ function switchBackofficeTab(name) {
   document.getElementById('view-membertiers').style.display = name === 'membertiers' ? 'block' : 'none';
   if (name === 'menucms' && !mcLoaded) {
     mcLoaded = true;
+    document.getElementById('mc-store-select').innerHTML = MC_STORE_OPTIONS.map(o =>
+      `<option value="${escapeHtml(o.id)}" ${o.id === MC_STORE_ID ? 'selected' : ''}>${escapeHtml(o.label)}</option>`
+    ).join('');
+    document.getElementById('mc-sync-store-list').innerHTML = MC_SYNC_TARGET_STORES.map(s =>
+      `<label><input type="checkbox" class="mc-sync-store-cb" value="${escapeHtml(s.id)}"> ${escapeHtml(s.label)}</label>`
+    ).join('');
     loadMenuCms();
   }
   if (name === 'membertiers' && !mtLoaded) {
@@ -337,7 +376,10 @@ let mcCurrentItem = null;   // {category, name} ，name為null代表正在新增
 let mcCurrentGroupCode = null; // 'NEW'代表正在新增群組
 
 function loadMenuCms() {
-  return apiGet({ action: 'menuCmsData' }).then(data => {
+  mcCurrentCat = null;
+  mcCurrentItem = null;
+  mcCurrentGroupCode = null;
+  return apiGet({ action: 'menuCmsData', storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
     mcCatalog = data.catalog;
     mcOptionGroups = data.optionGroups;
@@ -353,6 +395,38 @@ function loadMenuCms() {
     document.getElementById('mc-categories').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
     console.warn('菜單管理資料讀取失敗', err);
   });
+}
+
+// 切換編輯對象(自己的門市 / 品牌範本)，重新載入這份資料
+function mcSwitchStore(storeId) {
+  MC_STORE_ID = storeId;
+  document.getElementById('mc-publish-row').style.display = storeId === '__brand__' ? 'none' : 'flex';
+  document.getElementById('mc-sync-row').style.display = storeId === '__brand__' ? 'flex' : 'none';
+  loadMenuCms();
+}
+
+// 「發布」：把目前編輯的門市草稿(draft)整批覆蓋成正式上線版本(live)，顧客/POS下次讀取就會拿到
+function publishMcStore() {
+  if (MC_STORE_ID === '__brand__') { alert('品牌範本本身不能發布，請用下方「同步到分店」'); return; }
+  if (!confirm('確定要把「' + MC_STORE_ID + '」的草稿發布成正式上線版本嗎？發布後顧客/POS會立刻看到最新菜單。')) return;
+  const btn = document.getElementById('mc-publish-btn');
+  btn.disabled = true; btn.textContent = '發布中…';
+  apiPost({ action: 'publishStoreMenu', storeId: MC_STORE_ID }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
+    alert('已發布成正式上線版本');
+  }).catch(err => alert('發布失敗：' + err.message))
+    .finally(() => { btn.disabled = false; btn.textContent = '發布到正式版'; });
+}
+
+// 「同步（且發布）」：品牌端主動把範本推送到勾選的分店草稿，可選是否連同發布成該店的正式版本
+function syncBrandMenuToStores(alsoPublish) {
+  const checked = Array.from(document.querySelectorAll('.mc-sync-store-cb:checked')).map(cb => cb.value);
+  if (!checked.length) { alert('請至少勾選一間分店'); return; }
+  if (!confirm('確定要把品牌範本同步到：' + checked.join('、') + (alsoPublish ? '（同步且發布，會立刻讓顧客/POS看到）' : '（只同步到草稿，不影響顧客/POS目前看到的版本）') + '？')) return;
+  apiPost({ action: 'syncBrandMenuToStores', storeIds: checked, alsoPublish: !!alsoPublish }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '同步失敗');
+    alert('同步完成' + (alsoPublish ? '（已一併發布）' : '（已寫入分店草稿，還沒發布）'));
+  }).catch(err => alert('同步失敗：' + err.message));
 }
 
 // ---- 品項 ----
@@ -414,7 +488,7 @@ function startCatDrag(e, row) {
     document.removeEventListener('pointerup', onUp);
     const newOrder = Array.from(container.querySelectorAll('.mc-cat-row')).map(el => el.dataset.cat);
     mcCategoryOrder = newOrder;
-    apiPost({ action: 'reorderMenuCategories', order: newOrder }).then(data => {
+    apiPost({ action: 'reorderMenuCategories', order: newOrder, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
       if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     }).catch(err => {
       alert('分類順序儲存失敗，已還原：' + err.message);
@@ -513,7 +587,7 @@ function onMcPhotoFileSelected() {
     const b64 = reader.result.split(',')[1]; // data:image/xxx;base64,XXXX 只取逗號後面的部分
     apiPost({
       action: 'uploadItemPhoto',
-      photo: { category: mcCurrentItem.category, name: mcCurrentItem.name, imageBase64: b64, mimeType: file.type || 'image/jpeg' }
+      photo: { category: mcCurrentItem.category, name: mcCurrentItem.name, imageBase64: b64, mimeType: file.type || 'image/jpeg', storeId: MC_STORE_ID, status: MC_STATUS }
     }).then(data => {
       if (data.status !== 'ok') throw new Error(data.message || '上傳失敗');
       return loadMenuCms();
@@ -528,7 +602,7 @@ function onMcPhotoFileSelected() {
 
 function deleteMcPhoto() {
   if (!confirm('確定要刪除這張照片嗎？（只會移除品項的照片顯示，不會刪除雲端硬碟裡的檔案本身）')) return;
-  apiPost({ action: 'deleteItemPhoto', category: mcCurrentItem.category, name: mcCurrentItem.name }).then(data => {
+  apiPost({ action: 'deleteItemPhoto', category: mcCurrentItem.category, name: mcCurrentItem.name, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     return loadMenuCms();
   }).catch(err => alert('刪除失敗：' + err.message));
@@ -551,7 +625,9 @@ function saveMcItem() {
     priceL: mcFieldValue('mc-f-pricel'),
     priceSet: mcFieldValue('mc-f-priceset'),
     priceAlt: mcFieldValue('mc-f-pricealt'),
-    note: mcFieldValue('mc-f-note')
+    note: mcFieldValue('mc-f-note'),
+    storeId: MC_STORE_ID,
+    status: MC_STATUS
   };
   apiPost({ action: 'upsertMenuItem', item: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
@@ -562,7 +638,7 @@ function saveMcItem() {
 
 function deleteMcItem() {
   if (!confirm('確定要刪除「' + mcCurrentItem.name + '」嗎？此動作無法復原。')) return;
-  apiPost({ action: 'deleteMenuItem', category: mcCurrentItem.category, name: mcCurrentItem.name }).then(data => {
+  apiPost({ action: 'deleteMenuItem', category: mcCurrentItem.category, name: mcCurrentItem.name, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     mcCurrentItem = null;
     return loadMenuCms();
@@ -662,7 +738,7 @@ function saveMcComboGroupLinks(codes) {
   const previous = (mcItemComboGroups[key] || []).slice();
   mcItemComboGroups[key] = codes; // 樂觀更新
   renderMcItemEditor();
-  apiPost({ action: 'setItemComboGroupLinks', category: mcCurrentItem.category, name: mcCurrentItem.name, groupCodes: codes })
+  apiPost({ action: 'setItemComboGroupLinks', category: mcCurrentItem.category, name: mcCurrentItem.name, groupCodes: codes, storeId: MC_STORE_ID, status: MC_STATUS })
     .then(data => { if (data.status !== 'ok') throw new Error(data.message || '同步失敗'); })
     .catch(err => {
       mcItemComboGroups[key] = previous;
@@ -677,7 +753,7 @@ function copyMcComboGroupTags() {
   const idx = sel.value.indexOf('||');
   const srcCategory = sel.value.slice(0, idx);
   const srcName = sel.value.slice(idx + 2);
-  apiPost({ action: 'copyItemComboGroupLinks', srcCategory, srcName, category: mcCurrentItem.category, name: mcCurrentItem.name })
+  apiPost({ action: 'copyItemComboGroupLinks', srcCategory, srcName, category: mcCurrentItem.category, name: mcCurrentItem.name, storeId: MC_STORE_ID, status: MC_STATUS })
     .then(data => {
       if (data.status !== 'ok') throw new Error(data.message || '複製失敗');
       const key = mcCurrentItem.category + '||' + mcCurrentItem.name;
@@ -732,7 +808,7 @@ function saveMcGroupLinks(codes) {
   const previous = (mcItemGroups[key] || []).slice();
   mcItemGroups[key] = codes; // 樂觀更新，畫面先反映
   renderMcItemEditor();
-  apiPost({ action: 'setItemGroupLinks', category: mcCurrentItem.category, name: mcCurrentItem.name, groupCodes: codes })
+  apiPost({ action: 'setItemGroupLinks', category: mcCurrentItem.category, name: mcCurrentItem.name, groupCodes: codes, storeId: MC_STORE_ID, status: MC_STATUS })
     .then(data => { if (data.status !== 'ok') throw new Error(data.message || '同步失敗'); })
     .catch(err => {
       mcItemGroups[key] = previous;
@@ -747,7 +823,7 @@ function copyMcGroupTags() {
   const idx = sel.value.indexOf('||');
   const srcCategory = sel.value.slice(0, idx);
   const srcName = sel.value.slice(idx + 2);
-  apiPost({ action: 'copyItemGroupLinks', srcCategory, srcName, category: mcCurrentItem.category, name: mcCurrentItem.name })
+  apiPost({ action: 'copyItemGroupLinks', srcCategory, srcName, category: mcCurrentItem.category, name: mcCurrentItem.name, storeId: MC_STORE_ID, status: MC_STATUS })
     .then(data => {
       if (data.status !== 'ok') throw new Error(data.message || '複製失敗');
       const key = mcCurrentItem.category + '||' + mcCurrentItem.name;
@@ -835,7 +911,7 @@ function bulkAttachMcGroup() {
   if (!confirm(`確定要把「${groupLabel}」整批掛到「${catLabel}」底下所有品項嗎？`)) return;
   const statusEl = document.getElementById('mc-bulk-attach-status');
   statusEl.textContent = '套用中...';
-  apiPost({ action: 'bulkAttachGroupToCategory', category: sel.value, groupCode: mcCurrentGroupCode }).then(data => {
+  apiPost({ action: 'bulkAttachGroupToCategory', category: sel.value, groupCode: mcCurrentGroupCode, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '套用失敗');
     // loadMenuCms()會重繪整個群組編輯畫面(包含這個狀態列)，所以結果用alert顯示，不能只寫statusEl文字，
     // 不然還沒看到就被重繪蓋掉了
@@ -924,7 +1000,9 @@ function toggleMcOptionOnlineVisible(checkbox) {
     price: priceEl ? priceEl.value : '',
     priceM: (row.querySelector('.mc-v-pricem') || {}).value || '',
     priceL: (row.querySelector('.mc-v-pricel') || {}).value || '',
-    onlineVisible: checkbox.checked
+    onlineVisible: checkbox.checked,
+    storeId: MC_STORE_ID,
+    status: MC_STATUS
   };
   const wasChecked = !checkbox.checked;
   apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
@@ -958,7 +1036,9 @@ function saveMcOptionValueRow(btn) {
     price: priceEl ? priceEl.value : '',
     priceM: (row.querySelector('.mc-v-pricem') || {}).value || '',
     priceL: (row.querySelector('.mc-v-pricel') || {}).value || '',
-    onlineVisible: row.querySelector('.mc-v-online').checked
+    onlineVisible: row.querySelector('.mc-v-online').checked,
+    storeId: MC_STORE_ID,
+    status: MC_STATUS
   };
   if (mcHasNegativePrice_(payload)) { alert('加價金額不能是負數'); return; }
   apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
@@ -971,7 +1051,7 @@ function deleteMcOptionValueRow(btn) {
   const row = btn.closest('.mc-value-row');
   const name = row.querySelector('.mc-v-name').getAttribute('data-orig');
   if (!confirm('確定要刪除選項「' + name + '」嗎？')) return;
-  apiPost({ action: 'deleteOptionValue', groupCode: mcCurrentGroupCode, name: name }).then(data => {
+  apiPost({ action: 'deleteOptionValue', groupCode: mcCurrentGroupCode, name: name, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     return loadMenuCms();
   }).catch(err => alert('刪除失敗：' + err.message));
@@ -986,7 +1066,9 @@ function addMcOptionValue() {
     price: mcFieldValue('mc-newv-price'),
     priceM: mcFieldValue('mc-newv-pricem'),
     priceL: mcFieldValue('mc-newv-pricel'),
-    onlineVisible: document.getElementById('mc-newv-online').checked
+    onlineVisible: document.getElementById('mc-newv-online').checked,
+    storeId: MC_STORE_ID,
+    status: MC_STATUS
   };
   if (mcHasNegativePrice_(payload)) { alert('加價金額不能是負數'); return; }
   apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
@@ -1003,7 +1085,9 @@ function saveMcGroup() {
     label: label,
     type: document.getElementById('mc-g-type').value,
     required: document.getElementById('mc-g-required').checked,
-    onlineVisible: document.getElementById('mc-g-online').checked
+    onlineVisible: document.getElementById('mc-g-online').checked,
+    storeId: MC_STORE_ID,
+    status: MC_STATUS
   };
   apiPost({ action: 'upsertOptionGroup', group: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
@@ -1014,7 +1098,7 @@ function saveMcGroup() {
 
 function deleteMcGroup() {
   if (!confirm('確定要刪除整個群組嗎？所有品項對這個群組的掛載也會一併移除，此動作無法復原。')) return;
-  apiPost({ action: 'deleteOptionGroup', code: mcCurrentGroupCode }).then(data => {
+  apiPost({ action: 'deleteOptionGroup', code: mcCurrentGroupCode, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     mcCurrentGroupCode = null;
     return loadMenuCms();
