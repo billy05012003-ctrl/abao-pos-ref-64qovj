@@ -168,7 +168,9 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <button class="sub-item" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
     <button class="sub-item" id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
     <button class="sub-item" id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
-    <button class="sub-item" id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')">飲品升級</button>
+    <!-- 飲品升級不在側欄單獨顯示，改成「優惠券」清單裡公關費下方的捷徑列進入(見renderPmList)，
+         這顆按鈕保留在DOM但隱藏，讓switchBackofficeTab()既有的active/顯示切換邏輯不用另外特判 -->
+    <button class="sub-item" id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')" style="display:none;">飲品升級</button>
   </div>
 </nav>
 <main class="main-content">
@@ -1543,8 +1545,8 @@ const PM_DRINK_UPGRADE_SHORTCUT_AFTER = '公關費';
 function renderPmList() {
   const el = document.getElementById('pm-list');
   if (!pmPromos.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何優惠券</div>'; return; }
-  const shortcutRow = `<div class="mc-item-row" style="color:var(--brand);font-weight:600;" onclick="switchMemberSubview('drinkupgrade')">
-    <span>飲品升級</span><span class="mc-item-price">按鈕・前往設定 →</span>
+  const shortcutRow = `<div class="mc-item-row" onclick="switchMemberSubview('drinkupgrade')">
+    <span>飲品升級</span><span class="mc-item-price">按鈕</span>
   </div>`;
   el.innerHTML = pmPromos.map(p => {
     const tags = [
