@@ -1568,10 +1568,12 @@ function openPosDrinkCustom(drinkName) {
 // 套餐內建飲品的升級(2026-09-13新增)：套餐飲料存在currentPosModal.comboDrinkName/comboDrinkPrice，
 // 不是獨立購物車列，所以用不到showDrinkUpgradePicker那套(那個是掃posCart的列)，這裡另外做一套
 // 針對「目前彈窗裡選的這杯套餐飲料」直接套用升級規則：換名稱、加價金額疊加在原本的comboDrinkPrice上
+// 2026-09-13再次改版：比對依據從「客人選的那杯飲料屬於哪個飲料分類」改成「這份套餐主餐本身的分類」
+// (currentPosModal.cat)，這樣後台可以設「點OO套餐，附贈飲料都能加$X換成YY」，不用管客人實際選哪杯飲料
 function renderComboDrinkUpgradeSection() {
   const el = document.getElementById('pos-drink-upgrade-section');
   if (!el || !currentPosModal || !currentPosModal.comboDrinkName) return;
-  const cat = DRINK_ITEM_CATEGORY[currentPosModal.comboDrinkName];
+  const cat = currentPosModal.cat;
   const rules = cat ? DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat) : [];
   if (!rules.length) { el.innerHTML = ''; return; }
   const size = currentPosModal.comboDrinkSize;

@@ -1960,7 +1960,10 @@ function renderDuEditor() {
     `;
     return;
   }
-  const catOptions = MC_DRINK_CATEGORIES.map(cat =>
+  // 2026-09-13再次改版：來源分類不再限定飲料分類，任何菜單分類都能當來源——
+  // 選飲料分類＝針對「客人直接點這杯飲料」升級；選餐點分類(例如某個套餐)＝針對「這個套餐內建的飲料」升級，
+  // 不管客人在該套餐裡實際選了哪一種飲料都適用同一條規則
+  const catOptions = Object.keys(mcCatalog).map(cat =>
     `<option value="${escapeHtml(cat)}" ${cat === r.sourceCategory ? 'selected' : ''}>${escapeHtml(mcShortCatName(cat))}</option>`
   ).join('');
   el.innerHTML = `
