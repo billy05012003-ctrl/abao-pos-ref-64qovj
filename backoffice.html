@@ -1536,18 +1536,26 @@ function loadPromos() {
   });
 }
 
+// 「飲品升級」規則設定實際上是獨立的資料表(來源分類→目標品項的多筆對照，不是單一名稱+固定效果的優惠券)，
+// 沒有真的併進pmPromos這份資料；老闆希望在畫面上跟POS功能「優惠券」分類的按鈕順序對齊(...公關費之後緊接著
+// 就是活動飲品升級)，所以在清單裡插入一個可點擊的捷徑列導到「飲品升級」子分頁，資料本身仍各自獨立管理
+const PM_DRINK_UPGRADE_SHORTCUT_AFTER = '公關費';
 function renderPmList() {
   const el = document.getElementById('pm-list');
   if (!pmPromos.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何優惠券</div>'; return; }
+  const shortcutRow = `<div class="mc-item-row" style="color:var(--brand);font-weight:600;" onclick="switchMemberSubview('drinkupgrade')">
+    <span>飲品升級</span><span class="mc-item-price">按鈕・前往設定 →</span>
+  </div>`;
   el.innerHTML = pmPromos.map(p => {
     const tags = [
       p.showAsButton ? '按鈕' : null,
       p.manualGrantable ? '可贈送' : null,
       p.status === '停用' ? '停用' : null
     ].filter(Boolean).join('・');
-    return `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
+    const row = `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
       <span>${escapeHtml(p.name)}</span><span class="mc-item-price">${escapeHtml(tags)}</span>
     </div>`;
+    return p.name === PM_DRINK_UPGRADE_SHORTCUT_AFTER ? row + shortcutRow : row;
   }).join('');
 }
 
@@ -1870,10 +1878,15 @@ let duCurrentKey = null; // 格式："來源分類||目標品項"，null=新增
 function duKey_(r) { return r.sourceCategory + '||' + r.targetItem; }
 
 // 飲品升級規則需要真實的分類/品項清單才能做下拉選單，借用菜單管理已有的mcCatalog，
-// 如果老闆還沒點過「菜單管理」分頁(mcCatalog是空的)，這裡順便補抓一次
+// 如果老闆還沒點過「菜單管理」分頁(mcCatalog是空的)，這裡順便補抓一次。
+// loadMenuCms()本身沒有重試機制，遇到Google那邊偶發的暫時性錯誤會整個失敗且mcCatalog維持空的，
+// 這裡多重試一次，避免下拉選單因為單次網路延遲就整個開天窗
 function ensureMcCatalogLoaded_() {
   if (Object.keys(mcCatalog).length > 0) return Promise.resolve();
-  return loadMenuCms();
+  return loadMenuCms().then(() => {
+    if (Object.keys(mcCatalog).length > 0) return;
+    return loadMenuCms(); // 第一次抓完還是空的，再試最後一次
+  });
 }
 
 function loadDrinkUpgradeRules() {
@@ -1914,6 +1927,16 @@ function renderDuEditor() {
   const isNew = duCurrentKey === null;
   const r = isNew ? {} : (duRules.find(x => duKey_(x) === duCurrentKey) || {});
   if (!isNew && !duRules.find(x => duKey_(x) === duCurrentKey)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增升級規則」</div>'; return; }
+  // 菜單目錄可能因為網路暫時性問題沒抓到(mcCatalog是空的)，這時目標品項下拉會是空的沒辦法選，
+  // 與其讓老闆看到一個看不出原因的空選單，不如直接講清楚並給重新載入的按鈕
+  if (Object.keys(mcCatalog).length === 0) {
+    el.innerHTML = `
+      <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增升級規則' : '編輯升級規則'}</h3>
+      <div class="empty-hint">菜單目錄暫時載入不到，無法列出目標品項選單(通常是網路或Google暫時性問題)。</div>
+      <button type="button" class="mc-save-btn" onclick="loadDrinkUpgradeRules()">重新載入</button>
+    `;
+    return;
+  }
   const catOptions = MC_DRINK_CATEGORIES.map(cat =>
     `<option value="${escapeHtml(cat)}" ${cat === r.sourceCategory ? 'selected' : ''}>${escapeHtml(mcShortCatName(cat))}</option>`
   ).join('');
