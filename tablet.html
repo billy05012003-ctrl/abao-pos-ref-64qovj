@@ -785,19 +785,25 @@ function pickUpgradeAmount_(rule, size) {
 }
 
 let pendingDrinkUpgradeOptions = [];
+// 2026-09-13再次改版：套餐已經加入購物車後(line.comboDrinkName有值)，改用主餐自己的分類(line.cat)
+// 比對規則，不用管客人選的哪杯飲料；獨立飲品列維持原本用DRINK_ITEM_CATEGORY查自己分類的邏輯
 function showDrinkUpgradePicker() {
   if (posCart.length === 0) { alert('請先選購品項'); return; }
   const options = [];
   posCart.forEach(line => {
+    if (line.comboDrinkName) {
+      DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === line.cat).forEach(rule => options.push({ line, rule, isCombo: true }));
+      return;
+    }
     const cat = DRINK_ITEM_CATEGORY[line.baseName];
     if (!cat) return;
-    DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat).forEach(rule => options.push({ line, rule }));
+    DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat).forEach(rule => options.push({ line, rule, isCombo: false }));
   });
   if (!options.length) { alert('目前購物車沒有可以升級的飲品(或後台尚未設定升級規則)'); return; }
   pendingDrinkUpgradeOptions = options;
   document.getElementById('pos-drinkupgrade-picker-list').innerHTML = options.map((o, idx) => `
     <button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 10px;" onclick="applyDrinkUpgradeOption_(${idx})">
-      ${o.line.name}${o.line.size ? ' ('+o.line.size+')' : ''}　→　${o.rule.targetItem}　+$${pickUpgradeAmount_(o.rule, o.line.size)}
+      ${o.isCombo ? o.line.comboDrinkName : o.line.name}${(o.isCombo ? o.line.comboDrinkSize : o.line.size) ? ' ('+(o.isCombo ? o.line.comboDrinkSize : o.line.size)+')' : ''}　→　${o.rule.targetItem}　+$${pickUpgradeAmount_(o.rule, o.isCombo ? o.line.comboDrinkSize : o.line.size)}
     </button>
   `).join('');
   document.getElementById('pos-drinkupgrade-picker-overlay').classList.add('open');
@@ -808,6 +814,17 @@ function applyDrinkUpgradeOption_(idx) {
   if (!o) return;
   const line = posCart.find(c => c.lineKey === o.line.lineKey);
   if (!line) return;
+  if (o.isCombo) {
+    // 套餐內建飲料：只把飲料名稱那段文字換掉、加價疊加上去，其他主餐/配料客製化文字不動
+    const amount = pickUpgradeAmount_(o.rule, line.comboDrinkSize);
+    line.name = line.name.replace(line.comboDrinkName, o.rule.targetItem);
+    line.price += amount;
+    line.basePrice = line.price;
+    line.comboDrinkName = o.rule.targetItem;
+    closeDrinkUpgradePicker();
+    renderPosCart();
+    return;
+  }
   const amount = pickUpgradeAmount_(o.rule, line.size);
   const base = line.basePrice != null ? line.basePrice : line.price;
   line.name = o.rule.targetItem;
@@ -1747,7 +1764,9 @@ function confirmAddToPosCart() {
   if (existing) existing.qty += currentPosModal.qty;
   // baseName/basePrice供「第二件六折」等折抵套用：baseName不含客製化(用來跨列合併同品項數量判斷資格)，
   // basePrice是客人選單點或升級套餐當下的整組價(客製化加價之前)，折抵只算這個金額，加購一律不打折
-  else posCart.push({lineKey, name: displayName, baseName: currentPosModal.item.name, size: currentPosModal.size, price: unit, basePrice: currentPosModal.basePrice, qty: currentPosModal.qty, note});
+  // cat/comboDrinkName/comboDrinkSize(2026-09-13新增)：讓套餐已經加入購物車後，「活動飲品升級」
+  // 頂部按鈕也能回頭找到裡面的飲料——比對依據是主餐自己的分類(cat)，不是飲料本身
+  else posCart.push({lineKey, name: displayName, baseName: currentPosModal.item.name, size: currentPosModal.size, price: unit, basePrice: currentPosModal.basePrice, qty: currentPosModal.qty, note, cat: currentPosModal.cat, comboDrinkName: currentPosModal.comboDrinkName, comboDrinkSize: currentPosModal.comboDrinkSize});
   closePosItemModal();
   renderPosCart();
 }
