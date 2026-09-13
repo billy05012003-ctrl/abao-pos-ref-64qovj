@@ -147,8 +147,9 @@
   .cart-line { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .cart-line .qty-btn { border: 1px solid var(--border); background: #fff; width: 26px; height: 26px; border-radius: 6px; font-size: 1rem; cursor: pointer; }
   .cart-total { display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold; padding: 12px 0; }
-  form#checkout-form label { display: block; font-size: 0.85rem; margin: 10px 0 4px; color: var(--muted); }
-  form#checkout-form input, form#checkout-form select, form#checkout-form textarea {
+  form#checkout-form label, #cart-view label { display: block; font-size: 0.85rem; margin: 10px 0 4px; color: var(--muted); }
+  form#checkout-form input, form#checkout-form select, form#checkout-form textarea,
+  #cart-view input, #cart-view select, #cart-view textarea {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem;
   }
   .btn-primary {
@@ -308,6 +309,13 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <h2>我的訂單</h2>
       <div id="cart-lines"></div>
       <div class="cart-total"><span>總計</span><span id="cart-total">$0</span></div>
+      <div style="margin:10px 0;padding-top:10px;border-top:1px dashed var(--border);">
+        <label>會員手機（選填，用來查詢可折抵的兌換券）</label>
+        <input type="tel" id="cust-phone">
+        <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="loadCheckoutVouchers()">查詢可用兌換券</button>
+        <div id="checkout-voucher-list" style="margin-top:8px;"></div>
+        <div id="checkout-total-preview" style="font-size:0.85rem;color:var(--brand);margin-top:6px;"></div>
+      </div>
       <button class="btn-primary" id="go-checkout" onclick="showCheckout()">填寫取餐資訊</button>
       <button class="btn-secondary" onclick="closeCart()">繼續點餐</button>
     </div>
@@ -316,13 +324,6 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <h2>取餐資訊</h2>
       <label>姓名</label>
       <input type="text" id="cust-name" required>
-      <label>手機</label>
-      <input type="tel" id="cust-phone" required>
-      <div style="margin:6px 0 10px;">
-        <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:0;font-size:0.85rem;" onclick="loadCheckoutVouchers()">查詢可用兌換券</button>
-        <div id="checkout-voucher-list" style="margin-top:8px;"></div>
-        <div id="checkout-total-preview" style="font-size:0.85rem;color:var(--brand);margin-top:6px;"></div>
-      </div>
       <label>取餐方式</label>
       <select id="pickup-type">
         <option value="自取">自取</option>
@@ -674,7 +675,7 @@ function queryMyVouchers() {
       <div style="font-size:0.85rem;font-weight:600;color:var(--muted);margin-bottom:4px;">集點兌換</div>
       ${redeemableHtml}
     </div>`;
-    html += '<div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">＊兌換券可在填寫取餐資訊時自己選擇套用折抵，或到現場結帳時由店員核銷</div>';
+    html += '<div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">＊兌換券可在「我的訂單」畫面查詢並選擇套用折抵，或到現場結帳時由店員核銷</div>';
     resultEl.innerHTML = html;
   }).catch(err => {
     console.warn('查詢兌換券失敗', err);
@@ -718,6 +719,14 @@ function findCartLineForVoucher(type) {
   const keyword = VOUCHER_ITEM_MATCH_KEYWORD[type];
   if (!keyword) return null;
   return cart.find(c => c.baseName && c.baseName.includes(keyword));
+}
+
+// 兌換券選擇現在發生在「我的訂單」畫面(購物車還沒鎖定)，客人可能選完券又回頭改購物車數量，
+// 導致品項券的targetLineKey對不到東西——每次購物車異動都清掉這種已經失效的選擇，避免結帳時折抵錯誤
+function pruneStaleVoucherSelections_() {
+  checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v =>
+    v.targetLineKey == null || cart.some(c => c.lineKey === v.targetLineKey)
+  );
 }
 
 function loadCheckoutVouchers() {
@@ -1302,6 +1311,11 @@ function renderCart() {
   });
   const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
   document.getElementById('cart-total').textContent = '$' + total;
+  // 購物車重繪時一併刷新兌換券清單/折抵預覽，反映最新的購物車內容(哪些券還能套用、金額對不對)
+  if (checkoutMemberVouchers.length || checkoutSelectedVouchers.length) {
+    renderCheckoutVoucherList();
+    updateCheckoutTotalDisplay();
+  }
 }
 
 function changeQty(lineKey, delta) {
@@ -1309,6 +1323,7 @@ function changeQty(lineKey, delta) {
   if (idx === -1) return;
   cart[idx].qty += delta;
   if (cart[idx].qty <= 0) cart.splice(idx, 1);
+  pruneStaleVoucherSelections_();
   saveCartSession();
   renderCart();
   updateCartBar();
@@ -1327,11 +1342,9 @@ function showCheckout() {
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
   populatePickupDate();
   populatePickupTime(document.getElementById('pickup-date').value);
-  // 每次進結帳頁重置兌換券選擇，避免購物車內容改變後targetLineKey對不上舊的選擇
-  checkoutMemberVouchers = [];
-  checkoutSelectedVouchers = [];
-  document.getElementById('checkout-voucher-list').innerHTML = '';
-  document.getElementById('checkout-total-preview').textContent = '';
+  // 2026-09-13：兌換券改在「我的訂單」畫面就查詢/套用，進結帳頁不再清空選擇(狀態一路帶過來)。
+  // 購物車內容若在中途被改動，靠changeQty()裡的pruneStaleVoucherSelections_()清掉對不上的選擇，
+  // 不用等進到這一步才處理
   document.getElementById('cart-view').style.display = 'none';
   document.getElementById('checkout-form').style.display = 'block';
 }
@@ -1362,7 +1375,9 @@ function submitOrder(e) {
     return false;
   }
   const name = document.getElementById('cust-name').value;
-  const phone = document.getElementById('cust-phone').value;
+  const phone = document.getElementById('cust-phone').value.trim();
+  // 手機欄位搬到「我的訂單」畫面後不再是<form>裡的欄位，瀏覽器原生required不會擋，改用JS檢查
+  if (!phone) { alert('請輸入手機號碼'); backToCart(); document.getElementById('cust-phone').focus(); return false; }
   const dateLabel = formatDateLabel(dateValue === 'today' ? 0 : 1);
   const time = `${dateLabel} ${document.getElementById('pickup-time').value}`;
   const note = document.getElementById('cust-note').value;
