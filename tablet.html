@@ -775,6 +775,12 @@ function applyVoucherToLine(lineKey) {
 // 2026-09-13改版：原本是店員自己輸入加價金額、購物車品項不會真的換成目標飲品；
 // 老闆要求改成後台設定好「來源分類→目標品項＋加價」(DRINK_UPGRADE_RULES)，這裡選了會直接把
 // 該購物車列換成目標飲品(名稱/單價都換掉)，不再只是加一筆看不出換了什麼的加價
+// 來源分類都是M/L雙尺寸計價，加價金額也分開設定，這裡統一依「這杯飲料是M還是L」決定要用哪一個金額
+// (line.size/currentPosModal.comboDrinkSize大小寫不一定一致，統一轉大寫比對，避免M/L比對不到)
+function pickUpgradeAmount_(rule, size) {
+  return String(size || '').toUpperCase() === 'L' ? rule.amountL : rule.amountM;
+}
+
 let pendingDrinkUpgradeOptions = [];
 function showDrinkUpgradePicker() {
   if (posCart.length === 0) { alert('請先選購品項'); return; }
@@ -788,7 +794,7 @@ function showDrinkUpgradePicker() {
   pendingDrinkUpgradeOptions = options;
   document.getElementById('pos-drinkupgrade-picker-list').innerHTML = options.map((o, idx) => `
     <button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 10px;" onclick="applyDrinkUpgradeOption_(${idx})">
-      ${o.line.name}${o.line.size ? ' ('+o.line.size+')' : ''}　→　${o.rule.targetItem}　+$${o.rule.amount}
+      ${o.line.name}${o.line.size ? ' ('+o.line.size+')' : ''}　→　${o.rule.targetItem}　+$${pickUpgradeAmount_(o.rule, o.line.size)}
     </button>
   `).join('');
   document.getElementById('pos-drinkupgrade-picker-overlay').classList.add('open');
@@ -799,10 +805,11 @@ function applyDrinkUpgradeOption_(idx) {
   if (!o) return;
   const line = posCart.find(c => c.lineKey === o.line.lineKey);
   if (!line) return;
+  const amount = pickUpgradeAmount_(o.rule, line.size);
   const base = line.basePrice != null ? line.basePrice : line.price;
   line.name = o.rule.targetItem;
   line.baseName = o.rule.targetItem;
-  line.price = base + o.rule.amount;
+  line.price = base + amount;
   line.basePrice = line.price;
   line.note = ''; // 換成不同飲品，原本的冰量/甜度等客製化備註不一定適用，清空避免顯示錯誤資訊
   closeDrinkUpgradePicker();
@@ -1536,17 +1543,63 @@ function openPosDrinkCustom(drinkName) {
         currentPosModal.comboDrinkSize = inp.value;
         currentPosModal.comboDrinkPrice = prices[inp.value];
         refreshPosDrinkToppingIfPresent();
+        renderComboDrinkUpgradeSection(); // 換M/L份量後，飲品升級按鈕上顯示的加價金額要跟著換(M/L各自不同)
         updatePosItemModalTotal();
       };
     });
   }
 
+  const upgradeEl = document.createElement('div');
+  upgradeEl.id = 'pos-drink-upgrade-section';
+  body.appendChild(upgradeEl);
+  renderComboDrinkUpgradeSection();
+
+  const extraEl = document.createElement('div');
+  extraEl.id = 'pos-drink-extra-groups';
+  body.appendChild(extraEl);
   const extraGroups = drinkGroupsFor(drinkName);
   currentPosModal.comboDrinkExtraGroups = extraGroups;
-  extraGroups.forEach(gk => renderPosOptionGroup(body, gk));
+  extraGroups.forEach(gk => renderPosOptionGroup(extraEl, gk));
 
   updatePosItemModalTotal();
   document.getElementById('pos-drink-overlay').classList.add('open');
+}
+
+// 套餐內建飲品的升級(2026-09-13新增)：套餐飲料存在currentPosModal.comboDrinkName/comboDrinkPrice，
+// 不是獨立購物車列，所以用不到showDrinkUpgradePicker那套(那個是掃posCart的列)，這裡另外做一套
+// 針對「目前彈窗裡選的這杯套餐飲料」直接套用升級規則：換名稱、加價金額疊加在原本的comboDrinkPrice上
+function renderComboDrinkUpgradeSection() {
+  const el = document.getElementById('pos-drink-upgrade-section');
+  if (!el || !currentPosModal || !currentPosModal.comboDrinkName) return;
+  const cat = DRINK_ITEM_CATEGORY[currentPosModal.comboDrinkName];
+  const rules = cat ? DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat) : [];
+  if (!rules.length) { el.innerHTML = ''; return; }
+  const size = currentPosModal.comboDrinkSize;
+  el.innerHTML = `<div style="font-size:0.78rem;color:var(--muted);margin:8px 0 4px;">飲品升級</div>` +
+    rules.map((r, idx) => `<button type="button" class="btn" style="display:block;width:100%;text-align:left;margin-bottom:4px;padding:6px 10px;font-size:0.85rem;" onclick="applyComboDrinkUpgrade(${idx})">
+      升級成 ${r.targetItem}　+$${pickUpgradeAmount_(r, size)}
+    </button>`).join('');
+  el.dataset.rules = JSON.stringify(rules);
+}
+
+function applyComboDrinkUpgrade(idx) {
+  const el = document.getElementById('pos-drink-upgrade-section');
+  const rules = JSON.parse(el.dataset.rules || '[]');
+  const rule = rules[idx];
+  if (!rule) return;
+  const amount = pickUpgradeAmount_(rule, currentPosModal.comboDrinkSize);
+  currentPosModal.comboDrinkName = rule.targetItem;
+  currentPosModal.comboDrinkPrice = (currentPosModal.comboDrinkPrice || 0) + amount;
+  document.getElementById('pos-drink-modal-title').textContent = rule.targetItem;
+  // 換了飲品，原本的專屬客製化選項(冰量/甜度等)不一定適用，清掉改用新飲品自己的
+  (currentPosModal.comboDrinkExtraGroups || []).forEach(gk => delete currentPosModal.groups[gk]);
+  const extraGroups = drinkGroupsFor(rule.targetItem);
+  currentPosModal.comboDrinkExtraGroups = extraGroups;
+  const extraEl = document.getElementById('pos-drink-extra-groups');
+  extraEl.innerHTML = '';
+  extraGroups.forEach(gk => renderPosOptionGroup(extraEl, gk));
+  renderComboDrinkUpgradeSection();
+  updatePosItemModalTotal();
 }
 
 function openPosSmallDrinkCustom(drinkName) {

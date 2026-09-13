@@ -1919,7 +1919,7 @@ function renderDuList() {
     const key = duKey_(r);
     return `<div class="mc-item-row${key === duCurrentKey ? ' active' : ''}" onclick="duCurrentKey='${escapeHtml(key).replace(/'/g, "\\'")}';renderDuList();renderDuEditor();">
       <span>${escapeHtml(mcShortCatName(r.sourceCategory))} → ${escapeHtml(r.targetItem)}</span>
-      <span class="mc-item-price">+$${r.amount}${r.status === '停用' ? '・停用' : ''}</span>
+      <span class="mc-item-price">M+$${r.amountM}・L+$${r.amountL}${r.status === '停用' ? '・停用' : ''}</span>
     </div>`;
   }).join('');
 }
@@ -1946,7 +1946,10 @@ function renderDuEditor() {
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增升級規則' : '編輯升級規則'}</h3>
     <label class="mc-field">來源分類(客人點這個分類底下的飲品時可以升級)<select id="du-f-source">${catOptions}</select></label>
     <label class="mc-field">目標品項(升級後會換成這個)<select id="du-f-target">${drinkTargetItemOptions_(r.targetItem)}</select></label>
-    <label class="mc-field" style="max-width:160px;">加價金額<input id="du-f-amount" type="number" value="${r.amount ?? ''}"></label>
+    <div class="mc-field-row">
+      <label class="mc-field" style="max-width:160px;">加價金額(M)<input id="du-f-amount-m" type="number" value="${r.amountM ?? ''}"></label>
+      <label class="mc-field" style="max-width:160px;">加價金額(L)<input id="du-f-amount-l" type="number" value="${r.amountL ?? ''}"></label>
+    </div>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="du-f-status">
         <option value="啟用" ${(r.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
@@ -1963,13 +1966,14 @@ function renderDuEditor() {
 function saveDrinkUpgradeRule() {
   const sourceCategory = document.getElementById('du-f-source').value;
   const targetItem = document.getElementById('du-f-target').value;
-  const amount = document.getElementById('du-f-amount').value;
-  if (!sourceCategory || !targetItem || amount === '') { alert('請選擇來源分類、目標品項並輸入加價金額'); return; }
+  const amountM = document.getElementById('du-f-amount-m').value;
+  const amountL = document.getElementById('du-f-amount-l').value;
+  if (!sourceCategory || !targetItem || amountM === '' || amountL === '') { alert('請選擇來源分類、目標品項並輸入M/L加價金額'); return; }
   const isNew = duCurrentKey === null;
   const payload = {
     originalKey: isNew ? undefined : duCurrentKey,
     sourceCategory, targetItem,
-    amount: amount,
+    amountM: amountM, amountL: amountL,
     status: document.getElementById('du-f-status').value
   };
   apiPost({ action: 'upsertDrinkUpgradeRule', rule: payload }).then(data => {
