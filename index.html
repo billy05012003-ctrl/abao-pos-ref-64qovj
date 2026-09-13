@@ -201,7 +201,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館線上點餐</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館 線上點餐（測試版）</div>
       <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（202701新菜單測試版）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
@@ -380,27 +380,45 @@ function apiPost_(payload) {
 // 對應的效果只有mode:'fixed'(20/50元)跟mode:'item',effect:'free'(食物券)兩種，
 // 不會有第二件六折/五折這類POS專屬促銷券(那些只走POS按鈕即時折抵，不會贈送成持久記錄)
 // ---------------------------------------------------------------
-const VOUCHER_BEHAVIOR = {
-  '20元兌換券': { mode: 'fixed', amount: 20 },
-  '50元兌換券': { mode: 'fixed', amount: 50 },
-  '荷包蛋兌換券': { mode: 'item', effect: 'free' },
-  '中杯紅茶兌換券': { mode: 'item', effect: 'free' },
-  '中杯義式咖啡兌換券': { mode: 'item', effect: 'free' },
-  '中杯鮮奶茶兌換券': { mode: 'item', effect: 'free' },
-  '脆薯兌換券': { mode: 'item', effect: 'free' },
-  '米花雞球兌換券': { mode: 'item', effect: 'free' },
-  '中杯黑糖牛奶兌換券': { mode: 'item', effect: 'free' },
-  '美式狂想乙套兌換券': { mode: 'item', effect: 'free' }
-};
-// 集點兌換目錄：跟後端Code.gs的POINT_REDEMPTION_CATALOG一致，只用於前端顯示門檻
-const POINT_REDEMPTION_CATALOG = [
-  { points: 3, voucherType: '荷包蛋兌換券' },
-  { points: 5, voucherType: '中杯鮮奶茶兌換券' },
-  { points: 8, voucherType: '脆薯兌換券' },
-  { points: 8, voucherType: '米花雞球兌換券' },
-  { points: 10, voucherType: '中杯黑糖牛奶兌換券' },
-  { points: 20, voucherType: '美式狂想乙套兌換券' }
-];
+// 2026-09-13 CMS化：VOUCHER_BEHAVIOR/POINT_REDEMPTION_CATALOG原本寫死在這裡，現在改成頁面載入時
+// 向雲端「優惠券定義」「集點禮」表讀取(見下方loadPromoSettings)，POS後台可以直接新增/編輯/刪除。
+// 客人這邊只收「顯示為優惠券按鈕=否」或「可手動贈送=是」的項目(對應原本這份清單的篩選邏輯)——
+// 第二件六折/買一送一等POS專屬即時折抵按鈕不會出現在這裡，因為那些不會贈送成客人名下的持久兌換券
+let VOUCHER_BEHAVIOR = {};
+let POINT_REDEMPTION_CATALOG = [];
+
+function applyPromoSettings_(data) {
+  VOUCHER_BEHAVIOR = {};
+  (data.promos || []).filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton)).forEach(p => {
+    VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed'
+      ? { mode: 'fixed', amount: p.amount }
+      : { mode: 'item', effect: p.effect, minQty: p.minQty };
+  });
+  POINT_REDEMPTION_CATALOG = (data.pointGifts || []).filter(g => g.status !== '停用').map(g => ({ points: g.points, voucherType: g.voucherType }));
+}
+
+const PROMO_SETTINGS_CACHE_KEY = 'abao_pos_promo_settings_cache_v1';
+function loadPromoSettings() {
+  return apiGet_({ action: 'promoSettings' }).then(resp => {
+    if (!resp || resp.status !== 'ok') throw new Error('promoSettings回傳格式異常');
+    applyPromoSettings_(resp);
+    try { localStorage.setItem(PROMO_SETTINGS_CACHE_KEY, JSON.stringify(resp)); } catch (e) {}
+    return true;
+  }).catch(err => {
+    console.warn('優惠券設定雲端讀取失敗，嘗試改用本地快取', err);
+    try {
+      const cached = JSON.parse(localStorage.getItem(PROMO_SETTINGS_CACHE_KEY) || 'null');
+      if (cached && cached.status === 'ok') {
+        applyPromoSettings_(cached);
+        console.warn('已改用本地快取的優惠券設定(可能不是最新版本)');
+        return true;
+      }
+    } catch (e2) {}
+    console.error('優惠券設定完全無法取得(雲端+本地快取皆失敗)，兌換券/集點兌換功能將無法使用');
+    return false;
+  });
+}
+const promoSettingsReady = loadPromoSettings();
 
 let cart = []; // {key, name, size, price, qty}
 // 品項上下架狀態快取(品項名稱→'本日售完'/'永久下架')，由applyItemAvailability()載入頁面時抓一次，
