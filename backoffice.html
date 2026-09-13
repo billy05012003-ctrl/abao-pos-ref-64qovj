@@ -144,8 +144,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 <main class="main-content">
 <div id="view-availability" class="view">
   <p style="font-size:0.8rem;color:var(--muted);">
-    每個品項有兩個獨立開關：<b>雲端平板／線上點餐</b>(共用同一份狀態) 跟 <b>POS功能</b>(獨立狀態，互不影響)。
-    這裡改了會直接反映到對應的前台畫面，不需要老闆自己再跑去雲端平板或POS功能操作。
+    每個品項有兩個獨立開關：<b>線上點餐</b>(共用同一份狀態) 跟 <b>POS功能</b>(獨立狀態，互不影響)。
+    這裡改了會直接反映到對應的前台畫面，不需要老闆自己再跑去POS功能操作。
   </p>
   <div id="availability-list"><div class="empty-hint">載入中...</div></div>
 </div>
@@ -349,7 +349,7 @@ function renderAvailabilityList() {
 
         const tabletGroup = document.createElement('div');
         tabletGroup.className = 'control-group';
-        tabletGroup.innerHTML = '<span class="label">雲端平板／線上點餐</span>';
+        tabletGroup.innerHTML = '<span class="label">線上點餐</span>';
         const tabletSelect = buildStatusSelect(tabletCurrent, (val, selectEl) => {
           const previous = tabletCurrent;
           tabletStatusMap[it.name] = val === '供應中' ? undefined : val;
@@ -359,7 +359,7 @@ function renderAvailabilityList() {
               console.warn('雲端平板狀態同步失敗', err);
               tabletStatusMap[it.name] = previous === '供應中' ? undefined : previous;
               selectEl.value = previous;
-              alert(`「${it.name}」雲端平板／線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+              alert(`「${it.name}」線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
             });
         });
         tabletGroup.appendChild(tabletSelect);

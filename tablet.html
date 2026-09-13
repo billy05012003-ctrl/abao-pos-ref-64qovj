@@ -278,7 +278,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 
     <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
     <h2 style="font-size:1rem;margin:0 0 4px;">品項上下架</h2>
-    <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px;">點分類展開/收合。「雲端平板／線上點餐」跟「POS功能」是兩個獨立開關，互不影響。</div>
+    <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px;">點分類展開/收合。「線上點餐」跟「POS功能」是兩個獨立開關，互不影響。</div>
     <div id="pos-item-status-list"></div>
   </div>
 </div>
@@ -440,7 +440,7 @@ function renderMergedItemStatusList() {
 
         const tabletGroup = document.createElement('div');
         tabletGroup.className = 'control-group';
-        tabletGroup.innerHTML = '<span class="label">雲端平板／線上點餐</span>';
+        tabletGroup.innerHTML = '<span class="label">線上點餐</span>';
         const tabletSelect = buildAvailSelect_(tabletCurrent, (val, selectEl) => {
           const previous = tabletCurrent;
           if (!currentStoreStatus.items) currentStoreStatus.items = {};
@@ -451,7 +451,7 @@ function renderMergedItemStatusList() {
               console.warn('雲端平板/線上點餐狀態同步失敗', err);
               currentStoreStatus.items[it.name] = previous === '供應中' ? undefined : previous;
               selectEl.value = previous;
-              alert(`「${it.name}」雲端平板／線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+              alert(`「${it.name}」線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
             });
         });
         tabletGroup.appendChild(tabletSelect);
