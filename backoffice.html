@@ -304,65 +304,90 @@ function loadAvailability() {
 
 function posStatusKey(cat, name) { return cat + '||' + name; }
 
+let availabilityExpandedCats = new Set();
+
 function renderAvailabilityList() {
   const listEl = document.getElementById('availability-list');
   listEl.innerHTML = '';
-  let lastCat = null;
+  const grouped = new Map();
   ITEM_LIST.forEach(it => {
-    if (it.category !== lastCat) {
-      const catTitle = document.createElement('div');
-      catTitle.className = 'cat-title';
-      catTitle.textContent = it.category;
-      listEl.appendChild(catTitle);
-      lastCat = it.category;
-    }
-    const tabletCurrent = tabletStatusMap[it.name] || '供應中';
-    const posCurrent = posStatusMap[posStatusKey(it.category, it.name)] || '供應中';
+    if (!grouped.has(it.category)) grouped.set(it.category, []);
+    grouped.get(it.category).push(it);
+  });
 
+  grouped.forEach((items, cat) => {
+    const expanded = availabilityExpandedCats.has(cat);
     const row = document.createElement('div');
-    row.className = 'item-row';
-    row.innerHTML = `<span class="name">${it.name}</span>`;
+    row.className = 'mc-accordion-row';
 
-    const controls = document.createElement('div');
-    controls.className = 'controls';
+    const header = document.createElement('div');
+    header.className = 'mc-accordion-header';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'mc-accordion-toggle';
+    toggleBtn.innerHTML = `<span class="mc-accordion-caret">${expanded ? '▼' : '▶'}</span><span>${escapeHtml(cat)}</span><span class="mc-item-price">(${items.length})</span>`;
+    toggleBtn.onclick = () => {
+      if (expanded) availabilityExpandedCats.delete(cat); else availabilityExpandedCats.add(cat);
+      renderAvailabilityList();
+    };
+    header.appendChild(toggleBtn);
+    row.appendChild(header);
 
-    const tabletGroup = document.createElement('div');
-    tabletGroup.className = 'control-group';
-    tabletGroup.innerHTML = '<span class="label">雲端平板／線上點餐</span>';
-    const tabletSelect = buildStatusSelect(tabletCurrent, (val, selectEl) => {
-      const previous = tabletCurrent;
-      tabletStatusMap[it.name] = val === '供應中' ? undefined : val;
-      apiPost({ action: 'setItemStatus', name: it.name, status: val })
-        .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
-        .catch(err => {
-          console.warn('雲端平板狀態同步失敗', err);
-          tabletStatusMap[it.name] = previous === '供應中' ? undefined : previous;
-          selectEl.value = previous;
-          alert(`「${it.name}」雲端平板／線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+    if (expanded) {
+      const body = document.createElement('div');
+      body.className = 'mc-accordion-body';
+      items.forEach(it => {
+        const tabletCurrent = tabletStatusMap[it.name] || '供應中';
+        const posCurrent = posStatusMap[posStatusKey(it.category, it.name)] || '供應中';
+
+        const itemRow = document.createElement('div');
+        itemRow.className = 'item-row';
+        itemRow.innerHTML = `<span class="name">${escapeHtml(it.name)}</span>`;
+
+        const controls = document.createElement('div');
+        controls.className = 'controls';
+
+        const tabletGroup = document.createElement('div');
+        tabletGroup.className = 'control-group';
+        tabletGroup.innerHTML = '<span class="label">雲端平板／線上點餐</span>';
+        const tabletSelect = buildStatusSelect(tabletCurrent, (val, selectEl) => {
+          const previous = tabletCurrent;
+          tabletStatusMap[it.name] = val === '供應中' ? undefined : val;
+          apiPost({ action: 'setItemStatus', name: it.name, status: val })
+            .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+            .catch(err => {
+              console.warn('雲端平板狀態同步失敗', err);
+              tabletStatusMap[it.name] = previous === '供應中' ? undefined : previous;
+              selectEl.value = previous;
+              alert(`「${it.name}」雲端平板／線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+            });
         });
-    });
-    tabletGroup.appendChild(tabletSelect);
+        tabletGroup.appendChild(tabletSelect);
 
-    const posGroup = document.createElement('div');
-    posGroup.className = 'control-group';
-    posGroup.innerHTML = '<span class="label">POS功能</span>';
-    const posSelect = buildStatusSelect(posCurrent, (val, selectEl) => {
-      const previous = posCurrent;
-      posStatusMap[posStatusKey(it.category, it.name)] = val === '供應中' ? undefined : val;
-      apiPost({ action: 'setPosItemStatus', category: it.category, name: it.name, status: val })
-        .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
-        .catch(err => {
-          console.warn('POS功能狀態同步失敗', err);
-          posStatusMap[posStatusKey(it.category, it.name)] = previous === '供應中' ? undefined : previous;
-          selectEl.value = previous;
-          alert(`「${it.name}」POS功能狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+        const posGroup = document.createElement('div');
+        posGroup.className = 'control-group';
+        posGroup.innerHTML = '<span class="label">POS功能</span>';
+        const posSelect = buildStatusSelect(posCurrent, (val, selectEl) => {
+          const previous = posCurrent;
+          posStatusMap[posStatusKey(it.category, it.name)] = val === '供應中' ? undefined : val;
+          apiPost({ action: 'setPosItemStatus', category: it.category, name: it.name, status: val })
+            .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+            .catch(err => {
+              console.warn('POS功能狀態同步失敗', err);
+              posStatusMap[posStatusKey(it.category, it.name)] = previous === '供應中' ? undefined : previous;
+              selectEl.value = previous;
+              alert(`「${it.name}」POS功能狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+            });
         });
-    });
-    posGroup.appendChild(posSelect);
+        posGroup.appendChild(posSelect);
 
-    controls.appendChild(tabletGroup);
-    controls.appendChild(posGroup);
-    row.appendChild(controls);
+        controls.appendChild(tabletGroup);
+        controls.appendChild(posGroup);
+        itemRow.appendChild(controls);
+        body.appendChild(itemRow);
+      });
+      row.appendChild(body);
+    }
     listEl.appendChild(row);
   });
 }

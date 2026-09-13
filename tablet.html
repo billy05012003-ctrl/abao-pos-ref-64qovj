@@ -6,7 +6,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>美寶美食館 雲端平板（店家端）</title>
+<title>美寶美食館 POS功能（店家端）</title>
 <style>
   :root { --brand: #e8632c; --bg: #f5f5f5; --muted: #888; --border: #eee0d4; --card: #fff; }
   * { box-sizing: border-box; }
@@ -91,6 +91,18 @@
   .item-row select { font-size:0.85rem; padding:4px 6px; border-radius:6px; border:1px solid #ddd; }
   .empty-hint { color:#999; font-size:0.85rem; text-align:center; padding:12px 0; }
   .refresh-link { font-size:0.8rem; color:#888; text-decoration:underline; cursor:pointer; }
+  /* 分類手風琴列表（比照POS後台一致的樣式，2026-09-13新增：雲端平板整併進POS功能後，
+     品項上下架清單分類也改成可摺疊，不再整頁一路往下捲） */
+  .mc-accordion-row { background:#fff; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; overflow:hidden; }
+  .mc-accordion-header { display:flex; align-items:center; gap:6px; padding:2px 8px; }
+  .mc-accordion-toggle { flex:1; min-width:0; text-align:left; border:none; background:none; padding:10px 6px; font-size:0.92rem; font-weight:600; cursor:pointer; color:#222; display:flex; align-items:center; gap:6px; }
+  .mc-accordion-caret { color:var(--muted); font-size:0.7rem; width:12px; display:inline-block; flex:0 0 auto; }
+  .mc-accordion-body { border-top:1px solid var(--border); padding:6px 10px 10px 20px; }
+  .mc-accordion-item-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid #f0f0f0; font-size:0.85rem; flex-wrap:wrap; }
+  .mc-accordion-item-row .name { flex:1; min-width:120px; }
+  .mc-accordion-item-row .controls { display:flex; gap:12px; flex-wrap:wrap; }
+  .mc-accordion-item-row .control-group { display:flex; flex-direction:column; gap:2px; }
+  .mc-accordion-item-row .control-group .label { font-size:0.68rem; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -100,10 +112,10 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
       <div style="font-size:40px;margin-bottom:12px">⏳</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">「雲端平板/POS功能」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">「美寶美食館POS功能」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
     </div>
   </div>`;
-  document.title='已過期 - 雲端平板/POS功能';
+  document.title='已過期 - 美寶美食館POS功能';
   throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
 }
 // 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
@@ -116,8 +128,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館雲端平板</div>
-      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（雲端平板/POS功能）</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">POS功能</div>
+      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（美寶美食館POS功能）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
       <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
@@ -144,54 +156,9 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 
 <header>
   <h1>A-Bao溪湖培英店</h1>
-  <div class="sub">雲端平板（店家端，非顧客點餐頁）</div>
+  <div class="sub">POS功能（店家端，非顧客點餐頁）</div>
 </header>
-<div class="tabbar">
-  <button id="tabbar-btn-tablet" class="active" onclick="switchTab('tablet')">雲端平板</button>
-  <button id="tabbar-btn-pos" onclick="switchTab('pos')">POS功能</button>
-</div>
-
-<div id="view-tablet">
-<div id="status-banner" class="status-banner status-ok">載入中...</div>
-
-<section>
-  <h2>營業狀態控制</h2>
-  <div class="row">
-    <button class="btn btn-secondary" id="busy-btn" onclick="onBusyClick()">設為忙碌</button>
-    <select id="busy-minutes">
-      <option value="15">每15分鐘限接1張</option>
-      <option value="30">每30分鐘限接1張</option>
-      <option value="60">每60分鐘限接1張</option>
-    </select>
-  </div>
-  <div class="row">
-    <button class="btn btn-secondary" id="pause-btn" onclick="onPauseClick()">暫停接單</button>
-    <select id="pause-minutes">
-      <option value="15">暫停15分鐘</option>
-      <option value="30">暫停30分鐘</option>
-      <option value="60">暫停60分鐘</option>
-    </select>
-  </div>
-</section>
-
-<section>
-  <h2>當日營收 <span class="refresh-link" onclick="loadRevenue()">重新整理</span></h2>
-  <div class="revenue-num"><span id="revenue-total">$0</span></div>
-  <div class="meta" id="revenue-count">今日 0 筆已付款訂單</div>
-</section>
-
-<section>
-  <h2>待取餐訂單 <span class="refresh-link" onclick="loadOrders()">重新整理</span></h2>
-  <div id="orders-list"><div class="empty-hint">載入中...</div></div>
-</section>
-
-<section>
-  <h2>品項上下架管理</h2>
-  <div id="items-list"><div class="empty-hint">載入中...</div></div>
-</section>
-</div>
-
-<div id="view-pos" class="pos-layout" style="display:none">
+<div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
   <div class="pos-col pos-col-items">
     <button type="button" class="pos-back-btn" onclick="setPosStep('categories')">← 分類</button>
@@ -276,9 +243,45 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   <div class="pos-sheet" style="max-width:480px;">
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
       <button type="button" onclick="closePosLocalItemStatusManager()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
-      <h2 style="margin:0; flex:1; font-size:1rem;">POS功能 品項上下架</h2>
+      <h2 style="margin:0; flex:1; font-size:1rem;">上下架管理</h2>
     </div>
-    <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px 30px;">只影響這台平板，不影響顧客點餐頁</div>
+    <div id="status-banner" class="status-banner status-ok" style="margin:0 0 10px;border-radius:8px;">載入中...</div>
+
+    <section style="margin:0 0 12px;">
+      <h2>營業狀態控制</h2>
+      <div style="font-size:0.76rem;color:var(--muted);margin:-6px 0 8px;">以下設定僅影響線上點餐，不影響POS功能現場點餐</div>
+      <div class="row">
+        <button class="btn btn-secondary" id="busy-btn" onclick="onBusyClick()">設為忙碌</button>
+        <select id="busy-minutes">
+          <option value="15">每15分鐘限接1張</option>
+          <option value="30">每30分鐘限接1張</option>
+          <option value="60">每60分鐘限接1張</option>
+        </select>
+      </div>
+      <div class="row">
+        <button class="btn btn-secondary" id="pause-btn" onclick="onPauseClick()">暫停接單</button>
+        <select id="pause-minutes">
+          <option value="15">暫停15分鐘</option>
+          <option value="30">暫停30分鐘</option>
+          <option value="60">暫停60分鐘</option>
+        </select>
+      </div>
+    </section>
+
+    <section style="margin:0 0 12px;">
+      <h2>當日營收 <span class="refresh-link" onclick="loadRevenue()">重新整理</span></h2>
+      <div class="revenue-num"><span id="revenue-total">$0</span></div>
+      <div class="meta" id="revenue-count">今日 0 筆已付款訂單</div>
+    </section>
+
+    <section style="margin:0 0 12px;">
+      <h2>待取餐訂單 <span class="refresh-link" onclick="loadOrders()">重新整理</span></h2>
+      <div id="orders-list"><div class="empty-hint">載入中...</div></div>
+    </section>
+
+    <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
+    <h2 style="font-size:1rem;margin:0 0 4px;">品項上下架</h2>
+    <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px;">點分類展開/收合。「雲端平板／線上點餐」跟「POS功能」是兩個獨立開關，互不影響。</div>
     <div id="pos-item-status-list"></div>
   </div>
 </div>
@@ -322,7 +325,6 @@ function loadStoreStatus() {
     if (data.status !== 'ok') return;
     currentStoreStatus = data;
     refreshStatusBanner();
-    renderItemsList();
   });
 }
 
@@ -379,57 +381,101 @@ function markReady(orderId) {
   });
 }
 
-function renderItemsList() {
-  const container = document.getElementById('items-list');
+function buildAvailSelect_(current, onChange) {
+  const select = document.createElement('select');
+  ['供應中', '本日售完', '永久下架'].forEach(opt => {
+    const optEl = document.createElement('option');
+    optEl.value = opt;
+    optEl.textContent = opt;
+    if (opt === current) optEl.selected = true;
+    select.appendChild(optEl);
+  });
+  select.onchange = () => onChange(select.value, select);
+  return select;
+}
+
+// 2026-09-13新增：原本「雲端平板」分頁的品項狀態清單(renderItemsList)跟POS功能自己的品項上下架
+// (renderPosLocalItemStatusManager)合併成一份，分類改手風琴摺疊，每個品項同時顯示兩個獨立開關，
+// 呈現方式對齊POS後台的「品項上下架」頁面
+let itemStatusExpandedCats = new Set();
+
+function renderMergedItemStatusList() {
+  const container = document.getElementById('pos-item-status-list');
+  container.innerHTML = '';
   const overrides = currentStoreStatus.items || {};
-  let lastCat = null;
-  let html = '';
+  const grouped = new Map();
   ITEM_LIST.forEach(it => {
-    if (it.category !== lastCat) {
-      html += `<div class="item-cat">${it.category}</div>`;
-      lastCat = it.category;
+    if (!grouped.has(it.category)) grouped.set(it.category, []);
+    grouped.get(it.category).push(it);
+  });
+  grouped.forEach((items, cat) => {
+    const expanded = itemStatusExpandedCats.has(cat);
+    const row = document.createElement('div');
+    row.className = 'mc-accordion-row';
+
+    const header = document.createElement('div');
+    header.className = 'mc-accordion-header';
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'mc-accordion-toggle';
+    const displayCat = cat === POS_LOCAL_ADDON_STATUS_CATEGORY ? cat : shortCatName(cat);
+    toggleBtn.innerHTML = `<span class="mc-accordion-caret">${expanded ? '▼' : '▶'}</span><span>${displayCat}</span><span style="color:var(--muted);font-size:0.78rem;">(${items.length})</span>`;
+    toggleBtn.onclick = () => {
+      if (expanded) itemStatusExpandedCats.delete(cat); else itemStatusExpandedCats.add(cat);
+      renderMergedItemStatusList();
+    };
+    header.appendChild(toggleBtn);
+    row.appendChild(header);
+
+    if (expanded) {
+      const body = document.createElement('div');
+      body.className = 'mc-accordion-body';
+      items.forEach(it => {
+        const tabletCurrent = overrides[it.name] || '供應中';
+        const posCurrent = getPosLocalItemStatus(it.category, it.name) || '供應中';
+
+        const itemRow = document.createElement('div');
+        itemRow.className = 'mc-accordion-item-row';
+        itemRow.innerHTML = `<span class="name">${it.name}</span>`;
+
+        const controls = document.createElement('div');
+        controls.className = 'controls';
+
+        const tabletGroup = document.createElement('div');
+        tabletGroup.className = 'control-group';
+        tabletGroup.innerHTML = '<span class="label">雲端平板／線上點餐</span>';
+        const tabletSelect = buildAvailSelect_(tabletCurrent, (val, selectEl) => {
+          const previous = tabletCurrent;
+          if (!currentStoreStatus.items) currentStoreStatus.items = {};
+          currentStoreStatus.items[it.name] = val === '供應中' ? undefined : val;
+          apiPost({ action: 'setItemStatus', name: it.name, status: val })
+            .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+            .catch(err => {
+              console.warn('雲端平板/線上點餐狀態同步失敗', err);
+              currentStoreStatus.items[it.name] = previous === '供應中' ? undefined : previous;
+              selectEl.value = previous;
+              alert(`「${it.name}」雲端平板／線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
+            });
+        });
+        tabletGroup.appendChild(tabletSelect);
+
+        const posGroup = document.createElement('div');
+        posGroup.className = 'control-group';
+        posGroup.innerHTML = '<span class="label">POS功能</span>';
+        const posSelect = buildAvailSelect_(posCurrent, val => setPosLocalItemStatus(it.category, it.name, val));
+        posGroup.appendChild(posSelect);
+
+        controls.appendChild(tabletGroup);
+        controls.appendChild(posGroup);
+        itemRow.appendChild(controls);
+        body.appendChild(itemRow);
+      });
+      row.appendChild(body);
     }
-    const status = overrides[it.name] || '供應中';
-    html += `
-      <div class="item-row">
-        <span>${it.name}</span>
-        <select onchange="onItemStatusChange('${it.name.replace(/'/g, "\\'")}', this.value)">
-          <option value="供應中" ${status === '供應中' ? 'selected' : ''}>供應中</option>
-          <option value="本日售完" ${status === '本日售完' ? 'selected' : ''}>本日售完</option>
-          <option value="永久下架" ${status === '永久下架' ? 'selected' : ''}>永久下架</option>
-        </select>
-      </div>
-    `;
-  });
-  container.innerHTML = html;
-}
-
-function onItemStatusChange(name, status) {
-  apiPost({ action: 'setItemStatus', name: name, status: status }).then(() => {
-    if (!currentStoreStatus.items) currentStoreStatus.items = {};
-    currentStoreStatus.items[name] = status;
+    container.appendChild(row);
   });
 }
 
-loadStoreStatus();
-loadRevenue();
-loadOrders();
-
-// ---------------------------------------------------------------
-// POS功能：頂層分頁切換
-// ---------------------------------------------------------------
-let posMenuRendered = false;
-function switchTab(name) {
-  document.getElementById('view-tablet').style.display = name === 'tablet' ? 'block' : 'none';
-  document.getElementById('view-pos').style.display = name === 'pos' ? 'flex' : 'none';
-  document.getElementById('tabbar-btn-tablet').classList.toggle('active', name === 'tablet');
-  document.getElementById('tabbar-btn-pos').classList.toggle('active', name === 'pos');
-  if (name === 'pos' && !posMenuRendered) {
-    posMenuRendered = true;
-    // 先等菜單資料(CATALOG/OPTION_GROUPS，2026-09-06改成雲端讀取)就緒，再抓雲端上下架狀態，最後才渲染品項格線
-    menuCmsDataReady.then(() => loadPosItemStatus().then(renderPosMenu));
-  }
-}
 
 // ---------------------------------------------------------------
 // POS功能：會員查詢/註冊
@@ -845,10 +891,12 @@ function loadMenuCmsData() {
   });
 }
 
-// 頁面一載入就先發起抓取，不等使用者切到「POS功能」分頁才要（那時再等網路會太慢）。
-// 「雲端平板」分頁本身不吃CATALOG/OPTION_GROUPS(上下架管理用的是獨立的ITEM_LIST)，不受影響；
-// 只有switchTab()切到POS功能時才需要等這個resolve，見下方switchTab()改動
+// 頁面一載入就先發起抓取，不等進畫面才要（等網路會太慢）
 const menuCmsDataReady = loadMenuCmsData();
+
+// 2026-09-13：拿掉「雲端平板」分頁後，POS功能變成唯一畫面，不用等使用者切分頁才渲染，
+// 頁面一載入就直接準備好菜單格線
+menuCmsDataReady.then(() => loadPosItemStatus().then(renderPosMenu));
 
 function groupsForCategory(cat, itemName) {
   return ITEM_GROUPS_MAP[cat + '||' + itemName] || [];
@@ -887,7 +935,7 @@ function setPosLocalItemStatus(cat, name, status) {
       console.warn('POS功能上下架同步雲端失敗', err);
       if (previous === undefined) delete posItemStatusMap[key]; else posItemStatusMap[key] = previous;
       alert(`「${name}」上下架狀態同步雲端失敗，請確認網路連線後重試(畫面已還原)`);
-      renderPosLocalItemStatusManager();
+      renderMergedItemStatusList();
     });
 }
 
@@ -896,9 +944,11 @@ function getPosLocalItemStatus(cat, name) {
 }
 
 function openPosLocalItemStatusManager() {
-  // 每次打開都重新抓一次雲端最新狀態，避免看到「POS後台」剛改過但這裡還沒同步到的舊資料
-  loadPosItemStatus().then(renderPosLocalItemStatusManager);
+  // 每次打開都重新抓一次雲端最新狀態(含原本雲端平板那些)，避免看到別的裝置/後台剛改過但這裡還沒同步到的舊資料
   document.getElementById('pos-item-status-overlay').classList.add('open');
+  Promise.all([loadStoreStatus(), loadPosItemStatus()]).then(renderMergedItemStatusList);
+  loadRevenue();
+  loadOrders();
 }
 function closePosLocalItemStatusManager() {
   document.getElementById('pos-item-status-overlay').classList.remove('open');
@@ -919,45 +969,15 @@ const POS_LOCAL_ADDON_STATUS_NAMES = new Set(
   ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY).map(it => it.name)
 );
 
-function renderPosLocalItemStatusManager() {
-  const listEl = document.getElementById('pos-item-status-list');
-  listEl.innerHTML = '';
-  let lastCat = null;
-  ITEM_LIST.forEach(it => {
-    if (it.category !== lastCat) {
-      const catTitle = document.createElement('div');
-      catTitle.style.cssText = 'font-size:0.85rem;font-weight:700;color:var(--muted);margin:14px 0 6px;';
-      catTitle.textContent = it.category === POS_LOCAL_ADDON_STATUS_CATEGORY ? it.category : shortCatName(it.category);
-      listEl.appendChild(catTitle);
-      lastCat = it.category;
-    }
-    const current = getPosLocalItemStatus(it.category, it.name) || '供應中';
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.85rem;gap:8px;';
-    const select = document.createElement('select');
-    select.style.cssText = 'padding:4px 6px;border-radius:6px;border:1px solid var(--border);font-size:0.82rem;flex:none;';
-    ['供應中', '本日售完', '永久下架'].forEach(opt => {
-      const optEl = document.createElement('option');
-      optEl.value = opt;
-      optEl.textContent = opt;
-      if (opt === current) optEl.selected = true;
-      select.appendChild(optEl);
-    });
-    select.onchange = () => setPosLocalItemStatus(it.category, it.name, select.value);
-    row.innerHTML = `<span>${it.name}</span>`;
-    row.appendChild(select);
-    listEl.appendChild(row);
-  });
-}
-
 // 大麥POS參考版面：左欄分類清單，點分類才在中欄顯示該分類品項格線（不是全部分類一次全部攤開）
 function renderPosMenu() {
   const catCol = document.getElementById('pos-col-categories');
-  // POS功能自己的品項上下架管理，只存在這台平板本機(localStorage)，故意不跟雲端平板的品項狀態連動
+  // 2026-09-13：原本獨立的「雲端平板」分頁已整併進來，這顆按鈕現在打開的畫面同時包含
+  // 營業狀態控制/當日營收/待取餐訂單(原雲端平板內容，一律展開常駐顯示)＋品項上下架(手風琴摺疊)
   const manageBtn = document.createElement('button');
   manageBtn.className = 'pos-cat-btn';
   manageBtn.style.cssText = 'color:var(--brand);font-weight:700;border-bottom:1px solid var(--border);margin-bottom:6px;padding-bottom:10px;';
-  manageBtn.textContent = '⚙ 品項上下架';
+  manageBtn.textContent = '⚙ 上下架管理';
   manageBtn.onclick = openPosLocalItemStatusManager;
   catCol.appendChild(manageBtn);
   const cats = Object.keys(CATALOG);
