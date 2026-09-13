@@ -456,11 +456,26 @@ const MC_DRINK_CATEGORIES = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGA
 let tabletStatusMap = {};   // 雲端平板/線上點餐共用狀態，key=品項名稱
 let posStatusMap = {};      // POS功能獨立狀態，key=分類||品項名稱
 
+// mcCatalog等「菜單管理」用的變數提早宣告到這裡(原本在後面的Phase 2區塊)：
+// 2026-09-13品項上下架改成跟菜單管理共用同一份即時資料(見renderAvailabilityList)，
+// loadAvailability()在頁面載入時就會呼叫到ensureMcCatalogLoaded_()讀取mcCatalog，
+// 這些變數的宣告一定要在loadAvailability()實際被呼叫(見檔案後段的loadAvailability();)之前，
+// 不然let的暫時性死區(TDZ)會直接噴「Cannot access before initialization」
+let mcCatalog = {};
+let mcOptionGroups = {};
+let mcItemGroups = {}; // "分類||名稱" -> [群組代碼,...]
+let mcItemComboGroups = {}; // "分類||名稱" -> [群組代碼,...]，只有選「套餐」才會多出來的客製化選項
+let mcCategoryOrder = []; // 分類顯示順序(可拖曳調整)，來源見後端「分類排序」表
+let mcExpandedCats = new Set(); // 手風琴展開狀態(在記憶體，重新整理頁面會收合，切換門市/重新載入不會)
+let mcCurrentItem = null;   // {category, name} ，name為null代表正在新增，開啟編輯視窗(modal)時才有值
+let mcCurrentGroupCode = null; // 'NEW'代表正在新增群組
+
 function loadAvailability() {
   document.getElementById('availability-list').innerHTML = '<div class="empty-hint">載入中...</div>';
   return Promise.all([
     apiGet({ action: 'storeStatus', storeId: 'meibao' }),
-    apiGet({ action: 'posItemStatus' })
+    apiGet({ action: 'posItemStatus' }),
+    ensureMcCatalogLoaded_() // 2026-09-13改成跟「菜單管理」同一份即時資料，不再用寫死的ITEM_LIST快照
   ]).then(([storeData, posData]) => {
     tabletStatusMap = (storeData.status === 'ok' && storeData.items) ? storeData.items : {};
     posStatusMap = (posData.status === 'ok' && posData.items) ? posData.items : {};
@@ -474,14 +489,27 @@ function posStatusKey(cat, name) { return cat + '||' + name; }
 
 let availabilityExpandedCats = new Set();
 
+// 「加購品項/配料選擇」是跨好幾組客製化選項(bread_addon/omelet_addon/drink_topping...)的共用開關名單，
+// 不是CATALOG裡的真實分類，菜單管理沒有這個分類、抓不到，這部分只能繼續沿用ITEM_LIST的固定清單
+const ADDON_STATUS_CATEGORY = '加購品項/配料選擇';
+
 function renderAvailabilityList() {
   const listEl = document.getElementById('availability-list');
   listEl.innerHTML = '';
   const grouped = new Map();
-  ITEM_LIST.forEach(it => {
-    if (!grouped.has(it.category)) grouped.set(it.category, []);
-    grouped.get(it.category).push(it);
-  });
+  if (Object.keys(mcCatalog).length > 0) {
+    // 跟「菜單管理」同一份即時資料，分類名稱/品項異動都會自動同步，不用再手動重跑build_backoffice.py
+    Object.keys(mcCatalog).forEach(cat => {
+      grouped.set(cat, mcCatalog[cat].map(it => ({ category: cat, name: it.name })));
+    });
+    grouped.set(ADDON_STATUS_CATEGORY, ITEM_LIST.filter(it => it.category === ADDON_STATUS_CATEGORY));
+  } else {
+    // 菜單資料暫時抓不到(網路或Google暫時性問題)，退回舊快照，至少上下架還能用
+    ITEM_LIST.forEach(it => {
+      if (!grouped.has(it.category)) grouped.set(it.category, []);
+      grouped.get(it.category).push(it);
+    });
+  }
 
   grouped.forEach((items, cat) => {
     const expanded = availabilityExpandedCats.has(cat);
@@ -493,7 +521,7 @@ function renderAvailabilityList() {
     const toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
     toggleBtn.className = 'mc-accordion-toggle';
-    toggleBtn.innerHTML = `<span class="mc-accordion-caret">${expanded ? '▼' : '▶'}</span><span>${escapeHtml(cat)}</span><span class="mc-item-price">(${items.length})</span>`;
+    toggleBtn.innerHTML = `<span class="mc-accordion-caret">${expanded ? '▼' : '▶'}</span><span>${escapeHtml(mcShortCatName(cat))}</span><span class="mc-item-price">(${items.length})</span>`;
     toggleBtn.onclick = () => {
       if (expanded) availabilityExpandedCats.delete(cat); else availabilityExpandedCats.add(cat);
       renderAvailabilityList();
@@ -577,15 +605,8 @@ loadAvailability();
 
 // ---------------------------------------------------------------
 // 菜單管理（Phase 2，2026-09-06新增）：品項/客製化選項CRUD + 接線規則(掛載)管理
+// (mcCatalog等變數宣告已搬到前面的loadAvailability()之前，這裡不用重複宣告)
 // ---------------------------------------------------------------
-let mcCatalog = {};
-let mcOptionGroups = {};
-let mcItemGroups = {}; // "分類||名稱" -> [群組代碼,...]
-let mcItemComboGroups = {}; // "分類||名稱" -> [群組代碼,...]，只有選「套餐」才會多出來的客製化選項
-let mcCategoryOrder = []; // 分類顯示順序(可拖曳調整)，來源見後端「分類排序」表
-let mcExpandedCats = new Set(); // 手風琴展開狀態(在記憶體，重新整理頁面會收合，切換門市/重新載入不會)
-let mcCurrentItem = null;   // {category, name} ，name為null代表正在新增，開啟編輯視窗(modal)時才有值
-let mcCurrentGroupCode = null; // 'NEW'代表正在新增群組
 
 function loadMenuCms() {
   mcCurrentGroupCode = null;
