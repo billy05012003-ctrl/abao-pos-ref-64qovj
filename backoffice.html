@@ -492,9 +492,29 @@ function posStatusKey(cat, name) { return cat + '||' + name; }
 
 let availabilityExpandedCats = new Set();
 
-// 「加購品項/配料選擇」是跨好幾組客製化選項(bread_addon/omelet_addon/drink_topping...)的共用開關名單，
-// 不是CATALOG裡的真實分類，菜單管理沒有這個分類、抓不到，這部分只能繼續沿用ITEM_LIST的固定清單
+// 「加購品項/配料選擇」是跨好幾組客製化選項的共用開關名單，不是CATALOG裡的真實分類，
+// 菜單管理沒有這個分類、抓不到。2026-09-13改成動態化：直接從這幾組客製化選項庫(mcOptionGroups)
+// 即時抓選項值組成清單，不用再手動重跑build_backoffice.py同步ITEM_LIST快照。
+// 這份分類代碼清單是老闆定案「加購品項/配料選擇」實際涵蓋的來源，之後選項庫如果新增/改名這幾組
+// 底下的選項值會自動反映，但如果要納入全新一組客製化選項，要記得回來這裡補代碼
 const ADDON_STATUS_CATEGORY = '加購品項/配料選擇';
+const ADDON_STATUS_GROUP_CODES = ['bread_addon', 'omelet_addon', 'salad_addon', 'noodle_addon',
+  'dine_set_addon', 'coffee_strength', 'drink_topping', 'deluxe_upgrade', 'noodle_snack_choice'];
+
+function buildAddonStatusItems_() {
+  const seen = new Set();
+  const items = [];
+  ADDON_STATUS_GROUP_CODES.forEach(code => {
+    const g = mcOptionGroups[code];
+    if (!g || !g.options) return;
+    g.options.forEach(o => {
+      if (seen.has(o.name)) return;
+      seen.add(o.name);
+      items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
+    });
+  });
+  return items;
+}
 
 function renderAvailabilityList() {
   const listEl = document.getElementById('availability-list');
@@ -505,7 +525,11 @@ function renderAvailabilityList() {
     Object.keys(mcCatalog).forEach(cat => {
       grouped.set(cat, mcCatalog[cat].map(it => ({ category: cat, name: it.name })));
     });
-    grouped.set(ADDON_STATUS_CATEGORY, ITEM_LIST.filter(it => it.category === ADDON_STATUS_CATEGORY));
+    // 選項庫(mcOptionGroups)理論上跟mcCatalog同一次API回來，但萬一是空的還是退回舊快照保底
+    const addonItems = Object.keys(mcOptionGroups).length > 0
+      ? buildAddonStatusItems_()
+      : ITEM_LIST.filter(it => it.category === ADDON_STATUS_CATEGORY);
+    grouped.set(ADDON_STATUS_CATEGORY, addonItems);
   } else {
     // 菜單資料暫時抓不到(網路或Google暫時性問題)，退回舊快照，至少上下架還能用
     ITEM_LIST.forEach(it => {
