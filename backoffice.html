@@ -19,12 +19,26 @@
   .sidebar { display:flex; flex-direction:column; background:#fff; border-right:1px solid #eee; width:150px; flex:0 0 150px; position:sticky; top:0; align-self:flex-start; }
   .sidebar button { border:none; background:none; padding:14px 14px; font-size:0.9rem; font-weight:600; color:#888; cursor:pointer; text-align:left; border-left:3px solid transparent; }
   .sidebar button.active { color:var(--brand); background:#FFF7F3; border-left-color:var(--brand); }
+  /* 菜單管理側欄巢狀展開（品項分類／客製化選項庫），比照大麥後台的巢狀導覽 */
+  .sidebar .group-toggle { display:flex; align-items:center; justify-content:space-between; width:100%; }
+  .sidebar .group-caret { font-size:0.7rem; color:var(--muted); transition:transform 0.15s; }
+  .sidebar button.active .group-caret { color:var(--brand); }
+  .sidebar .group-caret.open { transform:rotate(90deg); }
+  .sidebar .sub-list { display:none; flex-direction:column; }
+  .sidebar .sub-list.open { display:flex; }
+  .sidebar .sub-item { padding:10px 14px 10px 34px; font-size:0.85rem; font-weight:500; color:var(--muted); border:none; background:none; border-left:3px solid transparent; cursor:pointer; text-align:left; position:relative; }
+  .sidebar .sub-item::before { content:''; position:absolute; left:20px; top:0; bottom:0; width:1px; background:var(--border); }
+  .sidebar .sub-item.active { color:var(--brand); background:#FFF7F3; font-weight:700; border-left-color:var(--brand); }
   .main-content { flex:1; min-width:0; }
   @media (max-width: 640px) {
     .app-shell { flex-direction:column; }
     .sidebar { flex-direction:row; width:100%; flex:none; border-right:none; border-bottom:1px solid #eee; overflow-x:auto; position:static; }
     .sidebar button { border-left:none; border-bottom:3px solid transparent; white-space:nowrap; }
     .sidebar button.active { border-left-color:transparent; border-bottom-color:var(--brand); }
+    .sidebar .sub-list.open { flex-direction:row; }
+    .sidebar .sub-item { border-left:none; border-bottom:3px solid transparent; }
+    .sidebar .sub-item.active { border-left-color:transparent; border-bottom-color:var(--brand); }
+    .sidebar .sub-item::before { display:none; }
   }
   .view { padding:12px 16px 40px; max-width:900px; margin:0; }
   /* 品項彈出視窗編輯用的modal */
@@ -90,10 +104,10 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
       <div style="font-size:40px;margin-bottom:12px">⏳</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">「美寶美食館POS後台」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">「POS後台」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
     </div>
   </div>`;
-  document.title='已過期 - 美寶美食館POS後台';
+  document.title='已過期 - POS後台';
   throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
 }
 // 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
@@ -106,8 +120,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">POS後台</div>
-      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（美寶美食館POS後台）</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館 POS後台</div>
+      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（POS後台）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
       <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
@@ -138,7 +152,13 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 <div class="app-shell">
 <nav class="sidebar" id="tabbar">
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">品項上下架</button>
-  <button id="tab-btn-menucms" onclick="switchBackofficeTab('menucms')">菜單管理</button>
+  <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
+    <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
+  </button>
+  <div class="sub-list" id="menucms-sublist">
+    <button class="sub-item" id="mc-sub-btn-categories" onclick="switchMcSubview('categories')">品項分類</button>
+    <button class="sub-item" id="mc-sub-btn-options" onclick="switchMcSubview('options')">客製化選項庫</button>
+  </div>
   <button id="tab-btn-membertiers" onclick="switchBackofficeTab('membertiers')">會員分級</button>
 </nav>
 <main class="main-content">
@@ -169,23 +189,26 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(true)">同步且發布</button>
     </div>
   </div>
-  <p style="font-size:0.8rem;color:var(--muted);">
-    改品項名稱/價格、新增/刪除品項、調整品項要用哪些客製化選項都在這裡。改完立刻生效，線上點餐頁/POS功能下次讀取菜單就會拿到最新版本。點分類可以展開/收合看底下的品項，點品項會彈出視窗編輯。
-  </p>
-  <div id="mc-cat-list"><div class="empty-hint">載入中...</div></div>
-  <button type="button" class="mc-add-btn" onclick="mcAddCategory()">+ 新增分類</button>
-  <hr style="margin:24px 0;border:none;border-top:1px solid var(--border);">
-  <p style="font-size:0.8rem;color:var(--muted);">
-    以下是全部品項共用的「客製化選項庫」，例如「麵包醬料選擇」「甜度選擇」這種選項組本身。改這裡會影響所有掛載這個群組的品項。
-  </p>
-  <div class="mc-layout">
-    <div class="mc-col">
-      <h4>客製化選項庫</h4>
-      <div id="mc-group-list"><div class="empty-hint">載入中...</div></div>
-    </div>
-    <div class="mc-col mc-col-wide">
-      <h4>編輯群組</h4>
-      <div id="mc-group-editor"><div class="empty-hint">選一個群組來編輯，或點「新增客製化選項群組」</div></div>
+  <div id="mc-subview-categories" style="display:block;">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      改品項名稱/價格、新增/刪除品項、調整品項要用哪些客製化選項都在這裡。改完立刻生效，線上點餐頁/POS功能下次讀取菜單就會拿到最新版本。點分類可以展開/收合看底下的品項，點品項會彈出視窗編輯。
+    </p>
+    <div id="mc-cat-list"><div class="empty-hint">載入中...</div></div>
+    <button type="button" class="mc-add-btn" onclick="mcAddCategory()">+ 新增分類</button>
+  </div>
+  <div id="mc-subview-options" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      這裡是全部品項共用的「客製化選項庫」，例如「麵包醬料選擇」「甜度選擇」這種選項組本身。改這裡會影響所有掛載這個群組的品項。
+    </p>
+    <div class="mc-layout">
+      <div class="mc-col">
+        <h4>客製化選項庫</h4>
+        <div id="mc-group-list"><div class="empty-hint">載入中...</div></div>
+      </div>
+      <div class="mc-col mc-col-wide">
+        <h4>編輯群組</h4>
+        <div id="mc-group-editor"><div class="empty-hint">選一個群組來編輯，或點「新增客製化選項群組」</div></div>
+      </div>
     </div>
   </div>
 </div>
@@ -245,6 +268,18 @@ const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美
 
 let mcLoaded = false;
 let mtLoaded = false;
+let currentMcSubview = 'categories';
+function toggleMenuGroup() {
+  const sublist = document.getElementById('menucms-sublist');
+  const willOpen = !sublist.classList.contains('open');
+  sublist.classList.toggle('open', willOpen);
+  document.getElementById('menucms-caret').classList.toggle('open', willOpen);
+  if (willOpen) switchMcSubview(currentMcSubview);
+}
+function switchMcSubview(name) {
+  currentMcSubview = name;
+  switchBackofficeTab('menucms');
+}
 function switchBackofficeTab(name) {
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
@@ -252,6 +287,14 @@ function switchBackofficeTab(name) {
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
   document.getElementById('view-membertiers').style.display = name === 'membertiers' ? 'block' : 'none';
+  document.getElementById('mc-sub-btn-categories').classList.toggle('active', name === 'menucms' && currentMcSubview === 'categories');
+  document.getElementById('mc-sub-btn-options').classList.toggle('active', name === 'menucms' && currentMcSubview === 'options');
+  document.getElementById('mc-subview-categories').style.display = (name === 'menucms' && currentMcSubview === 'categories') ? 'block' : 'none';
+  document.getElementById('mc-subview-options').style.display = (name === 'menucms' && currentMcSubview === 'options') ? 'block' : 'none';
+  if (name === 'menucms') {
+    document.getElementById('menucms-sublist').classList.add('open');
+    document.getElementById('menucms-caret').classList.add('open');
+  }
   if (name === 'menucms' && !mcLoaded) {
     mcLoaded = true;
     document.getElementById('mc-store-select').innerHTML = MC_STORE_OPTIONS.map(o =>
