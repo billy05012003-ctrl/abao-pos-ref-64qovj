@@ -236,6 +236,16 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   </div>
 </div>
 
+<div class="pos-overlay" id="pos-drinkupgrade-picker-overlay" style="z-index:26;">
+  <div class="pos-sheet">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+      <button type="button" onclick="closeDrinkUpgradePicker()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <h2 style="margin:0; flex:1; font-size:1rem;">選擇要升級成什麼</h2>
+    </div>
+    <div id="pos-drinkupgrade-picker-list"></div>
+  </div>
+</div>
+
 <div class="pos-overlay" id="pos-item-status-overlay" style="z-index:27;">
   <div class="pos-sheet" style="max-width:480px;">
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
@@ -505,7 +515,7 @@ function applyPromoSettings_(data) {
     if (p.manualGrantable) MANUAL_GRANT_VOUCHER_TYPES.push(p.name);
   });
   // 「優惠券」分類（POS功能左側分類清單）：涵蓋全部門市活動折抵/加價按鈕，
-  // 含不走VOUCHER_BEHAVIOR的「活動飲品升級」(加價，見promptDrinkUpgrade)，這個是固定不搬CMS的特例
+  // 含不走VOUCHER_BEHAVIOR的「活動飲品升級」(見showDrinkUpgradePicker/DRINK_UPGRADE_RULES，是另一套獨立的資料表)
   DISCOUNT_CATEGORY_ITEMS = [...DIRECT_DISCOUNT_TYPES, '活動飲品升級'];
   POINT_REDEMPTION_CATALOG = (data.pointGifts || []).filter(g => g.status !== '停用').map(g => ({ points: g.points, voucherType: g.voucherType }));
 }
@@ -533,6 +543,31 @@ function loadPromoSettings() {
   });
 }
 const promoSettingsReady = loadPromoSettings();
+
+// 飲品升級規則(2026-09-13新增)：來源分類→目標品項＋加價金額，取代原本店員自己輸入加價金額、
+// 品項不會真的換成目標飲品的舊做法(見applyDrinkUpgrade)
+let DRINK_UPGRADE_RULES = [];
+const DRINK_UPGRADE_CACHE_KEY = 'abao_pos_drink_upgrade_cache_v1';
+function loadDrinkUpgradeRules() {
+  return apiGet({ action: 'drinkUpgradeRules' }).then(resp => {
+    if (!resp || resp.status !== 'ok') throw new Error('drinkUpgradeRules回傳格式異常');
+    DRINK_UPGRADE_RULES = resp.rules.filter(r => r.status !== '停用');
+    try { localStorage.setItem(DRINK_UPGRADE_CACHE_KEY, JSON.stringify(resp)); } catch (e) {}
+    return true;
+  }).catch(err => {
+    console.warn('飲品升級規則雲端讀取失敗，嘗試改用本地快取', err);
+    try {
+      const cached = JSON.parse(localStorage.getItem(DRINK_UPGRADE_CACHE_KEY) || 'null');
+      if (cached && cached.status === 'ok') {
+        DRINK_UPGRADE_RULES = cached.rules.filter(r => r.status !== '停用');
+        return true;
+      }
+    } catch (e2) {}
+    DRINK_UPGRADE_RULES = [];
+    return false;
+  });
+}
+const drinkUpgradeRulesReady = loadDrinkUpgradeRules();
 
 // 依品項名稱查CATALOG目前的基本售價(單一定價品項用，飲料M/L這種不適用)，
 // 給「自動加購品項」(例如原本寫死的週四雞塊免費)算加入購物車的價格用
@@ -737,14 +772,46 @@ function applyVoucherToLine(lineKey) {
 
 // 活動飲品升級：跟上面折抵類按鈕相反，是加價，不用選購物車特定品項，直接加進總金額
 // 用負數discountAmount代表加價，跟其他正數(折抵)共用同一個directDiscounts陣列+總額計算
-function promptDrinkUpgrade() {
+// 2026-09-13改版：原本是店員自己輸入加價金額、購物車品項不會真的換成目標飲品；
+// 老闆要求改成後台設定好「來源分類→目標品項＋加價」(DRINK_UPGRADE_RULES)，這裡選了會直接把
+// 該購物車列換成目標飲品(名稱/單價都換掉)，不再只是加一筆看不出換了什麼的加價
+let pendingDrinkUpgradeOptions = [];
+function showDrinkUpgradePicker() {
   if (posCart.length === 0) { alert('請先選購品項'); return; }
-  const input = prompt('活動飲品升級，要加收多少元？');
-  if (input === null) return;
-  const amount = Number(input);
-  if (!amount || amount <= 0 || !Number.isInteger(amount)) { alert('請輸入有效的正整數金額'); return; }
-  directDiscounts.push({ type: '活動飲品升級', discountAmount: -amount });
+  const options = [];
+  posCart.forEach(line => {
+    const cat = DRINK_ITEM_CATEGORY[line.baseName];
+    if (!cat) return;
+    DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat).forEach(rule => options.push({ line, rule }));
+  });
+  if (!options.length) { alert('目前購物車沒有可以升級的飲品(或後台尚未設定升級規則)'); return; }
+  pendingDrinkUpgradeOptions = options;
+  document.getElementById('pos-drinkupgrade-picker-list').innerHTML = options.map((o, idx) => `
+    <button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 10px;" onclick="applyDrinkUpgradeOption_(${idx})">
+      ${o.line.name}${o.line.size ? ' ('+o.line.size+')' : ''}　→　${o.rule.targetItem}　+$${o.rule.amount}
+    </button>
+  `).join('');
+  document.getElementById('pos-drinkupgrade-picker-overlay').classList.add('open');
+}
+
+function applyDrinkUpgradeOption_(idx) {
+  const o = pendingDrinkUpgradeOptions[idx];
+  if (!o) return;
+  const line = posCart.find(c => c.lineKey === o.line.lineKey);
+  if (!line) return;
+  const base = line.basePrice != null ? line.basePrice : line.price;
+  line.name = o.rule.targetItem;
+  line.baseName = o.rule.targetItem;
+  line.price = base + o.rule.amount;
+  line.basePrice = line.price;
+  line.note = ''; // 換成不同飲品，原本的冰量/甜度等客製化備註不一定適用，清空避免顯示錯誤資訊
+  closeDrinkUpgradePicker();
   renderPosCart();
+}
+
+function closeDrinkUpgradePicker() {
+  document.getElementById('pos-drinkupgrade-picker-overlay').classList.remove('open');
+  pendingDrinkUpgradeOptions = [];
 }
 
 function applyDirectDiscount(type) {
@@ -917,7 +984,7 @@ const menuCmsDataReady = loadMenuCmsData();
 
 // 2026-09-13：拿掉「雲端平板」分頁後，POS功能變成唯一畫面，不用等使用者切分頁才渲染，
 // 頁面一載入就直接準備好菜單格線；一併等優惠券設定(promoSettingsReady)備妥，「優惠券」分類按鈕才會有正確清單
-Promise.all([menuCmsDataReady, promoSettingsReady]).then(() => loadPosItemStatus().then(renderPosMenu));
+Promise.all([menuCmsDataReady, promoSettingsReady, drinkUpgradeRulesReady]).then(() => loadPosItemStatus().then(renderPosMenu));
 
 function groupsForCategory(cat, itemName) {
   return ITEM_GROUPS_MAP[cat + '||' + itemName] || [];
@@ -1049,7 +1116,7 @@ function goToPosDiscountCategory() {
     const card = document.createElement('div');
     card.className = 'pos-grid-card';
     card.innerHTML = `<div class="name">${type}</div>`;
-    card.onclick = () => (type === '活動飲品升級' ? promptDrinkUpgrade() : applyDirectDiscount(type));
+    card.onclick = () => (type === '活動飲品升級' ? showDrinkUpgradePicker() : applyDirectDiscount(type));
     grid.appendChild(card);
   });
   itemsCol.appendChild(grid);
