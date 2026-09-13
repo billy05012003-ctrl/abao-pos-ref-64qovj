@@ -159,7 +159,16 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <button class="sub-item" id="mc-sub-btn-categories" onclick="switchMcSubview('categories')">品項分類</button>
     <button class="sub-item" id="mc-sub-btn-options" onclick="switchMcSubview('options')">客製化選項庫</button>
   </div>
-  <button id="tab-btn-membertiers" onclick="switchBackofficeTab('membertiers')">會員分級</button>
+  <button id="tab-btn-member" onclick="toggleMemberGroup()">
+    <span class="group-toggle">會員相關 <span class="group-caret" id="member-caret">▶</span></span>
+  </button>
+  <div class="sub-list" id="member-sublist">
+    <button class="sub-item" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
+    <button class="sub-item" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
+    <button class="sub-item" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
+    <button class="sub-item" id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
+    <button class="sub-item" id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
+  </div>
 </nav>
 <main class="main-content">
 <div id="view-availability" class="view">
@@ -212,20 +221,87 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </div>
   </div>
 </div>
-<div id="view-membertiers" class="view" style="display:none;">
-  <p style="font-size:0.8rem;color:var(--muted);">
-    升等/續等門檻、點數倍率都在這裡改，改完立刻生效，會直接套用到所有會員下次查詢/消費時的等級判定。
-    <b>「一般會員」是新會員註冊的預設等級，不能刪除、不能調整順序，只能改名稱。</b>
-  </p>
-  <div class="mc-layout">
-    <div class="mc-col" style="max-height:none;">
-      <h4>等級（可拖曳排序，一般會員鎖在最前）</h4>
-      <div id="mt-list"><div class="empty-hint">載入中...</div></div>
-      <button type="button" class="mc-add-btn" onclick="mtCurrentName='NEW';renderMtEditor();">+ 新增等級</button>
+<div id="view-member" class="view" style="display:none;">
+  <div id="mb-subview-tiers">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      升等/續等門檻、點數倍率都在這裡改，改完立刻生效，會直接套用到所有會員下次查詢/消費時的等級判定。
+      <b>「一般會員」是新會員註冊的預設等級，不能刪除、不能調整順序，只能改名稱。</b>
+    </p>
+    <div class="mc-layout">
+      <div class="mc-col" style="max-height:none;">
+        <h4>等級（可拖曳排序，一般會員鎖在最前）</h4>
+        <div id="mt-list"><div class="empty-hint">載入中...</div></div>
+        <button type="button" class="mc-add-btn" onclick="mtCurrentName='NEW';renderMtEditor();">+ 新增等級</button>
+      </div>
+      <div class="mc-col mc-col-wide" style="max-height:none;">
+        <h4>編輯等級</h4>
+        <div id="mt-editor"><div class="empty-hint">選一個等級來編輯，或點「新增等級」</div></div>
+      </div>
     </div>
-    <div class="mc-col mc-col-wide" style="max-height:none;">
-      <h4>編輯等級</h4>
-      <div id="mt-editor"><div class="empty-hint">選一個等級來編輯，或點「新增等級」</div></div>
+  </div>
+  <div id="mb-subview-birthday" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      會員生日當月自動發放（每人每年限一次），跟LINE無關、不用串接。「生效天數offset」「到期天數offset」都是從發放當天起算幾天，0＝當天。
+    </p>
+    <div class="mc-layout">
+      <div class="mc-col" style="max-height:none;">
+        <h4>生日禮清單</h4>
+        <div id="bg-list"><div class="empty-hint">載入中...</div></div>
+        <button type="button" class="mc-add-btn" onclick="bgCurrentType=null;renderBgEditor();">+ 新增生日禮</button>
+      </div>
+      <div class="mc-col mc-col-wide" style="max-height:none;">
+        <h4>編輯生日禮</h4>
+        <div id="bg-editor"><div class="empty-hint">選一筆來編輯，或點「新增生日禮」</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="mb-subview-register" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      新會員一註冊就自動發放（可多筆），跟LINE無關、不用串接。「生效天數offset」「到期天數offset」都是從註冊當天起算幾天，0＝當天。
+    </p>
+    <div class="mc-layout">
+      <div class="mc-col" style="max-height:none;">
+        <h4>註冊禮清單</h4>
+        <div id="rg-list"><div class="empty-hint">載入中...</div></div>
+        <button type="button" class="mc-add-btn" onclick="rgCurrentType=null;renderRgEditor();">+ 新增註冊禮</button>
+      </div>
+      <div class="mc-col mc-col-wide" style="max-height:none;">
+        <h4>編輯註冊禮</h4>
+        <div id="rg-editor"><div class="empty-hint">選一筆來編輯，或點「新增註冊禮」</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="mb-subview-points" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      會員用累計點數兌換下面「優惠券」清單裡的項目，扣點不影響當期消費/升等。
+    </p>
+    <div class="mc-layout">
+      <div class="mc-col" style="max-height:none;">
+        <h4>集點兌換清單</h4>
+        <div id="pg-list"><div class="empty-hint">載入中...</div></div>
+        <button type="button" class="mc-add-btn" onclick="pgCurrentType=null;renderPgEditor();">+ 新增集點兌換項目</button>
+      </div>
+      <div class="mc-col mc-col-wide" style="max-height:none;">
+        <h4>編輯集點兌換項目</h4>
+        <div id="pg-editor"><div class="empty-hint">選一筆來編輯，或點「新增集點兌換項目」</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="mb-subview-promo" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      這裡管理全部優惠券/折抵按鈕的「效果」本身：固定金額折抵、或依購買品項打折/免費/加一元多一件。
+      「顯示為優惠券按鈕」勾選的會出現在POS功能「優惠券」分類讓店員直接點；沒勾選的只能透過集點兌換/生日禮/註冊禮/店員贈送取得。
+    </p>
+    <div class="mc-layout">
+      <div class="mc-col" style="max-height:none;">
+        <h4>優惠券清單</h4>
+        <div id="pm-list"><div class="empty-hint">載入中...</div></div>
+        <button type="button" class="mc-add-btn" onclick="pmCurrentName=null;renderPmEditor();">+ 新增優惠券</button>
+      </div>
+      <div class="mc-col mc-col-wide" style="max-height:none;">
+        <h4>編輯優惠券</h4>
+        <div id="pm-editor"><div class="empty-hint">選一筆來編輯，或點「新增優惠券」</div></div>
+      </div>
     </div>
   </div>
 </div>
@@ -280,13 +356,30 @@ function switchMcSubview(name) {
   currentMcSubview = name;
   switchBackofficeTab('menucms');
 }
+
+// 「會員相關」側欄巢狀展開：會員分級/生日禮/註冊禮/集點禮/優惠券共用同一套子分頁切換邏輯
+const MB_SUBVIEWS = ['tiers', 'birthday', 'register', 'points', 'promo'];
+let mbLoaded = { tiers: false, birthday: false, register: false, points: false, promo: false };
+let currentMemberSubview = 'tiers';
+function toggleMemberGroup() {
+  const sublist = document.getElementById('member-sublist');
+  const willOpen = !sublist.classList.contains('open');
+  sublist.classList.toggle('open', willOpen);
+  document.getElementById('member-caret').classList.toggle('open', willOpen);
+  if (willOpen) switchMemberSubview(currentMemberSubview);
+}
+function switchMemberSubview(name) {
+  currentMemberSubview = name;
+  switchBackofficeTab('member');
+}
+
 function switchBackofficeTab(name) {
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
-  document.getElementById('tab-btn-membertiers').classList.toggle('active', name === 'membertiers');
+  document.getElementById('tab-btn-member').classList.toggle('active', name === 'member');
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
-  document.getElementById('view-membertiers').style.display = name === 'membertiers' ? 'block' : 'none';
+  document.getElementById('view-member').style.display = name === 'member' ? 'block' : 'none';
   document.getElementById('mc-sub-btn-categories').classList.toggle('active', name === 'menucms' && currentMcSubview === 'categories');
   document.getElementById('mc-sub-btn-options').classList.toggle('active', name === 'menucms' && currentMcSubview === 'options');
   document.getElementById('mc-subview-categories').style.display = (name === 'menucms' && currentMcSubview === 'categories') ? 'block' : 'none';
@@ -305,9 +398,21 @@ function switchBackofficeTab(name) {
     ).join('');
     loadMenuCms();
   }
-  if (name === 'membertiers' && !mtLoaded) {
-    mtLoaded = true;
-    loadMemberTiers();
+  MB_SUBVIEWS.forEach(sv => {
+    document.getElementById('mb-sub-btn-' + sv).classList.toggle('active', name === 'member' && currentMemberSubview === sv);
+    document.getElementById('mb-subview-' + sv).style.display = (name === 'member' && currentMemberSubview === sv) ? 'block' : 'none';
+  });
+  if (name === 'member') {
+    document.getElementById('member-sublist').classList.add('open');
+    document.getElementById('member-caret').classList.add('open');
+    if (!mbLoaded[currentMemberSubview]) {
+      mbLoaded[currentMemberSubview] = true;
+      if (currentMemberSubview === 'tiers') loadMemberTiers();
+      else if (currentMemberSubview === 'birthday') loadBirthdayGifts();
+      else if (currentMemberSubview === 'register') loadRegisterGifts();
+      else if (currentMemberSubview === 'points') loadPointGifts();
+      else if (currentMemberSubview === 'promo') loadPromos();
+    }
   }
 }
 
@@ -1375,6 +1480,368 @@ function deleteMtTier() {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     mtCurrentName = null;
     return loadMemberTiers();
+  }).catch(err => alert('刪除失敗：' + err.message));
+}
+
+// ---------- 優惠券/集點禮/生日禮/註冊禮設定（2026-09-13新增，取代原本寫死的常數）----------
+// 四塊共用同一份「優惠券定義」(pmPromos)：集點禮/生日禮/註冊禮的「券名稱」下拉選單都是從這裡選現有的優惠券，
+// 不是各自獨立輸入文字，避免打錯字對不到實際效果
+let pmPromos = [];
+let pgGifts = [];
+let bgGifts = [];
+let rgGifts = [];
+
+function fetchPromoSettings_() {
+  return apiGet({ action: 'promoSettings' }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    pmPromos = data.promos;
+    pgGifts = data.pointGifts;
+    return data;
+  });
+}
+
+function promoNameOptions_(selected) {
+  return pmPromos.map(p => `<option value="${escapeHtml(p.name)}" ${p.name === selected ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
+}
+
+// ---- 優惠券 ----
+let pmCurrentName = null; // null=新增
+
+function loadPromos() {
+  document.getElementById('pm-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  return fetchPromoSettings_().then(() => {
+    renderPmList();
+    renderPmEditor();
+  }).catch(err => {
+    document.getElementById('pm-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
+    console.warn('優惠券資料讀取失敗', err);
+  });
+}
+
+function renderPmList() {
+  const el = document.getElementById('pm-list');
+  if (!pmPromos.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何優惠券</div>'; return; }
+  el.innerHTML = pmPromos.map(p => {
+    const tags = [
+      p.showAsButton ? '按鈕' : null,
+      p.manualGrantable ? '可贈送' : null,
+      p.status === '停用' ? '停用' : null
+    ].filter(Boolean).join('・');
+    return `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
+      <span>${escapeHtml(p.name)}</span><span class="mc-item-price">${escapeHtml(tags)}</span>
+    </div>`;
+  }).join('');
+}
+
+function pmModeChanged() {
+  const mode = document.getElementById('pm-f-mode').value;
+  document.getElementById('pm-fixed-fields').style.display = mode === 'fixed' ? 'flex' : 'none';
+  document.getElementById('pm-item-fields').style.display = mode === 'item' ? 'flex' : 'none';
+}
+
+function renderPmEditor() {
+  const el = document.getElementById('pm-editor');
+  const isNew = pmCurrentName === null;
+  const p = isNew ? {} : (pmPromos.find(x => x.name === pmCurrentName) || {});
+  if (!isNew && !pmPromos.find(x => x.name === pmCurrentName)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增優惠券」</div>'; return; }
+  const mode = p.mode || 'fixed';
+  el.innerHTML = `
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增優惠券' : '編輯優惠券'}</h3>
+    <label class="mc-field">名稱<input id="pm-f-name" value="${escapeHtml(p.name || '')}"></label>
+    <label class="mc-field">效果模式
+      <select id="pm-f-mode" onchange="pmModeChanged()">
+        <option value="fixed" ${mode === 'fixed' ? 'selected' : ''}>固定金額折抵</option>
+        <option value="item" ${mode === 'item' ? 'selected' : ''}>依購買品項</option>
+      </select>
+    </label>
+    <div class="mc-field-row" id="pm-fixed-fields" style="display:${mode === 'fixed' ? 'flex' : 'none'};">
+      <label class="mc-field">折抵金額<input id="pm-f-amount" type="number" value="${p.amount ?? ''}"></label>
+    </div>
+    <div class="mc-field-row" id="pm-item-fields" style="display:${mode === 'item' ? 'flex' : 'none'};">
+      <label class="mc-field">效果類型
+        <select id="pm-f-effect">
+          <option value="free" ${p.effect === 'free' ? 'selected' : ''}>全額免費</option>
+          <option value="discount60" ${p.effect === 'discount60' ? 'selected' : ''}>打6折(第二件六折用)</option>
+          <option value="discount50" ${p.effect === 'discount50' ? 'selected' : ''}>打5折</option>
+          <option value="addOne" ${p.effect === 'addOne' ? 'selected' : ''}>加一元多一件</option>
+        </select>
+      </label>
+      <label class="mc-field">最低購買件數<input id="pm-f-minqty" type="number" value="${p.minQty ?? 1}"></label>
+      <label class="mc-field">自動加購品項(選填)<input id="pm-f-autoadd" placeholder="留空=不自動加購" value="${escapeHtml(p.autoAddItem || '')}"></label>
+    </div>
+    <div class="mc-field-row">
+      <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-showbtn" type="checkbox" ${p.showAsButton ? 'checked' : ''}> 顯示為優惠券按鈕(POS功能可直接點)</label>
+      <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-grantable" type="checkbox" ${p.manualGrantable ? 'checked' : ''}> 可手動贈送給會員</label>
+    </div>
+    <label class="mc-field" style="max-width:160px;">狀態
+      <select id="pm-f-status">
+        <option value="啟用" ${(p.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
+        <option value="停用" ${p.status === '停用' ? 'selected' : ''}>停用</option>
+      </select>
+    </label>
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="savePromo()">儲存</button>
+      ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePromo()">刪除</button>' : ''}
+    </div>
+  `;
+}
+
+function savePromo() {
+  const name = document.getElementById('pm-f-name').value.trim();
+  if (!name) { alert('請輸入名稱'); return; }
+  const isNew = pmCurrentName === null;
+  const mode = document.getElementById('pm-f-mode').value;
+  const payload = {
+    originalName: isNew ? undefined : pmCurrentName,
+    name: name,
+    mode: mode,
+    effect: mode === 'item' ? document.getElementById('pm-f-effect').value : '',
+    amount: mode === 'fixed' ? document.getElementById('pm-f-amount').value : '',
+    minQty: mode === 'item' ? document.getElementById('pm-f-minqty').value : '',
+    autoAddItem: mode === 'item' ? document.getElementById('pm-f-autoadd').value.trim() : '',
+    showAsButton: document.getElementById('pm-f-showbtn').checked,
+    manualGrantable: document.getElementById('pm-f-grantable').checked,
+    status: document.getElementById('pm-f-status').value
+  };
+  apiPost({ action: 'upsertPromo', promo: payload }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    pmCurrentName = name;
+    return loadPromos();
+  }).catch(err => alert('儲存失敗：' + err.message));
+}
+
+function deletePromo() {
+  if (!confirm('確定要刪除「' + pmCurrentName + '」這個優惠券嗎？此動作無法復原，集點禮/生日禮/註冊禮若還在使用這個名稱要記得一併調整。')) return;
+  apiPost({ action: 'deletePromo', name: pmCurrentName }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
+    pmCurrentName = null;
+    return loadPromos();
+  }).catch(err => alert('刪除失敗：' + err.message));
+}
+
+// ---- 集點禮 ----
+let pgCurrentType = null; // null=新增，用兌換券名稱當key(集點兌換清單裡不會有重複名稱)
+
+function loadPointGifts() {
+  document.getElementById('pg-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  return fetchPromoSettings_().then(() => {
+    renderPgList();
+    renderPgEditor();
+  }).catch(err => {
+    document.getElementById('pg-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
+    console.warn('集點禮資料讀取失敗', err);
+  });
+}
+
+function renderPgList() {
+  const el = document.getElementById('pg-list');
+  if (!pgGifts.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何集點兌換項目</div>'; return; }
+  el.innerHTML = pgGifts.map(g => `<div class="mc-item-row${g.voucherType === pgCurrentType ? ' active' : ''}" onclick="pgCurrentType='${escapeHtml(g.voucherType).replace(/'/g, "\\'")}';renderPgList();renderPgEditor();">
+    <span>${g.points}點 → ${escapeHtml(g.voucherType)}</span><span class="mc-item-price">${g.status === '停用' ? '停用' : ''}</span>
+  </div>`).join('');
+}
+
+function renderPgEditor() {
+  const el = document.getElementById('pg-editor');
+  const isNew = pgCurrentType === null;
+  const g = isNew ? {} : (pgGifts.find(x => x.voucherType === pgCurrentType) || {});
+  if (!isNew && !pgGifts.find(x => x.voucherType === pgCurrentType)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增集點兌換項目」</div>'; return; }
+  el.innerHTML = `
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增集點兌換項目' : '編輯集點兌換項目'}</h3>
+    <div class="mc-field-row">
+      <label class="mc-field">所需點數<input id="pg-f-points" type="number" value="${g.points ?? ''}"></label>
+      <label class="mc-field">兌換券名稱<select id="pg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
+    </div>
+    <label class="mc-field" style="max-width:160px;">狀態
+      <select id="pg-f-status">
+        <option value="啟用" ${(g.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
+        <option value="停用" ${g.status === '停用' ? 'selected' : ''}>停用</option>
+      </select>
+    </label>
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="savePointGift()">儲存</button>
+      ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePointGift()">刪除</button>' : ''}
+    </div>
+  `;
+}
+
+function savePointGift() {
+  const points = document.getElementById('pg-f-points').value;
+  const voucherType = document.getElementById('pg-f-type').value;
+  if (!points || !voucherType) { alert('請輸入所需點數並選擇兌換券'); return; }
+  const isNew = pgCurrentType === null;
+  const payload = {
+    originalVoucherType: isNew ? undefined : pgCurrentType,
+    voucherType: voucherType,
+    points: points,
+    status: document.getElementById('pg-f-status').value
+  };
+  apiPost({ action: 'upsertPointGift', gift: payload }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    pgCurrentType = voucherType;
+    return loadPointGifts();
+  }).catch(err => alert('儲存失敗：' + err.message));
+}
+
+function deletePointGift() {
+  if (!confirm('確定要刪除這個集點兌換項目嗎？此動作無法復原。')) return;
+  apiPost({ action: 'deletePointGift', voucherType: pgCurrentType }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
+    pgCurrentType = null;
+    return loadPointGifts();
+  }).catch(err => alert('刪除失敗：' + err.message));
+}
+
+// ---- 生日禮 ----
+let bgCurrentType = null; // null=新增
+
+function loadBirthdayGifts() {
+  document.getElementById('bg-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  return Promise.all([fetchPromoSettings_(), apiGet({ action: 'birthdayGiftData' })]).then(([, data]) => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    bgGifts = data.gifts;
+    renderBgList();
+    renderBgEditor();
+  }).catch(err => {
+    document.getElementById('bg-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
+    console.warn('生日禮資料讀取失敗', err);
+  });
+}
+
+function renderBgList() {
+  const el = document.getElementById('bg-list');
+  if (!bgGifts.length) { el.innerHTML = '<div class="empty-hint">尚未設定生日禮，生日當月不會自動發放任何東西</div>'; return; }
+  el.innerHTML = bgGifts.map(g => `<div class="mc-item-row${g.voucherType === bgCurrentType ? ' active' : ''}" onclick="bgCurrentType='${escapeHtml(g.voucherType).replace(/'/g, "\\'")}';renderBgList();renderBgEditor();">
+    <span>${escapeHtml(g.voucherType)}</span><span class="mc-item-price">${g.status === '停用' ? '停用' : `生效+${g.effectiveOffset}天/到期+${g.expiryOffset}天`}</span>
+  </div>`).join('');
+}
+
+function renderBgEditor() {
+  const el = document.getElementById('bg-editor');
+  const isNew = bgCurrentType === null;
+  const g = isNew ? {} : (bgGifts.find(x => x.voucherType === bgCurrentType) || {});
+  if (!isNew && !bgGifts.find(x => x.voucherType === bgCurrentType)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增生日禮」</div>'; return; }
+  el.innerHTML = `
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增生日禮' : '編輯生日禮'}</h3>
+    <label class="mc-field">券名稱<select id="bg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
+    <div class="mc-field-row">
+      <label class="mc-field">生效天數offset<input id="bg-f-effoffset" type="number" value="${g.effectiveOffset ?? 0}"></label>
+      <label class="mc-field">到期天數offset<input id="bg-f-expoffset" type="number" value="${g.expiryOffset ?? 27}"></label>
+    </div>
+    <label class="mc-field" style="max-width:160px;">狀態
+      <select id="bg-f-status">
+        <option value="啟用" ${(g.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
+        <option value="停用" ${g.status === '停用' ? 'selected' : ''}>停用</option>
+      </select>
+    </label>
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="saveBirthdayGift()">儲存</button>
+      ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteBirthdayGift()">刪除</button>' : ''}
+    </div>
+  `;
+}
+
+function saveBirthdayGift() {
+  const voucherType = document.getElementById('bg-f-type').value;
+  if (!voucherType) { alert('請選擇券名稱'); return; }
+  if (!confirm('此修改會影響之後每個月的生日禮自動發放，確定要儲存嗎？')) return;
+  const isNew = bgCurrentType === null;
+  const payload = {
+    originalVoucherType: isNew ? undefined : bgCurrentType,
+    voucherType: voucherType,
+    effectiveOffset: document.getElementById('bg-f-effoffset').value,
+    expiryOffset: document.getElementById('bg-f-expoffset').value,
+    status: document.getElementById('bg-f-status').value
+  };
+  apiPost({ action: 'upsertBirthdayGift', gift: payload }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    bgCurrentType = voucherType;
+    return loadBirthdayGifts();
+  }).catch(err => alert('儲存失敗：' + err.message));
+}
+
+function deleteBirthdayGift() {
+  if (!confirm('確定要刪除這筆生日禮設定嗎？此動作無法復原。')) return;
+  apiPost({ action: 'deleteBirthdayGift', voucherType: bgCurrentType }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
+    bgCurrentType = null;
+    return loadBirthdayGifts();
+  }).catch(err => alert('刪除失敗：' + err.message));
+}
+
+// ---- 註冊禮 ----
+let rgCurrentType = null; // null=新增
+
+function loadRegisterGifts() {
+  document.getElementById('rg-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  return Promise.all([fetchPromoSettings_(), apiGet({ action: 'registerGiftData' })]).then(([, data]) => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    rgGifts = data.gifts;
+    renderRgList();
+    renderRgEditor();
+  }).catch(err => {
+    document.getElementById('rg-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
+    console.warn('註冊禮資料讀取失敗', err);
+  });
+}
+
+function renderRgList() {
+  const el = document.getElementById('rg-list');
+  if (!rgGifts.length) { el.innerHTML = '<div class="empty-hint">尚未設定註冊禮，新會員註冊不會自動發放任何東西</div>'; return; }
+  el.innerHTML = rgGifts.map(g => `<div class="mc-item-row${g.voucherType === rgCurrentType ? ' active' : ''}" onclick="rgCurrentType='${escapeHtml(g.voucherType).replace(/'/g, "\\'")}';renderRgList();renderRgEditor();">
+    <span>${escapeHtml(g.voucherType)}</span><span class="mc-item-price">${g.status === '停用' ? '停用' : `生效+${g.effectiveOffset}天/到期+${g.expiryOffset}天`}</span>
+  </div>`).join('');
+}
+
+function renderRgEditor() {
+  const el = document.getElementById('rg-editor');
+  const isNew = rgCurrentType === null;
+  const g = isNew ? {} : (rgGifts.find(x => x.voucherType === rgCurrentType) || {});
+  if (!isNew && !rgGifts.find(x => x.voucherType === rgCurrentType)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增註冊禮」</div>'; return; }
+  el.innerHTML = `
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增註冊禮' : '編輯註冊禮'}</h3>
+    <label class="mc-field">券名稱<select id="rg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
+    <div class="mc-field-row">
+      <label class="mc-field">生效天數offset<input id="rg-f-effoffset" type="number" value="${g.effectiveOffset ?? 0}"></label>
+      <label class="mc-field">到期天數offset<input id="rg-f-expoffset" type="number" value="${g.expiryOffset ?? 6}"></label>
+    </div>
+    <label class="mc-field" style="max-width:160px;">狀態
+      <select id="rg-f-status">
+        <option value="啟用" ${(g.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
+        <option value="停用" ${g.status === '停用' ? 'selected' : ''}>停用</option>
+      </select>
+    </label>
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="saveRegisterGift()">儲存</button>
+      ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteRegisterGift()">刪除</button>' : ''}
+    </div>
+  `;
+}
+
+function saveRegisterGift() {
+  const voucherType = document.getElementById('rg-f-type').value;
+  if (!voucherType) { alert('請選擇券名稱'); return; }
+  const isNew = rgCurrentType === null;
+  const payload = {
+    originalVoucherType: isNew ? undefined : rgCurrentType,
+    voucherType: voucherType,
+    effectiveOffset: document.getElementById('rg-f-effoffset').value,
+    expiryOffset: document.getElementById('rg-f-expoffset').value,
+    status: document.getElementById('rg-f-status').value
+  };
+  apiPost({ action: 'upsertRegisterGift', gift: payload }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    rgCurrentType = voucherType;
+    return loadRegisterGifts();
+  }).catch(err => alert('儲存失敗：' + err.message));
+}
+
+function deleteRegisterGift() {
+  if (!confirm('確定要刪除這筆註冊禮設定嗎？此動作無法復原。')) return;
+  apiPost({ action: 'deleteRegisterGift', voucherType: rgCurrentType }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
+    rgCurrentType = null;
+    return loadRegisterGifts();
   }).catch(err => alert('刪除失敗：' + err.message));
 }
 </script>

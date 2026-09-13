@@ -109,10 +109,10 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
       <div style="font-size:40px;margin-bottom:12px">⏳</div>
       <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">「美寶美食館POS功能」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">「POS功能」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
     </div>
   </div>`;
-  document.title='已過期 - 美寶美食館POS功能';
+  document.title='已過期 - POS功能';
   throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
 }
 // 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
@@ -125,8 +125,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">POS功能</div>
-      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（美寶美食館POS功能）</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館 POS功能</div>
+      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（POS功能）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
       <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
@@ -484,42 +484,65 @@ const MEMBER_TIER_MULTIPLIER = { '一般會員': 1, '銅寶': 1, '銀寶': 2, '�
 // 兌換券系統（2026-08-31老闆定案）：mode='fixed'直接折抵金額，不用選購物車品項；
 // mode='item'要先選購物車裡的哪一項套用，effect決定套用方式(免費/打6折/加一元多一件)
 // ---------------------------------------------------------------
-const VOUCHER_BEHAVIOR = {
-  '20元兌換券': { mode: 'fixed', amount: 20 },
-  '50元兌換券': { mode: 'fixed', amount: 50 },
-  '荷包蛋兌換券': { mode: 'item', effect: 'free', minQty: 1 },
-  '中杯紅茶兌換券': { mode: 'item', effect: 'free', minQty: 1 },
-  '中杯義式咖啡兌換券': { mode: 'item', effect: 'free', minQty: 1 },
-  '中杯鮮奶茶兌換券': { mode: 'item', effect: 'free', minQty: 1 },
-  '脆薯兌換券': { mode: 'item', effect: 'free', minQty: 1 },
-  '米花雞球兌換券': { mode: 'item', effect: 'free', minQty: 1 },
-  '中杯黑糖牛奶兌換券': { mode: 'item', effect: 'free', minQty: 1 },
-  '美式狂想乙套兌換券': { mode: 'item', effect: 'free', minQty: 1 },
-  '買一送一': { mode: 'item', effect: 'free', minQty: 2 },
-  '第二件六折': { mode: 'item', effect: 'discount60', minQty: 2 },
-  '加一元多一件': { mode: 'item', effect: 'addOne', minQty: 1 },
-  '單品免費': { mode: 'item', effect: 'free', minQty: 1 },
-  '週二第二件五折': { mode: 'item', effect: 'discount50', minQty: 2 },
-  '週四雞塊免費': { mode: 'item', effect: 'free', minQty: 1, autoAddChicken: true },
-  '公關費': { mode: 'item', effect: 'free', minQty: 1 } // 跟「單品免費」效果相同(選品項、全額折抵)，只是分類標籤不同，方便之後區分公關招待/門市促銷活動
-};
-// 集點兌換目錄：跟後端Code.gs的POINT_REDEMPTION_CATALOG一致，只用於前端顯示門檻
-const POINT_REDEMPTION_CATALOG = [
-  { points: 3, voucherType: '荷包蛋兌換券' },
-  { points: 5, voucherType: '中杯鮮奶茶兌換券' },
-  { points: 8, voucherType: '脆薯兌換券' },
-  { points: 8, voucherType: '米花雞球兌換券' },
-  { points: 10, voucherType: '中杯黑糖牛奶兌換券' },
-  { points: 20, voucherType: '美式狂想乙套兌換券' }
-];
-// 2026-09-03老闆定案拆分「優惠券」跟「POS按鈕」兩種概念：
-// 優惠券＝贈送給會員成一筆持久記錄(可以現在用也可以下次消費才用)，只有20元/50元屬於這種
-// POS按鈕＝門市活動直接折抵，點了立刻套用購物車品項、不經過贈送/使用兩步驟、不留兌換券記錄
-const MANUAL_GRANT_VOUCHER_TYPES = ['20元兌換券', '50元兌換券'];
-const DIRECT_DISCOUNT_TYPES = ['20元兌換券', '50元兌換券', '第二件六折', '買一送一', '加一元多一件', '單品免費', '週二第二件五折', '週四雞塊免費', '公關費'];
-// 「優惠券」分類（POS功能左側分類清單，2026-09-03新增）：涵蓋全部門市活動折抵/加價按鈕，
-// 含不走VOUCHER_BEHAVIOR的「活動飲品升級」(加價，見promptDrinkUpgrade)
-const DISCOUNT_CATEGORY_ITEMS = [...DIRECT_DISCOUNT_TYPES, '活動飲品升級'];
+// 2026-09-13 CMS化：VOUCHER_BEHAVIOR/DIRECT_DISCOUNT_TYPES/MANUAL_GRANT_VOUCHER_TYPES/
+// POINT_REDEMPTION_CATALOG原本都寫死在這裡，現在改成頁面載入時向雲端「優惠券定義」「集點禮」表讀取
+// (見下方loadPromoSettings)，POS後台可以直接新增/編輯/刪除，不用再改程式碼部署
+let VOUCHER_BEHAVIOR = {};
+let DIRECT_DISCOUNT_TYPES = [];
+let MANUAL_GRANT_VOUCHER_TYPES = [];
+let DISCOUNT_CATEGORY_ITEMS = [];
+let POINT_REDEMPTION_CATALOG = [];
+
+function applyPromoSettings_(data) {
+  VOUCHER_BEHAVIOR = {};
+  DIRECT_DISCOUNT_TYPES = [];
+  MANUAL_GRANT_VOUCHER_TYPES = [];
+  (data.promos || []).filter(p => p.status !== '停用').forEach(p => {
+    VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed'
+      ? { mode: 'fixed', amount: p.amount }
+      : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null };
+    if (p.showAsButton) DIRECT_DISCOUNT_TYPES.push(p.name);
+    if (p.manualGrantable) MANUAL_GRANT_VOUCHER_TYPES.push(p.name);
+  });
+  // 「優惠券」分類（POS功能左側分類清單）：涵蓋全部門市活動折抵/加價按鈕，
+  // 含不走VOUCHER_BEHAVIOR的「活動飲品升級」(加價，見promptDrinkUpgrade)，這個是固定不搬CMS的特例
+  DISCOUNT_CATEGORY_ITEMS = [...DIRECT_DISCOUNT_TYPES, '活動飲品升級'];
+  POINT_REDEMPTION_CATALOG = (data.pointGifts || []).filter(g => g.status !== '停用').map(g => ({ points: g.points, voucherType: g.voucherType }));
+}
+
+// 斷網/API異常時退回localStorage上次成功抓到的快取，比照loadMenuCmsData同一套寫法
+const PROMO_SETTINGS_CACHE_KEY = 'abao_pos_promo_settings_cache_v1';
+function loadPromoSettings() {
+  return apiGet({ action: 'promoSettings' }).then(resp => {
+    if (!resp || resp.status !== 'ok') throw new Error('promoSettings回傳格式異常');
+    applyPromoSettings_(resp);
+    try { localStorage.setItem(PROMO_SETTINGS_CACHE_KEY, JSON.stringify(resp)); } catch (e) {}
+    return true;
+  }).catch(err => {
+    console.warn('優惠券設定雲端讀取失敗，嘗試改用本地快取', err);
+    try {
+      const cached = JSON.parse(localStorage.getItem(PROMO_SETTINGS_CACHE_KEY) || 'null');
+      if (cached && cached.status === 'ok') {
+        applyPromoSettings_(cached);
+        console.warn('已改用本地快取的優惠券設定(可能不是最新版本)');
+        return true;
+      }
+    } catch (e2) {}
+    console.error('優惠券設定完全無法取得(雲端+本地快取皆失敗)，優惠券/集點兌換功能將無法使用');
+    return false;
+  });
+}
+const promoSettingsReady = loadPromoSettings();
+
+// 依品項名稱查CATALOG目前的基本售價(單一定價品項用，飲料M/L這種不適用)，
+// 給「自動加購品項」(例如原本寫死的週四雞塊免費)算加入購物車的價格用
+function findCatalogItemPrice_(name) {
+  for (const cat in CATALOG) {
+    const item = (CATALOG[cat] || []).find(it => it.name === name);
+    if (item) return item.price != null ? item.price : (item.priceM != null ? item.priceM : 0);
+  }
+  return 0;
+}
 
 let memberVouchers = []; // 目前查到的會員兌換券清單(getMemberVouchers回傳)
 let appliedVouchers = []; // 本次結帳已套用的兌換券(有backend voucherId的持久記錄)，可複選多張：[{voucherId, type, mode, discountAmount, targetLineKey?}, ...]
@@ -727,18 +750,19 @@ function promptDrinkUpgrade() {
 function applyDirectDiscount(type) {
   const behavior = VOUCHER_BEHAVIOR[type];
   if (!behavior) { alert('未知的折抵類型：' + type); return; }
-  if (!behavior.autoAddChicken && posCart.length === 0) { alert('請先選購品項'); return; }
+  if (!behavior.autoAddItem && posCart.length === 0) { alert('請先選購品項'); return; }
   if (behavior.mode === 'fixed') {
     directDiscounts.push({ type, discountAmount: behavior.amount });
     renderPosCart();
     return;
   }
-  if (behavior.autoAddChicken) {
-    // 週四雞塊免費：專屬折抵「雞塊 (4個)」，購物車沒有就自動加一份再折抵，不用店員自己選品項
-    // 用baseName比對(而非name)，避免購物車已有客製化過的雞塊列(例如加辣)時誤判成沒有而重複新增
-    let line = posCart.find(c => c.baseName === '雞塊 (4個)');
+  if (behavior.autoAddItem) {
+    // 自動加購品項(例如週四雞塊免費)：購物車沒有就自動加一份再折抵，不用店員自己選品項
+    // 用baseName比對(而非name)，避免購物車已有客製化過的同名列(例如加辣)時誤判成沒有而重複新增
+    let line = posCart.find(c => c.baseName === behavior.autoAddItem);
     if (!line) {
-      line = { lineKey: '雞塊(4個)|free|', name: '雞塊 (4個)', baseName: '雞塊 (4個)', size: null, price: 35, basePrice: 35, qty: 1, note: '' };
+      const price = findCatalogItemPrice_(behavior.autoAddItem);
+      line = { lineKey: behavior.autoAddItem + '|free|', name: behavior.autoAddItem, baseName: behavior.autoAddItem, size: null, price, basePrice: price, qty: 1, note: '' };
       posCart.push(line);
     }
     applyDirectDiscountEffect_(type, behavior.effect, line.lineKey);
@@ -892,8 +916,8 @@ function loadMenuCmsData() {
 const menuCmsDataReady = loadMenuCmsData();
 
 // 2026-09-13：拿掉「雲端平板」分頁後，POS功能變成唯一畫面，不用等使用者切分頁才渲染，
-// 頁面一載入就直接準備好菜單格線
-menuCmsDataReady.then(() => loadPosItemStatus().then(renderPosMenu));
+// 頁面一載入就直接準備好菜單格線；一併等優惠券設定(promoSettingsReady)備妥，「優惠券」分類按鈕才會有正確清單
+Promise.all([menuCmsDataReady, promoSettingsReady]).then(() => loadPosItemStatus().then(renderPosMenu));
 
 function groupsForCategory(cat, itemName) {
   return ITEM_GROUPS_MAP[cat + '||' + itemName] || [];
