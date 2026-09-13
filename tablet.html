@@ -301,9 +301,12 @@ const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡自動帶上，兩個入口只改這一處，
 // 之後不管POS功能繼續加什麼新API都會自動套用，不用每次補強都想一次
 const APP_KEY = 'abao-meibao-2026';
+// 2026-09-13發現：同一組查詢字串重複打會被瀏覽器/Google那邊快取住，改後台設定後同分頁沒重新整理
+// 還是讀到舊資料，過去交接記錄裡好幾次寫的「Google暫時性404/延遲」很可能有一部分其實是這個快取問題。
+// 補上_=時間戳記防快取參數，確保每次都真的打到最新資料
 function apiGet(params) {
-  const qs = new URLSearchParams({ ...params, appKey: APP_KEY }).toString();
-  return fetch(`${ORDER_BACKEND_URL}?${qs}`).then(r => r.json());
+  const qs = new URLSearchParams({ ...params, appKey: APP_KEY, _: Date.now() }).toString();
+  return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json());
 }
 function apiPost(payload) {
   return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) }).then(r => r.json());
