@@ -197,8 +197,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div style="font-size:0.82rem;font-weight:600;">同步到分店</div>
     <div id="mc-sync-store-list" style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.85rem;"></div>
     <div style="display:flex;gap:8px;">
-      <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(false)">同步（只到草稿）</button>
-      <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(true)">同步且發布</button>
+      <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(false, this)">同步（只到草稿）</button>
+      <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(true, this)">同步且發布</button>
     </div>
   </div>
   <div id="mc-subview-categories" style="display:block;">
@@ -678,11 +678,14 @@ function mcSwitchStore(storeId) {
 }
 
 // 「發布」：把目前編輯的門市草稿(draft)整批覆蓋成正式上線版本(live)，顧客/POS下次讀取就會拿到
+// 2026-09-14加強警告文字(老闆反饋過事故後要求)：明講是「整批覆蓋」不是合併，且目前還沒有版本回溯功能，
+// 按鈕點下去後鎖住+顯示處理中，避免老闆等不到反應又連點造成重複請求(這次事故的併發問題已經在後端補鎖，
+// 這裡多一層是讓畫面上就看得出「正在處理」，不用猜)
 function publishMcStore() {
   if (MC_STORE_ID === '__brand__') { alert('品牌範本本身不能發布，請用下方「同步到分店」'); return; }
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的草稿發布成正式上線版本嗎？發布後顧客/POS會立刻看到最新菜單。')) return;
+  if (!confirm('確定要把「' + MC_STORE_ID + '」的草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新菜單\n・目前還沒有版本回溯功能，發布後無法一鍵復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   const btn = document.getElementById('mc-publish-btn');
-  btn.disabled = true; btn.textContent = '發布中…';
+  btn.disabled = true; btn.textContent = '發布中…（請勿重複點擊，處理中請耐心等候)';
   apiPost({ action: 'publishStoreMenu', storeId: MC_STORE_ID }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
     alert('已發布成正式上線版本');
@@ -691,14 +694,24 @@ function publishMcStore() {
 }
 
 // 「同步（且發布）」：品牌端主動把範本推送到勾選的分店草稿，可選是否連同發布成該店的正式版本
-function syncBrandMenuToStores(alsoPublish) {
+// 2026-09-14加強警告文字+處理中鎖定按鈕，理由同上(publishMcStore的註解)
+function syncBrandMenuToStores(alsoPublish, clickedBtn) {
   const checked = Array.from(document.querySelectorAll('.mc-sync-store-cb:checked')).map(cb => cb.value);
   if (!checked.length) { alert('請至少勾選一間分店'); return; }
-  if (!confirm('確定要把品牌範本同步到：' + checked.join('、') + (alsoPublish ? '（同步且發布，會立刻讓顧客/POS看到）' : '（只同步到草稿，不影響顧客/POS目前看到的版本）') + '？')) return;
+  const warnExtra = '\n\n・這是整批覆蓋分店目前的草稿內容，不是合併\n・目前還沒有版本回溯功能，同步後無法一鍵復原\n\n請確認品牌範本內容都已經檢查過再繼續。';
+  if (!confirm('確定要把品牌範本同步到：' + checked.join('、') + (alsoPublish ? '（同步且發布，會立刻讓顧客/POS看到）' : '（只同步到草稿，不影響顧客/POS目前看到的版本）') + '？' + warnExtra)) return;
+  const btns = document.querySelectorAll('#mc-sync-row button');
+  btns.forEach(b => { b.disabled = true; });
+  const originalText = clickedBtn ? clickedBtn.textContent : '';
+  if (clickedBtn) clickedBtn.textContent = '處理中…（請勿重複點擊，請耐心等候)';
   apiPost({ action: 'syncBrandMenuToStores', storeIds: checked, alsoPublish: !!alsoPublish }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '同步失敗');
     alert('同步完成' + (alsoPublish ? '（已一併發布）' : '（已寫入分店草稿，還沒發布）'));
-  }).catch(err => alert('同步失敗：' + err.message));
+  }).catch(err => alert('同步失敗：' + err.message))
+    .finally(() => {
+      btns.forEach(b => { b.disabled = false; });
+      if (clickedBtn) clickedBtn.textContent = originalText;
+    });
 }
 
 // ---- 分類手風琴列表（比照大麥「品牌範本餐點管理」的版面：每個分類一整列，展開看品項，點品項彈modal編輯）----
