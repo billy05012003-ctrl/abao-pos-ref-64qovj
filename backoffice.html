@@ -522,7 +522,9 @@ function renderAvailabilityList() {
   const grouped = new Map();
   if (Object.keys(mcCatalog).length > 0) {
     // 跟「菜單管理」同一份即時資料，分類名稱/品項異動都會自動同步，不用再手動重跑build_backoffice.py
-    Object.keys(mcCatalog).forEach(cat => {
+    // 2026-09-14修正：分類順序原本直接用Object.keys(mcCatalog)(不會跟著拖曳排序走)，
+    // 改成跟renderMcCatList()同一套邏輯讀mcCategoryOrder，菜單管理拖曳排序後這裡才會跟著換順序
+    mcCategoryOrder.filter(cat => mcCatalog.hasOwnProperty(cat)).forEach(cat => {
       grouped.set(cat, mcCatalog[cat].map(it => ({ category: cat, name: it.name })));
     });
     // 選項庫(mcOptionGroups)理論上跟mcCatalog同一次API回來，但萬一是空的還是退回舊快照保底
