@@ -766,7 +766,7 @@ function renderMcCatList() {
         const priceLabel = item.price != null ? ('$' + item.price)
           : (item.price_m != null || item.price_l != null) ? [item.price_m != null ? 'M$'+item.price_m : '', item.price_l != null ? 'L$'+item.price_l : ''].filter(Boolean).join(' ')
           : '';
-        itemRow.innerHTML = `<span>${escapeHtml(item.name)}</span><span class="mc-item-price">${escapeHtml(priceLabel)}</span>`;
+        itemRow.innerHTML = `<span>${item.locked ? '🔒 ' : ''}${escapeHtml(item.name)}</span><span class="mc-item-price">${escapeHtml(priceLabel)}</span>`;
         itemRow.onclick = () => { mcCurrentItem = { category: cat, name: item.name }; openMcItemModal(); };
         body.appendChild(itemRow);
       });
@@ -860,6 +860,12 @@ function renderMcItemEditor() {
       <label class="mc-field">副價格<input id="mc-f-pricealt" type="number" value="${item.price_alt ?? ''}"></label>
     </div>
     <label class="mc-field">備註<textarea id="mc-f-note" rows="2">${escapeHtml(item.note || '')}</textarea></label>
+    ${MC_STORE_ID !== '__brand__' ? `
+    <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin:8px 0;">
+      <input type="checkbox" id="mc-f-locked" ${item.locked ? 'checked' : ''}>
+      鎖定，不被品牌同步覆蓋（品牌之後同步到本店時，這個品項會跳過）
+    </label>
+    ` : ''}
     ${!isNew ? renderMcPhotoHtml(item) : ''}
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMcItem()">儲存</button>
@@ -940,6 +946,7 @@ function saveMcItem() {
     priceSet: mcFieldValue('mc-f-priceset'),
     priceAlt: mcFieldValue('mc-f-pricealt'),
     note: mcFieldValue('mc-f-note'),
+    locked: MC_STORE_ID !== '__brand__' && !!document.getElementById('mc-f-locked')?.checked,
     storeId: MC_STORE_ID,
     status: MC_STATUS
   };
