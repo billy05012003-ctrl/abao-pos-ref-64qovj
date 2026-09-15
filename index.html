@@ -134,6 +134,7 @@
   }
   .overlay.open { display: flex; }
   #drink-overlay { z-index: 25; }
+  #tier-overlay { z-index: 25; }
   .sheet {
     background: #fff;
     width: 100%;
@@ -264,6 +265,16 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   </div>
 </div>
 
+<div class="overlay" id="tier-overlay">
+  <div class="sheet" style="max-height:80vh;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <h2 style="margin:0;">會員等級與專屬好禮</h2>
+      <button type="button" onclick="closeTierOverlay()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <div id="tier-overlay-result"><div style="color:var(--muted);font-size:0.85rem;">載入中...</div></div>
+  </div>
+</div>
+
 <nav id="tabs"></nav>
 
 <main id="menu"><p style="text-align:center;color:var(--muted);padding:40px 16px;">菜單載入中…</p></main>
@@ -310,9 +321,11 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <div id="cart-lines"></div>
       <div class="cart-total"><span>總計</span><span id="cart-total">$0</span></div>
       <div style="margin:10px 0;padding-top:10px;border-top:1px dashed var(--border);">
-        <label>會員手機（選填，用來查詢可折抵的兌換券）</label>
+        <label>會員手機（需完成會員驗證才能送出訂單）</label>
         <input type="tel" id="cust-phone">
-        <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="loadCheckoutVouchers()">查詢可用兌換券</button>
+        <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="verifyMember()">驗證會員</button>
+        <button type="button" style="width:auto;padding:6px 0;margin-top:6px;margin-left:10px;background:none;border:none;color:var(--brand);font-size:0.85rem;text-decoration:underline;cursor:pointer;" onclick="openTierOverlay()">會員等級與專屬好禮</button>
+        <div id="member-verify-result" style="margin-top:8px;font-size:0.85rem;"></div>
         <div id="checkout-voucher-list" style="margin-top:8px;"></div>
         <div id="checkout-total-preview" style="font-size:0.85rem;color:var(--brand);margin-top:6px;"></div>
       </div>
@@ -390,10 +403,14 @@ function apiPost_(payload) {
 // 第二件六折/買一送一等POS專屬即時折抵按鈕不會出現在這裡，因為那些不會贈送成客人名下的持久兌換券
 let VOUCHER_BEHAVIOR = {};
 let POINT_REDEMPTION_CATALOG = [];
+// 2026-09-16會員等級說明頁新增：保留一份原始promos陣列(含minTier/allowNonMember)，
+// 上面VOUCHER_BEHAVIOR轉換過程會把這些欄位丟掉，等級說明頁篩選「這個等級能用的限定優惠」要用原始資料
+let ALL_PROMOS = [];
 
 function applyPromoSettings_(data) {
   VOUCHER_BEHAVIOR = {};
-  (data.promos || []).filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton)).forEach(p => {
+  ALL_PROMOS = data.promos || [];
+  ALL_PROMOS.filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton)).forEach(p => {
     VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed'
       ? { mode: 'fixed', amount: p.amount }
       : { mode: 'item', effect: p.effect, minQty: p.minQty };
@@ -730,6 +747,109 @@ function pruneStaleVoucherSelections_() {
   checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v =>
     v.targetLineKey == null || cart.some(c => c.lineKey === v.targetLineKey)
   );
+}
+
+// ---------------------------------------------------------------
+// 會員驗證（2026-09-16新增）：線上點餐強制先完成會員驗證才能送出訂單，
+// 入口沿用原本就在「我的訂單」畫面的會員手機欄位。verifiedMember非null代表已通過驗證，
+// showCheckout()/submitOrder()都會檢查這個變數
+// ---------------------------------------------------------------
+let verifiedMember = null;
+
+function renderMemberVerified_(member) {
+  verifiedMember = member;
+  document.getElementById('member-verify-result').innerHTML = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--brand);">
+      ✓ 您好，${escapeHtml_(member.name)}（${escapeHtml_(member.tier.endsWith('會員') ? member.tier : member.tier + '會員')}）
+    </div>`;
+}
+
+function renderMemberNotFound_(phone) {
+  verifiedMember = null;
+  document.getElementById('member-verify-result').innerHTML = `
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">
+      <div style="color:var(--muted);">查無此會員，填姓名建立即可（免費，立即生效）</div>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <input type="text" id="member-new-name" placeholder="姓名" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
+        <button type="button" class="btn-primary" style="width:auto;margin-top:0;padding:6px 14px;font-size:0.85rem;" onclick="registerNewMember('${phone}')">建立會員</button>
+      </div>
+    </div>`;
+}
+
+function verifyMember() {
+  const phone = document.getElementById('cust-phone').value.trim();
+  const resultEl = document.getElementById('member-verify-result');
+  if (!phone) { resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">請先輸入手機號碼</div>'; return; }
+  verifiedMember = null;
+  resultEl.innerHTML = '<div style="color:var(--muted);">驗證中...</div>';
+  apiGet_({ action: 'getMember', phone }).then(data => {
+    if (data.status === 'ok') {
+      renderMemberVerified_(data.member);
+      loadCheckoutVouchers();
+    } else if (data.status === 'not_found') {
+      renderMemberNotFound_(phone);
+    } else {
+      resultEl.innerHTML = '<div style="color:#a30000;">驗證失敗，請稍後再試</div>';
+    }
+  }).catch(() => {
+    resultEl.innerHTML = '<div style="color:#a30000;">驗證失敗，請確認網路連線後再試</div>';
+  });
+}
+
+function registerNewMember(phone) {
+  const name = document.getElementById('member-new-name').value.trim();
+  if (!name) { alert('請輸入姓名'); return; }
+  apiPost_({ action: 'registerMember', phone, name }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '建立會員失敗'); return; }
+    renderMemberVerified_(data.member);
+    loadCheckoutVouchers();
+  }).catch(() => alert('建立會員失敗，請確認網路連線後再試'));
+}
+
+function escapeHtml_(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---------------------------------------------------------------
+// 會員等級與專屬好禮說明頁（2026-09-16新增）：資料即時來自memberTierData+ALL_PROMOS，
+// 不是寫死的草稿——老闆在POS後台改門檻/加成/優惠設定，這裡重新整理就會跟著變
+// ---------------------------------------------------------------
+function openTierOverlay() {
+  document.getElementById('tier-overlay').classList.add('open');
+  renderTierBenefits();
+}
+function closeTierOverlay() {
+  document.getElementById('tier-overlay').classList.remove('open');
+}
+
+function renderTierBenefits() {
+  const el = document.getElementById('tier-overlay-result');
+  el.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">載入中...</div>';
+  apiGet_({ action: 'memberTierData' }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    const tiers = data.tiers.slice().sort((a, b) => a.order - b.order);
+    const orderOf = name => { const t = tiers.find(x => x.name === name); return t ? t.order : -1; };
+    el.innerHTML = tiers.map(t => {
+      const upgrade = t.threshold > 0 ? `半年內累積消費滿 $${t.threshold}` : '完成會員驗證即入會';
+      const renew = (t.continuationThreshold == null) ? '永久有效' : `等級內累積消費滿 $${t.continuationThreshold}`;
+      const bonus = (t.multiplier && t.multiplier > 1) ? `點數 ${t.multiplier} 倍送` : '無額外加成';
+      const perks = ALL_PROMOS.filter(p => p.minTier && p.status !== '停用' && orderOf(p.minTier) <= t.order).map(p => p.name);
+      const perksHtml = perks.length ? perks.map(n => `<span style="display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 8px;margin:2px 4px 0 0;font-size:0.78rem;">${escapeHtml_(n)}</span>`).join('') : '<span style="color:var(--muted);font-size:0.8rem;">尚未設定專屬優惠</span>';
+      return `
+        <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+          <div style="font-weight:700;color:var(--brand);margin-bottom:6px;">${escapeHtml_(t.name)}</div>
+          <div style="font-size:0.82rem;color:var(--muted);line-height:1.7;">
+            升級條件：${upgrade}<br>
+            續等條件：${renew}<br>
+            點數加成：${bonus}
+          </div>
+          <div style="margin-top:6px;">${perksHtml}</div>
+        </div>`;
+    }).join('');
+  }).catch(err => {
+    el.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">讀取失敗，請確認網路連線後再試</div>';
+    console.warn('會員等級資料讀取失敗', err);
+  });
 }
 
 function loadCheckoutVouchers() {
@@ -1342,6 +1462,7 @@ function openCart() {
 function closeCart() { document.getElementById('cart-overlay').classList.remove('open'); }
 function showCheckout() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
+  if (!verifiedMember) { alert('請先完成會員驗證，才能填寫取餐資訊'); document.getElementById('cust-phone').focus(); return; }
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
   populatePickupDate();
   populatePickupTime(document.getElementById('pickup-date').value);
@@ -1381,6 +1502,8 @@ function submitOrder(e) {
   const phone = document.getElementById('cust-phone').value.trim();
   // 手機欄位搬到「我的訂單」畫面後不再是<form>裡的欄位，瀏覽器原生required不會擋，改用JS檢查
   if (!phone) { alert('請輸入手機號碼'); backToCart(); document.getElementById('cust-phone').focus(); return false; }
+  // 2026-09-16：保險檢查，防止驗證成功後又手動改了手機號碼欄位(showCheckout()已經擋過一次，這裡是雙重防呆)
+  if (!verifiedMember || verifiedMember.phone !== phone) { alert('會員驗證資料有異動，請重新驗證'); backToCart(); return false; }
   const dateLabel = formatDateLabel(dateValue === 'today' ? 0 : 1);
   const time = `${dateLabel} ${document.getElementById('pickup-time').value}`;
   const note = document.getElementById('cust-note').value;
