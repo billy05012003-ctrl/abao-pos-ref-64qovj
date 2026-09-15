@@ -285,6 +285,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <p style="font-size:0.8rem;color:var(--muted);">
       會員用累計點數兌換下面「優惠券」清單裡的項目，扣點不影響當期消費/升等。
     </p>
+    <div id="pg-domain-controls"></div>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
         <h4>集點兌換清單</h4>
@@ -302,6 +303,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       這裡管理全部優惠券/折抵按鈕的「效果」本身：固定金額折抵、或依購買品項打折/免費/加一元多一件。
       「顯示為優惠券按鈕」勾選的會出現在POS功能「優惠券」分類讓店員直接點；沒勾選的只能透過集點兌換/生日禮/註冊禮/店員贈送取得。
     </p>
+    <div id="pm-domain-controls"></div>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
         <h4>優惠券清單</h4>
@@ -677,12 +679,20 @@ function mcAddCategory() {
 }
 
 // 切換編輯對象(自己的門市 / 品牌範本)，重新載入這份資料
+// 2026-09-16：集點禮/優惠券共用同一個MC_STORE_ID，切門市時這兩塊的快取(mbLoaded)也要失效，
+// 如果使用者當下就停在集點禮/優惠券子分頁要立刻重新載入，不然會看到上一個門市的舊資料
 function mcSwitchStore(storeId) {
   MC_STORE_ID = storeId;
   document.getElementById('mc-publish-row').style.display = storeId === '__brand__' ? 'none' : 'flex';
   document.getElementById('mc-sync-row').style.display = storeId === '__brand__' ? 'flex' : 'none';
   document.getElementById('mc-snapshot-panel').style.display = 'none'; // 換了編輯對象，收合快照面板避免看到上一個門市的快照
   loadMenuCms();
+  mbLoaded.points = false;
+  mbLoaded.promo = false;
+  pmCurrentName = null;
+  pgCurrentType = null;
+  if (currentMemberSubview === 'points') { mbLoaded.points = true; loadPointGifts(); }
+  else if (currentMemberSubview === 'promo') { mbLoaded.promo = true; loadPromos(); }
 }
 
 // ---- 版本回溯(2026-09-15新增) ----
@@ -1630,13 +1640,106 @@ let pgGifts = [];
 let bgGifts = [];
 let rgGifts = [];
 
+// 2026-09-16多店架構：集點禮/優惠券沿用菜單管理同一個MC_STORE_ID/MC_STATUS(目前編輯門市/草稿層)，
+// 不另外做第二套門市切換——要切門市請到「菜單管理」分頁切，這裡三個功能編輯的都是同一個「門市」概念
 function fetchPromoSettings_() {
-  return apiGet({ action: 'promoSettings' }).then(data => {
+  return apiGet({ action: 'promoSettings', storeId: MC_STORE_ID, version: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
     pmPromos = data.promos;
     pgGifts = data.pointGifts;
     return data;
   });
+}
+
+// ---- 集點禮/優惠券共用的「門市/版本」管理區塊(發布/同步/版本回溯)：這兩份資料在後端是同一個
+// 同步單位(copyPromoRows_一次處理兩張表)，所以只做一套控制項，透過prefix('pm'或'pg')同時插入
+// 到優惠券/集點禮兩個子分頁，行為完全一致 ----
+function renderPromoDomainControls() {
+  const storeLabel = (MC_STORE_OPTIONS.find(o => o.id === MC_STORE_ID) || {}).label || MC_STORE_ID;
+  const isBrand = MC_STORE_ID === '__brand__';
+  const html = `
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:0.8rem;color:var(--muted);">
+      目前編輯：<b>${escapeHtml(storeLabel)}</b>${isBrand ? '' : '的草稿版本'}（要切換門市請到「菜單管理」分頁切，集點禮/優惠券跟菜單共用同一個門市切換）
+    </div>
+    <div style="display:${isBrand ? 'none' : 'flex'};gap:10px;align-items:center;margin-bottom:12px;">
+      <button type="button" class="mc-save-btn" onclick="publishPromoDomain(this)">發布到正式版</button>
+    </div>
+    <div class="promo-sync-row" style="display:${isBrand ? 'flex' : 'none'};flex-direction:column;gap:8px;margin-bottom:12px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+      <div style="font-size:0.82rem;font-weight:600;">同步到分店</div>
+      <div class="promo-sync-store-list" style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.85rem;">
+        ${MC_SYNC_TARGET_STORES.map(s => `<label><input type="checkbox" class="promo-sync-store-cb" value="${escapeHtml(s.id)}"> ${escapeHtml(s.label)}</label>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button type="button" class="mc-save-btn" onclick="syncPromoDomainToStores(false, this)">同步（只到草稿）</button>
+        <button type="button" class="mc-save-btn" onclick="syncPromoDomainToStores(true, this)">同步且發布</button>
+      </div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <button type="button" class="mc-add-btn" onclick="togglePromoSnapshotPanel(this)">📜 版本回溯</button>
+      <div class="promo-snapshot-panel" style="display:none;margin-top:8px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+        <p style="font-size:0.78rem;color:var(--muted);margin:0 0 8px;">每次「同步」「發布」「回復」真的覆蓋資料之前，系統都會自動存一份快照，最近10份。回復本身也會先自動備份，可以再復原回去。</p>
+        <div class="promo-snapshot-list"><div class="empty-hint">載入中...</div></div>
+      </div>
+    </div>
+  `;
+  document.getElementById('pm-domain-controls').innerHTML = html;
+  document.getElementById('pg-domain-controls').innerHTML = html;
+}
+
+function publishPromoDomain(btn) {
+  if (MC_STORE_ID === '__brand__') { alert('品牌範本本身不能發布，請用下方「同步到分店」'); return; }
+  if (!confirm('確定要把「' + MC_STORE_ID + '」的集點禮/優惠券草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
+  btn.disabled = true; btn.textContent = '發布中...';
+  apiPost({ action: 'publishStorePromos', storeId: MC_STORE_ID }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
+    alert('已發布到正式版');
+  }).catch(err => alert('發布失敗：' + err.message))
+    .finally(() => { btn.disabled = false; btn.textContent = '發布到正式版'; });
+}
+
+function syncPromoDomainToStores(alsoPublish, btn) {
+  const checked = Array.from(btn.closest('.promo-sync-row').querySelectorAll('.promo-sync-store-cb:checked')).map(cb => cb.value);
+  if (!checked.length) { alert('請至少勾選一間要同步的分店'); return; }
+  const label = alsoPublish ? '同步且發布' : '同步（只到草稿）';
+  if (!confirm('確定要把品牌範本的集點禮/優惠券' + label + '到勾選的分店嗎？\n\n・這是整批覆蓋目的地，不是合併\n・系統會自動存一份覆蓋前的快照，之後可以在「📜版本回溯」復原')) return;
+  btn.disabled = true;
+  apiPost({ action: 'syncBrandPromosToStores', storeIds: checked, alsoPublish }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '同步失敗');
+    alert('同步完成');
+  }).catch(err => alert('同步失敗：' + err.message))
+    .finally(() => { btn.disabled = false; });
+}
+
+function togglePromoSnapshotPanel(btn) {
+  const panel = btn.nextElementSibling;
+  const willOpen = panel.style.display === 'none';
+  panel.style.display = willOpen ? 'block' : 'none';
+  if (willOpen) loadPromoSnapshotPanel(panel);
+}
+
+function loadPromoSnapshotPanel(panel) {
+  const listEl = panel.querySelector('.promo-snapshot-list');
+  listEl.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'listPromoSnapshots', storeId: MC_STORE_ID, version: MC_STATUS }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    if (!data.snapshots.length) { listEl.innerHTML = '<div class="empty-hint">目前沒有快照紀錄</div>'; return; }
+    listEl.innerHTML = data.snapshots.map(s => `
+      <div class="mc-item-row" style="cursor:default;">
+        <span>${new Date(s.createdAt).toLocaleString('zh-TW')}${s.actionLabel ? '・' + escapeHtml(s.actionLabel) : ''}</span>
+        <button type="button" class="mc-save-btn" style="padding:2px 10px;font-size:0.78rem;" onclick="restorePromoSnapshot_('${s.snapshotId}')">復原這份</button>
+      </div>`).join('');
+  }).catch(err => { listEl.innerHTML = '<div class="empty-hint">讀取失敗</div>'; console.warn('版本回溯讀取失敗', err); });
+}
+
+function restorePromoSnapshot_(snapshotId) {
+  const statusLabel = MC_STATUS === 'live' ? '正式上線' : '草稿';
+  if (!confirm('確定要把「' + MC_STORE_ID + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
+  apiPost({ action: 'restorePromoSnapshot', snapshotId }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '復原失敗');
+    alert('已復原');
+    if (currentMemberSubview === 'points') loadPointGifts();
+    else if (currentMemberSubview === 'promo') loadPromos();
+  }).catch(err => alert('復原失敗：' + err.message));
 }
 
 function promoNameOptions_(selected) {
@@ -1647,6 +1750,7 @@ function promoNameOptions_(selected) {
 let pmCurrentName = null; // null=新增
 
 function loadPromos() {
+  renderPromoDomainControls();
   document.getElementById('pm-list').innerHTML = '<div class="empty-hint">載入中...</div>';
   return fetchPromoSettings_().then(() => {
     renderPmList();
@@ -1726,6 +1830,10 @@ function renderPmEditor() {
         <option value="停用" ${p.status === '停用' ? 'selected' : ''}>停用</option>
       </select>
     </label>
+    ${MC_STORE_ID !== '__brand__' ? `
+    <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
+      <input id="pm-f-locked" type="checkbox" ${p.locked ? 'checked' : ''}> 鎖定，不被品牌同步覆蓋
+    </label>` : ''}
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="savePromo()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePromo()">刪除</button>' : ''}
@@ -1738,6 +1846,7 @@ function savePromo() {
   if (!name) { alert('請輸入名稱'); return; }
   const isNew = pmCurrentName === null;
   const mode = document.getElementById('pm-f-mode').value;
+  const lockedEl = document.getElementById('pm-f-locked');
   const payload = {
     originalName: isNew ? undefined : pmCurrentName,
     name: name,
@@ -1748,7 +1857,10 @@ function savePromo() {
     autoAddItem: mode === 'item' ? document.getElementById('pm-f-autoadd').value.trim() : '',
     showAsButton: document.getElementById('pm-f-showbtn').checked,
     manualGrantable: document.getElementById('pm-f-grantable').checked,
-    status: document.getElementById('pm-f-status').value
+    status: document.getElementById('pm-f-status').value,
+    storeId: MC_STORE_ID,
+    version: MC_STATUS,
+    locked: lockedEl ? lockedEl.checked : false
   };
   apiPost({ action: 'upsertPromo', promo: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
@@ -1759,7 +1871,7 @@ function savePromo() {
 
 function deletePromo() {
   if (!confirm('確定要刪除「' + pmCurrentName + '」這個優惠券嗎？此動作無法復原，集點禮/生日禮/註冊禮若還在使用這個名稱要記得一併調整。')) return;
-  apiPost({ action: 'deletePromo', name: pmCurrentName }).then(data => {
+  apiPost({ action: 'deletePromo', name: pmCurrentName, storeId: MC_STORE_ID, version: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     pmCurrentName = null;
     return loadPromos();
@@ -1770,6 +1882,7 @@ function deletePromo() {
 let pgCurrentType = null; // null=新增，用兌換券名稱當key(集點兌換清單裡不會有重複名稱)
 
 function loadPointGifts() {
+  renderPromoDomainControls();
   document.getElementById('pg-list').innerHTML = '<div class="empty-hint">載入中...</div>';
   return fetchPromoSettings_().then(() => {
     renderPgList();
@@ -1805,6 +1918,10 @@ function renderPgEditor() {
         <option value="停用" ${g.status === '停用' ? 'selected' : ''}>停用</option>
       </select>
     </label>
+    ${MC_STORE_ID !== '__brand__' ? `
+    <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
+      <input id="pg-f-locked" type="checkbox" ${g.locked ? 'checked' : ''}> 鎖定，不被品牌同步覆蓋
+    </label>` : ''}
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="savePointGift()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePointGift()">刪除</button>' : ''}
@@ -1817,11 +1934,15 @@ function savePointGift() {
   const voucherType = document.getElementById('pg-f-type').value;
   if (!points || !voucherType) { alert('請輸入所需點數並選擇兌換券'); return; }
   const isNew = pgCurrentType === null;
+  const lockedEl = document.getElementById('pg-f-locked');
   const payload = {
     originalVoucherType: isNew ? undefined : pgCurrentType,
     voucherType: voucherType,
     points: points,
-    status: document.getElementById('pg-f-status').value
+    status: document.getElementById('pg-f-status').value,
+    storeId: MC_STORE_ID,
+    version: MC_STATUS,
+    locked: lockedEl ? lockedEl.checked : false
   };
   apiPost({ action: 'upsertPointGift', gift: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
@@ -1832,7 +1953,7 @@ function savePointGift() {
 
 function deletePointGift() {
   if (!confirm('確定要刪除這個集點兌換項目嗎？此動作無法復原。')) return;
-  apiPost({ action: 'deletePointGift', voucherType: pgCurrentType }).then(data => {
+  apiPost({ action: 'deletePointGift', voucherType: pgCurrentType, storeId: MC_STORE_ID, version: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     pgCurrentType = null;
     return loadPointGifts();
