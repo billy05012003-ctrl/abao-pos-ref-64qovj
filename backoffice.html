@@ -201,6 +201,13 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(true, this)">同步且發布</button>
     </div>
   </div>
+  <div style="margin-bottom:16px;">
+    <button type="button" class="mc-add-btn" onclick="toggleSnapshotPanel()">📜 版本回溯</button>
+    <div id="mc-snapshot-panel" style="display:none;margin-top:8px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
+      <p style="font-size:0.78rem;color:var(--muted);margin:0 0 8px;">每次「同步」「發布」「回復」真的覆蓋資料之前，系統都會自動存一份快照，最近10份。回復本身也會先自動備份，可以再復原回去。</p>
+      <div id="mc-snapshot-list"><div class="empty-hint">載入中...</div></div>
+    </div>
+  </div>
   <div id="mc-subview-categories" style="display:block;">
     <p style="font-size:0.8rem;color:var(--muted);">
       改品項名稱/價格、新增/刪除品項、調整品項要用哪些客製化選項都在這裡。改完立刻生效，線上點餐頁/POS功能下次讀取菜單就會拿到最新版本。點分類可以展開/收合看底下的品項，點品項會彈出視窗編輯。
@@ -674,16 +681,58 @@ function mcSwitchStore(storeId) {
   MC_STORE_ID = storeId;
   document.getElementById('mc-publish-row').style.display = storeId === '__brand__' ? 'none' : 'flex';
   document.getElementById('mc-sync-row').style.display = storeId === '__brand__' ? 'flex' : 'none';
+  document.getElementById('mc-snapshot-panel').style.display = 'none'; // 換了編輯對象，收合快照面板避免看到上一個門市的快照
   loadMenuCms();
 }
 
+// ---- 版本回溯(2026-09-15新增) ----
+function toggleSnapshotPanel() {
+  const panel = document.getElementById('mc-snapshot-panel');
+  const willShow = panel.style.display === 'none';
+  panel.style.display = willShow ? 'block' : 'none';
+  if (willShow) loadMcSnapshots();
+}
+
+function loadMcSnapshots() {
+  const el = document.getElementById('mc-snapshot-list');
+  el.innerHTML = '<div class="empty-hint">載入中...</div>';
+  return Promise.all([
+    apiGet({ action: 'listMenuSnapshots', storeId: MC_STORE_ID, status: 'draft' }),
+    apiGet({ action: 'listMenuSnapshots', storeId: MC_STORE_ID, status: 'live' })
+  ]).then(([draftRes, liveRes]) => {
+    const all = [].concat(draftRes.snapshots || [], liveRes.snapshots || [])
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (!all.length) { el.innerHTML = '<div class="empty-hint">目前沒有任何快照</div>'; return; }
+    el.innerHTML = all.map(s => `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
+        <div>
+          <div>${new Date(s.createdAt).toLocaleString('zh-TW')}　【${s.status === 'draft' ? '草稿' : '正式上線'}】</div>
+          <div style="color:var(--muted);">${escapeHtml(s.actionLabel || '')}</div>
+        </div>
+        <button type="button" class="mc-save-btn" style="white-space:nowrap;" onclick="restoreMcSnapshot('${s.snapshotId}','${s.status}')">回復到這個版本</button>
+      </div>
+    `).join('');
+  }).catch(() => { el.innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重試</div>'; });
+}
+
+function restoreMcSnapshot(snapshotId, status) {
+  const statusLabel = status === 'draft' ? '草稿' : '正式上線';
+  if (!confirm('確定要把「' + MC_STORE_ID + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
+  apiPost({ action: 'restoreMenuSnapshot', snapshotId }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '復原失敗');
+    alert('復原完成');
+    loadMcSnapshots();
+    if (status === MC_STATUS) loadMenuCms(); // 復原的剛好是目前畫面正在編輯的這一層，重新整理內容
+  }).catch(err => alert('復原失敗：' + err.message));
+}
+
 // 「發布」：把目前編輯的門市草稿(draft)整批覆蓋成正式上線版本(live)，顧客/POS下次讀取就會拿到
-// 2026-09-14加強警告文字(老闆反饋過事故後要求)：明講是「整批覆蓋」不是合併，且目前還沒有版本回溯功能，
+// 2026-09-14加強警告文字(老闆反饋過事故後要求)：明講是「整批覆蓋」，2026-09-15已補上版本回溯功能，
 // 按鈕點下去後鎖住+顯示處理中，避免老闆等不到反應又連點造成重複請求(這次事故的併發問題已經在後端補鎖，
 // 這裡多一層是讓畫面上就看得出「正在處理」，不用猜)
 function publishMcStore() {
   if (MC_STORE_ID === '__brand__') { alert('品牌範本本身不能發布，請用下方「同步到分店」'); return; }
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新菜單\n・目前還沒有版本回溯功能，發布後無法一鍵復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
+  if (!confirm('確定要把「' + MC_STORE_ID + '」的草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新菜單\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   const btn = document.getElementById('mc-publish-btn');
   btn.disabled = true; btn.textContent = '發布中…（請勿重複點擊，處理中請耐心等候)';
   apiPost({ action: 'publishStoreMenu', storeId: MC_STORE_ID }).then(data => {
@@ -698,7 +747,7 @@ function publishMcStore() {
 function syncBrandMenuToStores(alsoPublish, clickedBtn) {
   const checked = Array.from(document.querySelectorAll('.mc-sync-store-cb:checked')).map(cb => cb.value);
   if (!checked.length) { alert('請至少勾選一間分店'); return; }
-  const warnExtra = '\n\n・這是整批覆蓋分店目前的草稿內容，不是合併\n・目前還沒有版本回溯功能，同步後無法一鍵復原\n\n請確認品牌範本內容都已經檢查過再繼續。';
+  const warnExtra = '\n\n・這是整批覆蓋分店目前的草稿內容，不是合併\n・鎖定的品項會跳過不被覆蓋\n・系統會自動存一份同步前的快照，之後可以在「📜版本回溯」復原\n\n請確認品牌範本內容都已經檢查過再繼續。';
   if (!confirm('確定要把品牌範本同步到：' + checked.join('、') + (alsoPublish ? '（同步且發布，會立刻讓顧客/POS看到）' : '（只同步到草稿，不影響顧客/POS目前看到的版本）') + '？' + warnExtra)) return;
   const btns = document.querySelectorAll('#mc-sync-row button');
   btns.forEach(b => { b.disabled = true; });
