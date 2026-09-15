@@ -1749,10 +1749,19 @@ function promoNameOptions_(selected) {
 // ---- 優惠券 ----
 let pmCurrentName = null; // null=新增
 
+// 2026-09-16：優惠券編輯畫面新增「最低適用等級」下拉選單，需要會員分級名稱清單(mtTiers)。
+// 如果老闆還沒點開過「會員分級」子分頁，mtTiers會是空的，這裡順便補抓一次(用mbLoaded.tiers避免重複抓)
+function ensureMemberTiersLoaded_() {
+  if (mbLoaded.tiers) return Promise.resolve();
+  return apiGet({ action: 'memberTierData' }).then(data => {
+    if (data.status === 'ok') { mtTiers = data.tiers; mtStats = data.stats || {}; mbLoaded.tiers = true; }
+  }).catch(err => console.warn('會員分級資料讀取失敗(優惠券門檻選單用)', err));
+}
+
 function loadPromos() {
   renderPromoDomainControls();
   document.getElementById('pm-list').innerHTML = '<div class="empty-hint">載入中...</div>';
-  return fetchPromoSettings_().then(() => {
+  return Promise.all([fetchPromoSettings_(), ensureMemberTiersLoaded_()]).then(() => {
     renderPmList();
     renderPmEditor();
   }).catch(err => {
@@ -1775,6 +1784,8 @@ function renderPmList() {
     const tags = [
       p.showAsButton ? '按鈕' : null,
       p.manualGrantable ? '可贈送' : null,
+      p.minTier ? ('限' + p.minTier + '以上') : null,
+      (p.minTier && !p.allowNonMember) ? '不開放非會員' : null,
       p.status === '停用' ? '停用' : null
     ].filter(Boolean).join('・');
     const row = `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
@@ -1788,6 +1799,12 @@ function pmModeChanged() {
   const mode = document.getElementById('pm-f-mode').value;
   document.getElementById('pm-fixed-fields').style.display = mode === 'fixed' ? 'flex' : 'none';
   document.getElementById('pm-item-fields').style.display = mode === 'item' ? 'flex' : 'none';
+}
+
+// 「不限」時不需要另外決定非會員能不能用(本來就沒有等級限制)，所以只有選了實際等級才顯示這個勾選框
+function pmMinTierChanged() {
+  const hasTier = !!document.getElementById('pm-f-mintier').value;
+  document.getElementById('pm-f-allownonmember-wrap').style.display = hasTier ? 'flex' : 'none';
 }
 
 function renderPmEditor() {
@@ -1830,6 +1847,17 @@ function renderPmEditor() {
         <option value="停用" ${p.status === '停用' ? 'selected' : ''}>停用</option>
       </select>
     </label>
+    <div class="mc-field-row">
+      <label class="mc-field" style="max-width:220px;">最低適用等級(限定發券/兌換用，不影響POS店內即時折扣按鈕)
+        <select id="pm-f-mintier" onchange="pmMinTierChanged()">
+          <option value="" ${!p.minTier ? 'selected' : ''}>不限</option>
+          ${mtTiers.map(t => `<option value="${escapeHtml(t.name)}" ${p.minTier === t.name ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="mc-field" id="pm-f-allownonmember-wrap" style="flex-direction:row;align-items:center;gap:6px;display:${p.minTier ? 'flex' : 'none'};">
+        <input id="pm-f-allownonmember" type="checkbox" ${p.allowNonMember !== false ? 'checked' : ''}> 未加入會員也能用
+      </label>
+    </div>
     ${MC_STORE_ID !== '__brand__' ? `
     <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
       <input id="pm-f-locked" type="checkbox" ${p.locked ? 'checked' : ''}> 鎖定，不被品牌同步覆蓋
@@ -1847,6 +1875,8 @@ function savePromo() {
   const isNew = pmCurrentName === null;
   const mode = document.getElementById('pm-f-mode').value;
   const lockedEl = document.getElementById('pm-f-locked');
+  const minTier = document.getElementById('pm-f-mintier').value;
+  const allowNonMemberEl = document.getElementById('pm-f-allownonmember');
   const payload = {
     originalName: isNew ? undefined : pmCurrentName,
     name: name,
@@ -1860,7 +1890,9 @@ function savePromo() {
     status: document.getElementById('pm-f-status').value,
     storeId: MC_STORE_ID,
     version: MC_STATUS,
-    locked: lockedEl ? lockedEl.checked : false
+    locked: lockedEl ? lockedEl.checked : false,
+    minTier: minTier,
+    allowNonMember: minTier ? (allowNonMemberEl ? allowNonMemberEl.checked : true) : true
   };
   apiPost({ action: 'upsertPromo', promo: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
