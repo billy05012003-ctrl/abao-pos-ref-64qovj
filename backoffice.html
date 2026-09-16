@@ -164,7 +164,12 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 <div class="app-shell">
 <nav class="sidebar" id="tabbar">
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">品項上下架</button>
-  <button id="tab-btn-schedule" onclick="switchBackofficeTab('schedule')">⚙商店時段設定</button>
+  <button id="tab-btn-merchant" onclick="toggleMerchantGroup()">
+    <span class="group-toggle">商家管理 <span class="group-caret" id="merchant-caret">▶</span></span>
+  </button>
+  <div class="sub-list" id="merchant-sublist">
+    <button class="sub-item" id="mch-sub-btn-schedule" onclick="switchMerchantSubview('schedule')">商店時段設定</button>
+  </div>
   <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
     <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
   </button>
@@ -430,6 +435,21 @@ function switchMcSubview(name) {
   switchBackofficeTab('menucms');
 }
 
+// 「商家管理」側欄巢狀展開（2026-09-16新增，比照大麥「店家設定」的分類方式）：
+// 目前只有「商店時段設定」一個子項，之後如果要做付款方式管理/取餐方式設定等功能可以比照同一套模式擴充
+let currentMerchantSubview = 'schedule';
+function toggleMerchantGroup() {
+  const sublist = document.getElementById('merchant-sublist');
+  const willOpen = !sublist.classList.contains('open');
+  sublist.classList.toggle('open', willOpen);
+  document.getElementById('merchant-caret').classList.toggle('open', willOpen);
+  if (willOpen) switchMerchantSubview(currentMerchantSubview);
+}
+function switchMerchantSubview(name) {
+  currentMerchantSubview = name;
+  switchBackofficeTab('merchant');
+}
+
 // 「會員相關」側欄巢狀展開：會員分級/生日禮/註冊禮/集點禮/優惠券共用同一套子分頁切換邏輯
 const MB_SUBVIEWS = ['tiers', 'birthday', 'register', 'points', 'promo', 'drinkupgrade'];
 let mbLoaded = { tiers: false, birthday: false, register: false, points: false, promo: false, drinkupgrade: false };
@@ -448,16 +468,21 @@ function switchMemberSubview(name) {
 
 function switchBackofficeTab(name) {
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
-  document.getElementById('tab-btn-schedule').classList.toggle('active', name === 'schedule');
+  document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
   document.getElementById('tab-btn-member').classList.toggle('active', name === 'member');
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
-  document.getElementById('view-schedule').style.display = name === 'schedule' ? 'block' : 'none';
+  document.getElementById('view-schedule').style.display = (name === 'merchant' && currentMerchantSubview === 'schedule') ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
   document.getElementById('view-member').style.display = name === 'member' ? 'block' : 'none';
-  if (name === 'schedule' && !schedLoaded) {
-    schedLoaded = true;
-    loadScheduleData();
+  document.getElementById('mch-sub-btn-schedule').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'schedule');
+  if (name === 'merchant') {
+    document.getElementById('merchant-sublist').classList.add('open');
+    document.getElementById('merchant-caret').classList.add('open');
+    if (currentMerchantSubview === 'schedule' && !schedLoaded) {
+      schedLoaded = true;
+      loadScheduleData();
+    }
   }
   document.getElementById('mc-sub-btn-categories').classList.toggle('active', name === 'menucms' && currentMcSubview === 'categories');
   document.getElementById('mc-sub-btn-options').classList.toggle('active', name === 'menucms' && currentMcSubview === 'options');
