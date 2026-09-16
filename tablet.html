@@ -181,11 +181,25 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div id="pos-checkout-panel" style="display:none">
       <div id="pos-checkout-member" style="font-size:0.85rem;margin-bottom:8px;"></div>
       <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">付款方式</label>
-      <select id="pos-payment-method" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;">
-        <option value="LinePay現場">LinePay現場</option>
+      <select id="pos-payment-method" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onchange="onPosPaymentMethodChange()">
+        <option value="取餐付款">取餐付款</option>
+        <option value="LinePay現場" selected>LinePay現場</option>
         <option value="現金">現金</option>
         <option value="其他">其他</option>
       </select>
+      <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個客人現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
+
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin:12px 0 4px;color:var(--muted)">
+        <input type="checkbox" id="pos-schedule-toggle" onchange="onPosScheduleToggle()"> 電話訂單／指定取餐時間（不勾＝現場立即取餐）
+      </label>
+      <div id="pos-schedule-fields" style="display:none;flex-direction:column;gap:6px;">
+        <input type="date" id="pos-pickup-date" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;">
+        <div style="display:flex;gap:6px;">
+          <select id="pos-pickup-hour" style="flex:1;min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;"></select>
+          <select id="pos-pickup-minute" style="flex:1;min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;"></select>
+        </div>
+      </div>
+
       <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:10px;" onclick="submitPosOrder()">確認結帳</button>
       <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="backToPosCart()">返回</button>
     </div>
@@ -384,10 +398,12 @@ function loadOrders() {
     container.innerHTML = data.orders.map(o => `
       <div class="order-card">
         <div>
-          <div><strong>${o.orderId}</strong></div>
+          <div><strong>${o.orderId}</strong>${o.unpaid ? ' <span style="color:#c0392b;font-weight:bold;">［取餐現場付款・待收款］</span>' : ''}</div>
           <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}</div>
         </div>
-        <button class="btn btn-primary" onclick="markReady('${o.orderId}')">可以取餐</button>
+        ${o.unpaid
+          ? `<button class="btn btn-primary" onclick="markCollected('${o.orderId}')">標記已收款</button>`
+          : `<button class="btn btn-primary" onclick="markReady('${o.orderId}')">可以取餐</button>`}
       </div>
     `).join('');
   });
@@ -425,7 +441,18 @@ function manualConfirmPayment(orderId) {
 }
 
 function markReady(orderId) {
-  apiPost({ action: 'markPickupReady', orderId: orderId }).then(() => {
+  apiPost({ action: 'markPickupReady', orderId: orderId }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
+    loadOrders();
+    loadRevenue();
+  });
+}
+
+// 「取餐付款」訂單客人到店先結帳的標記(2026-09-16新增)：待收款→未取餐，之後才能按「可以取餐」
+function markCollected(orderId) {
+  if (!confirm('確定「' + orderId + '」這筆訂單客人已經在現場付完款了嗎？')) return;
+  apiPost({ action: 'markOrderCollected', orderId: orderId }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
     loadOrders();
     loadRevenue();
   });
@@ -834,14 +861,16 @@ function showDrinkUpgradePicker() {
   const options = [];
   posCart.forEach(line => {
     if (line.comboDrinkName) {
-      DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === line.cat).forEach(rule => {
+      // 已經升級成某個目標飲品的話不再列出同一條規則，避免重複點擊重複加價(2026-09-16修正，
+      // 比照套餐客製化畫面內建的飲品升級同一套邏輯)
+      DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === line.cat && r.targetItem !== line.comboDrinkName).forEach(rule => {
         ['M', 'L'].forEach(sz => options.push({ line, rule, isCombo: true, size: sz }));
       });
       return;
     }
     const cat = DRINK_ITEM_CATEGORY[line.baseName];
     if (!cat) return;
-    DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat).forEach(rule => {
+    DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat && r.targetItem !== line.baseName).forEach(rule => {
       ['M', 'L'].forEach(sz => options.push({ line, rule, isCombo: false, size: sz }));
     });
   });
@@ -1575,6 +1604,8 @@ function clearPosDrinkCustom() {
   currentPosModal.comboDrinkName = null;
   currentPosModal.comboDrinkSize = null;
   currentPosModal.comboDrinkPrice = 0;
+  currentPosModal.comboDrinkBasePrice = 0;
+  currentPosModal.comboDrinkUpgradeFee = 0;
   (currentPosModal.comboDrinkExtraGroups || []).forEach(gk => delete currentPosModal.groups[gk]);
   currentPosModal.comboDrinkExtraGroups = [];
 }
@@ -1596,7 +1627,10 @@ function openPosDrinkCustom(drinkName) {
   if (prices.single != null || availSizes.length === 1) {
     const only = prices.single != null ? prices.single : prices[availSizes[0]];
     currentPosModal.comboDrinkSize = prices.single != null ? '' : availSizes[0];
-    currentPosModal.comboDrinkPrice = only;
+    // comboDrinkPrice=份量本身的價格+升級加價(2026-09-16修正)，兩者分開存，避免其中一個寫入時
+    // 直接蓋掉另一個(見applyComboDrinkUpgrade同一份註解)
+    currentPosModal.comboDrinkBasePrice = only;
+    currentPosModal.comboDrinkPrice = only + (currentPosModal.comboDrinkUpgradeFee || 0);
     const sizeLabel = prices.single != null ? '' : `限${availSizes[0].toUpperCase()} `;
     sizeEl.innerHTML = `<div style="font-size:0.8rem;color:var(--muted);">${sizeLabel}+$${only}</div>`;
   } else {
@@ -1611,7 +1645,11 @@ function openPosDrinkCustom(drinkName) {
     sizeEl.querySelectorAll('input').forEach(inp => {
       inp.onchange = () => {
         currentPosModal.comboDrinkSize = inp.value;
-        currentPosModal.comboDrinkPrice = prices[inp.value];
+        // 同上，份量價格只更新comboDrinkBasePrice，comboDrinkPrice由base+升級加價重新算出，
+        // 之前這裡直接蓋掉comboDrinkPrice，選份量的動作(份量是必選、幾乎每次都會選)會把已經套用的
+        // 升級加價一起洗掉，等於升級形同虛設(2026-09-16修正)
+        currentPosModal.comboDrinkBasePrice = prices[inp.value];
+        currentPosModal.comboDrinkPrice = prices[inp.value] + (currentPosModal.comboDrinkUpgradeFee || 0);
         refreshPosDrinkToppingIfPresent();
         renderComboDrinkUpgradeSection(); // 換M/L份量後，飲品升級按鈕上顯示的加價金額要跟著換(M/L各自不同)
         updatePosItemModalTotal();
@@ -1644,7 +1682,9 @@ function renderComboDrinkUpgradeSection() {
   const el = document.getElementById('pos-drink-upgrade-section');
   if (!el || !currentPosModal || !currentPosModal.comboDrinkName) return;
   const cat = currentPosModal.cat;
-  const rules = cat ? DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat) : [];
+  // 已經升級成某個目標飲品後，不再顯示同一條「升級成OO」規則——不然重複點會重複加價，
+  // 而且已經是該飲品了、再顯示同樣的升級選項邏輯上不合理(2026-09-16修正)
+  const rules = cat ? DRINK_UPGRADE_RULES.filter(r => r.sourceCategory === cat && r.targetItem !== currentPosModal.comboDrinkName) : [];
   if (!rules.length) { el.innerHTML = ''; return; }
   const size = currentPosModal.comboDrinkSize;
   el.innerHTML = `<div style="font-size:0.78rem;color:var(--muted);margin:8px 0 4px;">飲品升級</div>` +
@@ -1661,7 +1701,15 @@ function applyComboDrinkUpgrade(idx) {
   if (!rule) return;
   const amount = pickUpgradeAmount_(rule, currentPosModal.comboDrinkSize);
   currentPosModal.comboDrinkName = rule.targetItem;
-  currentPosModal.comboDrinkPrice = (currentPosModal.comboDrinkPrice || 0) + amount;
+  // comboDrinkUpgradeFee獨立存、用SET不是ADD(2026-09-16修正)：換成另一個升級目標時應該是取代，
+  // 不是疊加；comboDrinkPrice永遠=comboDrinkBasePrice+comboDrinkUpgradeFee重新算出，
+  // 這樣不管之後使用者是先選份量還是先點升級，兩個值都不會互相蓋掉(見openPosDrinkCustom同一份註解)
+  currentPosModal.comboDrinkUpgradeFee = amount;
+  currentPosModal.comboDrinkPrice = (currentPosModal.comboDrinkBasePrice || 0) + amount;
+  // 同步更新groups['combo_drink'](2026-09-16修正)：confirmAddToPosCart()組購物車顯示名稱時讀的是這個
+  // 底層陣列，不是comboDrinkName——先前只更新comboDrinkName/彈窗標題，沒同步這裡，導致畫面看起來升級
+  // 成功，但實際加入購物車/出單顯示的品項名稱還是升級前的飲料，是真的沒寫進訂單資料的假象
+  currentPosModal.groups['combo_drink'] = [rule.targetItem];
   document.getElementById('pos-drink-modal-title').textContent = rule.targetItem;
   // 換了飲品，原本的專屬客製化選項(冰量/甜度等)不一定適用，清掉改用新飲品自己的
   (currentPosModal.comboDrinkExtraGroups || []).forEach(gk => delete currentPosModal.groups[gk]);
@@ -1905,25 +1953,98 @@ function closePosCartAll() {
   selectedMember = null;
   document.getElementById('pos-confirm-panel').style.display = 'none';
   document.getElementById('pos-checkout-btn').style.display = 'block';
+  // 每次開始新訂單都重置成安全預設值(LinePay現場、非預約)，避免上一張選的「取餐付款」／指定取餐時間
+  // 殘留設定誤套到下一張現場立即結帳的訂單
+  document.getElementById('pos-payment-method').value = 'LinePay現場';
+  document.getElementById('pos-payatpickup-hint').style.display = 'none';
+  document.getElementById('pos-schedule-toggle').checked = false;
+  document.getElementById('pos-schedule-fields').style.display = 'none';
+  document.getElementById('pos-schedule-fields').removeAttribute('data-initialized');
+  document.getElementById('pos-pickup-date').value = '';
   setPosStep('categories');
+}
+
+function onPosPaymentMethodChange() {
+  const method = document.getElementById('pos-payment-method').value;
+  document.getElementById('pos-payatpickup-hint').style.display = method === '取餐付款' ? 'block' : 'none';
+}
+
+// 取餐時間改用兩個下拉選單(時／分，分鐘只列00/05/10.../55)取代原生<input type="time">——
+// 原生time輸入的手機滾輪選擇器不會因為step=300就只顯示5分鐘倍數，滾輪還是列出每一分鐘可選，
+// 且選到不合規則的值瀏覽器也不會自動修正，等於防呆沒真的擋到，改用下拉選單才能保證每個裝置/
+// 瀏覽器都只選得到5分鐘倍數
+function populatePosPickupTimeSelects_() {
+  const hourEl = document.getElementById('pos-pickup-hour');
+  const minuteEl = document.getElementById('pos-pickup-minute');
+  if (hourEl.options.length === 0) {
+    for (let h = 0; h < 24; h++) {
+      const opt = document.createElement('option');
+      opt.value = String(h).padStart(2, '0');
+      opt.textContent = String(h).padStart(2, '0');
+      hourEl.appendChild(opt);
+    }
+  }
+  if (minuteEl.options.length === 0) {
+    for (let m = 0; m < 60; m += 5) {
+      const opt = document.createElement('option');
+      opt.value = String(m).padStart(2, '0');
+      opt.textContent = String(m).padStart(2, '0');
+      minuteEl.appendChild(opt);
+    }
+  }
+}
+populatePosPickupTimeSelects_();
+
+function onPosScheduleToggle() {
+  const on = document.getElementById('pos-schedule-toggle').checked;
+  const fields = document.getElementById('pos-schedule-fields');
+  fields.style.display = on ? 'flex' : 'none';
+  // 每個新訂單週期(見closePosCartAll清掉data-initialized)只自動帶一次預設值，避免店員手動調整後
+  // 不小心關掉勾選再打開又被蓋回預設
+  if (on && !fields.dataset.initialized) {
+    fields.dataset.initialized = '1';
+    const dateEl = document.getElementById('pos-pickup-date');
+    const todayStr = new Date().toISOString().slice(0, 10);
+    dateEl.value = todayStr;
+    dateEl.min = todayStr;
+    // 預設帶入「現在往後捨入到下一個5分鐘整數」的時間，方便店員快速微調，不用從00:00開始選
+    const now = new Date();
+    let minutes = Math.ceil(now.getMinutes() / 5) * 5;
+    let hours = now.getHours();
+    if (minutes === 60) { minutes = 0; hours = (hours + 1) % 24; }
+    document.getElementById('pos-pickup-hour').value = String(hours).padStart(2, '0');
+    document.getElementById('pos-pickup-minute').value = String(minutes).padStart(2, '0');
+  }
 }
 
 function submitPosOrder() {
   const total = getPosCartFinalTotal();
   const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price }));
   const paymentMethod = document.getElementById('pos-payment-method').value;
+  const scheduled = document.getElementById('pos-schedule-toggle').checked;
+  let pickupDate = '', pickupTime = '';
+  if (scheduled) {
+    pickupDate = document.getElementById('pos-pickup-date').value;
+    pickupTime = document.getElementById('pos-pickup-hour').value + ':' + document.getElementById('pos-pickup-minute').value;
+    if (!pickupDate) { alert('請填寫取餐日期'); return; }
+  }
   apiPost({
     action: 'posCheckout',
     storeId: STORE_ID,
     items: items,
     totalAmount: total,
     paymentMethod: paymentMethod,
+    pickupDate: pickupDate,
+    pickupTime: pickupTime,
     memberPhone: selectedMember ? selectedMember.phone : '',
     voucherIds: appliedVouchers.map(v => v.voucherId)
   }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '結帳失敗'); return; }
     document.getElementById('pos-confirm-order-no').textContent = data.orderId;
-    document.getElementById('pos-confirm-points').textContent = data.pointsEarned ? `本次消費獲得 ${data.pointsEarned} 點` : '';
+    const notes = [];
+    if (data.pointsEarned) notes.push(`本次消費獲得 ${data.pointsEarned} 點`);
+    if (paymentMethod === '取餐付款') notes.push('⚠️客人尚未付款，取餐前請先在「待取餐訂單」標記已收款');
+    document.getElementById('pos-confirm-points').textContent = notes.join('　');
     document.getElementById('pos-checkout-panel').style.display = 'none';
     document.getElementById('pos-confirm-panel').style.display = 'block';
     loadRevenue();

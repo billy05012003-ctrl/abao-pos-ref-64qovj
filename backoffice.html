@@ -753,7 +753,19 @@ function loadPaymentMethodSettings() {
       return;
     }
     document.getElementById('payment-method-form').innerHTML = `
-      <div class="sched-pickup-field"><label>信用卡（藍新MPG）</label><input type="checkbox" id="pm-f-credit" ${data.creditEnabled ? 'checked' : ''}></div>
+      <div class="sched-pickup-field"><label>取餐付款</label><input type="checkbox" id="pm-f-payatpickup" ${data.payAtPickupEnabled ? 'checked' : ''}></div>
+      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 12px;">
+        開啟後客人結帳頁會顯示「取餐現場付款」——訂單直接成立、不走線上金流，到店要先在雲端平板標記已收款才能取餐。
+      </p>
+      <div class="sched-pickup-field"><label>信用卡一次付清（藍新MPG）</label><input type="checkbox" id="pm-f-credit" ${data.creditEnabled ? 'checked' : ''}></div>
+      <div class="sched-pickup-field"><label>Apple Pay</label><input type="checkbox" id="pm-f-applepay" ${data.applePayEnabled ? 'checked' : ''} ${data.creditEnabled ? '' : 'disabled'}></div>
+      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 12px;">
+        須先開啟「信用卡一次付清」才能開啟——跟信用卡走同一條藍新結帳頁，裝置/瀏覽器支援時會自動顯示Apple Pay按鈕，沒有獨立的付款流程。
+      </p>
+      <div class="sched-pickup-field"><label>AFTEE先享後付</label><input type="checkbox" id="pm-f-aftee" ${data.afteeEnabled ? 'checked' : ''}></div>
+      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 14px;">
+        藍新帳號尚未申請開通此功能，這裡先記錄設定意向，開通＋後端串接完成前不會真的出現在客人結帳頁。
+      </p>
       <div style="margin:14px 0 6px;font-size:0.85rem;font-weight:600;">LinePay（三選一，不是各自獨立的開關）</div>
       <p style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
         客人結帳頁只會看到一個LinePay按鈕，背後只能導去其中一條路，不能兩條同時開。
@@ -766,6 +778,12 @@ function loadPaymentMethodSettings() {
       </div>
       <button type="button" class="mc-save-btn" onclick="savePaymentMethodSettings()">儲存</button>
     `;
+    // Apple Pay相依信用卡一次付清：信用卡取消勾選時同步鎖住+取消勾選Apple Pay，避免存出矛盾狀態
+    document.getElementById('pm-f-credit').addEventListener('change', function() {
+      const applePayEl = document.getElementById('pm-f-applepay');
+      applePayEl.disabled = !this.checked;
+      if (!this.checked) applePayEl.checked = false;
+    });
   });
 }
 function savePaymentMethodSettings() {
@@ -777,7 +795,10 @@ function savePaymentMethodSettings() {
     action: 'updatePaymentMethodSettings',
     settings: {
       storeId: SCHED_STORE_ID,
+      payAtPickupEnabled: document.getElementById('pm-f-payatpickup').checked,
       creditEnabled: document.getElementById('pm-f-credit').checked,
+      applePayEnabled: document.getElementById('pm-f-applepay').checked,
+      afteeEnabled: document.getElementById('pm-f-aftee').checked,
       linePayMode: mode
     }
   }).then(data => {

@@ -345,6 +345,11 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <select id="pickup-date" required></select>
       <label>希望取餐時間</label>
       <select id="pickup-time" required></select>
+      <label id="checkout-paymethod-label" style="display:none;">付款方式</label>
+      <select id="checkout-payment-method" style="display:none;">
+        <option value="取餐付款">取餐現場付款</option>
+        <option value="online">線上付款（信用卡／LinePay）</option>
+      </select>
       <label>備註（選填）</label>
       <textarea id="cust-note" rows="2"></textarea>
       <button type="submit" class="btn-primary">送出訂單</button>
@@ -565,6 +570,28 @@ function loadScheduleSettings() {
   });
 }
 const scheduleSettingsReady = loadScheduleSettings();
+
+// 付款方式設定(2026-09-16新增)：只用來決定要不要顯示「取餐現場付款」選項，讀取失敗一律預設關閉，
+// 維持跟現行行為完全一致(顧客只看得到既有的線上付款/模擬付款流程)，不像商店時段設定那樣需要
+// 本地快取兜底(付款方式不影響能不能點餐，讀不到就先不顯示這個選項，客人一樣能正常送單)
+let PAY_AT_PICKUP_ENABLED = false;
+function loadPaymentMethodSettings_() {
+  return apiGet_({ action: 'paymentMethodSettings', storeId: 'meibao' }).then(resp => {
+    if (!resp || resp.status !== 'ok') throw new Error('paymentMethodSettings回傳格式異常');
+    PAY_AT_PICKUP_ENABLED = !!resp.payAtPickupEnabled;
+  }).catch(err => {
+    console.warn('付款方式設定讀取失敗，「取餐現場付款」選項預設不顯示(維持現行行為)', err);
+    PAY_AT_PICKUP_ENABLED = false;
+  }).then(() => {
+    const label = document.getElementById('checkout-paymethod-label');
+    const select = document.getElementById('checkout-payment-method');
+    if (label && select) {
+      label.style.display = PAY_AT_PICKUP_ENABLED ? 'block' : 'none';
+      select.style.display = PAY_AT_PICKUP_ENABLED ? 'block' : 'none';
+    }
+  });
+}
+loadPaymentMethodSettings_();
 
 function getPickupDateISO(offsetDays) {
   const d = new Date();
@@ -1606,9 +1633,16 @@ function submitOrder(e) {
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price }));
 
+  // 「取餐現場付款」只有PAY_AT_PICKUP_ENABLED開啟時欄位才會顯示，關閉時select維持隱藏，
+  // 這裡讀不到值就當作沒選(走原本的線上付款流程)，跟目前行為完全一致
+  const payAtPickupChosen = PAY_AT_PICKUP_ENABLED && document.getElementById('checkout-payment-method').value === '取餐付款';
+
   const lines = cart.map(c => `- ${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
   const discountLine = voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '';
-  const summary = `【${STORE_NAME}】線上點餐訂單\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${time}\n---\n${lines}\n---\n${discountLine}總計：$${total}\n備註：${note || '無'}\n（取餐時請至現場以LINE Pay QR結帳，此頁尚未串接線上金流）`;
+  const paymentNote = payAtPickupChosen
+    ? '（已選擇取餐現場付款，請於取餐時完成付款）'
+    : '（取餐時請至現場以LINE Pay QR結帳，此頁尚未串接線上金流）';
+  const summary = `【${STORE_NAME}】線上點餐訂單\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${time}\n---\n${lines}\n---\n${discountLine}總計：$${total}\n備註：${note || '無'}\n${paymentNote}`;
 
   try {
     let log = JSON.parse(localStorage.getItem('abao_orders_' + 'meibao') || '[]');
@@ -1631,10 +1665,17 @@ function submitOrder(e) {
     pickupTime: document.getElementById('pickup-time').value,
     items: items,
     totalAmount: total,
+    paymentMethod: payAtPickupChosen ? '取餐付款' : undefined,
     note: `訂單編號:${orderNo}　姓名:${name}　電話:${phone}${note ? '　備註:' + note : ''}`
   }).then(data => {
     if (data.status === 'ok') {
       pendingOrderContext.backendOrderId = data.orderId;
+      if (payAtPickupChosen) {
+        // 取餐付款：後端已經直接建立成「待收款」，不走線上金流，不能呼叫confirmPayment
+        // (那是線上金流確認動作，會誤把訂單標成已付款)，直接完成流程即可
+        completeOrderConfirmation_(pendingOrderContext, true);
+        return;
+      }
       // 2026-09-16新增：藍新MPG真實付款流程，目前只在網址帶?mpgtest=1時啟用(藍新商店還沒開通，
       // 不能讓正式客人點下去撞到「查無此商店代號」錯誤)，正式客人維持看到「模擬付款」畫面
       if (MPG_TEST_MODE) {
@@ -1653,7 +1694,13 @@ function submitOrder(e) {
       openCart();
     }
   }).catch(err => {
-    console.warn('建立待付款訂單失敗（網路問題，仍讓客人走完流程，現階段本來就靠截圖傳LINE兜底）', err);
+    console.warn('建立訂單失敗（網路問題，仍讓客人走完流程，現階段本來就靠截圖傳LINE兜底）', err);
+    if (payAtPickupChosen) {
+      // 取餐付款本來就不走金流，網路問題頂多是後端沒真的記到這筆單，直接給客人看完成畫面兜底
+      // (跟原本模擬付款流程的兜底邏輯一致)，沒有「模擬付款」這個中繼步驟可以顯示
+      completeOrderConfirmation_(pendingOrderContext, true);
+      return;
+    }
     document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
     document.getElementById('mockpay-total').textContent = pendingOrderContext.total;
     document.getElementById('mockpay-view').style.display = 'block';
@@ -1663,8 +1710,10 @@ function submitOrder(e) {
 }
 
 // 共用「訂單真正付款完成」收尾邏輯：核銷已套用的兌換券→呼叫confirmPayment→顯示完成畫面。
-// 模擬付款(confirmMockPayment)、藍新MPG真實付款(pollMpgOrderStatus確認成功後)都走這裡，避免重複維護
-function completeOrderConfirmation_(ctx) {
+// 模擬付款(confirmMockPayment)、藍新MPG真實付款(pollMpgOrderStatus確認成功後)都走這裡，避免重複維護。
+// skipConfirmPayment(2026-09-16新增)：「取餐付款」訂單後端本來就不是走線上金流確認這條路(見上方
+// submitOrder)，傳true代表只需要核銷兌換券+顯示完成畫面，不能呼叫confirmPayment誤標成已付款
+function completeOrderConfirmation_(ctx, skipConfirmPayment) {
   const finish = () => {
     document.getElementById('order-no').textContent = ctx.orderNo;
     document.getElementById('order-summary').textContent = ctx.summary;
@@ -1680,7 +1729,7 @@ function completeOrderConfirmation_(ctx) {
     ));
   };
   return redeemAppliedVouchers().then(() => {
-    if (ctx && ctx.backendOrderId) {
+    if (ctx && ctx.backendOrderId && !skipConfirmPayment) {
       return confirmPaymentOnBackend(ctx.backendOrderId).then(finish).catch(finish);
     } else {
       finish();
