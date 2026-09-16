@@ -191,6 +191,13 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
          這顆按鈕保留在DOM但隱藏，讓switchBackofficeTab()既有的active/顯示切換邏輯不用另外特判 -->
     <button class="sub-item" id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')" style="display:none;">飲品升級</button>
   </div>
+  <button id="tab-btn-posmanage" onclick="togglePosManageGroup()">
+    <span class="group-toggle">⚙ POS管理 <span class="group-caret" id="posmanage-caret">▶</span></span>
+  </button>
+  <div class="sub-list" id="posmanage-sublist">
+    <button class="sub-item" id="pmg-sub-btn-log" onclick="switchPosManageSubview('log')">開關帳記錄</button>
+    <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">POS夥伴管理</button>
+  </div>
 </nav>
 <main class="main-content">
 <div id="view-availability" class="view">
@@ -406,6 +413,23 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </div>
   </div>
 </div>
+<div id="view-posmanage" class="view" style="display:none;">
+  <div id="pmg-subview-log">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      POS功能「開帳／關帳」的歷史記錄，唯讀。實際操作(開帳/關帳按鈕)在POS功能那邊，這裡只是給老闆/店長事後查看。
+    </p>
+    <div id="pmg-log-list"><div class="empty-hint">載入中...</div></div>
+  </div>
+  <div id="pmg-subview-partner" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      規劃中，尚未開發——POS功能目前完全沒有登入/身份機制，這組功能要另外討論設計(誰能開/關帳、
+      細粒度操作權限要做到多細等)再動工。
+    </p>
+    <div class="empty-hint">POS權限管理</div>
+    <div class="empty-hint">身份權限設定</div>
+    <div class="empty-hint">夥伴身份設定</div>
+  </div>
+</div>
 </main>
 </div>
 <div id="mc-item-modal-overlay" class="mc-modal-overlay" style="display:none;" onclick="if(event.target===this)closeMcItemModal()">
@@ -492,16 +516,60 @@ function switchMemberSubview(name) {
   switchBackofficeTab('member');
 }
 
+// 「POS管理」側欄巢狀展開(2026-09-16新增)：開關帳記錄(唯讀)＋POS夥伴管理(規劃中佔位)
+let posManageLogLoaded = false;
+let currentPosManageSubview = 'log';
+function togglePosManageGroup() {
+  const sublist = document.getElementById('posmanage-sublist');
+  const willOpen = !sublist.classList.contains('open');
+  sublist.classList.toggle('open', willOpen);
+  document.getElementById('posmanage-caret').classList.toggle('open', willOpen);
+  if (willOpen) switchPosManageSubview(currentPosManageSubview);
+}
+function switchPosManageSubview(name) {
+  currentPosManageSubview = name;
+  switchBackofficeTab('posmanage');
+}
+function loadPosManageLog() {
+  apiGet({ action: 'registerLog', storeId: SCHED_STORE_ID }).then(data => {
+    const container = document.getElementById('pmg-log-list');
+    if (data.status !== 'ok' || data.logs.length === 0) {
+      container.innerHTML = '<div class="empty-hint">尚無開關帳記錄</div>';
+      return;
+    }
+    container.innerHTML = data.logs.map(l => `
+      <div class="sched-special-row">
+        <b>${escapeHtml(l.type)}</b>
+        <span>${new Date(l.time).toLocaleString('zh-TW')}</span>
+        ${l.note ? `<span style="color:var(--muted);">（${escapeHtml(l.note)}）</span>` : ''}
+      </div>`).join('');
+  });
+}
+
 function switchBackofficeTab(name) {
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
   document.getElementById('tab-btn-member').classList.toggle('active', name === 'member');
+  document.getElementById('tab-btn-posmanage').classList.toggle('active', name === 'posmanage');
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
   document.getElementById('view-schedule').style.display = (name === 'merchant' && currentMerchantSubview === 'schedule') ? 'block' : 'none';
   document.getElementById('view-payment').style.display = (name === 'merchant' && currentMerchantSubview === 'payment') ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
   document.getElementById('view-member').style.display = name === 'member' ? 'block' : 'none';
+  document.getElementById('view-posmanage').style.display = name === 'posmanage' ? 'block' : 'none';
+  document.getElementById('pmg-sub-btn-log').classList.toggle('active', name === 'posmanage' && currentPosManageSubview === 'log');
+  document.getElementById('pmg-sub-btn-partner').classList.toggle('active', name === 'posmanage' && currentPosManageSubview === 'partner');
+  document.getElementById('pmg-subview-log').style.display = (name === 'posmanage' && currentPosManageSubview === 'log') ? 'block' : 'none';
+  document.getElementById('pmg-subview-partner').style.display = (name === 'posmanage' && currentPosManageSubview === 'partner') ? 'block' : 'none';
+  if (name === 'posmanage') {
+    document.getElementById('posmanage-sublist').classList.add('open');
+    document.getElementById('posmanage-caret').classList.add('open');
+    if (currentPosManageSubview === 'log' && !posManageLogLoaded) {
+      posManageLogLoaded = true;
+      loadPosManageLog();
+    }
+  }
   document.getElementById('mch-sub-btn-schedule').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'schedule');
   document.getElementById('mch-sub-btn-payment').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'payment');
   if (name === 'merchant') {
