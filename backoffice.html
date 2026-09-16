@@ -169,6 +169,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   </button>
   <div class="sub-list" id="merchant-sublist">
     <button class="sub-item" id="mch-sub-btn-schedule" onclick="switchMerchantSubview('schedule')">商店時段設定</button>
+    <button class="sub-item" id="mch-sub-btn-payment" onclick="switchMerchantSubview('payment')">付款方式設定</button>
   </div>
   <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
     <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
@@ -226,6 +227,31 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <p style="font-size:0.78rem;color:var(--muted);">指定日期公休（例如國定假日），或當天用不同的營業時間，會蓋過上面每週固定的設定。</p>
     <div id="sched-special-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" class="mc-add-btn" onclick="schedAddSpecialDate()">+ 新增特殊日期</button>
+  </div>
+</div>
+<div id="view-payment" class="view" style="display:none;">
+  <div class="sched-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <button type="button" class="sched-tab-btn active" id="pm-tab-btn-online" onclick="switchPmSubview('online')">線上收款</button>
+    <button type="button" class="sched-tab-btn" id="pm-tab-btn-thirdparty" onclick="switchPmSubview('thirdparty')">第三方收款</button>
+    <button type="button" class="sched-tab-btn" id="pm-tab-btn-offline" onclick="switchPmSubview('offline')">線下收款</button>
+    <button type="button" class="sched-tab-btn" id="pm-tab-btn-tablescan" onclick="switchPmSubview('tablescan')">桌邊掃碼點餐</button>
+  </div>
+  <div id="pm-subview-online">
+    <p style="font-size:0.8rem;color:var(--muted);">控制線上點餐結帳頁面要不要開放這個付款方式，走的都是藍新MPG。</p>
+    <div id="payment-method-form"><div class="empty-hint">載入中...</div></div>
+  </div>
+  <div id="pm-subview-thirdparty" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">外送平台（例如UberEats/foodpanda）串接後的對帳/結算設定。目前沒有串接任何外送平台，尚無項目。</p>
+    <div class="empty-hint">尚無項目，之後有串接需求再新增</div>
+  </div>
+  <div id="pm-subview-offline" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">現場實體收款方式（客人手機出示付款碼給店員掃，或反過來）。這些多半是獨立商家帳號，本系統沒有API可以真的控制開關，這裡純粹記錄現場有開放哪些管道，方便之後對照。</p>
+    <div id="offline-payment-list"><div class="empty-hint">載入中...</div></div>
+    <button type="button" class="mc-add-btn" onclick="offlinePmAdd()">+ 新增線下收款方式</button>
+  </div>
+  <div id="pm-subview-tablescan" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">客人在桌邊自己掃碼點餐+付款。目前Abao沒有這種桌邊點餐模式，尚無項目。</p>
+    <div class="empty-hint">尚無項目，之後有這個需求再開發</div>
   </div>
 </div>
 <div id="view-menucms" class="view" style="display:none;">
@@ -473,15 +499,21 @@ function switchBackofficeTab(name) {
   document.getElementById('tab-btn-member').classList.toggle('active', name === 'member');
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
   document.getElementById('view-schedule').style.display = (name === 'merchant' && currentMerchantSubview === 'schedule') ? 'block' : 'none';
+  document.getElementById('view-payment').style.display = (name === 'merchant' && currentMerchantSubview === 'payment') ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
   document.getElementById('view-member').style.display = name === 'member' ? 'block' : 'none';
   document.getElementById('mch-sub-btn-schedule').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'schedule');
+  document.getElementById('mch-sub-btn-payment').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'payment');
   if (name === 'merchant') {
     document.getElementById('merchant-sublist').classList.add('open');
     document.getElementById('merchant-caret').classList.add('open');
     if (currentMerchantSubview === 'schedule' && !schedLoaded) {
       schedLoaded = true;
       loadScheduleData();
+    }
+    if (currentMerchantSubview === 'payment' && !paymentMethodLoaded) {
+      paymentMethodLoaded = true;
+      loadPaymentMethodSettings();
     }
   }
   document.getElementById('mc-sub-btn-categories').classList.toggle('active', name === 'menucms' && currentMcSubview === 'categories');
@@ -695,6 +727,107 @@ function schedDeleteSpecialDate(date) {
   if (!confirm('確定要刪除「' + date + '」這筆特殊日期設定嗎？')) return;
   apiPost({ action: 'deleteSpecialDate', storeId: SCHED_STORE_ID, date }).then(data => {
     if (data.status === 'ok') loadScheduleData();
+    else alert('刪除失敗：' + (data.message || ''));
+  });
+}
+
+// ---- 付款方式設定（2026-09-16新增，2026-09-16再調整：LinePay改三選一，新增線下收款清單）----
+let paymentMethodLoaded = false;
+let currentPmSubview = 'online';
+function switchPmSubview(name) {
+  currentPmSubview = name;
+  ['online', 'thirdparty', 'offline', 'tablescan'].forEach(sv => {
+    document.getElementById('pm-tab-btn-' + sv).classList.toggle('active', sv === name);
+    document.getElementById('pm-subview-' + sv).style.display = sv === name ? 'block' : 'none';
+  });
+  if (name === 'offline' && !offlinePmLoaded) {
+    offlinePmLoaded = true;
+    loadOfflinePaymentMethods();
+  }
+}
+
+function loadPaymentMethodSettings() {
+  apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
+    if (data.status !== 'ok') {
+      document.getElementById('payment-method-form').innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>';
+      return;
+    }
+    document.getElementById('payment-method-form').innerHTML = `
+      <div class="sched-pickup-field"><label>信用卡（藍新MPG）</label><input type="checkbox" id="pm-f-credit" ${data.creditEnabled ? 'checked' : ''}></div>
+      <div style="margin:14px 0 6px;font-size:0.85rem;font-weight:600;">LinePay（三選一，不是各自獨立的開關）</div>
+      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
+        客人結帳頁只會看到一個LinePay按鈕，背後只能導去其中一條路，不能兩條同時開。
+        <b>現場實體收款用的LinePay QR是獨立的另一組帳號，完全不受這裡影響</b>。
+      </p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
+        <label><input type="radio" name="pm-linepay-mode" value="藍新MPG" ${data.linePayMode === '藍新MPG' ? 'checked' : ''}> 藍新MPG電子錢包（已做好，可以選）</label>
+        <label><input type="radio" name="pm-linepay-mode" value="LinePayAPI" ${data.linePayMode === 'LinePayAPI' ? 'checked' : ''}> LinePay API獨立串接（尚未開發，選了也不會生效）</label>
+        <label><input type="radio" name="pm-linepay-mode" value="不開放" ${data.linePayMode === '不開放' ? 'checked' : ''}> 不開放LinePay</label>
+      </div>
+      <button type="button" class="mc-save-btn" onclick="savePaymentMethodSettings()">儲存</button>
+    `;
+  });
+}
+function savePaymentMethodSettings() {
+  const mode = document.querySelector('input[name="pm-linepay-mode"]:checked')?.value || '不開放';
+  if (mode === 'LinePayAPI') {
+    if (!confirm('LinePay API獨立串接目前尚未開發，選這個之後客人結帳頁會看不到任何LinePay選項（等同不開放），確定要這樣設定嗎？')) return;
+  }
+  apiPost({
+    action: 'updatePaymentMethodSettings',
+    settings: {
+      storeId: SCHED_STORE_ID,
+      creditEnabled: document.getElementById('pm-f-credit').checked,
+      linePayMode: mode
+    }
+  }).then(data => {
+    if (data.status === 'ok') alert('已儲存');
+    else alert('儲存失敗：' + (data.message || ''));
+  });
+}
+
+// ---- 線下收款方式清單 ----
+let offlinePmLoaded = false;
+function loadOfflinePaymentMethods() {
+  apiGet({ action: 'offlinePaymentMethods', storeId: SCHED_STORE_ID }).then(data => {
+    if (data.status !== 'ok') {
+      document.getElementById('offline-payment-list').innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>';
+      return;
+    }
+    document.getElementById('offline-payment-list').innerHTML = data.methods.length === 0
+      ? '<div class="empty-hint">尚無項目</div>'
+      : data.methods.map(m => `
+        <div class="sched-special-row">
+          <b>${escapeHtml(m.name)}</b>
+          <span>${m.status === '啟用' ? '🟢' : '🔴'} ${escapeHtml(m.status)}</span>
+          ${m.note ? `<span style="color:var(--muted);">（${escapeHtml(m.note)}）</span>` : ''}
+          <button type="button" onclick="offlinePmEdit('${escapeHtml(m.name).replace(/'/g, "\\'")}', '${m.status}', '${escapeHtml(m.note).replace(/'/g, "\\'")}')" style="margin-left:auto;border:none;background:none;color:var(--brand);cursor:pointer;">編輯</button>
+          <button type="button" onclick="offlinePmDelete('${escapeHtml(m.name).replace(/'/g, "\\'")}')" style="border:none;background:none;color:var(--brand);cursor:pointer;">刪除</button>
+        </div>`).join('');
+  });
+}
+function offlinePmAdd() {
+  const name = prompt('收款方式名稱（例如：全支付）：', '');
+  if (!name) return;
+  const enabled = confirm('現場是否已經啟用這個收款方式？\n\n按「確定」＝啟用\n按「取消」＝停用');
+  const note = prompt('備註（選填，例如帳號資訊）：', '') || '';
+  apiPost({ action: 'upsertOfflinePaymentMethod', method: { storeId: SCHED_STORE_ID, name, status: enabled ? '啟用' : '停用', note } }).then(data => {
+    if (data.status === 'ok') loadOfflinePaymentMethods();
+    else alert('新增失敗：' + (data.message || ''));
+  });
+}
+function offlinePmEdit(name, currentStatus, currentNote) {
+  const enabled = confirm('「' + name + '」目前是否啟用？\n\n按「確定」＝啟用\n按「取消」＝停用');
+  const note = prompt('備註：', currentNote) || '';
+  apiPost({ action: 'upsertOfflinePaymentMethod', method: { storeId: SCHED_STORE_ID, name, originalName: name, status: enabled ? '啟用' : '停用', note } }).then(data => {
+    if (data.status === 'ok') loadOfflinePaymentMethods();
+    else alert('更新失敗：' + (data.message || ''));
+  });
+}
+function offlinePmDelete(name) {
+  if (!confirm('確定要刪除「' + name + '」這個線下收款方式記錄嗎？')) return;
+  apiPost({ action: 'deleteOfflinePaymentMethod', storeId: SCHED_STORE_ID, name }).then(data => {
+    if (data.status === 'ok') loadOfflinePaymentMethods();
     else alert('刪除失敗：' + (data.message || ''));
   });
 }
