@@ -359,6 +359,11 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <button class="btn-primary" onclick="confirmMockPayment()">模擬付款成功</button>
     </div>
 
+    <div id="mpg-waiting-view" style="display:none; text-align:center; padding:10px 0;">
+      <h2>確認付款中…</h2>
+      <p style="color:#888; font-size:0.9rem;">已從藍新付款頁返回，正在確認付款結果，請稍候不要關閉視窗。</p>
+    </div>
+
     <div id="confirm-view">
       <h2>訂單已送出</h2>
       <div class="order-no" id="order-no"></div>
@@ -377,6 +382,9 @@ let CATALOG = {};
 const STAFF_ONLY_CATEGORIES = ['單點', '三明治', '其他'];
 
 const STORE_NAME = "美寶美食館（A-Bao溪湖培英店）";
+// 藍新商店尚未開通，真實付款流程只在網址帶?mpgtest=1時才會啟用，避免正式客人點下去撞到
+// 「查無此商店代號」的錯誤——正式客人在這個開關拿掉之前，一律維持看到「模擬付款」畫面
+const MPG_TEST_MODE = new URLSearchParams(location.search).get('mpgtest') === '1';
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡集中兩個小函式自動帶上，
 // 全站呼叫後端一律走這兩個函式，之後新增任何呼叫都自動套用，不用每處各自補
@@ -447,32 +455,116 @@ let cart = []; // {key, name, size, price, qty}
 // 主分類清單的disable邏輯，改用這份全站共用的名稱對照表)
 let itemAvailabilityMap = {};
 
-// 營業時間/接單時段規則（2026-08-27老闆確認：05:20開店、13:00打烊、打烊前15分鐘停止接單、下單後最少留10分鐘備餐）
-const STORE_OPEN_MIN = 5 * 60 + 20;   // 05:20
-const STORE_CLOSE_MIN = 13 * 60;      // 13:00
-const ORDER_CUTOFF_MIN = STORE_CLOSE_MIN - 15; // 12:45 停止接單
-const MIN_LEAD_MIN = 10; // 下單後最少10分鐘才能取餐
-const SLOT_STEP_MIN = 15; // 取餐時段間隔改成15分鐘一格（15/30/45/00），老闆反饋改成整點+一刻鐘的常見時段刻度
+// 商店時段設定（2026-09-16改造）：原本05:20開店/13:00打烊/12:45停止接單/15分鐘一格/每時段上限2單/
+// 只能訂到明天這些值全部寫死在這裡，改成向後端「storeScheduleSettings」讀取，POS後台可以編輯。
+// 這裡的變數只放「讀不到雲端設定時」的保底預設值，實際生效值由loadScheduleSettings()覆蓋。
+let SLOT_STEP_MIN = 15;
+let MAX_SLOT_CAPACITY = 2;
+let MIN_LEAD_MIN = 10; // 下單後最少幾分鐘才能取餐(備餐緩衝)
+let MAX_ADVANCE_DAYS = 1; // 最多可預訂到幾天後
+let ALLOW_SAME_DAY_ORDER = true;
+let BUSINESS_HOURS_BY_WEEKDAY = {}; // {0:[{start,end},...], 1:[...], ...} 0=日...6=六，同JS Date.getDay()
+let ORDER_HOURS_BY_WEEKDAY = {};
+let SPECIAL_DATES = {}; // 'YYYY-MM-DD' -> {closed, start, end, note}
 
 function getNowMinutes() {
   const d = new Date();
   return d.getHours() * 60 + d.getMinutes();
 }
-// isOrderingOpen()代表「今天」這個取餐日期還能不能被選——只看有沒有超過停止接單時間(12:45)，
-// 不要求現在已經開店，因為凌晨也應該能先預訂今天稍晚的時段（例如02:00訂今天05:20取餐）。
-// 開店前的下限由populatePickupTime()的Math.max(STORE_OPEN_MIN, ...)處理，不是這裡的責任。
-// 2026-08-27老闆糾正：現在非營業時間仍要能預訂明天的餐，不能整頁擋掉；
-// 2026-08-27健檢發現：原本用「now>=STORE_OPEN_MIN」當下限，會讓凌晨時段誤判成「今天不能訂」，已修正只看上限。
+function timeToMin_(t) {
+  const [h, m] = String(t).split(':').map(Number);
+  return h * 60 + m;
+}
+function getWeekdayForOffset_(offsetDays) {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.getDay();
+}
+// 某個取餐日期(offsetDays表示，0=今天)實際可用的營業時段清單(可能不只一段)——特殊日期公休回傳[]，
+// 特殊日期有自訂時間就整段取代當天原本的星期規則，否則照當天星期的固定規則
+function getBusinessRangesForOffset_(offsetDays) {
+  const special = SPECIAL_DATES[getPickupDateISO(offsetDays)];
+  if (special && special.closed) return [];
+  if (special && special.start && special.end) return [{ start: special.start, end: special.end }];
+  return BUSINESS_HOURS_BY_WEEKDAY[getWeekdayForOffset_(offsetDays)] || [];
+}
+// isOrderingOpen()代表「今天」這個取餐日期現在這個時間點還能不能被選——只看「顧客下單時間」的區間，
+// 跟「營業時間」是分開的兩組設定(老闆確認：下單時間是給客人預訂用，不用卡在當天營業時間內，
+// 例如晚上21:00~23:00也能下單訂隔天早餐)。預設的接單時間從00:00算起，等於沒有下限，
+// 保留原本「凌晨也能先預訂今天稍晚時段」的規則(2026-08-27老闆糾正過)。
 function isOrderingOpen() {
-  return getNowMinutes() < ORDER_CUTOFF_MIN;
+  const dateISO = getPickupDateISO(0);
+  const special = SPECIAL_DATES[dateISO];
+  if (special && special.closed) return false;
+  const ranges = ORDER_HOURS_BY_WEEKDAY[getWeekdayForOffset_(0)] || [];
+  const nowMin = getNowMinutes();
+  return ranges.some(r => nowMin >= timeToMin_(r.start) && nowMin < timeToMin_(r.end));
 }
 function formatDateLabel(offsetDays) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
   const md = `${d.getMonth() + 1}/${d.getDate()}`;
-  const dayName = offsetDays === 0 ? '今天' : offsetDays === 1 ? '明天' : '';
+  let dayName;
+  if (offsetDays === 0) dayName = '今天';
+  else if (offsetDays === 1) dayName = '明天';
+  else dayName = '週' + ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
   return `${md}（${dayName}）`;
 }
+
+function applyScheduleSettings_(data) {
+  const config = data.config || {};
+  SLOT_STEP_MIN = config.slotStepMinutes || 15;
+  MAX_SLOT_CAPACITY = config.maxSlotCapacity || 2;
+  MIN_LEAD_MIN = config.prepBufferMinutes || 10;
+  MAX_ADVANCE_DAYS = config.maxAdvanceDays || 1;
+  ALLOW_SAME_DAY_ORDER = config.allowSameDayOrder !== false;
+  BUSINESS_HOURS_BY_WEEKDAY = {};
+  (data.businessHours || []).forEach(r => {
+    (BUSINESS_HOURS_BY_WEEKDAY[r.weekday] = BUSINESS_HOURS_BY_WEEKDAY[r.weekday] || []).push({ start: r.start, end: r.end });
+  });
+  ORDER_HOURS_BY_WEEKDAY = {};
+  (data.orderHours || []).forEach(r => {
+    (ORDER_HOURS_BY_WEEKDAY[r.weekday] = ORDER_HOURS_BY_WEEKDAY[r.weekday] || []).push({ start: r.start, end: r.end });
+  });
+  SPECIAL_DATES = {};
+  (data.specialDates || []).forEach(s => { SPECIAL_DATES[s.date] = s; });
+}
+
+const SCHEDULE_SETTINGS_CACHE_KEY = 'abao_pos_schedule_settings_cache_v1';
+// 保底預設值：完全讀不到雲端也沒有本地快取時使用，跟改造前寫死的行為(05:20-13:00營業、
+// 00:00-12:45可下單、15分鐘一格、每時段上限2單、最多訂到明天)完全一致，確保這次改造
+// 不會讓點餐頁在極端情況下(雲端試算表出問題)整個掛掉
+function builtinDefaultScheduleSettings_() {
+  const weekdays = [0, 1, 2, 3, 4, 5, 6];
+  return {
+    businessHours: weekdays.map(w => ({ weekday: w, start: '05:20', end: '13:00' })),
+    orderHours: weekdays.map(w => ({ weekday: w, start: '00:00', end: '12:45' })),
+    specialDates: [],
+    config: { slotStepMinutes: 15, maxSlotCapacity: 2, allowSameDayOrder: true, maxAdvanceDays: 1, prepBufferMinutes: 10 }
+  };
+}
+function loadScheduleSettings() {
+  return apiGet_({ action: 'storeScheduleSettings', storeId: 'meibao' }).then(resp => {
+    if (!resp || resp.status !== 'ok') throw new Error('storeScheduleSettings回傳格式異常');
+    applyScheduleSettings_(resp);
+    try { localStorage.setItem(SCHEDULE_SETTINGS_CACHE_KEY, JSON.stringify(resp)); } catch (e) {}
+    return true;
+  }).catch(err => {
+    console.warn('商店時段設定雲端讀取失敗，嘗試改用本地快取', err);
+    try {
+      const cached = JSON.parse(localStorage.getItem(SCHEDULE_SETTINGS_CACHE_KEY) || 'null');
+      if (cached && cached.status === 'ok') {
+        applyScheduleSettings_(cached);
+        console.warn('已改用本地快取的商店時段設定(可能不是最新版本)');
+        return true;
+      }
+    } catch (e2) {}
+    console.error('商店時段設定完全無法取得(雲端+本地快取皆失敗)，改用內建預設值(05:20-13:00)');
+    applyScheduleSettings_(builtinDefaultScheduleSettings_());
+    return true;
+  });
+}
+const scheduleSettingsReady = loadScheduleSettings();
 
 function getPickupDateISO(offsetDays) {
   const d = new Date();
@@ -1490,9 +1582,9 @@ let pendingOrderContext = null;
 function submitOrder(e) {
   e.preventDefault();
   const dateValue = document.getElementById('pickup-date').value;
-  if (dateValue === 'today' && !isOrderingOpen()) {
-    // 表單開著跨過12:45或還沒到05:20的邊界情況，擋下並改成只能選明天
-    alert('已超過今日接單時間，今天的取餐時段暫不開放，請改選明天。');
+  if (Number(dateValue) === 0 && !isOrderingOpen()) {
+    // 表單開著跨過接單截止時間的邊界情況，擋下並改成只能選其他日期
+    alert('已超過今日接單時間，今天的取餐時段暫不開放，請改選其他日期。');
     checkOrderWindow();
     populatePickupDate();
     populatePickupTime(document.getElementById('pickup-date').value);
@@ -1504,7 +1596,7 @@ function submitOrder(e) {
   if (!phone) { alert('請輸入手機號碼'); backToCart(); document.getElementById('cust-phone').focus(); return false; }
   // 2026-09-16：保險檢查，防止驗證成功後又手動改了手機號碼欄位(showCheckout()已經擋過一次，這裡是雙重防呆)
   if (!verifiedMember || verifiedMember.phone !== phone) { alert('會員驗證資料有異動，請重新驗證'); backToCart(); return false; }
-  const dateLabel = formatDateLabel(dateValue === 'today' ? 0 : 1);
+  const dateLabel = formatDateLabel(Number(dateValue));
   const time = `${dateLabel} ${document.getElementById('pickup-time').value}`;
   const note = document.getElementById('cust-note').value;
   const rawTotal = cart.reduce((s, c) => s + c.qty * c.price, 0);
@@ -1535,7 +1627,7 @@ function submitOrder(e) {
 
   createPendingOrderOnBackend({
     storeId: 'meibao',
-    pickupDate: getPickupDateISO(dateValue === 'today' ? 0 : 1),
+    pickupDate: getPickupDateISO(Number(dateValue)),
     pickupTime: document.getElementById('pickup-time').value,
     items: items,
     totalAmount: total,
@@ -1543,10 +1635,15 @@ function submitOrder(e) {
   }).then(data => {
     if (data.status === 'ok') {
       pendingOrderContext.backendOrderId = data.orderId;
-      // 現階段藍新尚未串接，用「模擬付款」畫面代替真正的付款頁導向
-      document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
-      document.getElementById('mockpay-total').textContent = pendingOrderContext.total;
-      document.getElementById('mockpay-view').style.display = 'block';
+      // 2026-09-16新增：藍新MPG真實付款流程，目前只在網址帶?mpgtest=1時啟用(藍新商店還沒開通，
+      // 不能讓正式客人點下去撞到「查無此商店代號」錯誤)，正式客人維持看到「模擬付款」畫面
+      if (MPG_TEST_MODE) {
+        startMpgPayment(data.orderId, pendingOrderContext.total);
+      } else {
+        document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
+        document.getElementById('mockpay-total').textContent = pendingOrderContext.total;
+        document.getElementById('mockpay-view').style.display = 'block';
+      }
     } else {
       // 後端拒絕(例如該時段剛好被別人搶滿) - 還原購物車讓客人重新選時段，不能假裝訂單成立
       alert((data.message || '送出失敗，請重新選擇取餐時段') + '');
@@ -1565,15 +1662,14 @@ function submitOrder(e) {
   return false;
 }
 
-function confirmMockPayment() {
-  const ctx = pendingOrderContext;
-  document.getElementById('mockpay-view').style.display = 'none';
+// 共用「訂單真正付款完成」收尾邏輯：核銷已套用的兌換券→呼叫confirmPayment→顯示完成畫面。
+// 模擬付款(confirmMockPayment)、藍新MPG真實付款(pollMpgOrderStatus確認成功後)都走這裡，避免重複維護
+function completeOrderConfirmation_(ctx) {
   const finish = () => {
     document.getElementById('order-no').textContent = ctx.orderNo;
     document.getElementById('order-summary').textContent = ctx.summary;
     document.getElementById('confirm-view').style.display = 'block';
   };
-  // 付款確認成功才真的核銷兌換券(對應未來藍新真實付款成功通知的同一個時間點)；
   // 核銷失敗不擋訂單完成流程(客人已經看到折抵後金額，不應該卡在這裡)，只記log供事後排查
   const redeemAppliedVouchers = () => {
     if (!ctx || !ctx.voucherIds || !ctx.voucherIds.length) return Promise.resolve();
@@ -1583,42 +1679,138 @@ function confirmMockPayment() {
       }).catch(err => console.warn('兌換券核銷失敗(不影響訂單完成，可能網路問題)', voucherId, err))
     ));
   };
-  redeemAppliedVouchers().then(() => {
+  return redeemAppliedVouchers().then(() => {
     if (ctx && ctx.backendOrderId) {
-      confirmPaymentOnBackend(ctx.backendOrderId).then(finish).catch(finish);
+      return confirmPaymentOnBackend(ctx.backendOrderId).then(finish).catch(finish);
     } else {
       finish();
+      return Promise.resolve();
     }
   });
 }
 
-// 取餐日期：今天(若還在營業/接單時段內)或明天，兩選一（2026-08-27老闆確認規則）
+function confirmMockPayment() {
+  const ctx = pendingOrderContext;
+  document.getElementById('mockpay-view').style.display = 'none';
+  completeOrderConfirmation_(ctx);
+}
+
+// ---- 藍新MPG真實付款流程（2026-09-16新增，目前只在網址帶?mpgtest=1時啟用，見開頭MPG_TEST_MODE說明）----
+// 建立付款請求→組表單→導去藍新付款頁；付款完成後藍新會導回本頁(ReturnURL帶mpgreturn=1&orderId=)，
+// 同時藍新會非同步呼叫後端NotifyURL完成真正的付款確認(見checkMpgReturn的輪詢)
+function startMpgPayment(orderId, amount) {
+  // pendingOrderContext(訂單摘要/兌換券選擇)存到localStorage，因為送出表單導頁後整個頁面會離開，
+  // 等藍新導回來時原本的JS記憶體狀態已經沒了，要靠這份存檔重建完成畫面
+  try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(pendingOrderContext)); } catch (e) {}
+  const returnUrl = location.origin + location.pathname + '?mpgreturn=1&orderId=' + encodeURIComponent(orderId);
+  apiPost_({ action: 'createMpgPayment', orderId, amount, itemDesc: STORE_NAME, returnUrl }).then(data => {
+    if (data.status !== 'ok') {
+      alert('建立付款請求失敗：' + (data.message || '') + '\n請改用下方模擬付款完成訂單。');
+      document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
+      document.getElementById('mockpay-total').textContent = pendingOrderContext.total;
+      document.getElementById('mockpay-view').style.display = 'block';
+      return;
+    }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = data.mpgUrl;
+    Object.keys(data.fields).forEach(k => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = k;
+      input.value = data.fields[k];
+      form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+  }).catch(err => {
+    console.warn('建立藍新付款請求失敗（網路問題）', err);
+    alert('建立付款請求失敗，請改用下方模擬付款完成訂單。');
+    document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
+    document.getElementById('mockpay-total').textContent = pendingOrderContext.total;
+    document.getElementById('mockpay-view').style.display = 'block';
+  });
+}
+
+// 頁面載入時檢查是否剛從藍新付款頁導回來，是的話顯示等待畫面並輪詢付款狀態
+// (真正的付款確認是藍新NotifyURL非同步呼叫後端完成的，這裡只是前端等著看確認到了沒)
+function checkMpgReturn() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('mpgreturn') !== '1') return;
+  const orderId = params.get('orderId');
+  if (!orderId) return;
+  let ctx = null;
+  try { ctx = JSON.parse(localStorage.getItem('abao_mpg_pending_' + orderId) || 'null'); } catch (e) {}
+  document.getElementById('checkout-form').style.display = 'none';
+  document.getElementById('cart-view').style.display = 'none';
+  document.getElementById('mpg-waiting-view').style.display = 'block';
+  pollMpgOrderStatus_(orderId, ctx, 0);
+}
+function pollMpgOrderStatus_(orderId, ctx, attempt) {
+  apiGet_({ action: 'orderStatus', orderId }).then(data => {
+    if (data.status === 'ok' && (data.orderStatus === '未取餐' || data.orderStatus === '已取餐')) {
+      document.getElementById('mpg-waiting-view').style.display = 'none';
+      if (ctx) {
+        completeOrderConfirmation_(ctx);
+      } else {
+        // localStorage剛好被清過或跨裝置導回，摘要內容還原不了，至少讓客人知道訂單編號跟成功狀態
+        document.getElementById('order-no').textContent = orderId;
+        document.getElementById('order-summary').textContent = '付款已完成，取餐時請至現場出示此畫面。';
+        document.getElementById('confirm-view').style.display = 'block';
+      }
+      try { localStorage.removeItem('abao_mpg_pending_' + orderId); } catch (e) {}
+      cart = [];
+      saveCartSession();
+    } else if (attempt < 15) {
+      setTimeout(() => pollMpgOrderStatus_(orderId, ctx, attempt + 1), 2000);
+    } else {
+      document.getElementById('mpg-waiting-view').innerHTML =
+        '<h2>確認付款中…</h2><p style="color:#888;font-size:0.9rem;">付款確認需要一點時間，請稍後重新整理本頁，或截圖聯繫門市確認訂單狀態。</p>';
+    }
+  }).catch(() => {
+    if (attempt < 15) setTimeout(() => pollMpgOrderStatus_(orderId, ctx, attempt + 1), 2000);
+  });
+}
+
+// 取餐日期：今天(若還在接單時段內且開放當天訂購)起最多MAX_ADVANCE_DAYS天後，選項值改用offsetDays數字字串
+// (原本是'today'/'tomorrow'固定兩選一，2026-09-16改造成可設定天數，公休日自動從選單排除)
 function populatePickupDate() {
   const sel = document.getElementById('pickup-date');
   sel.innerHTML = '';
-  if (isOrderingOpen()) {
-    sel.innerHTML += `<option value="today">${formatDateLabel(0)}</option>`;
-  }
-  sel.innerHTML += `<option value="tomorrow">${formatDateLabel(1)}</option>`;
+  const candidates = [];
+  if (ALLOW_SAME_DAY_ORDER && isOrderingOpen()) candidates.push(0);
+  for (let d = 1; d <= MAX_ADVANCE_DAYS; d++) candidates.push(d);
+  const visible = candidates.filter(offset => getBusinessRangesForOffset_(offset).length > 0);
+  // 保底：萬一設定不小心把候選日期全部設成公休，至少列出原始候選，避免選單整個空白
+  const finalOptions = visible.length > 0 ? visible : candidates;
+  finalOptions.forEach(offset => {
+    sel.innerHTML += `<option value="${offset}">${formatDateLabel(offset)}</option>`;
+  });
   sel.onchange = () => populatePickupTime(sel.value);
 }
-
-const MAX_SLOT_CAPACITY = 2; // 每個取餐時段最多幾張訂單（2026-08-29老闆確認）
 
 function populatePickupTime(dateValue) {
   const sel = document.getElementById('pickup-time');
   sel.innerHTML = '';
-  let start = STORE_OPEN_MIN;
-  if (dateValue === 'today') {
-    // 今天要留下單後最少10分鐘備餐時間；明天以後直接開放整個營業時段，不用留備餐緩衝
-    start = Math.max(STORE_OPEN_MIN, getNowMinutes() + MIN_LEAD_MIN);
-  }
-  start = Math.ceil(start / SLOT_STEP_MIN) * SLOT_STEP_MIN;
-  for (let t = start; t <= STORE_CLOSE_MIN; t += SLOT_STEP_MIN) {
+  const offset = Number(dateValue);
+  const isToday = offset === 0;
+  const nowMin = getNowMinutes();
+  const slots = [];
+  getBusinessRangesForOffset_(offset).forEach(r => {
+    let start = timeToMin_(r.start);
+    const end = timeToMin_(r.end);
+    if (isToday) {
+      // 今天要留下單後最少幾分鐘備餐時間；之後的日期直接開放整個營業時段，不用留備餐緩衝
+      start = Math.max(start, nowMin + MIN_LEAD_MIN);
+    }
+    start = Math.ceil(start / SLOT_STEP_MIN) * SLOT_STEP_MIN;
+    for (let t = start; t <= end; t += SLOT_STEP_MIN) slots.push(t);
+  });
+  slots.forEach(t => {
     const h = String(Math.floor(t / 60)).padStart(2, '0');
     const m = String(t % 60).padStart(2, '0');
     sel.innerHTML += `<option value="${h}:${m}">${h}:${m}</option>`;
-  }
+  });
   applySlotCapacity(dateValue);
 }
 
@@ -1626,7 +1818,7 @@ function populatePickupTime(dateValue) {
 // 這只是前端體驗優化(避免客人選到已滿時段)，真正防止超賣的判斷在後端createPendingOrder_做，
 // 失敗就當作沒有容量限制、不擋顧客選時段，不能因為網路問題擋單
 function applySlotCapacity(dateValue) {
-  const dateISO = getPickupDateISO(dateValue === 'today' ? 0 : 1);
+  const dateISO = getPickupDateISO(Number(dateValue));
   apiGet_({ action: 'slotCounts', storeId: 'meibao', date: dateISO }).then(data => {
     if (data.status !== 'ok' || !data.counts) return;
     const sel = document.getElementById('pickup-time');
@@ -1640,12 +1832,11 @@ function applySlotCapacity(dateValue) {
   }).catch(err => console.warn('讀取時段容量失敗（不影響選時段）', err));
 }
 
-// 非阻斷式提示：只在「今天」不可選時顯示告知，不影響瀏覽/加入購物車/選明天下單
+// 非阻斷式提示：只在「今天」不可下單時顯示告知，不影響瀏覽/加入購物車/選其他日期下單
 function checkOrderWindow() {
-  // isOrderingOpen()現在只代表「有沒有超過12:45停止接單」，凌晨未開店不會觸發這個提示（可以先預訂今天稍晚時段）
   const closedEl = document.getElementById('closed-notice');
   if (!isOrderingOpen()) {
-    closedEl.textContent = `⏰ 已超過今日接單時間（打烊前15分鐘停止接單），今天的取餐時段暫不開放，但仍可預訂明天餐點。`;
+    closedEl.textContent = `⏰ 今天已超過線上接單時間，今天的取餐時段暫不開放，但仍可預訂其他開放日期的餐點。`;
     closedEl.style.display = 'block';
     return false;
   }
@@ -1661,11 +1852,14 @@ loadMenuCmsData().then(() => {
   renderMenu();
   applyItemAvailability();
 });
-populatePickupDate();
-populatePickupTime(document.getElementById('pickup-date').value);
-checkOrderWindow();
+scheduleSettingsReady.then(() => {
+  populatePickupDate();
+  populatePickupTime(document.getElementById('pickup-date').value);
+  checkOrderWindow();
+});
 loadCartSession();
 updateCartBar();
+checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 
 // 讀取雲端平板設定的品項上下架狀態，同步反映到點餐頁（本日售完/永久下架→擋掉加入按鈕）；
 // 順便讀暫停接單/設為忙碌狀態，顯示非阻斷式提示（真正擋單是送出訂單時後端做，這裡只是提早讓客人知道）

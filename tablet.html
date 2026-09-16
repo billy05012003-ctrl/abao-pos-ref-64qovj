@@ -286,6 +286,15 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <div id="orders-list"><div class="empty-hint">載入中...</div></div>
     </section>
 
+    <section style="margin:0 0 12px;display:none;" id="stuck-payment-section">
+      <h2>⚠️待付款訂單(卡住超過10分鐘) <span class="refresh-link" onclick="loadStuckPaymentOrders()">重新整理</span></h2>
+      <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
+        這裡列的是線上點餐送出後，超過10分鐘還沒收到藍新付款確認的訂單，多半是客人真的沒付款、或系統確認出問題。
+        <b>標記已付款前，請先去藍新商店後台「查詢交易紀錄」核對客人的卡真的有扣款成功</b>，避免誤把沒付款的訂單放行。
+      </div>
+      <div id="stuck-payment-list"><div class="empty-hint">載入中...</div></div>
+    </section>
+
     <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
     <h2 style="font-size:1rem;margin:0 0 4px;">品項上下架</h2>
     <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px;">點分類展開/收合。「線上點餐」跟「POS功能」是兩個獨立開關，互不影響。</div>
@@ -381,6 +390,37 @@ function loadOrders() {
         <button class="btn btn-primary" onclick="markReady('${o.orderId}')">可以取餐</button>
       </div>
     `).join('');
+  });
+}
+
+function loadStuckPaymentOrders() {
+  apiGet({ action: 'stuckPaymentOrders', storeId: STORE_ID }).then(data => {
+    if (data.status !== 'ok') return;
+    const section = document.getElementById('stuck-payment-section');
+    const container = document.getElementById('stuck-payment-list');
+    if (data.orders.length === 0) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = 'block';
+    container.innerHTML = data.orders.map(o => `
+      <div class="order-card">
+        <div>
+          <div><strong>${o.orderId}</strong></div>
+          <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}　${o.note || ''}</div>
+        </div>
+        <button class="btn btn-primary" onclick="manualConfirmPayment('${o.orderId}')">標記已付款</button>
+      </div>
+    `).join('');
+  });
+}
+
+function manualConfirmPayment(orderId) {
+  if (!confirm('確定「' + orderId + '」這筆訂單客人真的已經付款成功嗎？\n\n請先去藍新商店後台核對過交易紀錄再標記，標記後客人可以直接來取餐。')) return;
+  apiPost({ action: 'confirmPayment', orderId: orderId }).then(() => {
+    loadStuckPaymentOrders();
+    loadOrders();
+    loadRevenue();
   });
 }
 
@@ -1073,6 +1113,7 @@ function openPosLocalItemStatusManager() {
   Promise.all([loadStoreStatus(), loadPosItemStatus()]).then(renderMergedItemStatusList);
   loadRevenue();
   loadOrders();
+  loadStuckPaymentOrders();
 }
 function closePosLocalItemStatusManager() {
   document.getElementById('pos-item-status-overlay').classList.remove('open');

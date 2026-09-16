@@ -85,6 +85,18 @@
   .mc-field-row { display:flex; gap:10px; flex-wrap:wrap; }
   .mc-save-btn, .mc-delete-btn { padding:9px 16px; border-radius:7px; border:none; font-size:0.85rem; cursor:pointer; margin-right:8px; }
   .mc-save-btn { background:var(--brand); color:#fff; }
+  .sched-tab-btn { padding:8px 14px; border-radius:7px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:0.82rem; cursor:pointer; }
+  .sched-tab-btn.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .sched-day-row { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
+  .sched-day-row .sched-day-label { width:52px; flex-shrink:0; font-weight:600; padding-top:6px; }
+  .sched-day-row .sched-ranges { flex:1; display:flex; flex-direction:column; gap:6px; }
+  .sched-range-item { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .sched-range-item input[type="time"] { padding:5px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; }
+  .sched-range-item button { border:none; background:none; color:var(--brand); cursor:pointer; font-size:0.78rem; }
+  .sched-pickup-field { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .sched-pickup-field label { width:180px; flex-shrink:0; font-size:0.85rem; }
+  .sched-pickup-field input { padding:7px; border:1px solid var(--border); border-radius:6px; font-size:0.85rem; width:100px; }
+  .sched-special-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--border); flex-wrap:wrap; font-size:0.85rem; }
   .mc-delete-btn { background:none; border:1px solid #c94f1f; color:#c94f1f; }
   .mc-section { border-top:1px solid var(--border); margin-top:16px; padding-top:12px; }
   .mc-tags { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
@@ -152,6 +164,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 <div class="app-shell">
 <nav class="sidebar" id="tabbar">
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">品項上下架</button>
+  <button id="tab-btn-schedule" onclick="switchBackofficeTab('schedule')">⚙商店時段設定</button>
   <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
     <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
   </button>
@@ -180,6 +193,35 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     這裡改了會直接反映到對應的前台畫面，不需要老闆自己再跑去POS功能操作。
   </p>
   <div id="availability-list"><div class="empty-hint">載入中...</div></div>
+</div>
+<div id="view-schedule" class="view" style="display:none;">
+  <p style="font-size:0.8rem;color:var(--muted);">
+    這裡管理線上點餐的營業時間/接單時間/取餐設定，改完立刻生效。只影響<b>線上點餐</b>，不影響POS功能現場點餐。
+    目前只有美寶一間店在用。
+  </p>
+  <div class="sched-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <button type="button" class="sched-tab-btn active" id="sched-tab-btn-hours" onclick="switchSchedSubview('hours')">營業時間設定</button>
+    <button type="button" class="sched-tab-btn" id="sched-tab-btn-order" onclick="switchSchedSubview('order')">顧客下單時間</button>
+    <button type="button" class="sched-tab-btn" id="sched-tab-btn-pickup" onclick="switchSchedSubview('pickup')">自取取餐設定</button>
+    <button type="button" class="sched-tab-btn" id="sched-tab-btn-special" onclick="switchSchedSubview('special')">特殊營業時段</button>
+  </div>
+  <div id="sched-subview-hours">
+    <p style="font-size:0.78rem;color:var(--muted);">每天可以設定多段時間（例如中間留午休空檔）。這是給顧客看的營業時間，也是取餐時段選單的範圍依據。</p>
+    <div id="sched-hours-list"><div class="empty-hint">載入中...</div></div>
+  </div>
+  <div id="sched-subview-order" style="display:none;">
+    <p style="font-size:0.78rem;color:var(--muted);">這組決定「現在這個時間點客人能不能送出訂單」，<b>跟營業時間分開設定</b>——例如可以設晚上21:00~23:00也開放下單，訂隔天的餐。跟營業時間沒有關聯，不會互相限制。</p>
+    <div id="sched-order-list"><div class="empty-hint">載入中...</div></div>
+  </div>
+  <div id="sched-subview-pickup" style="display:none;">
+    <p style="font-size:0.78rem;color:var(--muted);">取餐時段的間隔、每個時段能接幾張單、開放預訂到幾天後，都在這裡設定。</p>
+    <div id="sched-pickup-form"><div class="empty-hint">載入中...</div></div>
+  </div>
+  <div id="sched-subview-special" style="display:none;">
+    <p style="font-size:0.78rem;color:var(--muted);">指定日期公休（例如國定假日），或當天用不同的營業時間，會蓋過上面每週固定的設定。</p>
+    <div id="sched-special-list"><div class="empty-hint">載入中...</div></div>
+    <button type="button" class="mc-add-btn" onclick="schedAddSpecialDate()">+ 新增特殊日期</button>
+  </div>
 </div>
 <div id="view-menucms" class="view" style="display:none;">
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
@@ -406,11 +448,17 @@ function switchMemberSubview(name) {
 
 function switchBackofficeTab(name) {
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
+  document.getElementById('tab-btn-schedule').classList.toggle('active', name === 'schedule');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
   document.getElementById('tab-btn-member').classList.toggle('active', name === 'member');
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
+  document.getElementById('view-schedule').style.display = name === 'schedule' ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
   document.getElementById('view-member').style.display = name === 'member' ? 'block' : 'none';
+  if (name === 'schedule' && !schedLoaded) {
+    schedLoaded = true;
+    loadScheduleData();
+  }
   document.getElementById('mc-sub-btn-categories').classList.toggle('active', name === 'menucms' && currentMcSubview === 'categories');
   document.getElementById('mc-sub-btn-options').classList.toggle('active', name === 'menucms' && currentMcSubview === 'options');
   document.getElementById('mc-subview-categories').style.display = (name === 'menucms' && currentMcSubview === 'categories') ? 'block' : 'none';
@@ -450,6 +498,180 @@ function switchBackofficeTab(name) {
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ---- 商店時段設定（2026-09-16新增）----
+// 只做美寶一間店，storeId直接寫死'meibao'，不套用菜單管理那套MC_STORE_ID(那是給多店draft/live內容用的，
+// 這個功能是單一即時生效的營運設定，跟門市狀態忙碌/暫停接單同一種性質，故意不比照CMS內容做草稿層)
+const SCHED_STORE_ID = 'meibao';
+const SCHED_WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六']; // 對齊JS Date.getDay()(0=日)
+const SCHED_WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 顯示順序改成一二三四五六日，比較符合台灣習慣
+let schedLoaded = false;
+let schedBusinessHours = []; // {weekday,start,end}
+let schedOrderHours = [];
+let schedSpecialDates = []; // {date,closed,start,end,note}
+let schedConfig = {};
+let currentSchedSubview = 'hours';
+
+function switchSchedSubview(name) {
+  currentSchedSubview = name;
+  ['hours', 'order', 'pickup', 'special'].forEach(sv => {
+    document.getElementById('sched-tab-btn-' + sv).classList.toggle('active', sv === name);
+    document.getElementById('sched-subview-' + sv).style.display = sv === name ? 'block' : 'none';
+  });
+}
+
+function loadScheduleData() {
+  apiGet({ action: 'storeScheduleSettings', storeId: SCHED_STORE_ID }).then(data => {
+    if (data.status !== 'ok') {
+      ['sched-hours-list', 'sched-order-list', 'sched-pickup-form', 'sched-special-list'].forEach(id => {
+        document.getElementById(id).innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>';
+      });
+      return;
+    }
+    schedBusinessHours = data.businessHours || [];
+    schedOrderHours = data.orderHours || [];
+    schedSpecialDates = data.specialDates || [];
+    schedConfig = data.config || {};
+    renderSchedHours('hours', '營業時間', schedBusinessHours, 'sched-hours-list');
+    renderSchedHours('order', '接單時間', schedOrderHours, 'sched-order-list');
+    renderSchedPickupForm();
+    renderSchedSpecialList();
+  });
+}
+
+// 營業時間/接單時間共用同一套渲染邏輯，用type區分呼叫哪個action。rules是目前這個type的完整清單(每天可能多段)
+function renderSchedHours(kind, type, rules, containerId) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = SCHED_WEEKDAY_ORDER.map(weekday => {
+    const ranges = rules.filter(r => r.weekday === weekday);
+    const rangesHtml = ranges.map(r => `
+      <div class="sched-range-item" data-weekday="${weekday}" data-orig-start="${escapeHtml(r.start)}">
+        <input type="time" class="sched-start" value="${escapeHtml(r.start)}">
+        <span>～</span>
+        <input type="time" class="sched-end" value="${escapeHtml(r.end)}">
+        <button type="button" onclick="schedSaveRange('${kind}','${type}',this)">儲存</button>
+        <button type="button" onclick="schedDeleteRange('${kind}','${type}',this)">刪除</button>
+      </div>`).join('');
+    return `
+      <div class="sched-day-row">
+        <div class="sched-day-label">週${SCHED_WEEKDAY_LABELS[weekday]}</div>
+        <div class="sched-ranges" data-weekday="${weekday}">
+          ${rangesHtml || '<div style="color:var(--muted);font-size:0.8rem;">（公休，沒有設定時段）</div>'}
+          <div class="sched-range-item">
+            <input type="time" class="sched-start-new">
+            <span>～</span>
+            <input type="time" class="sched-end-new">
+            <button type="button" onclick="schedAddRange('${kind}','${type}',${weekday},this)">+ 新增時段</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function schedSaveRange(kind, type, btn) {
+  const row = btn.closest('.sched-range-item');
+  const weekday = Number(row.dataset.weekday);
+  const origStart = row.dataset.origStart;
+  const start = row.querySelector('.sched-start').value;
+  const end = row.querySelector('.sched-end').value;
+  if (!start || !end) { alert('請填完整開始/結束時間'); return; }
+  apiPost({
+    action: 'upsertScheduleRule',
+    rule: { storeId: SCHED_STORE_ID, type, weekday, start, end, status: '啟用', originalKey: `${SCHED_STORE_ID}||${type}||${weekday}||${origStart}` }
+  }).then(data => {
+    if (data.status === 'ok') { alert('已儲存'); loadScheduleData(); }
+    else alert('儲存失敗：' + (data.message || ''));
+  });
+}
+
+function schedDeleteRange(kind, type, btn) {
+  if (!confirm('確定要刪除這個時段嗎？')) return;
+  const row = btn.closest('.sched-range-item');
+  const weekday = Number(row.dataset.weekday);
+  const start = row.dataset.origStart;
+  apiPost({ action: 'deleteScheduleRule', storeId: SCHED_STORE_ID, type, weekday, start }).then(data => {
+    if (data.status === 'ok') loadScheduleData();
+    else alert('刪除失敗：' + (data.message || ''));
+  });
+}
+
+function schedAddRange(kind, type, weekday, btn) {
+  const row = btn.closest('.sched-range-item');
+  const start = row.querySelector('.sched-start-new').value;
+  const end = row.querySelector('.sched-end-new').value;
+  if (!start || !end) { alert('請填完整開始/結束時間'); return; }
+  apiPost({ action: 'upsertScheduleRule', rule: { storeId: SCHED_STORE_ID, type, weekday, start, end, status: '啟用' } }).then(data => {
+    if (data.status === 'ok') loadScheduleData();
+    else alert('新增失敗：' + (data.message || ''));
+  });
+}
+
+function renderSchedPickupForm() {
+  const c = schedConfig;
+  document.getElementById('sched-pickup-form').innerHTML = `
+    <div class="sched-pickup-field"><label>取餐時段間隔（分鐘）</label><input type="number" id="sched-f-step" value="${c.slotStepMinutes ?? 15}" min="5" step="5"></div>
+    <div class="sched-pickup-field"><label>每時段限制單量</label><input type="number" id="sched-f-cap" value="${c.maxSlotCapacity ?? 2}" min="1"></div>
+    <div class="sched-pickup-field"><label>開放當天訂購</label><input type="checkbox" id="sched-f-sameday" ${c.allowSameDayOrder !== false ? 'checked' : ''}></div>
+    <div class="sched-pickup-field"><label>最多可預訂到幾天後</label><input type="number" id="sched-f-advance" value="${c.maxAdvanceDays ?? 1}" min="0"></div>
+    <div class="sched-pickup-field"><label>下單後最少留幾分鐘備餐</label><input type="number" id="sched-f-lead" value="${c.prepBufferMinutes ?? 10}" min="0"></div>
+    <button type="button" class="mc-save-btn" onclick="schedSavePickupConfig()">儲存</button>
+  `;
+}
+
+function schedSavePickupConfig() {
+  apiPost({
+    action: 'updateScheduleConfig',
+    config: {
+      storeId: SCHED_STORE_ID,
+      slotStepMinutes: document.getElementById('sched-f-step').value,
+      maxSlotCapacity: document.getElementById('sched-f-cap').value,
+      allowSameDayOrder: document.getElementById('sched-f-sameday').checked,
+      maxAdvanceDays: document.getElementById('sched-f-advance').value,
+      prepBufferMinutes: document.getElementById('sched-f-lead').value
+    }
+  }).then(data => {
+    if (data.status === 'ok') alert('已儲存');
+    else alert('儲存失敗：' + (data.message || ''));
+  });
+}
+
+function renderSchedSpecialList() {
+  const sorted = schedSpecialDates.slice().sort((a, b) => a.date < b.date ? -1 : 1);
+  document.getElementById('sched-special-list').innerHTML = sorted.length === 0
+    ? '<div class="empty-hint">目前沒有設定特殊日期</div>'
+    : sorted.map(s => `
+      <div class="sched-special-row">
+        <b>${escapeHtml(s.date)}</b>
+        <span>${s.closed ? '🔴 公休' : `🟢 調整營業 ${escapeHtml(s.start)}～${escapeHtml(s.end)}`}</span>
+        ${s.note ? `<span style="color:var(--muted);">（${escapeHtml(s.note)}）</span>` : ''}
+        <button type="button" onclick="schedDeleteSpecialDate('${escapeHtml(s.date)}')" style="margin-left:auto;border:none;background:none;color:var(--brand);cursor:pointer;">刪除</button>
+      </div>`).join('');
+}
+
+function schedAddSpecialDate() {
+  const date = prompt('請輸入日期(YYYY-MM-DD)：', '');
+  if (!date) return;
+  const closed = confirm('這天是公休(整天不開放)嗎？\n\n按「確定」＝公休\n按「取消」＝改成自訂當天營業時間');
+  let start = '', end = '';
+  if (!closed) {
+    start = prompt('當天營業開始時間(HH:mm)：', '05:20') || '';
+    end = prompt('當天營業結束時間(HH:mm)：', '13:00') || '';
+    if (!start || !end) { alert('未輸入完整時間，取消新增'); return; }
+  }
+  const note = prompt('備註(選填，例如「中秋節」)：', '') || '';
+  apiPost({ action: 'upsertSpecialDate', special: { storeId: SCHED_STORE_ID, date, closed, start, end, note } }).then(data => {
+    if (data.status === 'ok') loadScheduleData();
+    else alert('新增失敗：' + (data.message || ''));
+  });
+}
+
+function schedDeleteSpecialDate(date) {
+  if (!confirm('確定要刪除「' + date + '」這筆特殊日期設定嗎？')) return;
+  apiPost({ action: 'deleteSpecialDate', storeId: SCHED_STORE_ID, date }).then(data => {
+    if (data.status === 'ok') loadScheduleData();
+    else alert('刪除失敗：' + (data.message || ''));
+  });
 }
 
 // 分類名稱顯示用短名稱(去掉英文前綴)，比照線上點餐頁/POS功能的shortCatName()規則，
