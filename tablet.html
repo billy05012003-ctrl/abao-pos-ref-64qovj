@@ -968,6 +968,11 @@ function closeVoucherItemPicker() {
   pendingVoucherForItemPick = null;
 }
 
+// 購物車全部品項的總件數(2026-09-17新增，給「第二件五折」這種不限定同商品的門檻判斷用)
+function getPosCartTotalQty() {
+  return posCart.reduce((s, c) => s + c.qty, 0);
+}
+
 // 跨列合併資格判斷（2026-09-03新增）：同一基本品項(不管客製化不同)分成好幾條購物車列時，
 // 加總全部列的數量一起判斷夠不夠件數，不再只看被選中那一列自己的qty
 function getPosCartQtyForBaseName(baseName) {
@@ -979,7 +984,13 @@ function applyVoucherToLine(lineKey) {
   if (!v) return;
   const line = posCart.find(c => c.lineKey === lineKey);
   if (!line) return;
-  if (getPosCartQtyForBaseName(line.baseName) < v.minQty) { alert(`此品項需要有${v.minQty}件以上才能套用「${v.type}」`); return; }
+  // 「週二第二件五折」不限定同一個商品湊件數，其餘效果(買一送一/第二件六折/加一元多一件)維持只看同商品數量
+  const isDiscount50 = v.effect === 'discount50';
+  const qtyForThreshold = isDiscount50 ? getPosCartTotalQty() : getPosCartQtyForBaseName(line.baseName);
+  if (qtyForThreshold < v.minQty) {
+    alert(isDiscount50 ? `購物車需要有${v.minQty}件以上品項才能套用「${v.type}」` : `此品項需要有${v.minQty}件以上才能套用「${v.type}」`);
+    return;
+  }
 
   // 折抵只算基準價(客人選單點/升級套餐當下的整組價)，客製化加價一律不打折
   const base = line.basePrice != null ? line.basePrice : line.price;
@@ -1130,7 +1141,15 @@ function applyDirectDiscountEffect_(type, effect, lineKey) {
   const behavior = VOUCHER_BEHAVIOR[type];
   const line = posCart.find(c => c.lineKey === lineKey);
   if (!line) return;
-  if (behavior.minQty && getPosCartQtyForBaseName(line.baseName) < behavior.minQty) { alert(`此品項需要有${behavior.minQty}件以上才能套用「${type}」`); return; }
+  // 「週二第二件五折」不限定同一個商品湊件數，其餘效果(買一送一/第二件六折/加一元多一件)維持只看同商品數量
+  if (behavior.minQty) {
+    const isDiscount50 = effect === 'discount50';
+    const qtyForThreshold = isDiscount50 ? getPosCartTotalQty() : getPosCartQtyForBaseName(line.baseName);
+    if (qtyForThreshold < behavior.minQty) {
+      alert(isDiscount50 ? `購物車需要有${behavior.minQty}件以上品項才能套用「${type}」` : `此品項需要有${behavior.minQty}件以上才能套用「${type}」`);
+      return;
+    }
+  }
 
   // 折抵只算基準價(客人選單點/升級套餐當下的整組價)，客製化加價一律不打折
   const base = line.basePrice != null ? line.basePrice : line.price;
