@@ -161,6 +161,10 @@
     width: 100%; background: #fff; color: var(--brand); border: 1px solid var(--brand); border-radius: 10px;
     padding: 12px; font-size: 1rem; margin-top: 8px; cursor: pointer;
   }
+  #pickup-time-grid { display: flex; flex-wrap: wrap; gap: 6px; max-height: 200px; overflow-y: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
+  .time-slot-btn { flex: 0 0 auto; min-width: 68px; padding: 8px 6px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-size: 0.88rem; cursor: pointer; text-align: center; }
+  .time-slot-btn.active { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
+  .time-slot-btn:disabled { opacity: 0.35; cursor: not-allowed; text-decoration: line-through; }
   #confirm-view { display: none; text-align: center; padding: 10px 0; }
   #confirm-view .order-no { font-size: 1.4rem; font-weight: bold; color: var(--brand); margin: 12px 0; }
   #confirm-view pre {
@@ -342,7 +346,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <label>取餐日期<span style="color:#c0392b;">*必填</span></label>
       <select id="pickup-date" required></select>
       <label>希望取餐時間<span style="color:#c0392b;">*必填</span></label>
-      <select id="pickup-time" required></select>
+      <input type="hidden" id="pickup-time">
+      <div id="pickup-time-grid"></div>
       <label id="checkout-paymethod-label" style="display:none;">付款方式</label>
       <select id="checkout-payment-method" style="display:none;">
         <option value="取餐付款">取餐現場付款</option>
@@ -1666,6 +1671,8 @@ function submitOrder(e) {
     populatePickupTime(document.getElementById('pickup-date').value);
     return false;
   }
+  // 取餐時間改成按鈕格子後不再是<form>裡的原生欄位，required不會擋，改用JS檢查(2026-09-18)
+  if (!document.getElementById('pickup-time').value) { alert('請選擇取餐時間'); return false; }
   const name = document.getElementById('cust-name').value.trim();
   const phone = document.getElementById('cust-phone').value.trim();
   // 手機欄位搬到「我的訂單」畫面後不再是<form>裡的欄位，瀏覽器原生required不會擋，改用JS檢查
@@ -1887,9 +1894,13 @@ function populatePickupDate() {
   sel.onchange = () => populatePickupTime(sel.value);
 }
 
+// 取餐時間改用按鈕格子取代下拉選單(2026-09-18改版)：原本15分鐘一格的下拉選單在手機上要滑很久，
+// 改成一眼能看到多個時段的格子按鈕；預設自動選最接近現在的時段(清單第一個一定最早)，多數客人
+// 不用自己選，看到預設時間對就能直接送出
 function populatePickupTime(dateValue) {
-  const sel = document.getElementById('pickup-time');
-  sel.innerHTML = '';
+  const grid = document.getElementById('pickup-time-grid');
+  grid.innerHTML = '';
+  document.getElementById('pickup-time').value = '';
   const offset = Number(dateValue);
   const isToday = offset === 0;
   const nowMin = getNowMinutes();
@@ -1904,28 +1915,60 @@ function populatePickupTime(dateValue) {
     start = Math.ceil(start / SLOT_STEP_MIN) * SLOT_STEP_MIN;
     for (let t = start; t <= end; t += SLOT_STEP_MIN) slots.push(t);
   });
-  slots.forEach(t => {
+  if (!slots.length) {
+    grid.innerHTML = '<div style="font-size:0.85rem;color:var(--muted);padding:6px;">此日期暫無可預訂時段</div>';
+    return;
+  }
+  let firstValue = '';
+  slots.forEach((t, idx) => {
     const h = String(Math.floor(t / 60)).padStart(2, '0');
     const m = String(t % 60).padStart(2, '0');
-    sel.innerHTML += `<option value="${h}:${m}">${h}:${m}</option>`;
+    const value = `${h}:${m}`;
+    if (idx === 0) firstValue = value;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'time-slot-btn';
+    btn.textContent = value;
+    btn.dataset.value = value;
+    btn.onclick = () => selectPickupTime_(value);
+    grid.appendChild(btn);
   });
+  selectPickupTime_(firstValue);
   applySlotCapacity(dateValue);
 }
 
-// 讀取該取餐日期各時段目前已訂張數，額滿(達MAX_SLOT_CAPACITY)的時段從選單移除，避免同一時段塞爆備餐量。
+function selectPickupTime_(value) {
+  document.getElementById('pickup-time').value = value;
+  document.querySelectorAll('#pickup-time-grid .time-slot-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === value);
+  });
+}
+
+// 讀取該取餐日期各時段目前已訂張數，額滿(達MAX_SLOT_CAPACITY)的時段從格子裡disable掉，避免同一時段塞爆備餐量。
 // 這只是前端體驗優化(避免客人選到已滿時段)，真正防止超賣的判斷在後端createPendingOrder_做，
 // 失敗就當作沒有容量限制、不擋顧客選時段，不能因為網路問題擋單
 function applySlotCapacity(dateValue) {
   const dateISO = getPickupDateISO(Number(dateValue));
   apiGet_({ action: 'slotCounts', storeId: 'meibao', date: dateISO }).then(data => {
     if (data.status !== 'ok' || !data.counts) return;
-    const sel = document.getElementById('pickup-time');
+    const grid = document.getElementById('pickup-time-grid');
     if (document.getElementById('pickup-date').value !== dateValue) return; // 使用者已經切換到別的日期，這批結果過期不套用
-    [...sel.options].forEach(opt => {
-      if ((data.counts[opt.value] || 0) >= MAX_SLOT_CAPACITY) opt.remove();
+    const buttons = [...grid.querySelectorAll('.time-slot-btn')];
+    buttons.forEach(btn => {
+      if ((data.counts[btn.dataset.value] || 0) >= MAX_SLOT_CAPACITY) {
+        btn.disabled = true;
+        btn.classList.remove('active');
+      }
     });
-    if (sel.options.length === 0) {
-      sel.innerHTML = '<option value="">此日期時段皆已額滿</option>';
+    const currentValue = document.getElementById('pickup-time').value;
+    const currentBtn = buttons.find(b => b.dataset.value === currentValue);
+    if (!currentBtn || currentBtn.disabled) {
+      const nextAvailable = buttons.find(b => !b.disabled);
+      selectPickupTime_(nextAvailable ? nextAvailable.dataset.value : '');
+    }
+    if (buttons.length && buttons.every(b => b.disabled)) {
+      grid.innerHTML = '<div style="font-size:0.85rem;color:var(--muted);padding:6px;">此日期時段皆已額滿</div>';
+      document.getElementById('pickup-time').value = '';
     }
   }).catch(err => console.warn('讀取時段容量失敗（不影響選時段）', err));
 }
