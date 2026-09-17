@@ -446,12 +446,21 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   </div>
   <div id="pmg-subview-partner" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      規劃中，尚未開發——POS功能目前完全沒有登入/身份機制，這組功能要另外討論設計(誰能開/關帳、
-      細粒度操作權限要做到多細等)再動工。
+      3層角色：<b>夥伴</b>(點餐/結帳/開帳/查會員)、<b>店長</b>(夥伴權限+關帳/贈送兌換券)、<b>老闆</b>(等同店長，另外還有這個POS後台的完整權限)。
+      用4碼PIN碼識別身份，只在「關帳」「贈送兌換券」這兩個有實質影響的動作要求輸入姓名+PIN，後端會驗證角色是否足夠；
+      開帳只記錄是誰開的，不用驗證。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
     </p>
-    <div class="empty-hint">POS權限管理</div>
-    <div class="empty-hint">身份權限設定</div>
-    <div class="empty-hint">夥伴身份設定</div>
+    <div class="mc-layout">
+      <div class="mc-col" style="max-height:none;">
+        <h4>夥伴清單</h4>
+        <div id="ps-list"><div class="empty-hint">載入中...</div></div>
+        <button type="button" class="mc-add-btn" onclick="psCurrentName=null;renderPsEditor();">+ 新增夥伴</button>
+      </div>
+      <div class="mc-col mc-col-wide" style="max-height:none;">
+        <h4>編輯夥伴</h4>
+        <div id="ps-editor"><div class="empty-hint">選一位夥伴來編輯，或點「新增夥伴」</div></div>
+      </div>
+    </div>
   </div>
 </div>
 </main>
@@ -550,8 +559,9 @@ function switchMemberSubview(name) {
   switchBackofficeTab('member');
 }
 
-// 「POS管理」側欄巢狀展開(2026-09-16新增)：開關帳記錄(唯讀)＋POS夥伴管理(規劃中佔位)
+// 「POS管理」側欄巢狀展開(2026-09-16新增)：開關帳記錄(唯讀)＋POS夥伴管理
 let posManageLogLoaded = false;
+let posStaffLoaded = false;
 let currentPosManageSubview = 'log';
 function togglePosManageGroup() {
   const sublist = document.getElementById('posmanage-sublist');
@@ -580,6 +590,89 @@ function loadPosManageLog() {
   });
 }
 
+// ---- POS夥伴管理(2026-09-18新增) ----
+let posStaffList = [];
+let psCurrentName = null; // null=新增，用姓名當key(同門市內姓名不重複)
+function loadPosStaffList() {
+  document.getElementById('ps-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'posStaffList', storeId: SCHED_STORE_ID, includeDisabled: '1' }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    posStaffList = data.staff;
+    renderPsList();
+    renderPsEditor();
+  }).catch(err => {
+    document.getElementById('ps-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
+    console.warn('POS夥伴清單讀取失敗', err);
+  });
+}
+function renderPsList() {
+  const el = document.getElementById('ps-list');
+  if (!posStaffList.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何夥伴</div>'; return; }
+  el.innerHTML = posStaffList.map(s => `
+    <div class="mc-item-row${s.name === psCurrentName ? ' active' : ''}" onclick="psCurrentName='${escapeHtml(s.name).replace(/'/g, "\\'")}';renderPsList();renderPsEditor();">
+      <span>${escapeHtml(s.name)}</span><span class="mc-item-price">${escapeHtml(s.role)}${s.status !== '啟用' ? '・停用' : ''}</span>
+    </div>`).join('');
+}
+function renderPsEditor() {
+  const el = document.getElementById('ps-editor');
+  const isNew = psCurrentName === null;
+  const s = isNew ? {} : (posStaffList.find(x => x.name === psCurrentName) || {});
+  if (!isNew && !posStaffList.find(x => x.name === psCurrentName)) { el.innerHTML = '<div class="empty-hint">選一位來編輯，或點「新增夥伴」</div>'; return; }
+  el.innerHTML = `
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增夥伴' : '編輯夥伴'}</h3>
+    <label class="mc-field">姓名<input id="ps-f-name" value="${escapeHtml(s.name || '')}"></label>
+    <div class="mc-field-row">
+      <label class="mc-field">角色
+        <select id="ps-f-role">
+          <option value="夥伴" ${(s.role || '夥伴') === '夥伴' ? 'selected' : ''}>夥伴</option>
+          <option value="店長" ${s.role === '店長' ? 'selected' : ''}>店長</option>
+          <option value="老闆" ${s.role === '老闆' ? 'selected' : ''}>老闆</option>
+        </select>
+      </label>
+      <label class="mc-field">PIN碼(4碼數字)<input id="ps-f-pin" type="text" inputmode="numeric" maxlength="4" placeholder="${isNew ? '必填' : '留空＝不更改'}"></label>
+    </div>
+    <label class="mc-field" style="max-width:160px;">狀態
+      <select id="ps-f-status">
+        <option value="啟用" ${(s.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
+        <option value="停用" ${s.status === '停用' ? 'selected' : ''}>停用</option>
+      </select>
+    </label>
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="savePosStaffRow()">儲存</button>
+      ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePosStaffRow()">刪除</button>' : ''}
+    </div>
+  `;
+}
+function savePosStaffRow() {
+  const name = document.getElementById('ps-f-name').value.trim();
+  if (!name) { alert('請輸入姓名'); return; }
+  const pin = document.getElementById('ps-f-pin').value.trim();
+  if (pin && !/^\d{4}$/.test(pin)) { alert('PIN碼要4碼數字'); return; }
+  const isNew = psCurrentName === null;
+  if (isNew && !pin) { alert('新增夥伴要設定PIN碼'); return; }
+  const payload = {
+    originalName: isNew ? undefined : psCurrentName,
+    name: name,
+    role: document.getElementById('ps-f-role').value,
+    pin: pin || undefined,
+    status: document.getElementById('ps-f-status').value,
+    storeId: SCHED_STORE_ID
+  };
+  apiPost({ action: 'upsertPosStaff', staff: payload }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    psCurrentName = name;
+    return loadPosStaffList();
+  }).catch(err => alert('儲存失敗：' + err.message));
+}
+function deletePosStaffRow() {
+  if (!confirm('確定要刪除「' + psCurrentName + '」這位夥伴嗎？')) return;
+  apiPost({ action: 'deletePosStaff', name: psCurrentName, storeId: SCHED_STORE_ID }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
+    psCurrentName = null;
+    return loadPosStaffList();
+  }).catch(err => alert('刪除失敗：' + err.message));
+}
+
 function switchBackofficeTab(name) {
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
@@ -602,6 +695,10 @@ function switchBackofficeTab(name) {
     if (currentPosManageSubview === 'log' && !posManageLogLoaded) {
       posManageLogLoaded = true;
       loadPosManageLog();
+    }
+    if (currentPosManageSubview === 'partner' && !posStaffLoaded) {
+      posStaffLoaded = true;
+      loadPosStaffList();
     }
   }
   document.getElementById('mch-sub-btn-schedule').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'schedule');

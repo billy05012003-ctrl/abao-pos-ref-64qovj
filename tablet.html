@@ -343,9 +343,12 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <section style="margin:12px 0;">
       <h2 style="font-size:0.95rem;">開帳／關帳</h2>
       <div style="font-size:0.76rem;color:var(--muted);margin:-4px 0 10px;">
-        目前是陽春版，不綁操作員身份(POS功能還沒有登入機制)。「關帳」會把今天(取餐日期=今天)還卡著的
-        「取餐付款待收款」「線上金流待付款」訂單一次作廢，先看過清單再確認。
+        「關帳」會把今天(取餐日期=今天)還卡著的「取餐付款待收款」「線上金流待付款」訂單一次作廢，先看過清單再確認，需要店長以上權限。
       </div>
+      <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">開帳夥伴(選填)</label>
+      <select id="pos-open-staff-select" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;margin-bottom:8px;">
+        <option value="">請選擇夥伴</option>
+      </select>
       <div class="row">
         <button class="btn btn-primary" onclick="doOpenRegister()">開帳</button>
       </div>
@@ -362,8 +365,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 
     <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
     <section style="margin:0 0 12px;">
-      <h2 style="font-size:0.95rem;">POS夥伴管理<span style="font-size:0.72rem;color:var(--muted);font-weight:normal;">（規劃中，尚未開發）</span></h2>
-      <div style="font-size:0.76rem;color:var(--muted);">POS權限管理／身份權限設定／夥伴身份設定</div>
+      <h2 style="font-size:0.95rem;">POS夥伴管理</h2>
+      <div style="font-size:0.76rem;color:var(--muted);">新增/編輯夥伴請到POS後台「POS管理」→「POS夥伴管理」設定。這裡「開帳」的夥伴清單、「關帳」跟「贈送兌換券」需要的店長/老闆PIN驗證，都是讀同一份設定。</div>
     </section>
   </div>
 </div>
@@ -375,8 +378,30 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <h2 style="margin:0; flex:1; font-size:1rem;">關帳確認</h2>
     </div>
     <div id="close-register-preview-list"><div class="empty-hint">載入中...</div></div>
+    <div style="margin-top:10px;">
+      <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">店長／老闆姓名</label>
+      <select id="close-register-staff-select" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+        <option value="">請選擇</option>
+      </select>
+      <label style="display:block;font-size:0.8rem;margin:8px 0 4px;color:var(--muted)">PIN碼</label>
+      <input type="password" id="close-register-staff-pin" inputmode="numeric" maxlength="4" placeholder="4碼數字" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+    </div>
     <button class="btn btn-danger" style="width:100%;padding:10px;margin-top:12px;" onclick="confirmCloseRegister()">確認關帳，全部作廢</button>
     <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="closeCloseRegisterPreview()">取消</button>
+  </div>
+</div>
+
+<div class="pos-overlay" id="pos-staff-pin-overlay" style="z-index:30;">
+  <div class="pos-sheet" style="max-width:380px;">
+    <h2 style="margin:0 0 8px;font-size:1rem;" id="pos-staff-pin-title">需要店長以上權限</h2>
+    <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">店長／老闆姓名</label>
+    <select id="pos-staff-pin-select" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+      <option value="">請選擇</option>
+    </select>
+    <label style="display:block;font-size:0.8rem;margin:8px 0 4px;color:var(--muted)">PIN碼</label>
+    <input type="password" id="pos-staff-pin-input" inputmode="numeric" maxlength="4" placeholder="4碼數字" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+    <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:12px;" onclick="confirmPosStaffPin_()">確認</button>
+    <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="closePosStaffPinOverlay_()">取消</button>
   </div>
 </div>
 
@@ -523,18 +548,65 @@ function markCollected(orderId) {
 }
 
 // ---- POS管理：開帳／關帳(2026-09-16新增) ----
+let posStaffListCache_ = [];
+let closeRegisterStaffConfigured_ = true;
 function openPosManageOverlay() {
   document.getElementById('pos-manage-result').textContent = '';
   document.getElementById('pos-manage-overlay').classList.add('open');
   loadRegisterLog();
+  loadPosStaffForOpenSelect_();
 }
 function closePosManageOverlay() {
   document.getElementById('pos-manage-overlay').classList.remove('open');
 }
 
+// POS夥伴管理(2026-09-18新增)：開帳的夥伴下拉選單，讀清單一次快取起來，關帳確認畫面也會用到同一份
+function loadPosStaffForOpenSelect_() {
+  apiGet({ action: 'posStaffList', storeId: STORE_ID }).then(data => {
+    if (data.status !== 'ok') return;
+    posStaffListCache_ = data.staff;
+    const sel = document.getElementById('pos-open-staff-select');
+    sel.innerHTML = '<option value="">請選擇夥伴</option>' +
+      posStaffListCache_.map(s => `<option value="${s.name}">${s.name}（${s.role}）</option>`).join('');
+  }).catch(() => {});
+}
+
+// 可重複使用的「店長以上權限PIN確認」彈窗(2026-09-18新增)：贈送兌換券等其他需要角色門檻的動作都能共用，
+// 傳入標題文字跟「驗證通過後要做的事」callback(staffName, staffPin)；這間店還沒設定任何夥伴時直接放行，
+// 跟後端requirePosRole_同一套邏輯，避免功能上線當下卡住還沒建夥伴清單的店家
+let pendingStaffPinCallback_ = null;
+function openPosStaffPinPrompt_(title, callback) {
+  apiGet({ action: 'posStaffList', storeId: STORE_ID }).then(data => {
+    if (data.status !== 'ok') { alert('讀取夥伴清單失敗，請稍後再試'); return; }
+    if (data.staff.length === 0) { callback('', ''); return; }
+    const managerOptions = data.staff.filter(s => s.role === '店長' || s.role === '老闆');
+    if (!managerOptions.length) { alert('目前沒有設定「店長」或「老闆」角色的夥伴，請先到POS後台「POS管理」設定'); return; }
+    document.getElementById('pos-staff-pin-title').textContent = title;
+    document.getElementById('pos-staff-pin-input').value = '';
+    document.getElementById('pos-staff-pin-select').innerHTML = '<option value="">請選擇</option>' +
+      managerOptions.map(s => `<option value="${s.name}">${s.name}（${s.role}）</option>`).join('');
+    pendingStaffPinCallback_ = callback;
+    document.getElementById('pos-staff-pin-overlay').classList.add('open');
+  }).catch(() => alert('網路異常，請稍後再試'));
+}
+function closePosStaffPinOverlay_() {
+  document.getElementById('pos-staff-pin-overlay').classList.remove('open');
+  pendingStaffPinCallback_ = null;
+}
+function confirmPosStaffPin_() {
+  const name = document.getElementById('pos-staff-pin-select').value;
+  const pin = document.getElementById('pos-staff-pin-input').value.trim();
+  if (!name || !pin) { alert('請選擇姓名並輸入PIN碼'); return; }
+  const cb = pendingStaffPinCallback_;
+  document.getElementById('pos-staff-pin-overlay').classList.remove('open');
+  pendingStaffPinCallback_ = null;
+  if (cb) cb(name, pin);
+}
+
 function doOpenRegister() {
   if (!confirm('確定要開帳嗎？')) return;
-  apiPost({ action: 'openRegister', storeId: STORE_ID }).then(data => {
+  const staffName = document.getElementById('pos-open-staff-select').value;
+  apiPost({ action: 'openRegister', storeId: STORE_ID, staffName }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '開帳失敗'); return; }
     document.getElementById('pos-manage-result').textContent = '已開帳（' + new Date().toLocaleTimeString('zh-TW') + '）';
     loadRegisterLog();
@@ -563,6 +635,20 @@ function loadRegisterLog() {
 function openCloseRegisterPreview() {
   document.getElementById('pos-close-register-overlay').classList.add('open');
   document.getElementById('close-register-preview-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  document.getElementById('close-register-staff-pin').value = '';
+  document.getElementById('close-register-staff-select').innerHTML = '<option value="">請選擇</option>';
+  closeRegisterStaffConfigured_ = true; // 查回來之前先當作「有設定」，避免查詢還沒回來時被誤判成不用驗證
+  // 關帳需要店長以上權限，選單只列店長/老闆(夥伴選了送出時後端也會擋，這裡先過濾減少誤觸)；
+  // 重新查一次最新清單(不用開帳畫面那份快取)，避免剛好有人被停用卻還能選到
+  apiGet({ action: 'posStaffList', storeId: STORE_ID }).then(data => {
+    if (data.status !== 'ok') return;
+    // 這間店完全還沒設定任何夥伴(剛上線這個功能)時，後端會直接放行不驗證，前端這裡也跟著不強制輸入，
+    // 避免老闆自己都還沒建夥伴清單、卻先被這個新功能卡住不能關帳
+    closeRegisterStaffConfigured_ = data.staff.length > 0;
+    const managerOptions = data.staff.filter(s => s.role === '店長' || s.role === '老闆');
+    document.getElementById('close-register-staff-select').innerHTML = '<option value="">請選擇</option>' +
+      managerOptions.map(s => `<option value="${s.name}">${s.name}（${s.role}）</option>`).join('');
+  }).catch(() => {});
   apiGet({ action: 'pendingUnsettledOrders', storeId: STORE_ID }).then(data => {
     const container = document.getElementById('close-register-preview-list');
     if (data.status !== 'ok') { container.innerHTML = '<div class="empty-hint">讀取失敗：' + (data.message || '') + '</div>'; return; }
@@ -585,8 +671,11 @@ function closeCloseRegisterPreview() {
   document.getElementById('pos-close-register-overlay').classList.remove('open');
 }
 function confirmCloseRegister() {
+  const staffName = document.getElementById('close-register-staff-select').value;
+  const staffPin = document.getElementById('close-register-staff-pin').value.trim();
+  if (closeRegisterStaffConfigured_ && (!staffName || !staffPin)) { alert('請選擇店長/老闆姓名並輸入PIN碼'); return; }
   if (!confirm('確定要關帳嗎？今天還卡著的待收款/待付款訂單會全部作廢，此動作無法復原。')) return;
-  apiPost({ action: 'closeRegister', storeId: STORE_ID }).then(data => {
+  apiPost({ action: 'closeRegister', storeId: STORE_ID, staffName, staffPin }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '關帳失敗'); return; }
     closeCloseRegisterPreview();
     document.getElementById('pos-manage-result').textContent = '已關帳（作廢' + data.voidedCount + '張未處理訂單）';
@@ -908,15 +997,17 @@ function grantVoucherToMember(btn, type) {
   if (!selectedMember) { alert('請先查詢/選擇會員'); return; }
   if (btn.disabled) return;
   if (!confirm(`確定要贈送「${type}」給${selectedMember.name}嗎？這是店家成本，不會扣會員點數。`)) return;
-  btn.disabled = true;
-  apiPost({ action: 'grantVoucher', phone: selectedMember.phone, type: type }).then(data => {
-    if (data.status !== 'ok') { alert(data.message || '贈送失敗'); return; }
-    alert(`已贈送「${type}」給${selectedMember.name}`);
-    loadMemberVouchers();
-  }).catch(() => {
-    alert('網路異常，贈送失敗，請重試');
-  }).finally(() => {
-    btn.disabled = false;
+  openPosStaffPinPrompt_('贈送兌換券需要店長以上權限確認', (staffName, staffPin) => {
+    btn.disabled = true;
+    apiPost({ action: 'grantVoucher', phone: selectedMember.phone, type: type, staffName, staffPin, storeId: STORE_ID }).then(data => {
+      if (data.status !== 'ok') { alert(data.message || '贈送失敗'); return; }
+      alert(`已贈送「${type}」給${selectedMember.name}`);
+      loadMemberVouchers();
+    }).catch(() => {
+      alert('網路異常，贈送失敗，請重試');
+    }).finally(() => {
+      btn.disabled = false;
+    });
   });
 }
 
