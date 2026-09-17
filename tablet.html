@@ -1029,6 +1029,16 @@ function pickUpgradeAmount_(rule, size) {
   return String(size || '').toUpperCase() === 'L' ? rule.amountL : rule.amountM;
 }
 
+// 套餐飲料自己在「客製化選項值」設定的加價金額(2026-09-18新增，配合修正升級費疊加bug)：
+// 查COMBO_DRINK_PRICES，優先看single(現沏茶這種無M/L份量的)，否則依份量查m/l，查不到當0
+function comboDrinkOwnAddOn_(name, size) {
+  const p = COMBO_DRINK_PRICES[name];
+  if (!p) return 0;
+  if (p.single != null) return p.single;
+  const key = String(size || '').toLowerCase();
+  return p[key] != null ? p[key] : 0;
+}
+
 let pendingDrinkUpgradeOptions = [];
 // 2026-09-13再次改版：套餐已經加入購物車後(line.comboDrinkName有值)，改用主餐自己的分類(line.cat)
 // 比對規則，不用管客人選的哪杯飲料；獨立飲品列維持原本用DRINK_ITEM_CATEGORY查自己分類的邏輯
@@ -1069,11 +1079,15 @@ function applyDrinkUpgradeOption_(idx) {
   if (!line) return;
   const amount = pickUpgradeAmount_(o.rule, o.size);
   if (o.isCombo) {
-    // 套餐內建飲料：把「舊飲料名+舊份量」那段文字換成「新飲料名+選的份量」，加價疊加上去
+    // 套餐內建飲料：把「舊飲料名+舊份量」那段文字換成「新飲料名+選的份量」
     const oldLabel = line.comboDrinkName + (line.comboDrinkSize ? ' ' + String(line.comboDrinkSize).toUpperCase() : '');
     const newLabel = o.rule.targetItem + ' ' + o.size;
     line.name = line.name.replace(oldLabel, newLabel);
-    line.price += amount;
+    // 2026-09-18修正：先扣掉原本那杯飲料自己的加價，只收升級費這一項——原本這裡直接line.price+=amount，
+    // 如果客人一開始選的飲料本身就要加價(例如現沏茶+$10)，這裡會沒扣掉舊加價就疊加升級費，多收一筆錢
+    // (跟套餐客製化畫面內建的飲品升級同一種bug，這裡是購物車已加入後另外套用的「活動飲品升級」路徑)
+    const oldAddOn = comboDrinkOwnAddOn_(line.comboDrinkName, line.comboDrinkSize);
+    line.price = line.price - oldAddOn + amount;
     line.basePrice = line.price;
     line.comboDrinkName = o.rule.targetItem;
     line.comboDrinkSize = o.size.toLowerCase();
@@ -1834,6 +1848,7 @@ function clearPosDrinkCustom() {
   currentPosModal.comboDrinkPrice = 0;
   currentPosModal.comboDrinkBasePrice = 0;
   currentPosModal.comboDrinkUpgradeFee = 0;
+  currentPosModal.appliedUpgradeRule = null;
   (currentPosModal.comboDrinkExtraGroups || []).forEach(gk => delete currentPosModal.groups[gk]);
   currentPosModal.comboDrinkExtraGroups = [];
 }
@@ -1873,11 +1888,17 @@ function openPosDrinkCustom(drinkName) {
     sizeEl.querySelectorAll('input').forEach(inp => {
       inp.onchange = () => {
         currentPosModal.comboDrinkSize = inp.value;
-        // 同上，份量價格只更新comboDrinkBasePrice，comboDrinkPrice由base+升級加價重新算出，
-        // 之前這裡直接蓋掉comboDrinkPrice，選份量的動作(份量是必選、幾乎每次都會選)會把已經套用的
-        // 升級加價一起洗掉，等於升級形同虛設(2026-09-16修正)
-        currentPosModal.comboDrinkBasePrice = prices[inp.value];
-        currentPosModal.comboDrinkPrice = prices[inp.value] + (currentPosModal.comboDrinkUpgradeFee || 0);
+        // 2026-09-18修正：已經套用升級的狀態下重選份量，不能再把「原本那杯飲料的份量加價」
+        // 算進comboDrinkBasePrice——升級後的總加價應該只等於「升級費」這一項，不是「原飲料加價+升級費」
+        // 疊加(這正是這次抓到的bug：店員選了要加價的飲料再升級，被多收了一筆原飲料的加價)
+        if (currentPosModal.appliedUpgradeRule) {
+          currentPosModal.comboDrinkBasePrice = 0;
+          currentPosModal.comboDrinkUpgradeFee = pickUpgradeAmount_(currentPosModal.appliedUpgradeRule, inp.value);
+          currentPosModal.comboDrinkPrice = currentPosModal.comboDrinkUpgradeFee;
+        } else {
+          currentPosModal.comboDrinkBasePrice = prices[inp.value];
+          currentPosModal.comboDrinkPrice = prices[inp.value];
+        }
         refreshPosDrinkToppingIfPresent();
         renderComboDrinkUpgradeSection(); // 換M/L份量後，飲品升級按鈕上顯示的加價金額要跟著換(M/L各自不同)
         updatePosItemModalTotal();
@@ -1929,11 +1950,15 @@ function applyComboDrinkUpgrade(idx) {
   if (!rule) return;
   const amount = pickUpgradeAmount_(rule, currentPosModal.comboDrinkSize);
   currentPosModal.comboDrinkName = rule.targetItem;
-  // comboDrinkUpgradeFee獨立存、用SET不是ADD(2026-09-16修正)：換成另一個升級目標時應該是取代，
-  // 不是疊加；comboDrinkPrice永遠=comboDrinkBasePrice+comboDrinkUpgradeFee重新算出，
-  // 這樣不管之後使用者是先選份量還是先點升級，兩個值都不會互相蓋掉(見openPosDrinkCustom同一份註解)
+  // 2026-09-18修正：升級費是「換成這杯飲品最終要多收的錢」，不是疊加在原本那杯飲料的加價上面——
+  // 之前comboDrinkPrice=base+升級費，如果客人一開始選的飲料本身就要加價(例如現沏茶+$10)，
+  // 升級後會被多收一筆原飲料的加價(這次抓到的真實案例：129+10+7=146，多收了10元)。
+  // 修正後base歸零、只收升級費這一項；appliedUpgradeRule記住套用的規則，供之後重選M/L份量時
+  // 重新查對應金額用(見openPosDrinkCustom的份量onchange)
+  currentPosModal.appliedUpgradeRule = rule;
+  currentPosModal.comboDrinkBasePrice = 0;
   currentPosModal.comboDrinkUpgradeFee = amount;
-  currentPosModal.comboDrinkPrice = (currentPosModal.comboDrinkBasePrice || 0) + amount;
+  currentPosModal.comboDrinkPrice = amount;
   // 同步更新groups['combo_drink'](2026-09-16修正)：confirmAddToPosCart()組購物車顯示名稱時讀的是這個
   // 底層陣列，不是comboDrinkName——先前只更新comboDrinkName/彈窗標題，沒同步這裡，導致畫面看起來升級
   // 成功，但實際加入購物車/出單顯示的品項名稱還是升級前的飲料，是真的沒寫進訂單資料的假象
