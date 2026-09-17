@@ -267,6 +267,18 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <p style="font-size:0.8rem;color:var(--muted);">現場實體收款方式（客人手機出示付款碼給店員掃，或反過來）。這些多半是獨立商家帳號，本系統沒有API可以真的控制開關，這裡純粹記錄現場有開放哪些管道，方便之後對照。</p>
     <div id="offline-payment-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" class="mc-add-btn" onclick="offlinePmAdd()">+ 新增線下收款方式</button>
+    <div id="offline-pm-form" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;">
+      <h4 id="offline-pm-form-title" style="margin-top:0;">新增線下收款方式</h4>
+      <label class="mc-field">收款方式名稱<input id="offline-pm-f-name" placeholder="例如：全支付"></label>
+      <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
+        <input type="checkbox" id="offline-pm-f-enabled" checked> 現場已啟用
+      </label>
+      <label class="mc-field">備註(選填，例如帳號資訊)<input id="offline-pm-f-note"></label>
+      <div style="margin-top:10px;">
+        <button type="button" class="mc-save-btn" onclick="offlinePmSave()">儲存</button>
+        <button type="button" class="mc-delete-btn" onclick="offlinePmCancelForm()" style="background:#eee;color:#333;">取消</button>
+      </div>
+    </div>
   </div>
   <div id="pm-subview-tablescan" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">客人在桌邊自己掃碼點餐+付款。目前Abao沒有這種桌邊點餐模式，尚無項目。</p>
@@ -448,6 +460,16 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   <div class="mc-modal">
     <button type="button" class="mc-modal-close" onclick="closeMcItemModal()">×</button>
     <div id="mc-item-modal-body"></div>
+  </div>
+</div>
+<div id="mc-cat-modal-overlay" class="mc-modal-overlay" style="display:none;" onclick="if(event.target===this)closeMcAddCategoryModal()">
+  <div class="mc-modal">
+    <button type="button" class="mc-modal-close" onclick="closeMcAddCategoryModal()">×</button>
+    <h3 style="margin-top:0;font-size:1rem;">新增分類</h3>
+    <label class="mc-field">分類名稱<input id="mc-cat-f-name" placeholder="例如：飲料 DRINKS"></label>
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="submitMcAddCategory()">新增</button>
+    </div>
   </div>
 </div>
 
@@ -917,22 +939,38 @@ function loadOfflinePaymentMethods() {
         </div>`).join('');
   });
 }
+let offlinePmEditingName = null; // null=新增，非null=編輯中的原始名稱
+
 function offlinePmAdd() {
-  const name = prompt('收款方式名稱（例如：全支付）：', '');
-  if (!name) return;
-  const enabled = confirm('現場是否已經啟用這個收款方式？\n\n按「確定」＝啟用\n按「取消」＝停用');
-  const note = prompt('備註（選填，例如帳號資訊）：', '') || '';
-  apiPost({ action: 'upsertOfflinePaymentMethod', method: { storeId: SCHED_STORE_ID, name, status: enabled ? '啟用' : '停用', note } }).then(data => {
-    if (data.status === 'ok') loadOfflinePaymentMethods();
-    else alert('新增失敗：' + (data.message || ''));
-  });
+  offlinePmEditingName = null;
+  document.getElementById('offline-pm-form-title').textContent = '新增線下收款方式';
+  document.getElementById('offline-pm-f-name').value = '';
+  document.getElementById('offline-pm-f-enabled').checked = true;
+  document.getElementById('offline-pm-f-note').value = '';
+  document.getElementById('offline-pm-form').style.display = 'block';
 }
 function offlinePmEdit(name, currentStatus, currentNote) {
-  const enabled = confirm('「' + name + '」目前是否啟用？\n\n按「確定」＝啟用\n按「取消」＝停用');
-  const note = prompt('備註：', currentNote) || '';
-  apiPost({ action: 'upsertOfflinePaymentMethod', method: { storeId: SCHED_STORE_ID, name, originalName: name, status: enabled ? '啟用' : '停用', note } }).then(data => {
-    if (data.status === 'ok') loadOfflinePaymentMethods();
-    else alert('更新失敗：' + (data.message || ''));
+  offlinePmEditingName = name;
+  document.getElementById('offline-pm-form-title').textContent = '編輯線下收款方式';
+  document.getElementById('offline-pm-f-name').value = name;
+  document.getElementById('offline-pm-f-enabled').checked = currentStatus === '啟用';
+  document.getElementById('offline-pm-f-note').value = currentNote;
+  document.getElementById('offline-pm-form').style.display = 'block';
+}
+function offlinePmCancelForm() {
+  document.getElementById('offline-pm-form').style.display = 'none';
+  offlinePmEditingName = null;
+}
+function offlinePmSave() {
+  const name = document.getElementById('offline-pm-f-name').value.trim();
+  if (!name) { alert('請輸入收款方式名稱'); return; }
+  const enabled = document.getElementById('offline-pm-f-enabled').checked;
+  const note = document.getElementById('offline-pm-f-note').value.trim();
+  const payload = { storeId: SCHED_STORE_ID, name, status: enabled ? '啟用' : '停用', note };
+  if (offlinePmEditingName) payload.originalName = offlinePmEditingName;
+  apiPost({ action: 'upsertOfflinePaymentMethod', method: payload }).then(data => {
+    if (data.status === 'ok') { offlinePmCancelForm(); loadOfflinePaymentMethods(); }
+    else alert('儲存失敗：' + (data.message || ''));
   });
 }
 function offlinePmDelete(name) {
@@ -1159,11 +1197,17 @@ function loadMenuCms() {
 // 所以「新增分類」實際上是先問名稱，再直接開品項編輯視窗、把分類預填好，
 // 存第一個品項下去分類就自然出現了，跟既有「新增品項」是同一套底層機制
 function mcAddCategory() {
-  const name = prompt('請輸入新分類名稱：');
-  if (!name) return;
-  const trimmed = name.trim();
-  if (!trimmed) return;
+  document.getElementById('mc-cat-f-name').value = '';
+  document.getElementById('mc-cat-modal-overlay').style.display = 'flex';
+}
+function closeMcAddCategoryModal() {
+  document.getElementById('mc-cat-modal-overlay').style.display = 'none';
+}
+function submitMcAddCategory() {
+  const trimmed = document.getElementById('mc-cat-f-name').value.trim();
+  if (!trimmed) { alert('請輸入分類名稱'); return; }
   if (mcCatalog.hasOwnProperty(trimmed)) { alert('這個分類名稱已經存在了'); return; }
+  closeMcAddCategoryModal();
   mcCurrentItem = { category: trimmed, name: null };
   mcExpandedCats.add(trimmed);
   openMcItemModal();
@@ -1398,6 +1442,12 @@ function renderMcItemEditor() {
   el.innerHTML = `
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增品項（分類：' + escapeHtml(mcShortCatName(mcCurrentItem.category)) + '）' : '編輯品項'}</h3>
     <label class="mc-field">品項名稱<input id="mc-f-name" value="${escapeHtml(item.name || '')}"></label>
+    ${!isNew ? `
+    <label class="mc-field">所屬分類<select id="mc-f-category">
+      ${Object.keys(mcCatalog).map(cat => `<option value="${escapeHtml(cat)}" ${cat === mcCurrentItem.category ? 'selected' : ''}>${escapeHtml(mcShortCatName(cat))}</option>`).join('')}
+    </select></label>
+    <div style="font-size:0.75rem;color:var(--muted);margin:-6px 0 8px;">換分類儲存後才會生效；如果換到飲料分類需要中/大杯價格，儲存後重新點開這個品項再填</div>
+    ` : ''}
     <div class="mc-field-row">
       <label class="mc-field">價格<input id="mc-f-price" type="number" value="${item.price ?? ''}"></label>
       ${isDrinkItem ? `
@@ -1489,8 +1539,11 @@ function mcFieldValue(id) {
 function saveMcItem() {
   const name = document.getElementById('mc-f-name').value.trim();
   if (!name) { alert('請輸入品項名稱'); return; }
+  const categoryEl = document.getElementById('mc-f-category');
+  const newCategory = categoryEl ? categoryEl.value : mcCurrentItem.category;
   const payload = {
-    category: mcCurrentItem.category,
+    category: newCategory,
+    originalCategory: mcCurrentItem.category !== newCategory ? mcCurrentItem.category : undefined,
     originalName: mcCurrentItem.name || undefined,
     name: name,
     price: mcFieldValue('mc-f-price'),
@@ -1861,8 +1914,62 @@ function renderMcOptionValuesHtml(g) {
         </label>
         <button type="button" onclick="addMcOptionValue()">新增</button>
       </div>
+      ${sizeBased ? '' : `
+      <div style="margin-top:10px;">
+        <button type="button" class="mc-add-btn" onclick="mcToggleBatchAddValues_()" id="mc-batch-toggle-btn">+ 批次貼上新增(一行一個選項)</button>
+        <div id="mc-batch-add-panel" style="display:none;">
+          <p style="font-size:0.75rem;color:var(--muted);margin:4px 0;">一行一個選項，格式「名稱」或「名稱,加價金額」(逗號分隔，不填金額預設0)，例如：<br>不要洋蔥<br>加辣,5</p>
+          <textarea id="mc-batch-add-text" rows="6" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.85rem;" placeholder="不要洋蔥&#10;加辣,5"></textarea>
+          <div style="margin-top:6px;">
+            <button type="button" class="mc-save-btn" onclick="mcBatchAddOptionValues_()">批次新增</button>
+          </div>
+        </div>
+      </div>
+      `}
     </div>
   `;
+}
+
+function mcToggleBatchAddValues_() {
+  const panel = document.getElementById('mc-batch-add-panel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+// 批次貼上新增選項值(2026-09-17新增)：一次要建10幾個選項值時逐筆填太慢，
+// 只支援單一加價的群組(不支援M/L分尺寸定價的combo_drink/drink_topping，那兩組批次格式會更複雜、目前用量也少)
+function mcBatchAddOptionValues_() {
+  const raw = document.getElementById('mc-batch-add-text').value;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) { alert('請至少輸入一行選項'); return; }
+  const items = [];
+  for (const line of lines) {
+    const parts = line.split(',');
+    const name = (parts[0] || '').trim();
+    if (!name) continue;
+    const priceStr = (parts[1] || '').trim();
+    const price = priceStr === '' ? 0 : Number(priceStr);
+    if (isNaN(price)) { alert(`這一行的金額看不懂：「${line}」`); return; }
+    if (price < 0) { alert(`加價金額不能是負數：「${line}」`); return; }
+    items.push({ name, price });
+  }
+  if (!items.length) { alert('沒有可以新增的選項'); return; }
+  const btn = document.getElementById('mc-batch-add-panel').querySelector('.mc-save-btn');
+  btn.disabled = true;
+  btn.textContent = '新增中...';
+  const groupCode = mcCurrentGroupCode;
+  const storeId = MC_STORE_ID, status = MC_STATUS;
+  items.reduce((chain, it) => chain.then(() =>
+    apiPost({ action: 'upsertOptionValue', value: { groupCode, name: it.name, price: it.price, priceM: '', priceL: '', onlineVisible: true, storeId, status } })
+  ), Promise.resolve()).then(() => {
+    document.getElementById('mc-batch-add-text').value = '';
+    return loadMenuCms();
+  }).catch(err => {
+    alert('批次新增中途失敗：' + err.message + '（已成功的選項仍會保留，請檢查清單後繼續處理剩下的）');
+    return loadMenuCms();
+  }).finally(() => {
+    btn.disabled = false;
+    btn.textContent = '批次新增';
+  });
 }
 
 // 群組「線上點餐」開關勾選當下(2026-09-17新增)：底下每個選項值列的「線上點餐」勾選框跟著即時
@@ -2762,11 +2869,12 @@ function renderDuEditor() {
   el.innerHTML = `
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增升級規則' : '編輯升級規則'}</h3>
     <label class="mc-field">來源分類(客人點這個分類底下的飲品時可以升級)<select id="du-f-source">${catOptions}</select></label>
-    <label class="mc-field">目標品項(升級後會換成這個)<select id="du-f-target">${drinkTargetItemOptions_(r.targetItem)}</select></label>
+    <label class="mc-field">目標品項(升級後會換成這個)<select id="du-f-target" onchange="onDuTargetItemChange_()">${drinkTargetItemOptions_(r.targetItem)}</select></label>
     <div class="mc-field-row">
-      <label class="mc-field" style="max-width:160px;">加價金額(M)<input id="du-f-amount-m" type="number" value="${r.amountM ?? ''}"></label>
-      <label class="mc-field" style="max-width:160px;">加價金額(L)<input id="du-f-amount-l" type="number" value="${r.amountL ?? ''}"></label>
+      <label class="mc-field" id="du-amount-m-wrap" style="max-width:160px;">加價金額(M)<input id="du-f-amount-m" type="number" value="${r.amountM ?? ''}"></label>
+      <label class="mc-field" id="du-amount-l-wrap" style="max-width:160px;">加價金額(L)<input id="du-f-amount-l" type="number" value="${r.amountL ?? ''}"></label>
     </div>
+    <div id="du-amount-none-hint" style="display:none;font-size:0.78rem;color:var(--muted);margin:-6px 0 8px;">這個目標品項沒有M/L份量定價，不需要填加價金額</div>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="du-f-status">
         <option value="啟用" ${(r.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
@@ -2778,14 +2886,38 @@ function renderDuEditor() {
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteDrinkUpgradeRule()">刪除</button>' : ''}
     </div>
   `;
+  onDuTargetItemChange_();
+}
+
+// 目標品項有沒有M/L份量定價(2026-09-17新增)：沒有的話對應的加價金額欄位就不用填，
+// 之前不管目標品項有沒有大杯選項都強制要求填L，容易逼店長隨便填一個數字交差
+function onDuTargetItemChange_() {
+  const targetItem = document.getElementById('du-f-target')?.value;
+  const item = targetItem ? findCatalogItemPriceRef_(targetItem) : null;
+  const hasM = !!(item && item.price_m != null);
+  const hasL = !!(item && item.price_l != null);
+  const wrapM = document.getElementById('du-amount-m-wrap');
+  const wrapL = document.getElementById('du-amount-l-wrap');
+  const hint = document.getElementById('du-amount-none-hint');
+  if (!wrapM || !wrapL) return;
+  wrapM.style.display = hasM ? '' : 'none';
+  wrapL.style.display = hasL ? '' : 'none';
+  if (!hasM) document.getElementById('du-f-amount-m').value = '';
+  if (!hasL) document.getElementById('du-f-amount-l').value = '';
+  hint.style.display = (!hasM && !hasL) ? 'block' : 'none';
 }
 
 function saveDrinkUpgradeRule() {
   const sourceCategory = document.getElementById('du-f-source').value;
   const targetItem = document.getElementById('du-f-target').value;
+  if (!sourceCategory || !targetItem) { alert('請選擇來源分類、目標品項'); return; }
+  // 只要求目標品項實際有的份量填加價金額，沒有M/L定價的品項不強制填(2026-09-17改版)
+  const item = findCatalogItemPriceRef_(targetItem);
+  const hasM = !!(item && item.price_m != null);
+  const hasL = !!(item && item.price_l != null);
   const amountM = document.getElementById('du-f-amount-m').value;
   const amountL = document.getElementById('du-f-amount-l').value;
-  if (!sourceCategory || !targetItem || amountM === '' || amountL === '') { alert('請選擇來源分類、目標品項並輸入M/L加價金額'); return; }
+  if ((hasM && amountM === '') || (hasL && amountL === '')) { alert('請輸入這個目標品項對應份量的加價金額'); return; }
   if (hasNegativeAmount_([amountM, amountL])) { alert('加價金額不能是負數'); return; }
   const isNew = duCurrentKey === null;
   const payload = {
