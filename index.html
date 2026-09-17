@@ -258,7 +258,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <button type="button" onclick="closeVoucherLookup()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
     </div>
     <div class="row" style="display:flex; gap:8px; margin-bottom:12px;">
-      <input type="tel" id="voucher-lookup-phone" placeholder="輸入您的手機號碼" style="flex:1; min-width:0; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.95rem;">
+      <input type="tel" id="voucher-lookup-phone" placeholder="輸入您的手機號碼" maxlength="10" pattern="09\d{8}" inputmode="numeric" autocomplete="tel" style="flex:1; min-width:0; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.95rem;">
       <button type="button" class="btn-primary" style="width:auto; margin-top:0; padding:8px 16px;" onclick="queryMyVouchers()">查詢</button>
     </div>
     <div id="voucher-lookup-result"></div>
@@ -292,8 +292,9 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </div>
     <div id="item-modal-size"></div>
     <div id="item-modal-groups"></div>
-    <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填）</label>
-    <textarea id="item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem;" maxlength="100" placeholder="例如：不要洋蔥"></textarea>
+    <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填，這則是給「這個品項」的備註）</label>
+    <textarea id="item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem;" maxlength="100" placeholder="例如：不要洋蔥" oninput="updateItemModalNoteCount_()"></textarea>
+    <div id="item-modal-note-count" style="text-align:right; font-size:0.75rem; color:var(--muted); margin-top:2px;">0/100</div>
     <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:14px;">
       <button type="button" class="qty-btn" onclick="itemModalQty(-1)" style="width:34px;height:34px;font-size:1.2rem;">-</button>
       <span id="item-modal-qty" style="font-size:1.1rem; min-width:20px; text-align:center;">1</span>
@@ -310,7 +311,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <h2 id="drink-modal-title" style="margin:0; flex:1;"></h2>
     </div>
     <div id="drink-modal-body"></div>
-    <button class="btn-primary" onclick="confirmDrinkCustom()">確定</button>
+    <button class="btn-primary" id="drink-confirm-btn" onclick="confirmDrinkCustom()">確定</button>
   </div>
 </div>
 
@@ -322,8 +323,8 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <div class="cart-total"><span>總計</span><span id="cart-total">$0</span></div>
       <div style="margin:10px 0;padding-top:10px;border-top:1px dashed var(--border);">
         <label>會員手機（需完成會員驗證才能送出訂單）</label>
-        <input type="tel" id="cust-phone">
-        <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="verifyMember()">驗證會員</button>
+        <input type="tel" id="cust-phone" maxlength="10" pattern="09\d{8}" inputmode="numeric" autocomplete="tel" oninput="onCustPhoneInput_()" onblur="onCustPhoneInput_()">
+        <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="verifyMember()">確認手機號碼</button>
         <button type="button" style="width:auto;padding:6px 0;margin-top:6px;margin-left:10px;background:none;border:none;color:var(--brand);font-size:0.85rem;text-decoration:underline;cursor:pointer;" onclick="openTierOverlay()">會員等級與專屬好禮</button>
         <div id="member-verify-result" style="margin-top:8px;font-size:0.85rem;"></div>
         <div id="checkout-voucher-list" style="margin-top:8px;"></div>
@@ -335,23 +336,20 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 
     <form id="checkout-form" style="display:none" onsubmit="return submitOrder(event)">
       <h2>取餐資訊</h2>
-      <label>姓名</label>
-      <input type="text" id="cust-name" required>
-      <label>取餐方式</label>
-      <select id="pickup-type">
-        <option value="自取">自取</option>
-      </select>
-      <label>取餐日期</label>
+      <label>姓名<span style="color:#c0392b;">*必填</span></label>
+      <input type="text" id="cust-name" required autocomplete="name">
+      <label>取餐方式：自取</label>
+      <label>取餐日期<span style="color:#c0392b;">*必填</span></label>
       <select id="pickup-date" required></select>
-      <label>希望取餐時間</label>
+      <label>希望取餐時間<span style="color:#c0392b;">*必填</span></label>
       <select id="pickup-time" required></select>
       <label id="checkout-paymethod-label" style="display:none;">付款方式</label>
       <select id="checkout-payment-method" style="display:none;">
         <option value="取餐付款">取餐現場付款</option>
         <option value="online">線上付款（信用卡／LinePay）</option>
       </select>
-      <label>備註（選填）</label>
-      <textarea id="cust-note" rows="2"></textarea>
+      <label>備註（選填，這則是給「整張訂單」的備註，例如外帶提醒）</label>
+      <textarea id="cust-note" rows="2" placeholder="例如：外帶請幫我多裝一個袋子"></textarea>
       <button type="submit" class="btn-primary">送出訂單</button>
       <button type="button" class="btn-secondary" onclick="backToCart()">返回訂單</button>
     </form>
@@ -763,10 +761,39 @@ function closeVoucherLookup() {
   document.getElementById('voucher-overlay').classList.remove('open');
 }
 
+function isValidPhone_(phone) {
+  return /^09\d{8}$/.test(phone);
+}
+
+// 記住最近一次輸入的手機號碼(2026-09-17新增)：「我的兌換券」查詢欄跟「會員手機」欄是同一支手機的機率很高，
+// 記住後互相預填，客人不用打兩次。只存在客人自己的瀏覽器localStorage，不會上傳到雲端
+function rememberPhone_(phone) {
+  if (!isValidPhone_(phone)) return;
+  try { localStorage.setItem('abao_last_phone', phone); } catch (e) {}
+}
+function prefillRememberedPhone_() {
+  let saved = '';
+  try { saved = localStorage.getItem('abao_last_phone') || ''; } catch (e) {}
+  if (!saved) return;
+  const custPhone = document.getElementById('cust-phone');
+  const voucherPhone = document.getElementById('voucher-lookup-phone');
+  if (custPhone && !custPhone.value) custPhone.value = saved;
+  if (voucherPhone && !voucherPhone.value) voucherPhone.value = saved;
+}
+
+function updateItemModalNoteCount_() {
+  const len = document.getElementById('item-modal-note').value.length;
+  const el = document.getElementById('item-modal-note-count');
+  el.textContent = `${len}/100`;
+  el.style.color = len >= 100 ? '#c0392b' : 'var(--muted)';
+}
+
 function queryMyVouchers() {
   const phone = document.getElementById('voucher-lookup-phone').value.trim();
   const resultEl = document.getElementById('voucher-lookup-result');
   if (!phone) { resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">請輸入手機號碼</div>'; return; }
+  if (!isValidPhone_(phone)) { resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">手機號碼格式不正確，請輸入09開頭的10碼數字</div>'; return; }
+  rememberPhone_(phone);
   resultEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">查詢中...</div>';
 
   Promise.all([
@@ -889,16 +916,29 @@ function renderMemberNotFound_(phone) {
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">
       <div style="color:var(--muted);">查無此會員，填姓名建立即可（免費，立即生效）</div>
       <div style="display:flex;gap:8px;margin-top:6px;">
-        <input type="text" id="member-new-name" placeholder="姓名" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
+        <input type="text" id="member-new-name" placeholder="姓名" required autocomplete="name" style="flex:1;min-width:0;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
         <button type="button" class="btn-primary" style="width:auto;margin-top:0;padding:6px 14px;font-size:0.85rem;" onclick="registerNewMember('${phone}')">建立會員</button>
       </div>
     </div>`;
+}
+
+// 手機欄位輸入時即時處理(2026-09-17新增)：號碼跟已驗證的會員不一致就先清掉驗證狀態(避免改號後帶著舊會員身份送出訂單)，
+// 輸滿10碼合法格式就自動觸發驗證，不用等客人自己按「驗證會員」按鈕
+function onCustPhoneInput_() {
+  const phone = document.getElementById('cust-phone').value.trim();
+  if (verifiedMember && verifiedMember.phone !== phone) {
+    verifiedMember = null;
+    document.getElementById('member-verify-result').innerHTML = '';
+    document.getElementById('checkout-voucher-list').innerHTML = '';
+  }
+  if (isValidPhone_(phone)) { rememberPhone_(phone); verifyMember(); }
 }
 
 function verifyMember() {
   const phone = document.getElementById('cust-phone').value.trim();
   const resultEl = document.getElementById('member-verify-result');
   if (!phone) { resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">請先輸入手機號碼</div>'; return; }
+  if (!isValidPhone_(phone)) { resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">手機號碼格式不正確，請輸入09開頭的10碼數字</div>'; return; }
   verifiedMember = null;
   resultEl.innerHTML = '<div style="color:var(--muted);">驗證中...</div>';
   apiGet_({ action: 'getMember', phone }).then(data => {
@@ -1117,6 +1157,7 @@ function openItemModal(cat, key, item) {
 
   document.getElementById('item-modal-title').textContent = item.name;
   document.getElementById('item-modal-note').value = '';
+  updateItemModalNoteCount_();
   document.getElementById('item-modal-qty').textContent = '1';
 
   const sizeEl = document.getElementById('item-modal-size');
@@ -1333,6 +1374,9 @@ function openDrinkCustom(drinkName) {
   document.getElementById('drink-modal-title').textContent = drinkName;
   const body = document.getElementById('drink-modal-body');
   body.innerHTML = '';
+  const confirmBtn = document.getElementById('drink-confirm-btn');
+  confirmBtn.disabled = false;
+  confirmBtn.style.opacity = '1';
   if (!prices) { document.getElementById('drink-overlay').classList.add('open'); return; }
 
   const sizeEl = document.createElement('div');
@@ -1350,6 +1394,8 @@ function openDrinkCustom(drinkName) {
     sizeEl.innerHTML = `<div style="font-size:0.8rem;color:var(--muted);">${sizeLabel}+$${only}</div>`;
   } else {
     sizeEl.innerHTML = `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:4px;">份量 <span style="color:#c94f1f">*必選</span></div>`;
+    confirmBtn.disabled = true;
+    confirmBtn.style.opacity = '0.5';
     ['m', 'l'].forEach(sz => {
       if (prices[sz] == null) return;
       const label = document.createElement('label');
@@ -1361,6 +1407,8 @@ function openDrinkCustom(drinkName) {
       inp.onchange = () => {
         currentModal.comboDrinkSize = inp.value;
         currentModal.comboDrinkPrice = prices[inp.value];
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
         refreshDrinkToppingIfPresent();
         updateItemModalTotal();
       };
@@ -1581,7 +1629,8 @@ function openCart() {
 function closeCart() { document.getElementById('cart-overlay').classList.remove('open'); }
 function showCheckout() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
-  if (!verifiedMember) { alert('請先完成會員驗證，才能填寫取餐資訊'); document.getElementById('cust-phone').focus(); return; }
+  const currentPhone = document.getElementById('cust-phone').value.trim();
+  if (!verifiedMember || verifiedMember.phone !== currentPhone) { alert('請先完成會員驗證，才能填寫取餐資訊'); document.getElementById('cust-phone').focus(); return; }
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
   populatePickupDate();
   populatePickupTime(document.getElementById('pickup-date').value);
@@ -1617,7 +1666,7 @@ function submitOrder(e) {
     populatePickupTime(document.getElementById('pickup-date').value);
     return false;
   }
-  const name = document.getElementById('cust-name').value;
+  const name = document.getElementById('cust-name').value.trim();
   const phone = document.getElementById('cust-phone').value.trim();
   // 手機欄位搬到「我的訂單」畫面後不再是<form>裡的欄位，瀏覽器原生required不會擋，改用JS檢查
   if (!phone) { alert('請輸入手機號碼'); backToCart(); document.getElementById('cust-phone').focus(); return false; }
@@ -1908,6 +1957,7 @@ scheduleSettingsReady.then(() => {
 });
 loadCartSession();
 updateCartBar();
+prefillRememberedPhone_();
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 
 // 讀取雲端平板設定的品項上下架狀態，同步反映到點餐頁（本日售完/永久下架→擋掉加入按鈕）；

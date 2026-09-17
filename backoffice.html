@@ -233,6 +233,18 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   <div id="sched-subview-special" style="display:none;">
     <p style="font-size:0.78rem;color:var(--muted);">指定日期公休（例如國定假日），或當天用不同的營業時間，會蓋過上面每週固定的設定。</p>
     <div id="sched-special-list"><div class="empty-hint">載入中...</div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
+      <input type="date" id="sched-special-new-date">
+      <label style="display:flex;align-items:center;gap:4px;font-size:0.82rem;">
+        <input type="checkbox" id="sched-special-new-closed" onchange="schedToggleSpecialClosedFields_()"> 公休（整天不開放）
+      </label>
+      <span id="sched-special-new-time-fields" style="display:inline-flex;align-items:center;gap:6px;">
+        <input type="time" id="sched-special-new-start" value="05:20">
+        <span>～</span>
+        <input type="time" id="sched-special-new-end" value="13:00">
+      </span>
+      <input type="text" id="sched-special-new-note" placeholder="備註(選填，例如「中秋節」)" style="flex:1;min-width:120px;">
+    </div>
     <button type="button" class="mc-add-btn" onclick="schedAddSpecialDate()">+ 新增特殊日期</button>
   </div>
 </div>
@@ -331,7 +343,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   </div>
   <div id="mb-subview-birthday" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      會員生日當月自動發放（每人每年限一次），跟LINE無關、不用串接。「生效天數offset」「到期天數offset」都是從發放當天起算幾天，0＝當天。
+      會員生日當月自動發放（每人每年限一次），跟LINE無關、不用串接。「發放後第幾天生效」「發放後第幾天到期」都是從發放當天起算，0＝當天。
     </p>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
@@ -347,7 +359,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   </div>
   <div id="mb-subview-register" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      新會員一註冊就自動發放（可多筆），跟LINE無關、不用串接。「生效天數offset」「到期天數offset」都是從註冊當天起算幾天，0＝當天。
+      新會員一註冊就自動發放（可多筆），跟LINE無關、不用串接。「發放後第幾天生效」「發放後第幾天到期」都是從註冊當天起算，0＝當天。
     </p>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
@@ -774,20 +786,30 @@ function renderSchedSpecialList() {
       </div>`).join('');
 }
 
+function schedToggleSpecialClosedFields_() {
+  const closed = document.getElementById('sched-special-new-closed').checked;
+  document.getElementById('sched-special-new-time-fields').style.display = closed ? 'none' : 'inline-flex';
+}
+
 function schedAddSpecialDate() {
-  const date = prompt('請輸入日期(YYYY-MM-DD)：', '');
-  if (!date) return;
-  const closed = confirm('這天是公休(整天不開放)嗎？\n\n按「確定」＝公休\n按「取消」＝改成自訂當天營業時間');
+  const date = document.getElementById('sched-special-new-date').value;
+  if (!date) { alert('請選擇日期'); return; }
+  const closed = document.getElementById('sched-special-new-closed').checked;
   let start = '', end = '';
   if (!closed) {
-    start = prompt('當天營業開始時間(HH:mm)：', '05:20') || '';
-    end = prompt('當天營業結束時間(HH:mm)：', '13:00') || '';
-    if (!start || !end) { alert('未輸入完整時間，取消新增'); return; }
+    start = document.getElementById('sched-special-new-start').value;
+    end = document.getElementById('sched-special-new-end').value;
+    if (!start || !end) { alert('請填寫完整的營業開始/結束時間'); return; }
   }
-  const note = prompt('備註(選填，例如「中秋節」)：', '') || '';
+  const note = document.getElementById('sched-special-new-note').value.trim();
   apiPost({ action: 'upsertSpecialDate', special: { storeId: SCHED_STORE_ID, date, closed, start, end, note } }).then(data => {
-    if (data.status === 'ok') loadScheduleData();
-    else alert('新增失敗：' + (data.message || ''));
+    if (data.status === 'ok') {
+      document.getElementById('sched-special-new-date').value = '';
+      document.getElementById('sched-special-new-closed').checked = false;
+      document.getElementById('sched-special-new-note').value = '';
+      schedToggleSpecialClosedFields_();
+      loadScheduleData();
+    } else alert('新增失敗：' + (data.message || ''));
   });
 }
 
@@ -1385,7 +1407,10 @@ function renderMcItemEditor() {
     </div>
     <div class="mc-field-row">
       <label class="mc-field">套餐價格<input id="mc-f-priceset" type="number" value="${item.price_set ?? ''}"></label>
-      <label class="mc-field">副價格<input id="mc-f-pricealt" type="number" value="${item.price_alt ?? ''}"></label>
+      <label class="mc-field">副價格(選填，第二份量選項的價格)<input id="mc-f-pricealt" type="number" value="${item.price_alt ?? ''}"></label>
+    </div>
+    <div style="font-size:0.75rem;color:var(--muted);margin:-6px 0 8px;">
+      填了「副價格」後，線上點餐會多顯示一個可選份量按鈕，前提是品項名稱要包含「(選項1/選項2)」格式，例如「蛋餅(半份/一份)」——「價格」對應第一個選項、「副價格」對應第二個選項
     </div>
     <label class="mc-field">備註<textarea id="mc-f-note" rows="2">${escapeHtml(item.note || '')}</textarea></label>
     ${MC_STORE_ID !== '__brand__' ? `
@@ -1478,6 +1503,7 @@ function saveMcItem() {
     storeId: MC_STORE_ID,
     status: MC_STATUS
   };
+  if (hasNegativeAmount_([payload.price, payload.priceM, payload.priceL, payload.priceSet, payload.priceAlt])) { alert('價格不能是負數'); return; }
   apiPost({ action: 'upsertMenuItem', item: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     mcCurrentItem = { category: payload.category, name: payload.name };
@@ -1725,7 +1751,7 @@ function renderGroupEditor() {
       </label>
     </div>
     <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
-      <input type="checkbox" id="mc-g-online" ${g.onlineVisible === false ? '' : 'checked'}> 線上點餐（取消勾選，代表線上點餐整組不顯示）
+      <input type="checkbox" id="mc-g-online" ${g.onlineVisible === false ? '' : 'checked'} onchange="onMcGroupOnlineToggle_(this)"> 線上點餐（取消勾選，代表線上點餐整組不顯示）
     </label>
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMcGroup()">儲存</button>
@@ -1793,6 +1819,9 @@ function renderMcOptionValuesHtml(g) {
   // 2026-09-09新增(萃取分析參考大麥「原始金額/加價金額」雙欄顯示)：combo_drink這組額外顯示
   // 對照的主頁飲料原價，方便老闆核對加價金額算得對不對，不用自己再去翻主頁品項價格
   const showPriceRef = mcCurrentGroupCode === 'combo_drink';
+  // 群組本身「線上點餐」取消勾選時，整組在線上點餐不會顯示，底下每個選項值各自的「線上點餐」勾選框
+  // 這時候不生效，改成disabled灰階，避免老闆誤以為個別選項的設定還有作用(2026-09-17新增)
+  const groupOffline = g.onlineVisible === false;
   function priceRefHtml(name) {
     if (!showPriceRef) return '';
     const item = findCatalogItemPriceRef_(name);
@@ -1809,8 +1838,8 @@ function renderMcOptionValuesHtml(g) {
       <input class="mc-v-pricel" type="number" placeholder="大杯加價" value="${opt.priceL ?? ''}">
       ` : `<input class="mc-v-price" type="number" placeholder="加價" value="${opt.price ?? ''}">`}
       ${priceRefHtml(opt.name)}
-      <label style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--muted);white-space:nowrap;">
-        <input type="checkbox" class="mc-v-online" ${opt.onlineVisible === false ? '' : 'checked'} onchange="toggleMcOptionOnlineVisible(this)">線上點餐
+      <label style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--muted);white-space:nowrap;" title="${groupOffline ? '整組已在上方取消線上點餐，這裡暫不生效' : ''}">
+        <input type="checkbox" class="mc-v-online" ${opt.onlineVisible === false ? '' : 'checked'} ${groupOffline ? 'disabled' : ''} onchange="toggleMcOptionOnlineVisible(this)">線上點餐${groupOffline ? '(整組已隱藏)' : ''}
       </label>
       <button type="button" onclick="saveMcOptionValueRow(this)">儲存</button>
       <button type="button" onclick="deleteMcOptionValueRow(this)">刪除</button>
@@ -1834,6 +1863,18 @@ function renderMcOptionValuesHtml(g) {
       </div>
     </div>
   `;
+}
+
+// 群組「線上點餐」開關勾選當下(2026-09-17新增)：底下每個選項值列的「線上點餐」勾選框跟著即時
+// disable/enable，避免老闆誤以為整組隱藏時個別選項的設定還有作用。純畫面連動，不會自動存檔改動
+// 選項值本身的onlineVisible資料，老闆重新勾回群組的線上點餐後，各選項值原本的設定會保留
+function onMcGroupOnlineToggle_(groupCheckbox) {
+  const groupOffline = !groupCheckbox.checked;
+  document.querySelectorAll('.mc-value-row .mc-v-online').forEach(cb => {
+    cb.disabled = groupOffline;
+    const label = cb.closest('label');
+    if (label) label.title = groupOffline ? '整組已在上方取消線上點餐，這裡暫不生效' : '';
+  });
 }
 
 // 「線上點餐顯示」勾選框勾/取消當下就立刻存檔，不用等按「儲存」——跟品名/加價金額不同，
@@ -1872,6 +1913,12 @@ function toggleMcOptionOnlineVisible(checkbox) {
 // 後端upsertOptionValue_也有同一道檢查(防止繞過前端直接呼叫API)
 function mcHasNegativePrice_(payload) {
   return [payload.price, payload.priceM, payload.priceL].some(v => v !== '' && Number(v) < 0);
+}
+
+// 金額防呆(2026-09-17擴充，統一套用到品項價格/飲品升級加價/會員分級門檻倍率)：
+// 只擋負數，前端先擋一次省一趟API來回，後端仍應保有同一道檢查防止繞過前端直接呼叫API
+function hasNegativeAmount_(values) {
+  return values.some(v => v !== '' && v !== undefined && v !== null && Number(v) < 0);
 }
 
 function saveMcOptionValueRow(btn) {
@@ -2065,6 +2112,9 @@ function renderMtEditor() {
       <label class="mc-field">續等門檻<input id="mt-f-cont" type="number" placeholder="留空=無續等保護" value="${t.continuationThreshold ?? ''}" ${isLocked ? 'disabled' : ''}></label>
       <label class="mc-field">點數倍率<input id="mt-f-mult" type="number" value="${t.multiplier ?? 1}"></label>
     </div>
+    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">
+      「半年」目前是後端Code.gs寫死的固定週期(computeRollingSpend_，往前推6個月)，這個畫面上的欄位只能改「門檻金額」，如果要把週期改成一年或其他長度，要請工程師改程式碼，不是在這裡設定
+    </div>
     ${isLocked ? '<p style="font-size:0.75rem;color:var(--muted);">這是新會員註冊的預設等級，門檻鎖定為$0，只能改名稱。</p>' : ''}
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMtTier()">儲存</button>
@@ -2076,14 +2126,18 @@ function renderMtEditor() {
 function saveMtTier() {
   const name = document.getElementById('mt-f-name').value.trim();
   if (!name) { alert('請輸入等級名稱'); return; }
+  const threshold = document.getElementById('mt-f-threshold').value;
+  const continuationThreshold = document.getElementById('mt-f-cont').value;
+  const multiplier = document.getElementById('mt-f-mult').value;
+  if (hasNegativeAmount_([threshold, continuationThreshold, multiplier])) { alert('門檻與倍率不能是負數'); return; }
   if (!confirm('此修改會立即套用到所有會員，確定要儲存嗎？')) return;
   const isNew = mtCurrentName === 'NEW';
   const payload = {
     originalName: isNew ? undefined : mtCurrentName,
     name: name,
-    threshold: document.getElementById('mt-f-threshold').value,
-    continuationThreshold: document.getElementById('mt-f-cont').value,
-    multiplier: document.getElementById('mt-f-mult').value
+    threshold: threshold,
+    continuationThreshold: continuationThreshold,
+    multiplier: multiplier
   };
   apiPost({ action: 'upsertMemberTier', tier: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
@@ -2264,6 +2318,20 @@ function renderPmList() {
   }).join('');
 }
 
+// 自動加購品項下拉選單(2026-09-17改版，原本是自由輸入文字，打錯字會悄悄失效)：從真實菜單資料長出來，不用手打
+function pmAutoAddItemOptions_(selected) {
+  const items = [];
+  Object.keys(mcCatalog).forEach(cat => {
+    (mcCatalog[cat] || []).forEach(it => items.push(it.name));
+  });
+  // 舊資料如果是改版前存的自由文字、對不到現在任何一個品項名稱，保留成一個額外選項，
+  // 避免店長沒特別去改這格、卻在下次存檔時被悄悄清空
+  if (selected && items.indexOf(selected) === -1) {
+    items.unshift(selected);
+  }
+  return items.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('');
+}
+
 function pmModeChanged() {
   const mode = document.getElementById('pm-f-mode').value;
   document.getElementById('pm-fixed-fields').style.display = mode === 'fixed' ? 'flex' : 'none';
@@ -2304,7 +2372,12 @@ function renderPmEditor() {
         </select>
       </label>
       <label class="mc-field">最低購買件數<input id="pm-f-minqty" type="number" value="${p.minQty ?? 1}"></label>
-      <label class="mc-field">自動加購品項(選填)<input id="pm-f-autoadd" placeholder="留空=不自動加購" value="${escapeHtml(p.autoAddItem || '')}"></label>
+      <label class="mc-field">自動加購品項(選填)
+        <select id="pm-f-autoadd">
+          <option value="">不自動加購</option>
+          ${pmAutoAddItemOptions_(p.autoAddItem)}
+        </select>
+      </label>
     </div>
     <div class="mc-field-row">
       <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-showbtn" type="checkbox" ${p.showAsButton ? 'checked' : ''}> 顯示為優惠券按鈕(POS功能可直接點)</label>
@@ -2353,7 +2426,7 @@ function savePromo() {
     effect: mode === 'item' ? document.getElementById('pm-f-effect').value : '',
     amount: mode === 'fixed' ? document.getElementById('pm-f-amount').value : '',
     minQty: mode === 'item' ? document.getElementById('pm-f-minqty').value : '',
-    autoAddItem: mode === 'item' ? document.getElementById('pm-f-autoadd').value.trim() : '',
+    autoAddItem: mode === 'item' ? document.getElementById('pm-f-autoadd').value : '',
     showAsButton: document.getElementById('pm-f-showbtn').checked,
     manualGrantable: document.getElementById('pm-f-grantable').checked,
     status: document.getElementById('pm-f-status').value,
@@ -2411,7 +2484,7 @@ function renderPgEditor() {
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增集點兌換項目' : '編輯集點兌換項目'}</h3>
     <div class="mc-field-row">
       <label class="mc-field">所需點數<input id="pg-f-points" type="number" value="${g.points ?? ''}"></label>
-      <label class="mc-field">兌換券名稱<select id="pg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
+      <label class="mc-field">優惠券名稱<select id="pg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
     </div>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="pg-f-status">
@@ -2492,10 +2565,10 @@ function renderBgEditor() {
   if (!isNew && !bgGifts.find(x => x.voucherType === bgCurrentType)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增生日禮」</div>'; return; }
   el.innerHTML = `
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增生日禮' : '編輯生日禮'}</h3>
-    <label class="mc-field">券名稱<select id="bg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
+    <label class="mc-field">優惠券名稱<select id="bg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
     <div class="mc-field-row">
-      <label class="mc-field">生效天數offset<input id="bg-f-effoffset" type="number" value="${g.effectiveOffset ?? 0}"></label>
-      <label class="mc-field">到期天數offset<input id="bg-f-expoffset" type="number" value="${g.expiryOffset ?? 27}"></label>
+      <label class="mc-field">發放後第幾天生效<input id="bg-f-effoffset" type="number" value="${g.effectiveOffset ?? 0}"></label>
+      <label class="mc-field">發放後第幾天到期<input id="bg-f-expoffset" type="number" value="${g.expiryOffset ?? 27}"></label>
     </div>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="bg-f-status">
@@ -2569,10 +2642,10 @@ function renderRgEditor() {
   if (!isNew && !rgGifts.find(x => x.voucherType === rgCurrentType)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增註冊禮」</div>'; return; }
   el.innerHTML = `
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增註冊禮' : '編輯註冊禮'}</h3>
-    <label class="mc-field">券名稱<select id="rg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
+    <label class="mc-field">優惠券名稱<select id="rg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
     <div class="mc-field-row">
-      <label class="mc-field">生效天數offset<input id="rg-f-effoffset" type="number" value="${g.effectiveOffset ?? 0}"></label>
-      <label class="mc-field">到期天數offset<input id="rg-f-expoffset" type="number" value="${g.expiryOffset ?? 6}"></label>
+      <label class="mc-field">發放後第幾天生效<input id="rg-f-effoffset" type="number" value="${g.effectiveOffset ?? 0}"></label>
+      <label class="mc-field">發放後第幾天到期<input id="rg-f-expoffset" type="number" value="${g.expiryOffset ?? 6}"></label>
     </div>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="rg-f-status">
@@ -2713,6 +2786,7 @@ function saveDrinkUpgradeRule() {
   const amountM = document.getElementById('du-f-amount-m').value;
   const amountL = document.getElementById('du-f-amount-l').value;
   if (!sourceCategory || !targetItem || amountM === '' || amountL === '') { alert('請選擇來源分類、目標品項並輸入M/L加價金額'); return; }
+  if (hasNegativeAmount_([amountM, amountL])) { alert('加價金額不能是負數'); return; }
   const isNew = duCurrentKey === null;
   const payload = {
     originalKey: isNew ? undefined : duCurrentKey,

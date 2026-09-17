@@ -37,7 +37,7 @@
   #pos-drink-overlay { z-index:25; }
   .pos-sheet { background:#fff; width:100%; max-width:420px; max-height:85vh; overflow-y:auto; border-radius:16px; padding:16px; }
   .pos-cart-line { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
-  .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:26px; height:26px; border-radius:6px; font-size:1rem; cursor:pointer; }
+  .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:40px; height:40px; border-radius:6px; font-size:1.1rem; cursor:pointer; }
   .pos-cart-total { display:flex; justify-content:space-between; font-size:1.05rem; font-weight:bold; padding:10px 0; flex:none; }
   .pos-size-select { font-size:0.78rem; margin-top:4px; }
   .pos-size-select label { margin-right:6px; cursor:pointer; }
@@ -80,6 +80,10 @@
   .btn-secondary { background:#eee; color:#333; }
   .btn-danger { background:#A32D2D; color:#fff; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .pos-pay-btn { flex:1 1 45%; min-width:80px; padding:10px 6px; border:1px solid var(--border); border-radius:8px; background:#fff; font-size:0.85rem; cursor:pointer; text-align:center; }
+  .pos-pay-btn.active { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; }
+  .pos-pay-btn.warn { border-color:#c0392b; color:#c0392b; }
+  .pos-pay-btn.warn.active { background:#c0392b; border-color:#c0392b; color:#fff; }
   .revenue-num { font-size:1.6rem; font-weight:700; color:var(--brand); }
   .order-card { display:flex; justify-content:space-between; align-items:center; padding:10px; border:1px solid #eee; border-radius:8px; margin-bottom:8px; }
   .order-card .meta { font-size:0.85rem; color:#666; }
@@ -168,7 +172,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <button type="button" class="pos-back-btn" onclick="setPosStep('items')">← 返回點餐</button>
     <div class="pos-col-title">會員</div>
     <div class="row">
-      <input type="tel" id="member-phone-input" placeholder="顧客電話" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+      <input type="tel" id="member-phone-input" placeholder="顧客電話" maxlength="10" inputmode="numeric" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;" oninput="onMemberPhoneInput_()">
       <button class="btn btn-primary" onclick="lookupMember()">查詢</button>
     </div>
     <div id="member-info"></div>
@@ -181,26 +185,38 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <div id="pos-checkout-panel" style="display:none">
       <div id="pos-checkout-member" style="font-size:0.85rem;margin-bottom:8px;"></div>
       <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">付款方式</label>
-      <select id="pos-payment-method" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onchange="onPosPaymentMethodChange()">
-        <option value="取餐付款">取餐付款</option>
-        <option value="LinePay現場" selected>LinePay現場</option>
-        <option value="現金">現金</option>
-        <option value="其他">其他</option>
-      </select>
+      <input type="hidden" id="pos-payment-method" value="LinePay現場">
+      <div id="pos-payment-method-group" style="display:flex;flex-wrap:wrap;gap:8px;">
+        <button type="button" class="pos-pay-btn active" data-method="LinePay現場" onclick="setPosPaymentMethod_('LinePay現場')">LinePay現場</button>
+        <button type="button" class="pos-pay-btn" data-method="現金" onclick="setPosPaymentMethod_('現金')">現金</button>
+        <button type="button" class="pos-pay-btn" data-method="其他" onclick="setPosPaymentMethod_('其他')">其他</button>
+        <button type="button" class="pos-pay-btn warn" data-method="取餐付款" onclick="setPosPaymentMethod_('取餐付款')">取餐付款</button>
+      </div>
       <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個客人現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
+      <div id="pos-cash-fields" style="display:none;margin-top:8px;">
+        <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">實收金額</label>
+        <input type="number" id="pos-cash-received" inputmode="numeric" min="0" placeholder="輸入客人給的金額" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:1rem;" oninput="updatePosCashChange_()">
+        <div id="pos-cash-change-result" style="margin-top:6px;font-size:1.05rem;font-weight:700;"></div>
+      </div>
 
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin:12px 0 4px;color:var(--muted)">
-        <input type="checkbox" id="pos-schedule-toggle" onchange="onPosScheduleToggle()"> 電話訂單／指定取餐時間（不勾＝現場立即取餐）
-      </label>
+      <input type="checkbox" id="pos-schedule-toggle" style="display:none;" onchange="onPosScheduleToggle()">
+      <div style="display:flex;gap:8px;margin:12px 0 4px;">
+        <button type="button" class="pos-pay-btn active" id="pos-schedule-mode-now" onclick="setPosScheduleMode_(false)">現場取餐</button>
+        <button type="button" class="pos-pay-btn" id="pos-schedule-mode-later" onclick="setPosScheduleMode_(true)">電話預約／指定時間</button>
+      </div>
       <div id="pos-schedule-fields" style="display:none;flex-direction:column;gap:6px;">
         <input type="date" id="pos-pickup-date" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;">
+        <div style="display:flex;gap:6px;">
+          <button type="button" class="btn btn-secondary" style="flex:1;padding:6px;font-size:0.82rem;" onclick="setPosPickupDateQuick_(0)">今天</button>
+          <button type="button" class="btn btn-secondary" style="flex:1;padding:6px;font-size:0.82rem;" onclick="setPosPickupDateQuick_(1)">明天</button>
+        </div>
         <div style="display:flex;gap:6px;">
           <select id="pos-pickup-hour" style="flex:1;min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;"></select>
           <select id="pos-pickup-minute" style="flex:1;min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;"></select>
         </div>
       </div>
 
-      <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:10px;" onclick="submitPosOrder()">確認結帳</button>
+      <button class="btn btn-primary" id="pos-submit-order-btn" style="width:100%;padding:10px;margin-top:10px;" onclick="submitPosOrder()">確認結帳</button>
       <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="backToPosCart()">返回</button>
     </div>
 
@@ -331,7 +347,9 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       </div>
       <div class="row">
         <button class="btn btn-primary" onclick="doOpenRegister()">開帳</button>
-        <button class="btn btn-secondary" onclick="openCloseRegisterPreview()">關帳</button>
+      </div>
+      <div class="row" style="margin-top:16px;">
+        <button class="btn btn-danger" style="opacity:0.85;" onclick="openCloseRegisterPreview()">⚠ 關帳（今日訂單將作廢）</button>
       </div>
       <div id="pos-manage-result" style="font-size:0.8rem;color:var(--brand);margin-top:8px;"></div>
     </section>
@@ -356,7 +374,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <h2 style="margin:0; flex:1; font-size:1rem;">關帳確認</h2>
     </div>
     <div id="close-register-preview-list"><div class="empty-hint">載入中...</div></div>
-    <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:12px;" onclick="confirmCloseRegister()">確認關帳，全部作廢</button>
+    <button class="btn btn-danger" style="width:100%;padding:10px;margin-top:12px;" onclick="confirmCloseRegister()">確認關帳，全部作廢</button>
     <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="closeCloseRegisterPreview()">取消</button>
   </div>
 </div>
@@ -775,9 +793,23 @@ let pendingVoucherForItemPick = null; // item模式兌換券選好後、等待�
 let directDiscounts = []; // 門市活動直接折抵(POS按鈕)，不對應任何backend voucherId、不留兌換券記錄：[{type, discountAmount, targetLineKey?}, ...]
 let pendingDirectDiscount = null; // item模式折抵選好後、等待店員點選購物車品項時的暫存
 
+function isValidPhone_(phone) {
+  return /^09\d{8}$/.test(phone);
+}
+
+// 輸滿10碼合法格式自動查詢(2026-09-17新增)，不用店員自己再點一次查詢鈕
+function onMemberPhoneInput_() {
+  const phone = document.getElementById('member-phone-input').value.trim();
+  if (isValidPhone_(phone)) lookupMember();
+}
+
 function lookupMember() {
   const phone = document.getElementById('member-phone-input').value.trim();
   if (!phone) return;
+  if (!isValidPhone_(phone)) {
+    document.getElementById('member-info').innerHTML = '<div style="color:#a30000;font-size:0.85rem;">手機號碼格式不正確，請輸入09開頭的10碼數字</div>';
+    return;
+  }
   const el = document.getElementById('member-info');
   el.textContent = '查詢中...';
   apiGet({ action: 'getMember', phone: phone }).then(data => {
@@ -790,8 +822,8 @@ function lookupMember() {
       el.innerHTML = `
         <div>查無此會員，是否建立新會員？</div>
         <div class="row" style="margin-top:6px;">
-          <input type="text" id="member-new-name" placeholder="姓名">
-          <input type="text" id="member-new-birthday" placeholder="生日(選填)">
+          <input type="text" id="member-new-name" placeholder="姓名" required autocomplete="name">
+          <input type="date" id="member-new-birthday" placeholder="生日(選填)">
           <button class="btn btn-primary" onclick="registerMember('${phone}')">建立</button>
         </div>`;
     } else {
@@ -843,49 +875,63 @@ function renderMemberVoucherPanel() {
 
   const redeemableHtml = POINT_REDEMPTION_CATALOG.map(entry => {
     const enough = selectedMember.points >= entry.points;
+    const shortBy = entry.points - selectedMember.points;
     return `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:0.78rem;${enough ? '' : 'opacity:0.5;'}">
-        <span>${entry.points}點 → ${entry.voucherType}</span>
-        <button class="btn" style="padding:2px 7px;font-size:0.74rem;" ${enough ? '' : 'disabled'} onclick="redeemPointsForVoucher('${entry.voucherType}')">兌換</button>
+        <span>${entry.points}點 → ${entry.voucherType}${enough ? '' : `<span style="color:#c0392b;"> (還差${shortBy}點)</span>`}</span>
+        <button class="btn" style="padding:2px 7px;font-size:0.74rem;" ${enough ? '' : 'disabled'} onclick="redeemPointsForVoucher(this,'${entry.voucherType}')">兌換</button>
       </div>`;
   }).join('');
 
   const grantHtml = MANUAL_GRANT_VOUCHER_TYPES.map(type => `
-    <button class="btn" style="padding:4px 8px;font-size:0.76rem;margin:2px 4px 2px 0;" onclick="grantVoucherToMember('${type}')">贈送：${type}</button>
+    <button class="btn" style="padding:4px 8px;font-size:0.76rem;margin:2px 4px 2px 0;" onclick="grantVoucherToMember(this,'${type}')">贈送：${type}</button>
   `).join('');
 
   panel.innerHTML = `
-    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px;">
+    <div style="margin-top:8px;padding:6px 8px;border-radius:8px;background:#f5f5f5;">
       <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:2px;">目前可用兌換券</div>
       ${usableHtml}
     </div>
-    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px;">
-      <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:2px;">集點兌換</div>
+    <div style="margin-top:8px;padding:6px 8px;border-radius:8px;background:#eef6ff;">
+      <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:2px;">集點兌換（扣會員點數）</div>
       ${redeemableHtml}
     </div>
-    <div style="margin-top:8px;border-top:1px dashed var(--border);padding-top:6px;">
-      <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:4px;">店員贈送兌換券</div>
+    <div style="margin-top:8px;padding:6px 8px;border-radius:8px;background:#fff4e5;">
+      <div style="font-size:0.8rem;font-weight:600;color:#a35b00;margin-bottom:4px;">店員贈送（店家成本，不扣會員點數）</div>
       ${grantHtml}
     </div>
   `;
 }
 
-function grantVoucherToMember(type) {
+function grantVoucherToMember(btn, type) {
   if (!selectedMember) { alert('請先查詢/選擇會員'); return; }
+  if (btn.disabled) return;
+  if (!confirm(`確定要贈送「${type}」給${selectedMember.name}嗎？這是店家成本，不會扣會員點數。`)) return;
+  btn.disabled = true;
   apiPost({ action: 'grantVoucher', phone: selectedMember.phone, type: type }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '贈送失敗'); return; }
     alert(`已贈送「${type}」給${selectedMember.name}`);
     loadMemberVouchers();
+  }).catch(() => {
+    alert('網路異常，贈送失敗，請重試');
+  }).finally(() => {
+    btn.disabled = false;
   });
 }
 
-function redeemPointsForVoucher(voucherType) {
+function redeemPointsForVoucher(btn, voucherType) {
   if (!selectedMember) return;
+  if (btn.disabled) return;
+  btn.disabled = true;
   apiPost({ action: 'redeemPoints', phone: selectedMember.phone, voucherType: voucherType }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '兌換失敗'); return; }
     selectedMember.points = data.remainingPoints;
     alert(`已兌換「${voucherType}」，剩餘點數 ${data.remainingPoints}`);
     loadMemberVouchers();
+  }).catch(() => {
+    alert('網路異常，兌換失敗，請重試');
+  }).finally(() => {
+    btn.disabled = false;
   });
 }
 
@@ -1535,9 +1581,9 @@ function openPosItemModal(cat, key, item) {
     <label style="display:block; font-size:0.8rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填）</label>
     <textarea id="pos-item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.85rem;" maxlength="100" placeholder="例如：不要洋蔥"></textarea>
     <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:14px;">
-      <button type="button" class="qty-btn" onclick="posItemModalQty(-1)" style="width:34px;height:34px;font-size:1.2rem;">-</button>
+      <button type="button" class="qty-btn" onclick="posItemModalQty(-1)" style="width:42px;height:42px;font-size:1.2rem;">-</button>
       <span id="pos-item-modal-qty" style="font-size:1.1rem; min-width:20px; text-align:center;">1</span>
-      <button type="button" class="qty-btn" onclick="posItemModalQty(1)" style="width:34px;height:34px;font-size:1.2rem;">+</button>
+      <button type="button" class="qty-btn" onclick="posItemModalQty(1)" style="width:42px;height:42px;font-size:1.2rem;">+</button>
     </div>
     <button class="btn-primary" style="width:100%;margin-top:12px;padding:12px;" onclick="confirmAddToPosCart()">加入訂單　<span id="pos-item-modal-total"></span></button>
   `;
@@ -2084,18 +2130,47 @@ function closePosCartAll() {
   document.getElementById('pos-checkout-btn').style.display = 'block';
   // 每次開始新訂單都重置成安全預設值(LinePay現場、非預約)，避免上一張選的「取餐付款」／指定取餐時間
   // 殘留設定誤套到下一張現場立即結帳的訂單
-  document.getElementById('pos-payment-method').value = 'LinePay現場';
-  document.getElementById('pos-payatpickup-hint').style.display = 'none';
-  document.getElementById('pos-schedule-toggle').checked = false;
-  document.getElementById('pos-schedule-fields').style.display = 'none';
+  setPosPaymentMethod_('LinePay現場');
+  setPosScheduleMode_(false);
   document.getElementById('pos-schedule-fields').removeAttribute('data-initialized');
   document.getElementById('pos-pickup-date').value = '';
   setPosStep('categories');
 }
 
+function setPosPaymentMethod_(method) {
+  document.getElementById('pos-payment-method').value = method;
+  document.querySelectorAll('#pos-payment-method-group .pos-pay-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-method') === method);
+  });
+  onPosPaymentMethodChange();
+}
+
 function onPosPaymentMethodChange() {
   const method = document.getElementById('pos-payment-method').value;
   document.getElementById('pos-payatpickup-hint').style.display = method === '取餐付款' ? 'block' : 'none';
+  const cashFields = document.getElementById('pos-cash-fields');
+  cashFields.style.display = method === '現金' ? 'block' : 'none';
+  if (method !== '現金') {
+    document.getElementById('pos-cash-received').value = '';
+    document.getElementById('pos-cash-change-result').textContent = '';
+  }
+}
+
+// 現金找零計算(2026-09-17新增)：只是給店員的心算輔助，不影響實際送出的訂單金額/付款方式
+function updatePosCashChange_() {
+  const receivedInput = document.getElementById('pos-cash-received').value;
+  const resultEl = document.getElementById('pos-cash-change-result');
+  if (receivedInput === '') { resultEl.textContent = ''; return; }
+  const received = Number(receivedInput);
+  const total = getPosCartFinalTotal();
+  const change = received - total;
+  if (change < 0) {
+    resultEl.style.color = '#c0392b';
+    resultEl.textContent = `還差 $${Math.abs(change)}`;
+  } else {
+    resultEl.style.color = 'var(--brand)';
+    resultEl.textContent = `找零 $${change}`;
+  }
 }
 
 // 取餐時間改用兩個下拉選單(時／分，分鐘只列00/05/10.../55)取代原生<input type="time">——
@@ -2123,6 +2198,20 @@ function populatePosPickupTimeSelects_() {
   }
 }
 populatePosPickupTimeSelects_();
+
+// 電話訂單日期快速按鈕(2026-09-17新增)：多數電話訂單是當天或隔天，不用每次都翻日曆選
+function setPosPickupDateQuick_(daysFromToday) {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromToday);
+  document.getElementById('pos-pickup-date').value = d.toISOString().slice(0, 10);
+}
+
+function setPosScheduleMode_(scheduled) {
+  document.getElementById('pos-schedule-toggle').checked = scheduled;
+  document.getElementById('pos-schedule-mode-now').classList.toggle('active', !scheduled);
+  document.getElementById('pos-schedule-mode-later').classList.toggle('active', scheduled);
+  onPosScheduleToggle();
+}
 
 function onPosScheduleToggle() {
   const on = document.getElementById('pos-schedule-toggle').checked;
@@ -2156,7 +2245,14 @@ function submitPosOrder() {
     pickupDate = document.getElementById('pos-pickup-date').value;
     pickupTime = document.getElementById('pos-pickup-hour').value + ':' + document.getElementById('pos-pickup-minute').value;
     if (!pickupDate) { alert('請填寫取餐日期'); return; }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (pickupDate < todayStr) { alert('取餐日期不可早於今天，請重新選擇'); return; }
   }
+  const btn = document.getElementById('pos-submit-order-btn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  const btnOriginalText = btn.textContent;
+  btn.textContent = '送出中...';
   apiPost({
     action: 'posCheckout',
     storeId: STORE_ID,
@@ -2177,6 +2273,11 @@ function submitPosOrder() {
     document.getElementById('pos-checkout-panel').style.display = 'none';
     document.getElementById('pos-confirm-panel').style.display = 'block';
     loadRevenue();
+  }).catch(() => {
+    alert('網路異常，結帳失敗，請重試');
+  }).finally(() => {
+    btn.disabled = false;
+    btn.textContent = btnOriginalText;
   });
 }
 </script>
