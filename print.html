@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出單頁（筆電）</title>
+<style>
+  :root { --bg:#faf7f2; --card:#fff; --ink:#2b2b2b; --mute:#777; --line:#e4ddd2; --accent:#d9622b; --ok:#2e8b57; --bad:#c0392b; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px 16px 50px; background:var(--bg); color:var(--ink); font:15px/1.6 "Microsoft JhengHei", system-ui, sans-serif; }
+  body.alarm { background:#fde3df; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size:20px; margin:0 0 2px; }
+  .sub { color:var(--mute); font-size:13px; margin-bottom:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .kv { font-size:12px; color:var(--mute); } .kv b { display:block; font-size:16px; color:var(--ink); font-weight:600; }
+  .kv b.ok { color:var(--ok); } .kv b.bad { color:var(--bad); }
+  button { font:inherit; border:0; border-radius:8px; padding:9px 16px; background:var(--accent); color:#fff; cursor:pointer; margin:0 8px 8px 0; }
+  button.sec { background:#eee6da; color:var(--ink); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  input { font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:6px; }
+  #log { background:#1e1e1e; color:#d6d6d6; font:12.5px/1.55 Consolas, monospace; padding:12px; border-radius:10px; height:300px; overflow:auto; white-space:pre-wrap; }
+  #log .e { color:#ff8a80; } #log .g { color:#8bd5a0; } #log .y { color:#f4d35e; }
+  .hint { font-size:12.5px; color:var(--mute); margin-top:4px; }
+</style>
+</head>
+<body>
+<script>
+if(new Date()>new Date('2026-12-31T23:59:59')){
+  document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:'Microsoft JhengHei',sans-serif;text-align:center;padding:20px">
+    <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
+      <div style="font-size:40px;margin-bottom:12px">⏳</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
+      <div style="font-size:12px;color:#666;line-height:1.7">「出單頁」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
+    </div>
+  </div>`;
+  document.title='已過期 - 出單頁';
+  throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
+}
+// 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
+(function(){
+  const SITE_PASSWORD='3345678';
+  const AUTH_KEY='mk_auth_meibao_print';
+  if(localStorage.getItem(AUTH_KEY)==='1')return;
+  const gate=document.createElement('div');
+  gate.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:-apple-system,"Microsoft JhengHei",sans-serif';
+  gate.innerHTML=`
+    <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
+      <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
+      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館 出單頁</div>
+      <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（出單頁）</div>
+      <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
+      <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
+      <button id="gate-btn" style="width:100%;background:#e8632c;color:#fff;border:none;padding:11px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer">確定</button>
+      <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
+    </div>`;
+  document.body.appendChild(gate);
+  function trySubmit(){
+    const val=document.getElementById('gate-pw').value;
+    if(val===SITE_PASSWORD){
+      localStorage.setItem(AUTH_KEY,'1');
+      gate.remove();
+    }else{
+      document.getElementById('gate-err').textContent='密碼錯誤，請再試一次';
+      document.getElementById('gate-pw').value='';
+      document.getElementById('gate-pw').focus();
+    }
+  }
+  document.getElementById('gate-btn').onclick=trySubmit;
+  document.getElementById('gate-pw').addEventListener('keydown',e=>{if(e.key==='Enter')trySubmit();});
+  document.getElementById('gate-pw').focus();
+})();
+</script>
+
+<div class="wrap">
+  <h1>出單頁（筆電）　<span id="storeLabel"></span></h1>
+  <div class="sub">開著這一頁，就會自動把線上訂單印到出單機。請保持這個視窗開著、筆電不要休眠或闔蓋。</div>
+
+  <div class="card">
+    <div class="grid">
+      <div class="kv">出單機<b id="stPort" class="bad">尚未連線</b></div>
+      <div class="kv">接單列印<b id="stRun" class="bad">未開始</b></div>
+      <div class="kv">最後一次查詢<b id="stPoll">—</b></div>
+      <div class="kv">今日已印<b id="stCount">0 張</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <button id="btnPick">① 選擇出單機</button>
+    <button id="btnKey" class="sec">② 設定出單密碼</button>
+    <button id="btnToggle" class="sec" disabled>③ 開始接單列印</button>
+    <button id="btnTest" class="sec" disabled>印一張測試單</button>
+    <div style="margin-top:6px;font-size:14px">每 <input id="interval" type="number" min="5" value="10" style="width:64px"> 秒查詢一次新訂單
+      <label style="margin-left:12px"><input type="checkbox" id="optCut"> 送切紙指令（這台手撕，預設不送）</label></div>
+    <div class="hint">第一次使用：依序按 ①選 COM3、②貼上出單密碼、③開始。之後重新開啟這一頁會<b>自動連線並自動開始</b>，不用再點。</div>
+  </div>
+
+  <div class="card"><div id="log"></div></div>
+</div>
+
+<script>
+'use strict';
+// ---------- 設定 ----------
+const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
+const APP_KEY = 'abao-meibao-2026';   // 跟線上點餐頁同一把公開的appKey；出單密碼另外存在這台電腦的localStorage
+const STORE_ID = 'meibao';
+const STORE_LABEL = '溪湖培英店';
+const MOCK = new URLSearchParams(location.search).get('mock') === '1';   // 測試用：不接真的出單機，只在畫面上顯示
+function $(id) { return document.getElementById(id); }
+$('storeLabel').textContent = STORE_LABEL + (MOCK ? '（模擬出單機）' : '');
+
+// ---------- Big5 編碼（TextDecoder 反查建表，已對照 Python 標準 Big5 驗證）----------
+const BIG5 = new Map();
+(function () {
+  const dec = new TextDecoder('big5');
+  const rng = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  const leads = [...rng(0xA1, 0xF9), ...rng(0x81, 0xA0), ...rng(0xFA, 0xFE)];
+  const trails = [...rng(0x40, 0x7E), ...rng(0xA1, 0xFE)];
+  for (const l of leads) for (const t of trails) {
+    const ch = dec.decode(new Uint8Array([l, t]));
+    if ([...ch].length === 1 && ch !== '�' && !BIG5.has(ch)) BIG5.set(ch, [l, t]);
+  }
+})();
+function encodeBig5(text) {
+  const bytes = [], missing = [];
+  for (const ch of text) {
+    const c = ch.codePointAt(0);
+    if (c < 0x80) { bytes.push(c); continue; }
+    const b = BIG5.get(ch);
+    if (b) bytes.push(b[0], b[1]); else { bytes.push(0x3F); missing.push(ch); }
+  }
+  return { bytes, missing };
+}
+function buildTicketBytes(lines) {
+  const out = [0x1B, 0x40, 0x1C, 0x26];               // ESC @ 初始化 + FS & 進入中文模式
+  const missingAll = [];
+  for (const line of lines) { const r = encodeBig5(line + '\n'); out.push(...r.bytes); missingAll.push(...r.missing); }
+  out.push(0x1C, 0x2E, 0x1B, 0x64, 5);                 // FS . 離開中文模式 + 走紙5行
+  if ($('optCut').checked) out.push(0x1D, 0x56, 0x42, 0x00);
+  return { data: new Uint8Array(out), missing: missingAll };
+}
+
+// ---------- 記錄 ----------
+const logEl = $('log');
+function log(msg, cls) {
+  const t = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+  const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = '[' + t + '] ' + msg;
+  logEl.appendChild(d); while (logEl.childElementCount > 400) logEl.removeChild(logEl.firstChild); logEl.scrollTop = logEl.scrollHeight;
+}
+function setState(id, text, cls) { const e = $(id); e.textContent = text; e.className = cls || ''; }
+
+// ---------- 後端 ----------
+// 所有後端請求都設20秒逾時：Apps Script偶爾會卡住不回應，沒有逾時的話整個輪詢會永遠停在那個請求上
+function fetchJson(url, opts) {
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(), 20000);
+  return fetch(url, { ...opts, signal: ac.signal }).then(r => r.json()).finally(() => clearTimeout(to));
+}
+function apiPost(payload) {
+  return fetchJson(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) });
+}
+function apiGet(params) {
+  const qs = new URLSearchParams({ ...params, appKey: APP_KEY, _: Date.now() }).toString();
+  return fetchJson(ORDER_BACKEND_URL + '?' + qs);
+}
+const getKey = () => { try { return localStorage.getItem('abao_print_key') || ''; } catch (e) { return ''; } };
+
+// ---------- 出單機（Web Serial）----------
+let port = null, running = false, timer = null, busy = false, printedToday = 0, tickStartedAt = 0;
+let mockSent = [];
+async function openPort(p) {
+  if (MOCK) return;
+  if (p.readable || p.writable) { port = p; return; }
+  await p.open({ baudRate: 115200 });
+  port = p;
+}
+async function writeBytes(data) {
+  if (MOCK) { mockSent.push(data); return; }
+  if (!port) throw new Error('出單機尚未連線');
+  if (!port.writable) await openPort(port);
+  const w = port.writable.getWriter();
+  try { await w.write(data); } finally { w.releaseLock(); }
+}
+function portReady() { return MOCK || !!port; }
+function refreshButtons() {
+  $('btnToggle').disabled = !(portReady() && getKey());
+  $('btnTest').disabled = !portReady();
+  setState('stPort', portReady() ? (MOCK ? '模擬中' : '已連線') : '尚未連線', portReady() ? 'ok' : 'bad');
+}
+
+$('btnPick').onclick = async () => {
+  try { const p = await navigator.serial.requestPort(); await openPort(p); port = p; log('出單機已連線', 'g'); refreshButtons(); }
+  catch (e) { log('連線失敗：' + e.message, 'e'); }
+};
+$('btnKey').onclick = () => {
+  const v = prompt('請貼上出單密碼（只會存在這台電腦）：', getKey());
+  if (v === null) return;
+  try { localStorage.setItem('abao_print_key', v.trim()); } catch (e) {}
+  log(v.trim() ? '出單密碼已設定' : '出單密碼已清除', v.trim() ? 'g' : 'y'); refreshButtons();
+};
+$('btnTest').onclick = async () => {
+  try {
+    const now = new Date().toLocaleString('zh-TW', { hour12: false });
+    const { data } = buildTicketBytes(['== 出單頁測試 ==', STORE_LABEL, now, '中文、English、$123 ○']);
+    await writeBytes(data); log('測試單已送出', 'g');
+  } catch (e) { log('測試單失敗：' + e.message, 'e'); }
+};
+
+// ---------- 接單列印迴圈 ----------
+function setRunning(on) {
+  running = on;
+  setState('stRun', on ? '執行中' : '已暫停', on ? 'ok' : 'bad');
+  $('btnToggle').textContent = on ? '③ 暫停接單列印' : '③ 開始接單列印';
+  clearTimeout(timer);
+  if (on) schedule(0);
+  try { localStorage.setItem('abao_print_run', on ? '1' : '0'); } catch (e) {}
+  updateWakeLock();
+}
+function schedule(ms) {
+  clearTimeout(timer);
+  const sec = Math.max(5, Number($('interval').value) || 10);
+  timer = setTimeout(tick, ms === undefined ? sec * 1000 : ms);
+}
+$('btnToggle').onclick = () => setRunning(!running);
+
+async function tick() {
+  if (!running || busy) return;
+  busy = true; tickStartedAt = Date.now();
+  let gap = null;
+  try {
+    const key = getKey();
+    const claim = await apiPost({ action: 'claimPrint', storeId: STORE_ID, printKey: key, limit: 3 });
+    setState('stPoll', new Date().toLocaleTimeString('zh-TW', { hour12: false }));
+    if (claim.status !== 'ok') { log('領單被拒：' + (claim.message || ''), 'e'); setState('stRun', '出單密碼有誤？', 'bad'); alarm(true); return; }
+    if (!claim.orders.length) { alarm(false); return; }
+    gap = 0;   // 剛領到單，馬上再查一次，不用等整個間隔
+    for (const t of claim.orders) await printOne(t);
+  } catch (e) {
+    if (!e.printerError) log('查詢失敗（網路？）：' + e.message, 'e');
+  } finally {
+    busy = false;
+    if (running) schedule(gap === null ? undefined : gap);
+  }
+}
+
+async function printOne(t) {
+  try {
+    const { data, missing } = buildTicketBytes(t.lines);
+    await writeBytes(data);
+    const rep = await apiPost({ action: 'printed', orderId: t.orderId, printKey: getKey() });
+    printedToday++; setState('stCount', printedToday + ' 張');
+    log('已印 ' + t.orderId + (t.reprint ? '（補印第' + t.printCount + '次）' : '') + (missing.length ? '；缺字改印?：' + missing.join('') : '') +
+        (rep.status === 'ok' ? '' : '；回報失敗：' + rep.message), rep.status === 'ok' ? 'g' : 'y');
+    alarm(false);
+  } catch (e) {
+    log('印出失敗 ' + t.orderId + '：' + e.message + ' → 退回佇列', 'e');
+    try { await apiPost({ action: 'printFailed', orderId: t.orderId, printKey: getKey() }); } catch (_) {}
+    try { if (port && !MOCK) { await port.close(); } } catch (_) {}
+    if (!MOCK) port = null;
+    refreshButtons(); alarm(true);
+    setState('stRun', '出單機斷線，請重新連線', 'bad');
+    running = false; clearTimeout(timer); $('btnToggle').textContent = '③ 開始接單列印';
+    e.printerError = true;
+    throw e;   // 中止這一批剩下的單，它們會在逾時後自動回到佇列
+  }
+}
+function alarm(on) {
+  document.body.classList.toggle('alarm', !!on);
+  if (on) { try { const c = new (window.AudioContext || window.webkitAudioContext)(); const o = c.createOscillator(); o.connect(c.destination); o.frequency.value = 880; o.start(); setTimeout(() => { o.stop(); c.close(); }, 400); } catch (e) {} }
+}
+
+
+// ---------- 看門狗：輪詢停滯時自動重啟 ----------
+let lastTickBeat = Date.now();
+setInterval(() => {
+  if (!running) return;
+  const sec = Math.max(5, Number($('interval').value) || 10);
+  const idleMs = Date.now() - Math.max(tickStartedAt, lastTickBeat);
+  if (idleMs > (sec * 3 + 60) * 1000) {
+    log('輪詢停滯超過 ' + Math.round(idleMs / 1000) + ' 秒，自動重啟', 'y');
+    busy = false; lastTickBeat = Date.now(); schedule(0);
+  }
+}, 15000);
+
+// ---------- 螢幕不休眠 ----------
+let wakeLock = null;
+async function updateWakeLock() {
+  try {
+    if (running && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); log('已要求螢幕保持開啟'); }
+    if (!running && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) { log('螢幕保持開啟失敗：' + e.message, 'y'); }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateWakeLock(); });
+
+// ---------- 啟動：自動連線並自動開始 ----------
+(async function init() {
+  if (!MOCK && !('serial' in navigator)) { log('這個瀏覽器不支援 Web Serial，請用電腦版 Chrome 或 Edge', 'e'); $('btnPick').disabled = true; return; }
+  log('出單頁已載入（' + STORE_LABEL + '）' + (MOCK ? ' 【模擬出單機模式】' : ''));
+  try {
+    if (!MOCK) {
+      const ports = await navigator.serial.getPorts();
+      if (ports.length) { await openPort(ports[0]); port = ports[0]; log('已自動連上出單機', 'g'); }
+    }
+  } catch (e) { log('自動連線失敗：' + e.message, 'e'); }
+  refreshButtons();
+  let wantRun = false; try { wantRun = localStorage.getItem('abao_print_run') === '1'; } catch (e) {}
+  if (portReady() && getKey() && wantRun) { log('自動開始接單列印'); setRunning(true); }
+  else if (!getKey()) log('尚未設定出單密碼，請按 ② 設定', 'y');
+})();
+window.__print = { get sent() { return mockSent; }, get running() { return running; }, tick, setRunning };
+</script>
+</body>
+</html>
