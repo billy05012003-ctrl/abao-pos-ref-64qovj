@@ -91,6 +91,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     <button id="btnKey" class="sec">② 設定出單密碼</button>
     <button id="btnToggle" class="sec" disabled>③ 開始接單列印</button>
     <button id="btnTest" class="sec" disabled>印一張測試單</button>
+    <button id="btnStatus" class="sec">查詢印表機狀態</button>
     <div style="margin-top:6px;font-size:14px">每 <input id="interval" type="number" min="5" value="10" style="width:64px"> 秒查詢一次新訂單
       <label style="margin-left:12px"><input type="checkbox" id="optCut"> 送切紙指令（這台手撕，預設不送）</label></div>
     <div class="hint">第一次使用：依序按 ①選 COM3、②貼上出單密碼、③開始。之後重新開啟這一頁會<b>自動連線並自動開始</b>，不用再點。</div>
@@ -174,13 +175,17 @@ async function openPort(p) {
   if (p.readable || p.writable) { port = p; return; }
   await p.open({ baudRate: 115200 });
   port = p;
+  startReadLoop(p);
 }
 async function writeBytes(data) {
   if (MOCK) { mockSent.push(data); return; }
   if (!port) throw new Error('出單機尚未連線');
   if (!port.writable) await openPort(port);
   const w = port.writable.getWriter();
-  try { await w.write(data); } finally { w.releaseLock(); }
+  try {
+    // 藍牙序列埠在出單機關機/離開範圍時，write可能永遠不回應，設8秒逾時當作失敗
+    await Promise.race([w.write(data), new Promise((_, rej) => setTimeout(() => rej(new Error('寫入逾時（出單機無回應）')), 8000))]);
+  } finally { try { w.releaseLock(); } catch (e) {} }
 }
 function portReady() { return MOCK || !!port; }
 function refreshButtons() {
@@ -207,9 +212,97 @@ $('btnTest').onclick = async () => {
   } catch (e) { log('測試單失敗：' + e.message, 'e'); }
 };
 
+// ---------- 印表機狀態查詢（ESC/POS DLE EOT）----------
+// 出單機收到資料就會回成功，沒紙/上蓋開啟時網頁是不知道的，所以要主動問。這台是否支援要實測(按「查詢印表機狀態」)。
+let rxQueue = [], rxWaiters = [], readerActive = false, statusSupported = false, lastProblem = '';
+async function startReadLoop(p) {
+  if (MOCK || !p.readable || readerActive) return;
+  readerActive = true;
+  try {
+    const reader = p.readable.getReader();
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) for (const b of value) rxQueue.push(b);
+        const ws = rxWaiters; rxWaiters = []; ws.forEach(f => f());
+      }
+    } finally { try { reader.releaseLock(); } catch (e) {} }
+  } catch (e) { /* 埠關閉或斷線，讀取迴圈自然結束 */ } finally { readerActive = false; }
+}
+function waitRx(ms) {
+  return new Promise(res => {
+    let w; const t = setTimeout(() => { rxWaiters = rxWaiters.filter(f => f !== w); res(false); }, ms);
+    w = () => { clearTimeout(t); res(true); }; rxWaiters.push(w);
+  });
+}
+async function queryStatus(n) {
+  if (MOCK) return null;
+  rxQueue.length = 0;
+  await writeBytes(new Uint8Array([0x10, 0x04, n]));
+  if (!rxQueue.length) await waitRx(1200);
+  return rxQueue.length ? rxQueue.shift() : null;
+}
+// 回傳 {supported, problem}：problem 為空字串代表正常
+async function checkPrinter() {
+  const s1 = await queryStatus(1);
+  if (s1 === null) return { supported: false, problem: '' };
+  const s2 = await queryStatus(2), s4 = await queryStatus(4);
+  const probs = [];
+  if (s1 & 0x08) probs.push('出單機離線');
+  if (s2 !== null && (s2 & 0x04)) probs.push('上蓋沒蓋好');
+  if (s2 !== null && (s2 & 0x40)) probs.push('出單機錯誤');
+  if (s4 !== null && (s4 & 0x60)) probs.push('缺紙');
+  const nearEnd = s4 !== null && !(s4 & 0x60) && (s4 & 0x0C);   // 紙快用完只警示，不擋接單
+  return { supported: true, problem: probs.join('、'), warn: nearEnd ? '紙快用完' : '', raw: [s1, s2, s4] };
+}
+$('btnStatus').onclick = async () => {
+  try {
+    if (!portReady()) { log('請先連線出單機', 'y'); return; }
+    const hex = v => v === null ? '無回應' : '0x' + v.toString(16).padStart(2, '0') + ' (' + v.toString(2).padStart(8, '0') + ')';
+    const r = [];
+    for (const n of [1, 2, 3, 4]) r.push(await queryStatus(n));
+    log('狀態查詢 n=1 印表機:' + hex(r[0]) + '　n=2 離線原因:' + hex(r[1]) + '　n=3 錯誤:' + hex(r[2]) + '　n=4 紙感測:' + hex(r[3]));
+    const c = await checkPrinter();
+    statusSupported = c.supported;
+    log(c.supported ? ('判讀：' + (c.problem || '正常') + (c.warn ? '（' + c.warn + '）' : '') + '。之後接單前會自動檢查缺紙/上蓋') : '這台出單機沒有回應狀態查詢，無法偵測缺紙（仍可正常出單）', c.supported ? (c.problem ? 'e' : 'g') : 'y');
+  } catch (e) { log('狀態查詢失敗：' + e.message, 'e'); }
+};
+
+// ---------- 斷線自動重連 ----------
+let reconnecting = false, reconnectTries = 0, wantRun = false;
+function startReconnect() {
+  if (MOCK || reconnecting) return;
+  reconnecting = true; reconnectTries = 0;
+  setState('stPort', '重新連線中…', 'bad');
+  const attempt = async () => {
+    reconnectTries++;
+    try {
+      const ports = await navigator.serial.getPorts();
+      if (!ports.length) throw new Error('找不到已授權的出單機，請按 ① 重新選擇');
+      try { if (port) await port.close(); } catch (e) {}
+      port = null;
+      await openPort(ports[0]);
+      // 開得起來不代表出單機真的開機，送一個初始化指令確認寫得進去
+      await writeBytes(new Uint8Array([0x1B, 0x40]));
+      reconnecting = false; refreshButtons(); log('出單機已重新連線', 'g'); alarm(false);
+      if (wantRun) setRunning(true);
+    } catch (e) {
+      port = null; refreshButtons(); setState('stPort', '重新連線中…（第' + reconnectTries + '次）', 'bad');
+      if (reconnectTries % 6 === 0) { log('重連多次失敗，重新載入頁面（' + e.message + '）', 'e'); setTimeout(() => location.reload(), 500); return; }
+      setTimeout(attempt, 10000);
+    }
+  };
+  setTimeout(attempt, 3000);
+}
+if (!MOCK && 'serial' in navigator) {
+  navigator.serial.addEventListener('disconnect', () => { log('出單機已斷線', 'e'); port = null; refreshButtons(); alarm(true); if (wantRun) { running = false; clearTimeout(timer); startReconnect(); } });
+  navigator.serial.addEventListener('connect', () => { if (wantRun && !portReady()) startReconnect(); });
+}
+
 // ---------- 接單列印迴圈 ----------
 function setRunning(on) {
-  running = on;
+  running = on; if (on) wantRun = true;
   setState('stRun', on ? '執行中' : '已暫停', on ? 'ok' : 'bad');
   $('btnToggle').textContent = on ? '③ 暫停接單列印' : '③ 開始接單列印';
   clearTimeout(timer);
@@ -222,7 +315,7 @@ function schedule(ms) {
   const sec = Math.max(5, Number($('interval').value) || 10);
   timer = setTimeout(tick, ms === undefined ? sec * 1000 : ms);
 }
-$('btnToggle').onclick = () => setRunning(!running);
+$('btnToggle').onclick = () => { if (running) wantRun = false; setRunning(!running); };
 
 async function tick() {
   if (!running || busy) return;
@@ -230,6 +323,15 @@ async function tick() {
   let gap = null;
   try {
     const key = getKey();
+    if (statusSupported && portReady()) {
+      const c = await checkPrinter();
+      if (c.supported && c.problem) {
+        if (lastProblem !== c.problem) log('出單機異常：' + c.problem + '，暫停領單直到排除', 'e');
+        lastProblem = c.problem; setState('stRun', '⚠ ' + c.problem, 'bad'); alarm(true); return;
+      }
+      if (lastProblem) { log('出單機恢復正常，繼續接單', 'g'); lastProblem = ''; setState('stRun', '執行中', 'ok'); }
+      if (c.warn) setState('stPoll', new Date().toLocaleTimeString('zh-TW', { hour12: false }) + '　⚠' + c.warn);
+    }
     const claim = await apiPost({ action: 'claimPrint', storeId: STORE_ID, printKey: key, limit: 3 });
     setState('stPoll', new Date().toLocaleTimeString('zh-TW', { hour12: false }));
     if (claim.status !== 'ok') { log('領單被拒：' + (claim.message || ''), 'e'); setState('stRun', '出單密碼有誤？', 'bad'); alarm(true); return; }
@@ -254,13 +356,13 @@ async function printOne(t) {
         (rep.status === 'ok' ? '' : '；回報失敗：' + rep.message), rep.status === 'ok' ? 'g' : 'y');
     alarm(false);
   } catch (e) {
-    log('印出失敗 ' + t.orderId + '：' + e.message + ' → 退回佇列', 'e');
+    log('印出失敗 ' + t.orderId + '：' + e.message + ' → 退回佇列，開始自動重連', 'e');
     try { await apiPost({ action: 'printFailed', orderId: t.orderId, printKey: getKey() }); } catch (_) {}
     try { if (port && !MOCK) { await port.close(); } } catch (_) {}
     if (!MOCK) port = null;
     refreshButtons(); alarm(true);
-    setState('stRun', '出單機斷線，請重新連線', 'bad');
-    running = false; clearTimeout(timer); $('btnToggle').textContent = '③ 開始接單列印';
+    running = false; clearTimeout(timer);     // 停止領單；重連成功後由startReconnect恢復(wantRun仍為true，localStorage的執行旗標也還在)
+    if (!MOCK) startReconnect();
     e.printerError = true;
     throw e;   // 中止這一批剩下的單，它們會在逾時後自動回到佇列
   }
@@ -304,9 +406,12 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
     }
   } catch (e) { log('自動連線失敗：' + e.message, 'e'); }
   refreshButtons();
-  let wantRun = false; try { wantRun = localStorage.getItem('abao_print_run') === '1'; } catch (e) {}
+  try { wantRun = localStorage.getItem('abao_print_run') === '1'; } catch (e) {}
+  // 連上後先問一次狀態，判斷這台出單機支不支援缺紙偵測
+  if (portReady() && !MOCK) { try { const c = await checkPrinter(); statusSupported = c.supported; log(c.supported ? '出單機支援狀態回報，會自動偵測缺紙/上蓋（目前：' + (c.problem || '正常') + '）' : '出單機不回報狀態，無法偵測缺紙', c.supported ? 'g' : 'y'); } catch (e) { log('狀態查詢失敗：' + e.message, 'y'); } }
   if (portReady() && getKey() && wantRun) { log('自動開始接單列印'); setRunning(true); }
   else if (!getKey()) log('尚未設定出單密碼，請按 ② 設定', 'y');
+  else if (wantRun && !portReady()) { log('上次是執行中，但目前連不上出單機，自動重連'); startReconnect(); }
 })();
 window.__print = { get sent() { return mockSent; }, get running() { return running; }, tick, setRunning };
 </script>
