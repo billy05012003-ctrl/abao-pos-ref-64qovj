@@ -326,6 +326,15 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
       <div id="stuck-payment-list"><div class="empty-hint">載入中...</div></div>
     </section>
 
+    <section style="margin:0 0 12px;">
+      <h2>訂單退款 <span class="refresh-link" onclick="loadRefundableOrders()">載入／重新整理</span></h2>
+      <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
+        列出近3天已收款、尚未退款的訂單。退款需要<b>店長以上</b>輸入PIN。線上信用卡單會直接向藍新退回客人的卡（系統先取消授權，已請款則改請退款）；
+        現場單只記錄「現場退還」，現金／LINE Pay請店員當場退給客人。退款後會一併<b>扣回點數與消費</b>、<b>退回這張單用掉的兌換券</b>，並取消還沒印出的單。
+      </div>
+      <div id="refund-list"><div class="empty-hint">按上方「載入」查看可退款訂單</div></div>
+    </section>
+
     <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
     <h2 style="font-size:1rem;margin:0 0 4px;">品項上下架</h2>
     <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px;">點分類展開/收合。「線上點餐」跟「POS功能」是兩個獨立開關，互不影響。</div>
@@ -517,6 +526,40 @@ function loadStuckPaymentOrders() {
         <button class="btn btn-primary" onclick="manualConfirmPayment('${o.orderId}')">標記已付款</button>
       </div>
     `).join('');
+  });
+}
+
+// ---- 訂單退款(2026-09-19新增)：店長以上PIN，後端refundOrder統一處理金流退款+點數/消費回沖+券退回 ----
+function loadRefundableOrders() {
+  const box = document.getElementById('refund-list');
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'refundableOrders', storeId: STORE_ID }).then(data => {
+    if (data.status !== 'ok') { box.innerHTML = '<div class="empty-hint">載入失敗，請稍後再試</div>'; return; }
+    if (!data.orders.length) { box.innerHTML = '<div class="empty-hint">近3天沒有可退款的訂單</div>'; return; }
+    box.innerHTML = data.orders.map(o => `
+      <div class="order-card">
+        <div>
+          <div><strong>${o.orderId}</strong> <span class="meta">[${o.channel}] ${o.status}</span></div>
+          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div>
+        </div>
+        ${o.needsManual
+          ? '<button class="btn" disabled style="opacity:.5;">無法自動退</button>'
+          : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.gateway ? 'true' : 'false'})">退款</button>`}
+      </div>
+    `).join('');
+  }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+}
+
+function doRefund(orderId, amount, viaGateway) {
+  const how = viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回客人的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給客人。';
+  if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。')) return;
+  openPosStaffPinPrompt_('退款需要店長以上權限確認', (staffName, staffPin) => {
+    apiPost({ action: 'refundOrder', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
+      if (data.status !== 'ok') { alert('退款失敗：' + (data.message || '')); loadRefundableOrders(); return; }
+      alert('退款完成\n方式：' + data.mode + '\n金額：$' + data.amount +
+            '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張');
+      loadRefundableOrders(); loadOrders(); loadRevenue();
+    }).catch(() => alert('網路異常，退款結果不確定，請先到「訂單退款」重新整理確認這張單的狀態，不要重複退款'));
   });
 }
 
