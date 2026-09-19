@@ -1690,7 +1690,8 @@ function submitOrder(e) {
   const total = Math.max(0, rawTotal - voucherDiscount);
   const appliedVoucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
-  const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price }));
+  // 2026-09-19：補送品項備註(note)，出單機廚房單會印在該品項下面；之前只送name/size/qty/price，客人寫的「少蔥」等會遺失
+  const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '' }));
 
   // 「取餐現場付款」只有PAY_AT_PICKUP_ENABLED開啟時欄位才會顯示，關閉時select維持隱藏，
   // 這裡讀不到值就當作沒選(走原本的線上付款流程)，跟目前行為完全一致

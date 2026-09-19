@@ -2410,7 +2410,8 @@ function onPosScheduleToggle() {
 
 function submitPosOrder() {
   const total = getPosCartFinalTotal();
-  const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price }));
+  // 2026-09-19：補送品項備註(note)供出單機廚房單使用
+  const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '' }));
   const paymentMethod = document.getElementById('pos-payment-method').value;
   const scheduled = document.getElementById('pos-schedule-toggle').checked;
   let pickupDate = '', pickupTime = '';
