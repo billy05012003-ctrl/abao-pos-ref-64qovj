@@ -1789,7 +1789,11 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
   };
   return redeemAppliedVouchers().then(() => {
     if (ctx && ctx.backendOrderId && !skipConfirmPayment) {
-      return confirmPaymentOnBackend(ctx.backendOrderId).then(finish).catch(finish);
+      return confirmPaymentOnBackend(ctx.backendOrderId).then(res => {
+        // 2026-09-19：後端已停用模擬付款(res.status非ok)時，不能讓客人看到「訂單完成」卻其實沒付款
+        if (res && res.status !== 'ok') { alert(res.message || '付款確認失敗，請改用線上信用卡付款'); return; }
+        finish();
+      }).catch(finish);
     } else {
       finish();
       return Promise.resolve();
@@ -1859,7 +1863,8 @@ function pollMpgOrderStatus_(orderId, ctx, attempt) {
     if (data.status === 'ok' && (data.orderStatus === '未取餐' || data.orderStatus === '已取餐')) {
       document.getElementById('mpg-waiting-view').style.display = 'none';
       if (ctx) {
-        completeOrderConfirmation_(ctx);
+        // 藍新付款已由NotifyURL在後端確認過，不能再呼叫confirmPayment(已停用，且不需要)
+        completeOrderConfirmation_(ctx, true);
       } else {
         // localStorage剛好被清過或跨裝置導回，摘要內容還原不了，至少讓客人知道訂單編號跟成功狀態
         document.getElementById('order-no').textContent = orderId;

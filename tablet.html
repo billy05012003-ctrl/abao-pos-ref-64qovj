@@ -522,10 +522,14 @@ function loadStuckPaymentOrders() {
 
 function manualConfirmPayment(orderId) {
   if (!confirm('確定「' + orderId + '」這筆訂單客人真的已經付款成功嗎？\n\n請先去藍新商店後台核對過交易紀錄再標記，標記後客人可以直接來取餐。')) return;
-  apiPost({ action: 'confirmPayment', orderId: orderId }).then(() => {
-    loadStuckPaymentOrders();
-    loadOrders();
-    loadRevenue();
+  // 2026-09-19：改成需要店長以上PIN(後端staffConfirmPayment)，原本任何人都能呼叫的confirmPayment已關閉
+  openPosStaffPinPrompt_('標記已付款需要店長以上權限確認', (staffName, staffPin) => {
+    apiPost({ action: 'staffConfirmPayment', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
+      if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
+      loadStuckPaymentOrders();
+      loadOrders();
+      loadRevenue();
+    });
   });
 }
 
