@@ -392,7 +392,10 @@ const STAFF_ONLY_CATEGORIES = ['單點', '三明治', '其他'];
 const STORE_NAME = "美寶美食館（A-Bao溪湖培英店）";
 // 藍新商店尚未開通，真實付款流程只在網址帶?mpgtest=1時才會啟用，避免正式客人點下去撞到
 // 「查無此商店代號」的錯誤——正式客人在這個開關拿掉之前，一律維持看到「模擬付款」畫面
-const MPG_TEST_MODE = new URLSearchParams(location.search).get('mpgtest') === '1';
+// 2026-09-19：?mpgtest=1 改走藍新「測試站」(測試卡不扣款，後端有安全開關)；?mpgtest=live 才是正式站真刷卡
+const MPG_TEST_PARAM = new URLSearchParams(location.search).get('mpgtest');
+const MPG_TEST_MODE = MPG_TEST_PARAM === '1' || MPG_TEST_PARAM === 'live';
+const MPG_SANDBOX = MPG_TEST_PARAM === '1';
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡集中兩個小函式自動帶上，
 // 全站呼叫後端一律走這兩個函式，之後新增任何呼叫都自動套用，不用每處各自補
@@ -1808,7 +1811,7 @@ function startMpgPayment(orderId, amount) {
   // 等藍新導回來時原本的JS記憶體狀態已經沒了，要靠這份存檔重建完成畫面
   try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(pendingOrderContext)); } catch (e) {}
   const returnUrl = location.origin + location.pathname + '?mpgreturn=1&orderId=' + encodeURIComponent(orderId);
-  apiPost_({ action: 'createMpgPayment', orderId, amount, itemDesc: STORE_NAME, returnUrl }).then(data => {
+  apiPost_({ action: 'createMpgPayment', orderId, amount, itemDesc: STORE_NAME, returnUrl, sandbox: MPG_SANDBOX }).then(data => {
     if (data.status !== 'ok') {
       alert('建立付款請求失敗：' + (data.message || '') + '\n請改用下方模擬付款完成訂單。');
       document.getElementById('mockpay-order-no').textContent = pendingOrderContext.orderNo;
