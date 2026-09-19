@@ -1725,6 +1725,9 @@ function submitOrder(e) {
     pickupTime: document.getElementById('pickup-time').value,
     items: items,
     totalAmount: total,
+    // 2026-09-19：帶上已驗證的會員電話與所選兌換券編號，由後端驗證券、付款成功時核銷券並核發點數(不再靠付款後回到本頁才核銷)
+    memberPhone: phone,
+    voucherIds: appliedVoucherIds,
     paymentMethod: payAtPickupChosen ? '取餐付款' : undefined,
     note: `訂單編號:${orderNo}　姓名:${name}　電話:${phone}${note ? '　備註:' + note : ''}`
   }).then(data => {
@@ -1788,7 +1791,8 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
       }).catch(err => console.warn('兌換券核銷失敗(不影響訂單完成，可能網路問題)', voucherId, err))
     ));
   };
-  return redeemAppliedVouchers().then(() => {
+  // 2026-09-19起兌換券改由後端在付款成功(取餐付款則下單當下)核銷，這裡不再由頁面核銷，避免客人付完款直接關頁導致券沒被核銷
+  return Promise.resolve().then(() => {
     if (ctx && ctx.backendOrderId && !skipConfirmPayment) {
       return confirmPaymentOnBackend(ctx.backendOrderId).then(res => {
         // 2026-09-19：後端已停用模擬付款(res.status非ok)時，不能讓客人看到「訂單完成」卻其實沒付款
