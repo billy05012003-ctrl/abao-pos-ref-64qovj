@@ -535,7 +535,13 @@ function loadRefundableOrders() {
   box.innerHTML = '<div class="empty-hint">載入中...</div>';
   apiGet({ action: 'refundableOrders', storeId: STORE_ID }).then(data => {
     if (data.status !== 'ok') { box.innerHTML = '<div class="empty-hint">載入失敗，請稍後再試</div>'; return; }
-    if (!data.orders.length) { box.innerHTML = '<div class="empty-hint">近3天沒有可退款的訂單</div>'; return; }
+    // 退款受理制(2026-09-20)：剛付款的信用卡單要等藍新請款完成才能退，系統先受理、之後自動退，這裡列出還在等的單
+    const pend = data.pendingRefunds || [];
+    const pendHtml = pend.length
+      ? '<div class="meta" style="margin-top:10px;">⏳ 退款處理中（等藍新請款完成後自動退款，不用再操作）：<br>' +
+        pend.map(p => p.orderId + '　$' + p.totalAmount + '　(' + p.requestedAt + ' 受理)').join('<br>') + '</div>'
+      : '';
+    if (!data.orders.length) { box.innerHTML = '<div class="empty-hint">近3天沒有可退款的訂單</div>' + pendHtml; return; }
     box.innerHTML = data.orders.map(o => `
       <div class="order-card">
         <div>
@@ -546,7 +552,7 @@ function loadRefundableOrders() {
           ? '<button class="btn" disabled style="opacity:.5;">無法自動退</button>'
           : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.gateway ? 'true' : 'false'})">退款</button>`}
       </div>
-    `).join('');
+    `).join('') + pendHtml;
   }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
 }
 
@@ -556,8 +562,13 @@ function doRefund(orderId, amount, viaGateway) {
   openPosStaffPinPrompt_('退款需要店長以上權限確認', (staffName, staffPin) => {
     apiPost({ action: 'refundOrder', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
       if (data.status !== 'ok') { alert('退款失敗：' + (data.message || '')); loadRefundableOrders(); return; }
-      alert('退款完成\n方式：' + data.mode + '\n金額：$' + data.amount +
-            '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張');
+      if (data.pending) {
+        alert('退款已受理（還沒退到客人的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。\n系統已先扣回點數與消費、退回兌換券，之後會自動退款，不用再操作，也請勿重複按退款。\n金額：$' + data.amount +
+              '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張');
+      } else {
+        alert('退款完成\n方式：' + data.mode + '\n金額：$' + data.amount +
+              '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張');
+      }
       loadRefundableOrders(); loadOrders(); loadRevenue();
     }).catch(() => alert('網路異常，退款結果不確定，請先到「訂單退款」重新整理確認這張單的狀態，不要重複退款'));
   });
