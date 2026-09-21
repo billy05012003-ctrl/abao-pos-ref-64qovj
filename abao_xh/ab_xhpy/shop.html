@@ -529,7 +529,7 @@ function loadScheduleSettings() {
 const scheduleSettingsReady = loadScheduleSettings();
 
 // 付款方式設定(2026-09-16新增)：只用來決定要不要顯示「取餐現場付款」選項，讀取失敗一律預設關閉，
-// 維持跟現行行為完全一致(顧客只看得到既有的線上付款/模擬付款流程)，不像商店時段設定那樣需要
+// 維持跟現行行為完全一致(顧客只看得到既有的線上付款流程)，不像商店時段設定那樣需要
 // 本地快取兜底(付款方式不影響能不能點餐，讀不到就先不顯示這個選項，客人一樣能正常送單)
 let PAY_AT_PICKUP_ENABLED = false;
 function loadPaymentMethodSettings_() {
@@ -562,7 +562,7 @@ function getPickupDateISO(offsetDays) {
 function createPendingOrderOnBackend(payload) {
   return apiPost_(payload);
 }
-// 標記訂單為已付款（現階段由「模擬付款」按鈕觸發，之後改由藍新付款完成通知呼叫）
+// 標記訂單為已付款（實際由藍新付款完成通知在後端處理，此函式僅保留相容用）
 function confirmPaymentOnBackend(orderId) {
   return apiPost_({ action: 'confirmPayment', orderId });
 }
@@ -1666,7 +1666,7 @@ function submitOrder(e) {
   } catch (err) {}
 
   const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓客人重選時段
-  // voucherIds/phone先存著，等「模擬付款」(未來是藍新真實付款成功)那一步才真的呼叫後端核銷，
+  // voucherIds/phone先存著，等藍新付款成功那一步才由後端核銷，
   // 避免客人填完折抵資訊卻棄單，兌換券卻已經被扣掉的情況
   pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, cartBackup: cartBackup };
   cart = [];
@@ -1712,7 +1712,7 @@ function submitOrder(e) {
 }
 
 // 共用「訂單真正付款完成」收尾邏輯：核銷已套用的兌換券→呼叫confirmPayment→顯示完成畫面。
-// 模擬付款(confirmMockPayment)、藍新MPG真實付款(pollMpgOrderStatus確認成功後)都走這裡，避免重複維護。
+// 藍新MPG付款(pollMpgOrderStatus確認成功後)、取餐現場付款都走這裡，避免重複維護。
 // skipConfirmPayment(2026-09-16新增)：「取餐付款」訂單後端本來就不是走線上金流確認這條路(見上方
 // submitOrder)，傳true代表只需要核銷兌換券+顯示完成畫面，不能呼叫confirmPayment誤標成已付款
 function completeOrderConfirmation_(ctx, skipConfirmPayment) {
@@ -1736,7 +1736,7 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
   return Promise.resolve().then(() => {
     if (ctx && ctx.backendOrderId && !skipConfirmPayment) {
       return confirmPaymentOnBackend(ctx.backendOrderId).then(res => {
-        // 2026-09-19：後端已停用模擬付款(res.status非ok)時，不能讓客人看到「訂單完成」卻其實沒付款
+        // 2026-09-19：後端拒絕(res.status非ok)時，不能讓客人看到「訂單完成」卻其實沒付款
         if (res && res.status !== 'ok') { alert(res.message || '付款確認失敗，請改用線上信用卡付款'); return; }
         finish();
       }).catch(finish);
@@ -1760,7 +1760,7 @@ function restoreCartAfterFailure_(message) {
   backToCart();
 }
 
-// ---- 藍新MPG真實付款流程（2026-09-16新增，目前只在網址帶?mpgtest=1時啟用，見開頭MPG_TEST_MODE說明）----
+// ---- 藍新MPG付款流程（預設走正式站；網址帶?mpgtest=1時走驗證環境，見開頭MPG_SANDBOX說明）----
 // 建立付款請求→組表單→導去藍新付款頁；付款完成後藍新會導回本頁(ReturnURL帶mpgreturn=1&orderId=)，
 // 同時藍新會非同步呼叫後端NotifyURL完成真正的付款確認(見checkMpgReturn的輪詢)
 function startMpgPayment(orderId, amount) {
