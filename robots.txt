@@ -1,2 +1,3 @@
 User-agent: *
+Allow: /abao_xh/ab_xhpy/info.html
 Disallow: /
