@@ -122,54 +122,43 @@ function apiPost(payload) {
 const getKey = () => { try { return localStorage.getItem('abao_print_key') || ''; } catch (e) { return ''; } };
 
 // ---------- KBBluetooth（Kiosk Browser Lockdown的原生JS橋接，不透過RawBT）----------
+// 2026-09-23重要發現：isConnected()回報不可信——印表機關機時仍可能顯示true(誤判)，
+// 靠這個狀態判斷「重連是否成功」會提早放棄、之後送印一直失敗(實測發生過)。
+// 改成：只相信「真的送資料」這個動作的成敗，isConnected()只拿來做畫面顯示參考用，不再拿來決定要不要重連/是否成功。
 function hasKB() { return typeof window.KBBluetooth !== 'undefined'; }
 function kbConnected() { try { return hasKB() && KBBluetooth.isConnected(); } catch (e) { return false; } }
-function kbConnecting() { try { return hasKB() && KBBluetooth.isConnecting(); } catch (e) { return false; } }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function refreshIfaceState() {
   setState('stIface', hasKB() ? 'KBBluetooth已偵測' : '找不到KBBluetooth（要用Kiosk Browser Lockdown開、且App設定要開JavaScript Interface）', hasKB() ? 'ok' : 'bad');
-  if (!reconnecting) setState('stPort', kbConnected() ? '已連線' : '尚未連線', kbConnected() ? 'ok' : 'bad');
+  setState('stPort', kbConnected() ? '已連線(僅供參考)' : '尚未連線', kbConnected() ? 'ok' : 'bad');
   refreshButtons();
 }
-function refreshButtons() { $('btnToggle').disabled = !(kbConnected() && getKey()); }
+function refreshButtons() { $('btnToggle').disabled = !(hasKB() && getKey()); }
 $('btnConnect').onclick = () => {
   if (!hasKB()) { log('找不到KBBluetooth介面，確認是用Kiosk Browser Lockdown開這頁、且已在App設定開啟JavaScript Interface', 'e'); return; }
   try { KBBluetooth.connect(); log('已呼叫連線（非同步，稍等再看「印表機連線」狀態）', 'g'); } catch (e) { log('連線呼叫失敗：' + e.message, 'e'); }
   setTimeout(refreshIfaceState, 1500);
 };
-function kbPrint(bytes) {
+// 送印：不相信isConnected()，永遠先送送看；失敗就強制重新呼叫connect()、等3秒、再送一次，最多重試到第3次才放棄
+// (2026-09-23實測驗證：手動按連線後馬上能印，代表「強制重新connect()」才是真正有效的動作，不是狀態判斷)
+async function kbPrint(bytes) {
   if (!hasKB()) { log('找不到KBBluetooth介面，無法送印', 'e'); return false; }
-  if (!kbConnected()) { log('印表機尚未連線，先按①連線', 'y'); startReconnect(); return false; }
-  try { KBBluetooth.sendHexString(toHex(bytes)); return true; }
-  catch (e) { log('送印失敗：' + e.message, 'e'); startReconnect(); return false; }
-}
-
-// ---------- 藍牙斷線自動重連（比照筆電版Web Serial的startReconnect，KBBluetooth沒有斷線事件通知，
-// 只能靠isConnected()輪詢偵測，偵測到斷線或送印失敗都會觸發這裡）----------
-let reconnecting = false, reconnectTries = 0;
-function startReconnect() {
-  if (reconnecting || !hasKB()) return;
-  reconnecting = true; reconnectTries = 0;
-  setState('stPort', '重新連線中…', 'bad');
-  const attempt = () => {
-    reconnectTries++;
-    try { KBBluetooth.connect(); } catch (e) {}
-    setTimeout(() => {
-      if (kbConnected()) {
-        reconnecting = false; refreshIfaceState(); log('印表機已重新連線', 'g');
-      } else if (kbConnecting()) {
-        setState('stPort', '重新連線中…（第' + reconnectTries + '次，仍在連線中）', 'bad');
-        setTimeout(attempt, 8000);
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try { KBBluetooth.sendHexString(toHex(bytes)); if (attempt > 1) log('重新連線後送印成功（第' + attempt + '次嘗試）', 'g'); return true; }
+    catch (e) {
+      if (attempt < 3) {
+        log('送印失敗（第' + attempt + '次，' + e.message + '），強制重新連線後再試', 'y');
+        setState('stPort', '送印失敗，重新連線中…', 'bad');
+        try { KBBluetooth.connect(); } catch (e2) {}
+        await sleep(3000);
       } else {
-        setState('stPort', '重新連線中…（第' + reconnectTries + '次）', 'bad');
-        if (reconnectTries % 6 === 0) log('印表機重連已失敗' + reconnectTries + '次，持續嘗試中（檢查印表機是否開機/在範圍內）', 'e');
-        setTimeout(attempt, 8000);
+        log('送印失敗（已重試3次仍失敗，' + e.message + '），留給下次輪詢再試', 'e');
       }
-    }, 2500);
-  };
-  attempt();
+    }
+  }
+  refreshIfaceState();
+  return false;
 }
-// 每10秒順便檢查一次連線是否還在(不是只有送印失敗才檢查，避免斷線後要等到下一張單才發現；跟查詢新訂單同步為10秒好記)
-setInterval(() => { if (running && hasKB() && !kbConnected() && !kbConnecting() && !reconnecting) { log('偵測到印表機已斷線，開始自動重連', 'y'); startReconnect(); } }, 10000);
 
 $('btnKey').onclick = () => {
   const v = prompt('請貼上出單密碼（只會存在這台平板）：', getKey());
@@ -177,10 +166,10 @@ $('btnKey').onclick = () => {
   try { localStorage.setItem('abao_print_key', v.trim()); } catch (e) {}
   log(v.trim() ? '出單密碼已設定' : '出單密碼已清除', v.trim() ? 'g' : 'y'); refreshButtons();
 };
-$('btnTest').onclick = () => {
+$('btnTest').onclick = async () => {
   const now = new Date().toLocaleString('zh-TW', { hour12: false });
   const { data } = buildTicketBytes(['== 出單頁測試(KioskBT) ==', STORE_LABEL, now, '中文、English、$123 ○']);
-  const ok = kbPrint(data);
+  const ok = await kbPrint(data);
   log(ok ? '測試單已送出（用眼睛看出單機有沒有真的印出來）' : '測試單送出失敗', ok ? 'g' : 'e');
 };
 
@@ -223,7 +212,7 @@ async function tick() {
 }
 async function printOne(t) {
   const { data, missing } = buildTicketBytes(t.lines);
-  const ok = kbPrint(data);
+  const ok = await kbPrint(data);
   if (!ok) { log('印出失敗 ' + t.orderId + '，留在佇列等下次重試', 'e'); return; }
   try {
     const rep = await apiPost({ action: 'printed', orderId: t.orderId, printKey: getKey() });
