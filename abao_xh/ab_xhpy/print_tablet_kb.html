@@ -168,8 +168,8 @@ function startReconnect() {
   };
   attempt();
 }
-// 每15秒順便檢查一次連線是否還在(不是只有送印失敗才檢查，避免斷線後要等到下一張單才發現)
-setInterval(() => { if (running && hasKB() && !kbConnected() && !kbConnecting() && !reconnecting) { log('偵測到印表機已斷線，開始自動重連', 'y'); startReconnect(); } }, 15000);
+// 每10秒順便檢查一次連線是否還在(不是只有送印失敗才檢查，避免斷線後要等到下一張單才發現；跟查詢新訂單同步為10秒好記)
+setInterval(() => { if (running && hasKB() && !kbConnected() && !kbConnecting() && !reconnecting) { log('偵測到印表機已斷線，開始自動重連', 'y'); startReconnect(); } }, 10000);
 
 $('btnKey').onclick = () => {
   const v = prompt('請貼上出單密碼（只會存在這台平板）：', getKey());
