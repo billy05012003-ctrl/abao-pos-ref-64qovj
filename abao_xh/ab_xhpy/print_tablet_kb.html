@@ -124,9 +124,10 @@ const getKey = () => { try { return localStorage.getItem('abao_print_key') || ''
 // ---------- KBBluetooth（Kiosk Browser Lockdown的原生JS橋接，不透過RawBT）----------
 function hasKB() { return typeof window.KBBluetooth !== 'undefined'; }
 function kbConnected() { try { return hasKB() && KBBluetooth.isConnected(); } catch (e) { return false; } }
+function kbConnecting() { try { return hasKB() && KBBluetooth.isConnecting(); } catch (e) { return false; } }
 function refreshIfaceState() {
   setState('stIface', hasKB() ? 'KBBluetooth已偵測' : '找不到KBBluetooth（要用Kiosk Browser Lockdown開、且App設定要開JavaScript Interface）', hasKB() ? 'ok' : 'bad');
-  setState('stPort', kbConnected() ? '已連線' : '尚未連線', kbConnected() ? 'ok' : 'bad');
+  if (!reconnecting) setState('stPort', kbConnected() ? '已連線' : '尚未連線', kbConnected() ? 'ok' : 'bad');
   refreshButtons();
 }
 function refreshButtons() { $('btnToggle').disabled = !(kbConnected() && getKey()); }
@@ -137,10 +138,38 @@ $('btnConnect').onclick = () => {
 };
 function kbPrint(bytes) {
   if (!hasKB()) { log('找不到KBBluetooth介面，無法送印', 'e'); return false; }
-  if (!kbConnected()) { log('印表機尚未連線，先按①連線', 'y'); return false; }
+  if (!kbConnected()) { log('印表機尚未連線，先按①連線', 'y'); startReconnect(); return false; }
   try { KBBluetooth.sendHexString(toHex(bytes)); return true; }
-  catch (e) { log('送印失敗：' + e.message, 'e'); return false; }
+  catch (e) { log('送印失敗：' + e.message, 'e'); startReconnect(); return false; }
 }
+
+// ---------- 藍牙斷線自動重連（比照筆電版Web Serial的startReconnect，KBBluetooth沒有斷線事件通知，
+// 只能靠isConnected()輪詢偵測，偵測到斷線或送印失敗都會觸發這裡）----------
+let reconnecting = false, reconnectTries = 0;
+function startReconnect() {
+  if (reconnecting || !hasKB()) return;
+  reconnecting = true; reconnectTries = 0;
+  setState('stPort', '重新連線中…', 'bad');
+  const attempt = () => {
+    reconnectTries++;
+    try { KBBluetooth.connect(); } catch (e) {}
+    setTimeout(() => {
+      if (kbConnected()) {
+        reconnecting = false; refreshIfaceState(); log('印表機已重新連線', 'g');
+      } else if (kbConnecting()) {
+        setState('stPort', '重新連線中…（第' + reconnectTries + '次，仍在連線中）', 'bad');
+        setTimeout(attempt, 8000);
+      } else {
+        setState('stPort', '重新連線中…（第' + reconnectTries + '次）', 'bad');
+        if (reconnectTries % 6 === 0) log('印表機重連已失敗' + reconnectTries + '次，持續嘗試中（檢查印表機是否開機/在範圍內）', 'e');
+        setTimeout(attempt, 8000);
+      }
+    }, 2500);
+  };
+  attempt();
+}
+// 每15秒順便檢查一次連線是否還在(不是只有送印失敗才檢查，避免斷線後要等到下一張單才發現)
+setInterval(() => { if (running && hasKB() && !kbConnected() && !kbConnecting() && !reconnecting) { log('偵測到印表機已斷線，開始自動重連', 'y'); startReconnect(); } }, 15000);
 
 $('btnKey').onclick = () => {
   const v = prompt('請貼上出單密碼（只會存在這台平板）：', getKey());
