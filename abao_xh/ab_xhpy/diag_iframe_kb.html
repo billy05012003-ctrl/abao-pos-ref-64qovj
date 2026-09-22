@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>診斷：iframe內KBBluetooth</title>
+<style>body{font:16px/1.6 sans-serif;padding:16px;background:#faf7f2}
+.box{border:2px solid #ccc;border-radius:8px;padding:12px;margin-bottom:12px}
+.ok{color:#2e8b57;font-weight:bold} .bad{color:#c0392b;font-weight:bold}
+iframe{width:100%;height:180px;border:2px dashed #d9622b;border-radius:8px}
+</style>
+</head>
+<body>
+<h2>診斷：外層頁面 vs iframe內 能不能都看到 KBBluetooth</h2>
+
+<div class="box">
+  <h3>① 外層頁面（parent）本身：</h3>
+  <div id="parentResult">檢查中…</div>
+</div>
+
+<div class="box">
+  <h3>② iframe 裡面（跟外層完全獨立的JS環境）：</h3>
+  <iframe id="childFrame" srcdoc="
+    <html><body style='font:16px sans-serif;padding:10px'>
+    <div id='r'>檢查中…</div>
+    <script>
+      var r = document.getElementById('r');
+      if (typeof window.KBBluetooth !== 'undefined') {
+        r.innerHTML = '<b style=color:green>✅ iframe內也找得到KBBluetooth！</b>';
+        try { r.innerHTML += '<br>isConnected(): ' + window.KBBluetooth.isConnected(); } catch(e) { r.innerHTML += '<br>呼叫isConnected()出錯：' + e.message; }
+      } else {
+        r.innerHTML = '<b style=color:red>❌ iframe內看不到KBBluetooth（undefined）</b>';
+      }
+    </script>
+    </body></html>
+  "></iframe>
+</div>
+
+<div class="box" id="conclusion">③ 結論：等上面兩項都跑完自動顯示</div>
+
+<script>
+var pr = document.getElementById('parentResult');
+if (typeof window.KBBluetooth !== 'undefined') {
+  pr.innerHTML = '<b class="ok">✅ 外層找得到KBBluetooth</b>';
+} else {
+  pr.innerHTML = '<b class="bad">❌ 外層也看不到KBBluetooth（代表不是用Kiosk Browser Lockdown開的，或JavaScript Interface沒開）</b>';
+}
+setTimeout(function(){
+  var c = document.getElementById('conclusion');
+  var frameDoc;
+  try { frameDoc = document.getElementById('childFrame').contentWindow; } catch(e) {}
+  var childHasIt = frameDoc && typeof frameDoc.KBBluetooth !== 'undefined';
+  c.innerHTML = '③ 結論：' + (childHasIt
+    ? '<b class="ok">iframe隔離可行，KBBluetooth兩邊都拿得到</b>'
+    : '<b class="bad">iframe裡面拿不到KBBluetooth，這條路走不通，要改用別的隔離方式（例如iframe改用postMessage請外層頁面代為呼叫）</b>');
+}, 500);
+</script>
+</body>
+</html>
