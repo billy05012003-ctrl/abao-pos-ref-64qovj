@@ -39,6 +39,7 @@
       <div class="kv">接單列印<b id="stRun" class="bad">未開始</b></div>
       <div class="kv">最後一次查詢<b id="stPoll">—</b></div>
       <div class="kv">今日已送印<b id="stCount">0 張</b></div>
+      <div class="kv">心跳單<b id="stHeartbeat">尚未開始</b></div>
     </div>
   </div>
 
@@ -49,6 +50,7 @@
     <button id="btnTest" class="sec">印一張測試單</button>
     <div style="margin-top:6px;font-size:14px">每 <input id="interval" type="number" min="5" value="10" style="width:64px"> 秒查詢一次新訂單
       <label style="margin-left:12px"><input type="checkbox" id="optCut"> 送切紙指令（這台手撕，預設不送）</label></div>
+    <div style="margin-top:6px;font-size:14px">每 <input id="heartbeatMin" type="number" min="5" value="30" style="width:64px"> 分鐘印一張心跳單（KBBluetooth無法確認印表機真的收到資料，靠心跳單把「無聲斷線」變成看得見的訊號：好一段時間沒看到心跳單，代表要去按①重新連線）</div>
     <div class="hint">前置：平板系統藍牙先配對好印表機「TM-m10-HIP6666」並設為預設；Kiosk Browser Lockdown設定裡開啟「JavaScript Interface」。之後依序按①②③。</div>
   </div>
 
@@ -173,6 +175,30 @@ $('btnTest').onclick = async () => {
   log(ok ? '測試單已送出（用眼睛看出單機有沒有真的印出來）' : '測試單送出失敗', ok ? 'g' : 'e');
 };
 
+// ---------- 心跳單：KBBluetooth無法確認印表機真的收到資料(見開發記錄)，
+// 靠定時印一張心跳單，把「無聲斷線」變成「好一段時間沒看到紙」這種看得見的訊號，
+// 縮短店員發現問題的時間差(最多就是心跳間隔)，不是完美解法，但不用等原生App就能上線用
+let heartbeatTimer = null, heartbeatCount = 0;
+function startHeartbeat() {
+  stopHeartbeat();
+  const min = Math.max(5, Number($('heartbeatMin').value) || 30);
+  heartbeatTimer = setInterval(sendHeartbeat, min * 60000);
+  setState('stHeartbeat', '已開始，每' + min + '分鐘一次');
+}
+function stopHeartbeat() {
+  clearInterval(heartbeatTimer); heartbeatTimer = null;
+  setState('stHeartbeat', '尚未開始');
+}
+async function sendHeartbeat() {
+  heartbeatCount++;
+  const now = new Date().toLocaleString('zh-TW', { hour12: false });
+  const { data } = buildTicketBytes(['== 心跳單(系統自動) ==', STORE_LABEL, now, '系統正常運作 #' + heartbeatCount, '(好一段時間沒看到心跳單，代表要按①重新連線)']);
+  const ok = await kbPrint(data);
+  const stateText = (ok ? '已印' : '❌送印失敗') + '第' + heartbeatCount + '次（' + now + '）';
+  setState('stHeartbeat', stateText, ok ? 'ok' : 'bad');
+  log(ok ? '心跳單已送出 #' + heartbeatCount : '心跳單送印失敗 #' + heartbeatCount + '（代表印表機可能真的斷線中）', ok ? 'g' : 'e');
+}
+
 // ---------- 接單列印迴圈 ----------
 let running = false, timer = null, busy = false, printedToday = 0, tickStartedAt = 0, wantRun = false;
 function setRunning(on) {
@@ -180,7 +206,7 @@ function setRunning(on) {
   setState('stRun', on ? '執行中' : '已暫停', on ? 'ok' : 'bad');
   $('btnToggle').textContent = on ? '③ 暫停接單列印' : '③ 開始接單列印';
   clearTimeout(timer);
-  if (on) schedule(0);
+  if (on) { schedule(0); startHeartbeat(); } else { stopHeartbeat(); }
   try { localStorage.setItem('abao_print_run', on ? '1' : '0'); } catch (e) {}
   updateWakeLock();
 }
