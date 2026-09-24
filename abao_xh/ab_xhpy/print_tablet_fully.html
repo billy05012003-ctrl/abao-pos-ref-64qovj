@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>出單頁（平板Fully Kiosk）</title>
+<style>
+  :root { --bg:#faf7f2; --card:#fff; --ink:#2b2b2b; --mute:#777; --line:#e4ddd2; --accent:#d9622b; --ok:#2e8b57; --bad:#c0392b; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px 16px 50px; background:var(--bg); color:var(--ink); font:15px/1.6 "Microsoft JhengHei", system-ui, sans-serif; }
+  body.alarm { background:#fde3df; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size:20px; margin:0 0 2px; }
+  .sub { color:var(--mute); font-size:13px; margin-bottom:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .kv { font-size:12px; color:var(--mute); } .kv b { display:block; font-size:16px; color:var(--ink); font-weight:600; }
+  .kv b.ok { color:var(--ok); } .kv b.bad { color:var(--bad); }
+  button { font:inherit; border:0; border-radius:8px; padding:9px 16px; background:var(--accent); color:#fff; cursor:pointer; margin:0 8px 8px 0; }
+  button.sec { background:#eee6da; color:var(--ink); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  input { font:inherit; padding:7px 9px; border:1px solid var(--line); border-radius:6px; }
+  #log { background:#1e1e1e; color:#d6d6d6; font:12.5px/1.55 Consolas, monospace; padding:12px; border-radius:10px; height:300px; overflow:auto; white-space:pre-wrap; }
+  #log .e { color:#ff8a80; } #log .g { color:#8bd5a0; } #log .y { color:#f4d35e; }
+  .hint { font-size:12.5px; color:var(--mute); margin-top:4px; }
+  .warnbox { background:#fff3cd; border:1px solid #f0d98a; border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:12px; }
+  /* 斷線橫幅：放在最上面，iframe 只露出一小塊時也看得到 */
+  #linkBanner { display:none; position:sticky; top:0; z-index:10; background:var(--bad); color:#fff; font-weight:bold; font-size:17px; text-align:center; padding:10px; border-radius:8px; margin:-12px 0 12px; }
+  body.linkdown #linkBanner { display:block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="linkBanner">⚠ 出單機斷線！請確認印表機電源已開，系統會自動重連</div>
+  <h1>出單頁（平板・Fully Kiosk）　<span id="storeLabel"></span></h1>
+  <div class="sub">要用「Fully Kiosk Browser」開這一頁（不是Chrome），並在Fully設定開啟「Enable JavaScript Interface」。開著這一頁、保持在前景、螢幕不要關，會自動把線上訂單印到出單機。</div>
+  <div class="warnbox">⚠ 測試版，非正式版。Fully 收不到印表機回傳資料（沒有缺紙/上蓋偵測），但「送出失敗」會即時回報，所以抓得到印表機關機/藍牙斷線：斷線時頁面變紅＋嗶聲、暫停領單（單子留在佇列不會漏），每15秒自動重連，恢復後自動補印。</div>
+
+  <div class="card">
+    <div class="grid">
+      <div class="kv">藍牙介面<b id="stIface" class="bad">尚未偵測</b></div>
+      <div class="kv">印表機連線<b id="stPort" class="bad">尚未連線</b></div>
+      <div class="kv">接單列印<b id="stRun" class="bad">未開始</b></div>
+      <div class="kv">最後一次查詢<b id="stPoll">—</b></div>
+      <div class="kv">今日已送印<b id="stCount">0 張</b></div>
+      <div class="kv">心跳單<b id="stHeartbeat">尚未開始</b></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <button id="btnConnect" class="sec">① 連線印表機</button>
+    <button id="btnKey" class="sec">② 設定出單密碼</button>
+    <button id="btnToggle" class="sec" disabled>③ 開始接單列印</button>
+    <button id="btnTest" class="sec">印一張測試單</button>
+    <div style="margin-top:6px;font-size:14px">印表機藍牙名稱 <input id="btName" type="text" style="width:190px"></div>
+    <div style="margin-top:6px;font-size:14px">每 <input id="interval" type="number" min="5" value="10" style="width:64px"> 秒查詢一次新訂單
+      <label style="margin-left:12px"><input type="checkbox" id="optCut"> 送切紙指令（這台手撕，預設不送）</label></div>
+    <div style="margin-top:6px;font-size:14px">每 <input id="heartbeatMin" type="number" min="5" value="30" style="width:64px"> 分鐘印一張心跳單（斷線已能自動偵測，心跳單是額外保險）</div>
+    <div class="hint">前置：平板系統藍牙先配對好印表機；Fully設定開啟「Enable JavaScript Interface」；Kiosk Browser Lockdown 要「結束執行」（兩個App會搶同一台印表機）。第一次依序按①②③，之後重開頁面會自動連線、自動開始。<b>重開頁面後請點一下畫面任一處</b>，嗶聲才會啟用。</div>
+  </div>
+
+  <div class="card"><div id="log"></div></div>
+</div>
+
+<script>
+'use strict';
+// ---------- 設定 ----------
+const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
+const APP_KEY = 'abao-meibao-2026';
+const STORE_ID = 'meibao';
+const STORE_LABEL = '溪湖培英店';
+const DEFAULT_BT_NAME = 'TM-m10-HIP6666';
+const LINK_CHECK_SEC = 5;          // 每幾秒檢查一次連線
+const RECONNECT_EVERY_SEC = 15;    // 斷線時每幾秒自動重連一次
+function $(id) { return document.getElementById(id); }
+$('storeLabel').textContent = STORE_LABEL;
+
+// ---------- Big5 編碼（跟筆電版共用同一套建表方式）----------
+const BIG5 = new Map();
+(function () {
+  const dec = new TextDecoder('big5');
+  const rng = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  const leads = [...rng(0xA1, 0xF9), ...rng(0x81, 0xA0), ...rng(0xFA, 0xFE)];
+  const trails = [...rng(0x40, 0x7E), ...rng(0xA1, 0xFE)];
+  for (const l of leads) for (const t of trails) {
+    const ch = dec.decode(new Uint8Array([l, t]));
+    if ([...ch].length === 1 && ch !== '�' && !BIG5.has(ch)) BIG5.set(ch, [l, t]);
+  }
+})();
+function encodeBig5(text) {
+  const bytes = [], missing = [];
+  for (const ch of text) {
+    const c = ch.codePointAt(0);
+    if (c < 0x80) { bytes.push(c); continue; }
+    const b = BIG5.get(ch);
+    if (b) bytes.push(b[0], b[1]); else { bytes.push(0x3F); missing.push(ch); }
+  }
+  return { bytes, missing };
+}
+function buildTicketBytes(lines) {
+  const out = [0x1B, 0x40, 0x1C, 0x26];               // ESC @ 初始化 + FS & 進入中文模式
+  const missingAll = [];
+  for (const line of lines) { const r = encodeBig5(line + '\n'); out.push(...r.bytes); missingAll.push(...r.missing); }
+  out.push(0x1C, 0x2E, 0x1B, 0x64, 5);                 // FS . 離開中文模式 + 走紙5行
+  if ($('optCut').checked) out.push(0x1D, 0x56, 0x42, 0x00);
+  return { data: new Uint8Array(out), missing: missingAll };
+}
+function toHex(bytes) {
+  let hex = '';
+  for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+  return hex;
+}
+
+// ---------- 記錄 ----------
+const logEl = $('log');
+function log(msg, cls) {
+  const t = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+  const d = document.createElement('div'); if (cls) d.className = cls; d.textContent = '[' + t + '] ' + msg;
+  logEl.appendChild(d); while (logEl.childElementCount > 400) logEl.removeChild(logEl.firstChild); logEl.scrollTop = logEl.scrollHeight;
+}
+function setState(id, text, cls) { const e = $(id); e.textContent = text; e.className = cls || ''; }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ---------- 後端 ----------
+function fetchJson(url, opts) {
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(), 20000);
+  return fetch(url, { ...opts, signal: ac.signal }).then(r => r.json()).finally(() => clearTimeout(to));
+}
+function apiPost(payload) {
+  return fetchJson(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) });
+}
+const getKey = () => { try { return localStorage.getItem('abao_print_key') || ''; } catch (e) { return ''; } };
+function getBtName() { return $('btName').value.trim() || DEFAULT_BT_NAME; }
+
+// ---------- 嗶聲（AudioContext 要有人點過畫面才能出聲）----------
+let audioCtx = null;
+function ensureAudio() { try { if (!audioCtx) audioCtx = new AudioContext(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {} }
+document.addEventListener('pointerdown', ensureAudio);
+// 嵌在 POS 頁的 iframe 裡時，店員點的是 POS 畫面，所以也聽上層頁面的點擊（同網域才拿得到）
+try { if (window.parent !== window) window.parent.document.addEventListener('pointerdown', ensureAudio); } catch (e) {}
+function beep() {
+  if (!audioCtx || audioCtx.state !== 'running') return;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.frequency.value = 880; g.gain.value = 0.3; o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + 0.4);
+}
+
+// ---------- Fully 藍牙 ----------
+// 2026-09-24 診斷頁實測(diag_fully_bt.html)：
+//  - Fully 收不到印表機回傳資料(onBtDataRead 完全不觸發)，所以沒有缺紙/上蓋偵測
+//  - 但 btSendHexData() 在印表機關機的當下就回傳 false，比 btIsConnected() 更早反應(後者關機後還顯示 true)
+//    → 以「送出結果」判斷斷線；btIsConnected() 只當輔助
+//  - 關機後每15秒 btClose()+btOpenByName() 重連，印表機開機後約30秒內自動恢復，不用人按
+// iframe 內不一定拿得到 window.fully，拿不到就用同網域的上層頁面的
+function getF() {
+  if (window.fully) return window.fully;
+  try { if (window.parent && window.parent !== window && window.parent.fully) return window.parent.fully; } catch (e) {}
+  return null;
+}
+function hasF() { const F = getF(); return !!(F && typeof F.btSendHexData === 'function'); }
+// 送一段資料，回傳 true=送出成功 / false=送出失敗(斷線)
+function fullySend(hex) {
+  try { return getF().btSendHexData(hex) !== false; } catch (e) { return false; }
+}
+// 連線檢查用的探測指令：ESC = 1（選擇印表機為周邊裝置），不會印出任何東西、印表機也不會回傳資料
+const PROBE_HEX = '1b3d01';
+
+let linkUp = false, linkDownSince = 0, lastReconnectAt = 0, reconnecting = false;
+function btOpen() {
+  const F = getF();
+  try { F.btClose(); } catch (e) {}
+  try { F.btOpenByName(getBtName()); } catch (e) { log('連線呼叫失敗：' + e.message, 'e'); }
+}
+function setLink(up, why) {
+  if (up && !linkUp) {
+    if (linkDownSince) log('✅ 出單機恢復連線（斷線 ' + Math.round((Date.now() - linkDownSince) / 1000) + ' 秒），恢復領單', 'g');
+    linkDownSince = 0;
+    document.body.classList.remove('linkdown');
+    if (running) { alarm(false); schedule(0); }       // 恢復後馬上領單，把斷線期間留在佇列的單補印出來
+  }
+  if (!up && !linkDownSince) {
+    linkDownSince = Date.now();
+    log('⚠ 出單機斷線（' + why + '），暫停領單，單子留在佇列不會漏', 'e');
+    document.body.classList.add('linkdown');
+  }
+  linkUp = up;
+  setState('stPort', up ? '已連線' : '斷線 ' + Math.round((Date.now() - linkDownSince) / 1000) + ' 秒', up ? 'ok' : 'bad');
+}
+async function reconnect(reason) {
+  if (reconnecting) return false;
+  reconnecting = true; lastReconnectAt = Date.now();
+  try {
+    log('自動重新連線（' + reason + '）…', 'y');
+    btOpen();
+    await sleep(3000);
+    const ok = fullySend(PROBE_HEX);
+    log(ok ? '重新連線成功' : '重新連線失敗，' + RECONNECT_EVERY_SEC + ' 秒後再試', ok ? 'g' : 'y');
+    setLink(ok, '重新連線失敗');
+    return ok;
+  } finally { reconnecting = false; }
+}
+// 連線監控：每5秒送探測指令；失敗＝斷線(頁面變紅+嗶聲)，斷線中每15秒自動重連
+let linkTimer = null;
+function startLinkMonitor() {
+  clearInterval(linkTimer);
+  linkTimer = setInterval(async () => {
+    if (!hasF() || reconnecting || printing) return;
+    const ok = fullySend(PROBE_HEX);
+    if (ok) { setLink(true); return; }
+    setLink(false, '送出失敗');
+    beep();
+    if (Date.now() - lastReconnectAt >= RECONNECT_EVERY_SEC * 1000) await reconnect('斷線中');
+  }, LINK_CHECK_SEC * 1000);
+}
+
+// 送印：送出失敗就重連一次再試；還是失敗就回傳 false（呼叫端把單子留在佇列）
+let printing = false;
+async function fullyPrint(bytes) {
+  if (!hasF()) { log('找不到Fully藍牙介面，無法送印', 'e'); return false; }
+  printing = true;
+  try {
+    const hex = toHex(bytes);
+    if (fullySend(hex)) { setLink(true); return true; }
+    log('送印失敗，重新連線後再試一次', 'y');
+    setLink(false, '送印失敗');
+    if (await reconnect('送印失敗') && fullySend(hex)) { log('重新連線後送印成功', 'g'); return true; }
+    return false;
+  } finally { printing = false; }
+}
+
+function refreshIfaceState() {
+  setState('stIface', hasF() ? 'Fully藍牙已偵測' + (window.fully ? '' : '（透過上層頁面）') : '找不到Fully介面（要用Fully Kiosk開、且設定要開Enable JavaScript Interface）', hasF() ? 'ok' : 'bad');
+  refreshButtons();
+}
+function refreshButtons() { $('btnToggle').disabled = !(hasF() && getKey()); }
+$('btnConnect').onclick = async () => {
+  if (!hasF()) { log('找不到Fully藍牙介面，確認是用Fully Kiosk開這頁、且已開啟Enable JavaScript Interface', 'e'); return; }
+  try { localStorage.setItem('abao_print_btname', getBtName()); } catch (e) {}
+  lastReconnectAt = 0;
+  const ok = await reconnect('手動按①');
+  if (ok) startLinkMonitor();
+};
+
+$('btnKey').onclick = () => {
+  const v = prompt('請貼上出單密碼（只會存在這台平板）：', getKey());
+  if (v === null) return;
+  try { localStorage.setItem('abao_print_key', v.trim()); } catch (e) {}
+  log(v.trim() ? '出單密碼已設定' : '出單密碼已清除', v.trim() ? 'g' : 'y'); refreshButtons();
+};
+$('btnTest').onclick = async () => {
+  const now = new Date().toLocaleString('zh-TW', { hour12: false });
+  const { data } = buildTicketBytes(['== 出單頁測試(Fully) ==', STORE_LABEL, now, '中文、English、$123 ○']);
+  const ok = await fullyPrint(data);
+  log(ok ? '測試單已送出' : '測試單送出失敗（出單機斷線？）', ok ? 'g' : 'e');
+};
+
+// ---------- 心跳單：斷線已能自動偵測，心跳單留著當額外保險（萬一探測誤判正常）----------
+let heartbeatTimer = null, heartbeatCount = 0;
+function startHeartbeat() {
+  stopHeartbeat();
+  const min = Math.max(5, Number($('heartbeatMin').value) || 30);
+  heartbeatTimer = setInterval(sendHeartbeat, min * 60000);
+  setState('stHeartbeat', '已開始，每' + min + '分鐘一次');
+}
+function stopHeartbeat() {
+  clearInterval(heartbeatTimer); heartbeatTimer = null;
+  setState('stHeartbeat', '尚未開始');
+}
+async function sendHeartbeat() {
+  if (!linkUp) { log('出單機斷線中，略過這次心跳單', 'y'); return; }
+  heartbeatCount++;
+  const now = new Date().toLocaleString('zh-TW', { hour12: false });
+  const { data } = buildTicketBytes(['== 心跳單(系統自動) ==', STORE_LABEL, now, '系統正常運作 #' + heartbeatCount]);
+  const ok = await fullyPrint(data);
+  setState('stHeartbeat', (ok ? '已印' : '❌送印失敗') + '第' + heartbeatCount + '次（' + now + '）', ok ? 'ok' : 'bad');
+  log(ok ? '心跳單已送出 #' + heartbeatCount : '心跳單送印失敗 #' + heartbeatCount, ok ? 'g' : 'e');
+}
+
+// ---------- 接單列印迴圈 ----------
+let running = false, timer = null, busy = false, printedToday = 0, tickStartedAt = 0, wantRun = false;
+function setRunning(on) {
+  running = on; if (on) wantRun = true;
+  setState('stRun', on ? '執行中' : '已暫停', on ? 'ok' : 'bad');
+  $('btnToggle').textContent = on ? '③ 暫停接單列印' : '③ 開始接單列印';
+  clearTimeout(timer);
+  if (on) { schedule(0); startHeartbeat(); } else { stopHeartbeat(); }
+  try { localStorage.setItem('abao_print_run', on ? '1' : '0'); } catch (e) {}
+  updateWakeLock();
+}
+function schedule(ms) {
+  clearTimeout(timer);
+  const sec = Math.max(5, Number($('interval').value) || 10);
+  timer = setTimeout(tick, ms === undefined ? sec * 1000 : ms);
+}
+$('btnToggle').onclick = () => { if (running) wantRun = false; setRunning(!running); };
+
+async function tick() {
+  if (!running || busy) return;
+  busy = true; tickStartedAt = Date.now();
+  let gap = null;
+  try {
+    // 斷線中不領單：單子留在後端佇列(待列印)，恢復連線後 setLink 會立刻觸發下一輪領單補印
+    if (!linkUp) { setState('stPoll', '斷線中，暫停領單'); return; }
+    const key = getKey();
+    const claim = await apiPost({ action: 'claimPrint', storeId: STORE_ID, printKey: key, limit: 3 });
+    setState('stPoll', new Date().toLocaleTimeString('zh-TW', { hour12: false }));
+    if (claim.status !== 'ok') { log('領單被拒：' + (claim.message || ''), 'e'); setState('stRun', '出單密碼有誤？', 'bad'); alarm(true); return; }
+    if (!claim.orders.length) { alarm(false); return; }
+    gap = 0;
+    for (const t of claim.orders) { if (!linkUp) break; await printOne(t); }   // 印到一半斷線就停，剩下的單等租約到期回佇列
+  } catch (e) {
+    log('查詢失敗（網路？）：' + e.message, 'e');
+  } finally {
+    busy = false;
+    if (running) schedule(gap === null ? undefined : gap);
+  }
+}
+async function printOne(t) {
+  const { data, missing } = buildTicketBytes(t.lines);
+  const ok = await fullyPrint(data);
+  // 送印失敗不回報：後端領單租約(60秒)到期後單子自動回到待列印，恢復連線後會以「補印」再印出
+  if (!ok) { log('印出失敗 ' + t.orderId + '，留在佇列，恢復連線後自動補印', 'e'); return; }
+  try {
+    const rep = await apiPost({ action: 'printed', orderId: t.orderId, printKey: getKey() });
+    printedToday++; setState('stCount', printedToday + ' 張');
+    log('已送印 ' + t.orderId + (t.reprint ? '（補印第' + t.printCount + '次）' : '') + (missing.length ? '；缺字改印?：' + missing.join('') : '') +
+        (rep.status === 'ok' ? '' : '；回報失敗：' + rep.message), rep.status === 'ok' ? 'g' : 'y');
+    alarm(false);
+  } catch (e) {
+    log('回報後端失敗 ' + t.orderId + '：' + e.message, 'e');
+  }
+}
+function alarm(on) { document.body.classList.toggle('alarm', !!on); }
+
+// ---------- 看門狗 ----------
+let lastTickBeat = Date.now();
+setInterval(() => {
+  if (!running) return;
+  const sec = Math.max(5, Number($('interval').value) || 10);
+  const idleMs = Date.now() - Math.max(tickStartedAt, lastTickBeat);
+  if (idleMs > (sec * 3 + 60) * 1000) {
+    log('輪詢停滯超過 ' + Math.round(idleMs / 1000) + ' 秒，自動重啟', 'y');
+    busy = false; lastTickBeat = Date.now(); schedule(0);
+  }
+}, 15000);
+
+// ---------- 螢幕不休眠 ----------
+let wakeLock = null;
+async function updateWakeLock() {
+  try {
+    if (running && 'wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); log('已要求螢幕保持開啟'); }
+    if (!running && wakeLock) { await wakeLock.release(); wakeLock = null; }
+  } catch (e) { log('螢幕保持開啟失敗：' + e.message, 'y'); }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { updateWakeLock(); log('頁面回到前景'); }
+  else { log('頁面被切到背景', 'y'); }
+});
+
+// ---------- 啟動 ----------
+(async function init() {
+  log('出單頁(平板Fully測試版)已載入（' + STORE_LABEL + '）');
+  try { $('btName').value = localStorage.getItem('abao_print_btname') || DEFAULT_BT_NAME; } catch (e) { $('btName').value = DEFAULT_BT_NAME; }
+  refreshIfaceState();
+  try { wantRun = localStorage.getItem('abao_print_run') === '1'; } catch (e) {}
+  if (!hasF()) { log('尚未偵測到Fully藍牙介面，確認：①是用Fully Kiosk開的這一頁 ②Fully設定裡「Enable JavaScript Interface」已開啟', 'y'); return; }
+  // 重開頁面自動連線＋開始監控（不用人按①）
+  await reconnect('頁面載入');
+  startLinkMonitor();
+  if (getKey() && wantRun) { log('自動開始接單列印'); setRunning(true); }
+  else if (!getKey()) log('尚未設定出單密碼，請按 ② 設定', 'y');
+})();
+</script>
+</body>
+</html>
