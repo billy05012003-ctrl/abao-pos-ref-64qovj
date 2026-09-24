@@ -34,7 +34,7 @@
   <div id="linkBanner">⚠ 出單機斷線！請確認印表機電源已開，系統會自動重連</div>
   <h1>出單頁（平板・Fully Kiosk）　<span id="storeLabel"></span></h1>
   <div class="sub">要用「Fully Kiosk Browser」開這一頁（不是Chrome），並在Fully設定開啟「Enable JavaScript Interface」。開著這一頁、保持在前景、螢幕不要關，會自動把線上訂單印到出單機。</div>
-  <div class="warnbox">⚠ 測試版，非正式版。Fully 收不到印表機回傳資料（沒有缺紙/上蓋偵測），但「送出失敗」會即時回報，所以抓得到印表機關機/藍牙斷線：斷線時頁面變紅＋嗶聲、暫停領單（單子留在佇列不會漏），每15秒自動重連，恢復後自動補印。</div>
+  <div class="warnbox">Fully 收不到印表機回傳資料（沒有缺紙/上蓋偵測），但「送出失敗」會即時回報，所以抓得到印表機關機/藍牙斷線：斷線時頁面變紅＋嗶聲、暫停領單（單子留在佇列不會漏），每15秒自動重連，恢復後自動補印。</div>
 
   <div class="card">
     <div class="grid">
@@ -360,7 +360,7 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- 啟動 ----------
 (async function init() {
-  log('出單頁(平板Fully測試版)已載入（' + STORE_LABEL + '）');
+  log('出單頁(平板Fully)已載入（' + STORE_LABEL + '）');
   try { $('btName').value = localStorage.getItem('abao_print_btname') || DEFAULT_BT_NAME; } catch (e) { $('btName').value = DEFAULT_BT_NAME; }
   refreshIfaceState();
   try { wantRun = localStorage.getItem('abao_print_run') === '1'; } catch (e) {}

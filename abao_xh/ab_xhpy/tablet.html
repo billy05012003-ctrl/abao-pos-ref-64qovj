@@ -156,9 +156,17 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 </script>
 
 
-<header>
-  <h1>A-Bao溪湖培英店</h1>
-  <div class="sub">POS功能（店家端，非顧客點餐頁）</div>
+<header style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+  <div>
+    <h1>A-Bao溪湖培英店</h1>
+    <div class="sub">POS功能（店家端，非顧客點餐頁）</div>
+  </div>
+  <!-- 印單模組：用iframe隔離，跟POS的JS完全獨立執行環境，不會撞名/互相拖累。
+       2026-09-24由合併測試版轉正式：要用Fully Kiosk開本頁才會出單(用Chrome開POS照常可用，但不會出單)。
+       同一間店的出單主機只能有一台，改用平板出單後筆電print.html要關掉。 -->
+  <iframe id="printModuleFrame" src="print_tablet_fully.html"
+    style="width:260px;height:110px;border:2px solid rgba(255,255,255,0.4);border-radius:8px;background:#fff;flex:none"
+    title="印單模組"></iframe>
 </header>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
