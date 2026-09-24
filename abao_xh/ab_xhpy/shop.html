@@ -2038,7 +2038,8 @@ let groupPollTimer_ = null;
 function groupStoreKey_(gid) { return 'abao_group_' + gid; }
 function loadGroupCtx_(gid) { try { return JSON.parse(localStorage.getItem(groupStoreKey_(gid)) || 'null'); } catch (e) { return null; } }
 function saveGroupCtx_() { if (!groupCtx) return; try { localStorage.setItem(groupStoreKey_(groupCtx.groupId), JSON.stringify(groupCtx)); } catch (e) {} }
-function groupShareUrl_() { return location.origin + location.pathname + '?g=' + encodeURIComponent(groupCtx.groupId); }
+// 第二次健檢(2026-09-24)：內部測試走藍新測試站(?mpgtest=1)時，分享給朋友的連結也要帶著，否則朋友付款會走到正式站
+function groupShareUrl_() { return location.origin + location.pathname + '?g=' + encodeURIComponent(groupCtx.groupId) + (MPG_SANDBOX ? '&mpgtest=1' : ''); }
 function groupItemsFromCart_() { return cart.map(c => ({ lineKey: c.lineKey, name: c.name, baseName: c.baseName, size: c.size || '', price: c.price, basePrice: c.basePrice, qty: c.qty, note: c.note || '' })); }
 function groupStatusClass_(st) { return st === '收單中' ? 'open' : (st === '已結單' || st === '已截止' || st === '付款中') ? 'locked' : st === '已成立' ? 'done' : 'dead'; }
 function groupMinutesLeft_() { if (!groupView || !groupView.deadline) return null; return Math.ceil((new Date(groupView.deadline).getTime() - Date.now()) / 60000); }
