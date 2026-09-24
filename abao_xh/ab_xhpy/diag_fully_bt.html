@@ -52,6 +52,8 @@
     <button id="btnStatus" class="sec">查詢印表機狀態</button>
     <button id="btnPrint" class="sec">印一張測試單</button>
     <button id="btnReconnect" class="sec">重新連線</button>
+    <p style="margin-top:6px">若顯示「無回應」，再按下面這顆：它改成「只偵測有沒有收到東西、不讀內容」，用來分辨是 Fully 完全沒收到，還是收到了但內容格式把程式弄壞。</p>
+    <button id="btnPing" class="sec">只測有沒有收到（診斷）</button>
   </div>
 
   <div class="card">
@@ -136,6 +138,8 @@ window.__btData = raw => {
   rxQueue.push(...bytes);
   const ws = rxWaiters; rxWaiters = []; ws.forEach(f => f());
 };
+let pingCount = 0;
+window.__btPing = () => { pingCount++; log('📩 收到事件觸發（第 ' + pingCount + ' 次，未讀內容）', 'g'); };
 window.__btOk = dev => { log('連線成功事件：' + dev, 'g'); setPortState(true, '已連線'); };
 window.__btFail = () => { log('連線失敗事件', 'e'); setPortState(false, '連線失敗'); };
 
@@ -207,6 +211,21 @@ async function reconnect(auto) {
   return s !== null;
 }
 $('btnReconnect').onclick = async () => { ensureAudio(); if (await reconnect(false)) setAlarm(false); };
+
+$('btnPing').onclick = async () => {
+  try {
+    F.bind('onBtDataRead', 'window.__btPing()');
+    log('已改成「只偵測事件」模式，送出狀態查詢…');
+    const before = pingCount;
+    F.btSendHexData(toHex([0x10, 0x04, 1]));
+    await new Promise(r => setTimeout(r, 3000));
+    if (pingCount > before) log('→ Fully 有收到回話！問題在資料格式，小保可以改程式解決', 'g');
+    else log('→ 3 秒內完全沒觸發：Fully 沒收到印表機回話', 'e');
+  } catch (e) { log('診斷失敗：' + e.message, 'e'); }
+  finally {
+    F.bind('onBtDataRead', 'window.__btData("$data")');   // 還原成讀內容模式
+  }
+};
 
 let monTimer = null, busy = false, downSince = 0;
 $('btnMon').onclick = () => {
