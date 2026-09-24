@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>診斷：Fully藍牙雙向</title>
+<style>
+  :root { --bg:#faf7f2; --card:#fff; --ink:#2b2b2b; --mute:#777; --line:#e4ddd2; --accent:#d9622b; --ok:#2e8b57; --bad:#c0392b; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px 16px 60px; background:var(--bg); color:var(--ink); font:16px/1.6 system-ui, "Microsoft JhengHei", sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--mute); font-size:13px; margin-bottom:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .card h2 { font-size:16px; margin:0 0 4px; }
+  .card p { margin:4px 0 10px; color:var(--mute); font-size:14px; }
+  button { font:inherit; border:0; border-radius:8px; padding:10px 16px; background:var(--accent); color:#fff; margin:0 8px 8px 0; }
+  button.sec { background:#eee6da; color:var(--ink); }
+  input[type=text] { font:inherit; padding:8px; border:1px solid var(--line); border-radius:8px; width:100%; max-width:320px; margin-bottom:8px; }
+  .state { display:inline-block; padding:2px 10px; border-radius:999px; font-size:13px; background:#eee; }
+  .state.ok { background:#dff3e7; color:var(--ok); } .state.bad { background:#f8dcd8; color:var(--bad); }
+  #alarm { display:none; background:var(--bad); color:#fff; font-size:22px; font-weight:bold; text-align:center; padding:18px; border-radius:12px; margin-bottom:12px; }
+  #log { background:#1e1e1e; color:#d6d6d6; font:13px/1.55 Consolas, monospace; padding:12px; border-radius:10px; height:320px; overflow:auto; white-space:pre-wrap; word-break:break-all; }
+  #log .e { color:#ff8a80; } #log .g { color:#8bd5a0; } #log .y { color:#ffd479; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>診斷：Fully Kiosk 藍牙雙向連線</h1>
+  <div class="sub">測 Fully Kiosk Browser 能不能收到出單機回傳的資料（能問到印表機狀態 → 斷線會回報）。獨立測試頁，不會動任何訂單。</div>
+
+  <div id="alarm">⚠ 出單機沒有回應！請檢查印表機電源，再按「重新連線」</div>
+
+  <div class="card">
+    <h2>0. 環境檢查</h2>
+    <div id="env"></div>
+  </div>
+
+  <div class="card">
+    <h2>① 連線出單機</h2>
+    <p>先用名稱連線；不行再填 MAC 位址（Kiosk Browser 設定裡「Default Device」那串，格式像 00:11:22:AA:BB:CC）。<b>測試前 Kiosk Browser Lockdown 要先「結束執行」</b>。</p>
+    <input type="text" id="btName" value="TM-m10-HIP6666" placeholder="藍牙名稱"><br>
+    <button id="btnName">用名稱連線</button><br>
+    <input type="text" id="btMac" placeholder="MAC 位址（選填）"><br>
+    <button id="btnMac" class="sec">用 MAC 連線</button>
+    <br><span id="portState" class="state">尚未連線</span>
+  </div>
+
+  <div class="card">
+    <h2>② 測試雙向溝通</h2>
+    <p><b>關鍵測試</b>：按「查詢印表機狀態」，紀錄出現「收到資料」＝印表機有回話（雙向成功）；出現「無回應」＝只能單向。</p>
+    <button id="btnStatus" class="sec">查詢印表機狀態</button>
+    <button id="btnPrint" class="sec">印一張測試單</button>
+    <button id="btnReconnect" class="sec">重新連線</button>
+  </div>
+
+  <div class="card">
+    <h2>③ 斷線偵測測試</h2>
+    <p>按「開始監控」後，每 5 秒自動問一次印表機。接著<b>把印表機關機</b>，看幾秒內跳出紅色警示＋嗶聲；再<b>開機</b>，看會不會自己恢復（不按任何按鈕），不會的話按「重新連線」。</p>
+    <button id="btnMon" class="sec">開始監控</button>
+    <span id="monState" class="state">未執行</span>
+  </div>
+
+  <div class="card">
+    <h2>紀錄</h2>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const F = window.fully;
+
+// ---------- Big5 編碼表（沿用筆電版）----------
+const BIG5 = new Map();
+(function buildBig5() {
+  const dec = new TextDecoder('big5');
+  const rng = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  const leads = [...rng(0xA1, 0xF9), ...rng(0x81, 0xA0), ...rng(0xFA, 0xFE)];
+  const trails = [...rng(0x40, 0x7E), ...rng(0xA1, 0xFE)];
+  for (const l of leads) for (const t of trails) {
+    const ch = dec.decode(new Uint8Array([l, t]));
+    if ([...ch].length === 1 && ch !== '�' && !BIG5.has(ch)) BIG5.set(ch, [l, t]);
+  }
+})();
+function encodeBig5(text) {
+  const bytes = [];
+  for (const ch of text) {
+    const code = ch.codePointAt(0);
+    if (code < 0x80) { bytes.push(code); continue; }
+    bytes.push(...(BIG5.get(ch) || [0x3F]));
+  }
+  return bytes;
+}
+const ESC = 0x1B, FS = 0x1C;
+function buildTicket(lines) {
+  const out = [ESC, 0x40, FS, 0x26];
+  for (const line of lines) out.push(...encodeBig5(line + '\n'));
+  out.push(FS, 0x2E, ESC, 0x64, 5);
+  return out;
+}
+const toHex = bytes => bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+
+// ---------- 畫面 ----------
+const $ = id => document.getElementById(id);
+function log(msg, cls) {
+  const t = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+  const d = document.createElement('div'); if (cls) d.className = cls;
+  d.textContent = '[' + t + '] ' + msg; $('log').appendChild(d); $('log').scrollTop = $('log').scrollHeight;
+}
+function setPortState(ok, text) { const s = $('portState'); s.textContent = text; s.className = 'state ' + (ok ? 'ok' : 'bad'); }
+
+let audioCtx = null;
+function ensureAudio() { try { if (!audioCtx) audioCtx = new AudioContext(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch (e) {} }
+function beep() {
+  if (!audioCtx) return;
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.frequency.value = 880; g.gain.value = 0.3; o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + 0.4);
+}
+function setAlarm(on) { $('alarm').style.display = on ? 'block' : 'none'; if (on) beep(); }
+
+// ---------- Fully 藍牙事件 ----------
+// Fully 會把 $data / $device 代換成實際內容後執行字串；資料格式文件沒寫，收到什麼都先原樣記下來
+let rxQueue = [], rxWaiters = [];
+function parseData(raw) {
+  const s = String(raw == null ? '' : raw);
+  if (/^[0-9a-fA-F\s]+$/.test(s) && s.replace(/\s/g, '').length % 2 === 0) {
+    return s.replace(/\s/g, '').match(/../g).map(h => parseInt(h, 16));
+  }
+  return [...s].map(c => c.charCodeAt(0) & 0xFF);
+}
+window.__btData = raw => {
+  const bytes = parseData(raw);
+  log('收到資料：原始="' + raw + '" → ' + bytes.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '), 'g');
+  rxQueue.push(...bytes);
+  const ws = rxWaiters; rxWaiters = []; ws.forEach(f => f());
+};
+window.__btOk = dev => { log('連線成功事件：' + dev, 'g'); setPortState(true, '已連線'); };
+window.__btFail = () => { log('連線失敗事件', 'e'); setPortState(false, '連線失敗'); };
+
+function waitRx(ms) {
+  return new Promise(res => {
+    let w; const t = setTimeout(() => { rxWaiters = rxWaiters.filter(f => f !== w); res(false); }, ms);
+    w = () => { clearTimeout(t); res(true); }; rxWaiters.push(w);
+  });
+}
+function sendHex(hex) {
+  const r = F.btSendHexData(hex);
+  return r;
+}
+async function queryStatus(n) {
+  rxQueue.length = 0;
+  sendHex(toHex([0x10, 0x04, n]));             // DLE EOT n：請印表機回報狀態
+  if (!rxQueue.length) await waitRx(2000);
+  return rxQueue.length ? rxQueue.shift() : null;
+}
+const hx = v => v === null ? '無回應' : '0x' + v.toString(16).padStart(2, '0');
+
+function openBy(kind) {
+  ensureAudio();
+  try {
+    if (kind === 'name') { const n = $('btName').value.trim(); log('用名稱連線：' + n); F.btOpenByName(n); }
+    else { const m = $('btMac').value.trim().toUpperCase(); if (!m) { log('請先填 MAC', 'y'); return; } log('用 MAC 連線：' + m); F.btOpenByMac(m); }
+    setTimeout(() => {
+      let c = null; try { c = F.btIsConnected(); } catch (e) {}
+      log('3 秒後 btIsConnected() = ' + c);
+      try { log('裝置資訊：' + F.btGetDeviceInfoJson()); } catch (e) {}
+      if (c) setPortState(true, '已連線');
+    }, 3000);
+  } catch (e) { log('連線呼叫失敗：' + e.message, 'e'); }
+}
+let lastOpen = 'name';
+$('btnName').onclick = () => { lastOpen = 'name'; openBy('name'); };
+$('btnMac').onclick = () => { lastOpen = 'mac'; openBy('mac'); };
+
+$('btnStatus').onclick = async () => {
+  ensureAudio();
+  try {
+    const r = [];
+    for (const n of [1, 2, 4]) r.push(await queryStatus(n));
+    log('狀態 n=1:' + hx(r[0]) + '　n=2:' + hx(r[1]) + '　n=4(紙):' + hx(r[2]), r[0] === null ? 'e' : 'g');
+    if (r[0] === null) log('→ 印表機沒有回話：這條路只能單向', 'e');
+    else {
+      const probs = [];
+      if (r[1] !== null && (r[1] & 0x04)) probs.push('上蓋沒蓋好');
+      if (r[2] !== null && (r[2] & 0x60)) probs.push('缺紙');
+      log('→ ✅ 雙向成功！印表機有回話。目前：' + (probs.join('、') || '正常'), 'g');
+    }
+  } catch (e) { log('查詢失敗：' + e.message, 'e'); }
+};
+$('btnPrint').onclick = () => {
+  try {
+    const r = sendHex(toHex(buildTicket(['=== Fully藍牙雙向測試 ===', new Date().toLocaleString('zh-TW', { hour12: false }), '這張有印出來＝送資料成功', ''])));
+    log('測試單已送出（回傳值：' + r + '）', 'g');
+  } catch (e) { log('送出失敗：' + e.message, 'e'); }
+};
+async function reconnect(auto) {
+  try { F.btClose(); } catch (e) {}
+  await new Promise(r => setTimeout(r, 500));
+  if (lastOpen === 'mac' && $('btMac').value.trim()) F.btOpenByMac($('btMac').value.trim().toUpperCase());
+  else F.btOpenByName($('btName').value.trim());
+  await new Promise(r => setTimeout(r, 3000));
+  const s = await queryStatus(1);
+  log((auto ? '自動' : '手動') + '重新連線' + (s !== null ? '成功' : '失敗（印表機沒回話）'), s !== null ? 'g' : (auto ? 'y' : 'e'));
+  setPortState(s !== null, s !== null ? '已連線' : '斷線');
+  return s !== null;
+}
+$('btnReconnect').onclick = async () => { ensureAudio(); if (await reconnect(false)) setAlarm(false); };
+
+let monTimer = null, busy = false, downSince = 0;
+$('btnMon').onclick = () => {
+  ensureAudio();
+  if (monTimer) { clearInterval(monTimer); monTimer = null; $('btnMon').textContent = '開始監控'; $('monState').textContent = '已停止'; $('monState').className = 'state'; return; }
+  $('btnMon').textContent = '停止監控'; $('monState').textContent = '監控中'; $('monState').className = 'state ok';
+  log('開始監控：每 5 秒問一次印表機。現在可以把印表機關機');
+  monTimer = setInterval(async () => {
+    if (busy) return; busy = true;
+    try {
+      let s = null;
+      try { s = await queryStatus(1); } catch (e) { log('詢問時出錯：' + e.message, 'y'); }
+      if (s !== null) {
+        if (downSince) { log('✅ 印表機恢復回話（斷線 ' + Math.round((Date.now() - downSince) / 1000) + ' 秒）', 'g'); downSince = 0; setAlarm(false); setPortState(true, '已連線'); $('monState').textContent = '監控中'; }
+      } else {
+        if (!downSince) { downSince = Date.now(); log('⚠ 印表機沒回話 → 已警示', 'e'); }
+        setAlarm(true);
+        $('monState').textContent = '斷線 ' + Math.round((Date.now() - downSince) / 1000) + ' 秒';
+        if (await reconnect(true)) { log('✅ 不用按按鈕就自動恢復了（斷線 ' + Math.round((Date.now() - downSince) / 1000) + ' 秒）', 'g'); downSince = 0; setAlarm(false); $('monState').textContent = '監控中'; }
+      }
+    } finally { busy = false; }
+  }, 5000);
+};
+
+// ---------- 啟動 ----------
+(function init() {
+  const env = [];
+  if (!F) {
+    env.push('<span style="color:var(--bad)">❌ 找不到 Fully 介面：請用 Fully Kiosk Browser 開這頁，並在設定開啟「Enable JavaScript Interface」</span>');
+    $('env').innerHTML = env.join('<br>');
+    log('找不到 window.fully', 'e');
+    return;
+  }
+  const bt = [];
+  for (const k in F) if (/^bt/i.test(k)) bt.push(k);
+  env.push('Fully 介面：✅');
+  try { env.push('Fully 版本：' + F.getFullyVersion()); } catch (e) {}
+  env.push('藍牙相關函式：' + (bt.length ? bt.sort().join(', ') : '<span style="color:var(--bad)">沒有（可能要 PLUS 授權或版本太舊）</span>'));
+  $('env').innerHTML = env.join('<br>');
+  try {
+    F.bind('onBtDataRead', 'window.__btData("$data")');
+    F.bind('onBtConnectSuccess', 'window.__btOk("$device")');
+    F.bind('onBtConnectFailure', 'window.__btFail()');
+    log('已註冊藍牙事件（收資料／連線成功／連線失敗）', 'g');
+  } catch (e) { log('註冊事件失敗：' + e.message, 'e'); }
+  log('頁面已載入，請按「用名稱連線」');
+})();
+</script>
+</body>
+</html>
