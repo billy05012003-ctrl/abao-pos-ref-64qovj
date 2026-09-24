@@ -191,6 +191,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
          這顆按鈕保留在DOM但隱藏，讓switchBackofficeTab()既有的active/顯示切換邏輯不用另外特判 -->
     <button class="sub-item" id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')" style="display:none;">飲品升級</button>
   </div>
+  <button id="tab-btn-group" onclick="switchBackofficeTab('group')">👥 團購模組</button>
   <button id="tab-btn-posmanage" onclick="togglePosManageGroup()">
     <span class="group-toggle">⚙ POS管理 <span class="group-caret" id="posmanage-caret">▶</span></span>
   </button>
@@ -437,6 +438,21 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </div>
   </div>
 </div>
+<div id="view-group" class="view" style="display:none;">
+  <p style="font-size:0.8rem;color:var(--muted);">
+    線上點餐的「揪團」：團主開團分享連結，朋友免登入加餐，團主結單後一次付清，出單時每個人的餐點分開印名字。
+    這裡唯讀，列出最近的揪團與每人明細。付款模式由團主開團時選：<b>請客</b>=團主結單後一次付清，全團一張訂單(訂單編號見右側)、點數歸團主；
+    <b>各付各的</b>=每人付自己那份、每人一張訂單、各自拿點數(每人付款狀態見明細)。付款成立後都是一般線上訂單，退款照一般訂單流程處理。揪團一律需要會員。
+  </p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+    <select id="grp-days" onchange="loadGroupList()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
+      <option value="1">今天</option><option value="3" selected>最近 3 天</option><option value="7">最近 7 天</option><option value="31">最近 31 天</option>
+    </select>
+    <button type="button" class="mc-add-btn" style="margin:0;width:auto;padding:6px 14px;" onclick="loadGroupList()">重新整理</button>
+    <span id="grp-summary" style="font-size:0.85rem;color:var(--muted);"></span>
+  </div>
+  <div id="grp-list"><div class="empty-hint">載入中...</div></div>
+</div>
 <div id="view-posmanage" class="view" style="display:none;">
   <div id="pmg-subview-log">
     <p style="font-size:0.8rem;color:var(--muted);">
@@ -590,6 +606,39 @@ function loadPosManageLog() {
   });
 }
 
+// ---- 團購模組(2026-09-24新增)：線上點餐「揪團」清單，唯讀 ----
+let groupListLoaded = false;
+const GROUP_STATUS_COLOR = { '收單中': '#1f7a3d', '已截止': '#9a5b00', '已結單': '#9a5b00', '付款中': '#9a5b00', '已成立': '#0c447c', '已退款': '#777', '已作廢': '#a30000' };
+function loadGroupList() {
+  const list = document.getElementById('grp-list');
+  list.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'groupList', storeId: SCHED_STORE_ID, days: document.getElementById('grp-days').value }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    const gs = data.groups || [];
+    const cnt = st => gs.filter(g => g.groupStatus === st).length;
+    const paidTotal = gs.filter(g => g.groupStatus === '已成立').reduce((s, g) => s + g.total, 0);
+    document.getElementById('grp-summary').textContent = `共 ${gs.length} 團｜收單中 ${cnt('收單中')}｜已成立 ${cnt('已成立')}（$${paidTotal}）｜已作廢 ${cnt('已作廢')}`;
+    if (!gs.length) { list.innerHTML = '<div class="empty-hint">這段期間沒有揪團</div>'; return; }
+    list.innerHTML = gs.map(g => {
+      const color = GROUP_STATUS_COLOR[g.groupStatus] || '#777';
+      const members = g.members.map(m => `
+        <div style="padding:4px 0;border-top:1px dashed var(--border);">
+          <div style="display:flex;justify-content:space-between;font-weight:bold;"><span>${escapeHtml(m.name)}${m.isHost ? '（團主）' : ''}${m.payState ? '　<span style="font-weight:normal;color:' + (m.payState === '已付款' ? '#0c447c' : m.payState === '付款中' ? '#9a5b00' : '#777') + ';">' + escapeHtml(m.payState) + '</span>' : ''}</span><span>$${m.subtotal}</span></div>
+          ${m.items.map(it => `<div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--muted);"><span>${escapeHtml(it.name)}${it.size ? ' (' + escapeHtml(it.size) + ')' : ''} x${it.qty}${it.note ? '　※' + escapeHtml(it.note) : ''}</span><span>$${it.price * it.qty}</span></div>`).join('')}
+        </div>`).join('');
+      return `<details class="sched-special-row" style="display:block;margin-bottom:8px;">
+        <summary style="cursor:pointer;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <span><b>${escapeHtml(g.hostName)} 的揪團</b>（${escapeHtml(g.payModeText || '請客')}${g.pickupDate ? '・取餐 ' + escapeHtml(g.pickupDate.slice(5).replace('-', '/')) + ' ' + escapeHtml(g.pickupTime) : ''}）　${g.members.length} 人　$${g.total}</span>
+          <span><span style="color:${color};font-weight:bold;">${escapeHtml(g.groupStatus)}</span>　開團 ${new Date(g.createdAt).toLocaleString('zh-TW', { hour12: false })}　截止 ${escapeHtml(g.deadlineText)}${g.orderId ? '　訂單 ' + escapeHtml(g.orderId) : ''}</span>
+        </summary>
+        <div style="margin-top:6px;">${members}</div>
+      </details>`;
+    }).join('');
+  }).catch(err => {
+    list.innerHTML = '<div class="empty-hint">載入失敗：' + escapeHtml(err.message) + '</div>';
+  });
+}
+
 // ---- POS夥伴管理(2026-09-18新增) ----
 let posStaffList = [];
 let psCurrentName = null; // null=新增，用姓名當key(同門市內姓名不重複)
@@ -679,6 +728,9 @@ function switchBackofficeTab(name) {
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
   document.getElementById('tab-btn-member').classList.toggle('active', name === 'member');
   document.getElementById('tab-btn-posmanage').classList.toggle('active', name === 'posmanage');
+  document.getElementById('tab-btn-group').classList.toggle('active', name === 'group');
+  document.getElementById('view-group').style.display = name === 'group' ? 'block' : 'none';
+  if (name === 'group' && !groupListLoaded) { groupListLoaded = true; loadGroupList(); }
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
   document.getElementById('view-schedule').style.display = (name === 'merchant' && currentMerchantSubview === 'schedule') ? 'block' : 'none';
   document.getElementById('view-payment').style.display = (name === 'merchant' && currentMerchantSubview === 'payment') ? 'block' : 'none';

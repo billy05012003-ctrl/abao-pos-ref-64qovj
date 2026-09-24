@@ -160,7 +160,7 @@
     width: 100%; background: #fff; color: var(--brand); border: 1px solid var(--brand); border-radius: 10px;
     padding: 12px; font-size: 1rem; margin-top: 8px; cursor: pointer;
   }
-  #pickup-time-grid { display: flex; flex-wrap: wrap; gap: 6px; max-height: 200px; overflow-y: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
+  #pickup-time-grid, #group-pickup-time-grid { display: flex; flex-wrap: wrap; gap: 6px; max-height: 200px; overflow-y: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
   .time-slot-btn { flex: 0 0 auto; min-width: 68px; padding: 8px 6px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-size: 0.88rem; cursor: pointer; text-align: center; }
   .time-slot-btn.active { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
   .time-slot-btn:disabled { opacity: 0.35; cursor: not-allowed; text-decoration: line-through; }
@@ -175,6 +175,15 @@
   .size-select label { margin-right: 6px; cursor: pointer; }
   /* 2026-08-28修正：手機瀏覽器在某些排版情境下(inline-block標籤內)會把radio/checkbox原生外觀縮到看不見，
      明確給寬高強制顯示，避免客製化選項(溫度/甜度等)在手機上看不到可點選的圓圈 */
+  /* 揪團(2026-09-24) */
+  #group-banner { display:none; background:#e8f4ff; border-bottom:1px solid #b9dcff; color:#0c447c; font-size:0.85rem; padding:8px 16px; text-align:center; cursor:pointer; }
+  .group-member { border:1px solid var(--border); border-radius:10px; padding:8px 10px; margin-bottom:8px; }
+  .group-member.me { border-color:var(--brand); }
+  .group-member .gm-head { display:flex; justify-content:space-between; font-weight:bold; font-size:0.9rem; }
+  .group-member .gm-item { display:flex; justify-content:space-between; font-size:0.82rem; color:#555; padding:2px 0; }
+  .group-status { display:inline-block; font-size:0.78rem; padding:2px 10px; border-radius:999px; background:#eee; margin-left:6px; }
+  .group-status.open { background:#e3f5e9; color:#1f7a3d; } .group-status.locked { background:#fff3e0; color:#9a5b00; } .group-status.done { background:#e8f4ff; color:#0c447c; } .group-status.dead { background:#fde3df; color:#a30000; }
+  .cart-who { display:inline-block; font-size:0.72rem; background:#e8f4ff; color:#0c447c; border-radius:6px; padding:0 6px; margin-right:4px; }
   input[type="radio"], input[type="checkbox"] {
     width: 15px;
     height: 15px;
@@ -196,6 +205,7 @@
 <div class="notice">營業時間：每日 05:20～13:00（無公休日）。線上訂單以信用卡付款，付款完成後請依所選時段到店取餐。</div>
 <div class="notice" id="closed-notice" style="display:none; background:#ffe0e0; border-color:#ffb3b3; color:#a30000;"></div>
 <div class="notice" id="store-status-notice" style="display:none; background:#ffe0e0; border-color:#ffb3b3; color:#a30000;"></div>
+<div id="group-banner" onclick="openGroupPanel()"></div>
 
 <div class="overlay" id="category-overlay">
   <div class="sheet" style="max-height:80vh;">
@@ -283,7 +293,17 @@
       <h2>我的訂單</h2>
       <div id="cart-lines"></div>
       <div class="cart-total"><span>總計</span><span id="cart-total">$0</span></div>
-      <div style="margin:10px 0;padding-top:10px;border-top:1px dashed var(--border);">
+      <div id="group-cart-box" style="display:none;margin:10px 0;padding:10px;border:1px solid #b9dcff;border-radius:10px;background:#f4faff;">
+        <div id="group-cart-hint" style="font-size:0.85rem;color:#0c447c;margin-bottom:6px;"></div>
+        <label id="group-my-name-label">你的名字（出單會印在你的餐點上）</label>
+        <input type="text" id="group-my-name" maxlength="12" placeholder="例如：阿華">
+        <label id="group-agree-row" style="display:none;align-items:flex-start;gap:8px;margin-top:10px;font-size:0.82rem;line-height:1.5;cursor:pointer;color:var(--text);">
+          <input type="checkbox" id="group-agree-terms" style="width:20px;height:20px;margin-top:1px;flex:none;">
+          <span>我已閱讀並同意<a href="info.html#refund" target="_blank" rel="noopener">退款政策</a>、<a href="info.html#terms" target="_blank" rel="noopener">服務條款</a>及<a href="info.html#privacy" target="_blank" rel="noopener">隱私權政策</a>。<b>已付款訂單，非特殊因素，不可退款</b>。</span>
+        </label>
+        <button type="button" class="btn-primary" id="group-submit-btn" onclick="submitMyGroupItems()">送出我的餐點到揪團</button>
+      </div>
+      <div id="cart-member-block" style="margin:10px 0;padding-top:10px;border-top:1px dashed var(--border);">
         <label>會員手機（需完成會員驗證才能送出訂單）</label>
         <input type="tel" id="cust-phone" maxlength="10" pattern="09\d{8}" inputmode="numeric" autocomplete="tel" oninput="onCustPhoneInput_()" onblur="onCustPhoneInput_()">
         <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="verifyMember()">確認手機號碼</button>
@@ -293,6 +313,7 @@
         <div id="checkout-total-preview" style="font-size:0.85rem;color:var(--brand);margin-top:6px;"></div>
       </div>
       <button class="btn-primary" id="go-checkout" onclick="showCheckout()">填寫取餐資訊</button>
+      <button class="btn-secondary" id="go-group-create" style="display:none;" onclick="openGroupCreate()">👥 揪朋友一起點（我請客／代付）</button>
       <button class="btn-secondary" onclick="closeCart()">繼續點餐</button>
     </div>
 
@@ -333,6 +354,46 @@
       <pre id="order-summary"></pre>
       <button class="btn-primary" onclick="closeAll()">完成，關閉視窗</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="group-create-overlay">
+  <div class="sheet">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+      <h2 style="margin:0;">揪朋友一起點</h2>
+      <button type="button" onclick="closeGroupCreate()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <p style="font-size:0.85rem;color:var(--muted);margin:4px 0 10px;line-height:1.6;">開團後會產生一個連結，分享給朋友；朋友完成會員驗證、填名字就能把自己的餐點加進來。出單時每個人的餐點會分開印上名字。</p>
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">誰付錢？</label>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.9rem;margin:4px 0;cursor:pointer;"><input type="radio" name="group-paymode" value="host" checked onchange="onGroupPayModeChange_()"><span><b>我請客</b>：截止後由我一次付清，點數都歸我</span></label>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.9rem;margin:4px 0;cursor:pointer;"><input type="radio" name="group-paymode" value="each" onchange="onGroupPayModeChange_()"><span><b>各付各的</b>：每個人送出時付自己那份、各自拿點數（我也付我自己的）</span></label>
+    <div id="group-pickup-box" style="display:none;">
+      <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">取餐日期（各付各的要先定好，大家付款時才知道何時取餐）</label>
+      <select id="group-pickup-date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;"></select>
+      <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">取餐時間</label>
+      <input type="hidden" id="group-pickup-time">
+      <div id="group-pickup-time-grid"></div>
+    </div>
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">你的名字（團主）</label>
+    <input type="text" id="group-host-name" maxlength="12" placeholder="例如：小明" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;">
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">朋友點餐截止</label>
+    <select id="group-deadline" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;">
+      <option value="10">10 分鐘後</option><option value="15">15 分鐘後</option><option value="20" selected>20 分鐘後</option>
+      <option value="30">30 分鐘後</option><option value="45">45 分鐘後</option><option value="60">1 小時後</option>
+      <option value="90">1.5 小時後</option><option value="120">2 小時後</option><option value="180">3 小時後</option>
+    </select>
+    <div id="group-create-note" style="font-size:0.8rem;color:var(--muted);margin-top:8px;">你目前購物車裡的餐點會算成你自己的份。截止後 2 小時內沒有完成付款，揪團會自動作廢。</div>
+    <button class="btn-primary" id="group-create-btn" onclick="createGroup()">開團並產生分享連結</button>
+  </div>
+</div>
+
+<div class="overlay" id="group-overlay">
+  <div class="sheet">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+      <h2 style="margin:0;" id="group-title">揪團</h2>
+      <button type="button" onclick="closeGroupPanel()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <div id="group-body"><div style="color:var(--muted);font-size:0.85rem;">載入中…</div></div>
   </div>
 </div>
 
@@ -1549,7 +1610,7 @@ function renderCart() {
     const div = document.createElement('div');
     div.className = 'cart-line';
     div.innerHTML = `
-      <div>${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
+      <div>${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
       <div style="display:flex;align-items:center;gap:8px">
         <button class="qty-btn" data-act="dec">-</button>
         <span>${c.qty}</span>
@@ -1558,6 +1619,8 @@ function renderCart() {
     `;
     div.querySelector('[data-act="dec"]').onclick = () => changeQty(c.lineKey, -1);
     div.querySelector('[data-act="inc"]').onclick = () => changeQty(c.lineKey, 1);
+    // 揪團結帳：品項是全團的餐點(後端以揪團明細為準)，這裡不能加減，要改請回揪團
+    if (groupCheckoutMode) div.querySelectorAll('.qty-btn').forEach(b => b.style.visibility = 'hidden');
     linesEl.appendChild(div);
   });
   const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
@@ -1578,16 +1641,21 @@ function changeQty(lineKey, delta) {
   saveCartSession();
   renderCart();
   updateCartBar();
+  if (groupCtx && groupView) refreshGroupCartUi_();   // 揪團：付款按鈕上的金額跟著更新
 }
 
 function openCart() {
   renderCart();
+  refreshGroupCartUi_();
   document.getElementById('cart-view').style.display = 'block';
   document.getElementById('checkout-form').style.display = 'none';
   document.getElementById('confirm-view').style.display = 'none';
   document.getElementById('cart-overlay').classList.add('open');
 }
-function closeCart() { document.getElementById('cart-overlay').classList.remove('open'); }
+function closeCart() {
+  document.getElementById('cart-overlay').classList.remove('open');
+  if (groupCheckoutMode) exitGroupCheckout_();
+}
 function showCheckout() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
   const currentPhone = document.getElementById('cust-phone').value.trim();
@@ -1607,6 +1675,7 @@ function backToCart() {
 }
 function closeAll() {
   document.getElementById('cart-overlay').classList.remove('open');
+  groupCheckoutMode = false;
   cart = [];
   checkoutMemberVouchers = [];
   checkoutSelectedVouchers = [];
@@ -1651,7 +1720,7 @@ function submitOrder(e) {
   // 這裡讀不到值就當作沒選(走原本的線上付款流程)，跟目前行為完全一致
   const payAtPickupChosen = PAY_AT_PICKUP_ENABLED && document.getElementById('checkout-payment-method').value === '取餐付款';
 
-  const lines = cart.map(c => `- ${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
+  const lines = cart.map(c => `- ${c.who ? '['+c.who+'] ' : ''}${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
   const discountLine = voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '';
   const paymentNote = payAtPickupChosen
     ? '（已選擇取餐現場付款，請於取餐時完成付款）'
@@ -1683,6 +1752,9 @@ function submitOrder(e) {
     memberPhone: phone,
     voucherIds: appliedVoucherIds,
     paymentMethod: payAtPickupChosen ? '取餐付款' : undefined,
+    // 揪團結帳：後端改用揪團明細建單(不信任這裡的items)，並把訂單掛回揪團
+    groupId: groupCheckoutMode && groupCtx ? groupCtx.groupId : undefined,
+    hostToken: groupCheckoutMode && groupCtx ? groupCtx.hostToken : undefined,
     note: `訂單編號:${orderNo}　姓名:${name}　電話:${phone}${note ? '　備註:' + note : ''}`
   }).then(data => {
     if (data.status === 'ok') {
@@ -1834,8 +1906,11 @@ function pollMpgOrderStatus_(orderId, ctx, attempt) {
 
 // 取餐日期：今天(若還在接單時段內且開放當天訂購)起最多MAX_ADVANCE_DAYS天後，選項值改用offsetDays數字字串
 // (原本是'today'/'tomorrow'固定兩選一，2026-09-16改造成可設定天數，公休日自動從選單排除)
-function populatePickupDate() {
-  const sel = document.getElementById('pickup-date');
+// 2026-09-24：揪團「各付各的」開團時也要選取餐時間，改成可指定元素；不帶參數=結帳頁原本的欄位(行為不變)
+const PICKUP_IDS_ = { date: 'pickup-date', grid: 'pickup-time-grid', time: 'pickup-time' };
+function populatePickupDate(ids) {
+  ids = ids || PICKUP_IDS_;
+  const sel = document.getElementById(ids.date);
   sel.innerHTML = '';
   const candidates = [];
   if (ALLOW_SAME_DAY_ORDER && isOrderingOpen()) candidates.push(0);
@@ -1846,16 +1921,17 @@ function populatePickupDate() {
   finalOptions.forEach(offset => {
     sel.innerHTML += `<option value="${offset}">${formatDateLabel(offset)}</option>`;
   });
-  sel.onchange = () => populatePickupTime(sel.value);
+  sel.onchange = () => populatePickupTime(sel.value, ids);
 }
 
 // 取餐時間改用按鈕格子取代下拉選單(2026-09-18改版)：原本15分鐘一格的下拉選單在手機上要滑很久，
 // 改成一眼能看到多個時段的格子按鈕；預設自動選最接近現在的時段(清單第一個一定最早)，多數客人
 // 不用自己選，看到預設時間對就能直接送出
-function populatePickupTime(dateValue) {
-  const grid = document.getElementById('pickup-time-grid');
+function populatePickupTime(dateValue, ids) {
+  ids = ids || PICKUP_IDS_;
+  const grid = document.getElementById(ids.grid);
   grid.innerHTML = '';
-  document.getElementById('pickup-time').value = '';
+  document.getElementById(ids.time).value = '';
   const offset = Number(dateValue);
   const isToday = offset === 0;
   const nowMin = getNowMinutes();
@@ -1885,16 +1961,17 @@ function populatePickupTime(dateValue) {
     btn.className = 'time-slot-btn';
     btn.textContent = value;
     btn.dataset.value = value;
-    btn.onclick = () => selectPickupTime_(value);
+    btn.onclick = () => selectPickupTime_(value, ids);
     grid.appendChild(btn);
   });
-  selectPickupTime_(firstValue);
-  applySlotCapacity(dateValue);
+  selectPickupTime_(firstValue, ids);
+  applySlotCapacity(dateValue, ids);
 }
 
-function selectPickupTime_(value) {
-  document.getElementById('pickup-time').value = value;
-  document.querySelectorAll('#pickup-time-grid .time-slot-btn').forEach(btn => {
+function selectPickupTime_(value, ids) {
+  ids = ids || PICKUP_IDS_;
+  document.getElementById(ids.time).value = value;
+  document.querySelectorAll('#' + ids.grid + ' .time-slot-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.value === value);
   });
 }
@@ -1902,12 +1979,13 @@ function selectPickupTime_(value) {
 // 讀取該取餐日期各時段目前已訂張數，額滿(達MAX_SLOT_CAPACITY)的時段從格子裡disable掉，避免同一時段塞爆備餐量。
 // 這只是前端體驗優化(避免客人選到已滿時段)，真正防止超賣的判斷在後端createPendingOrder_做，
 // 失敗就當作沒有容量限制、不擋顧客選時段，不能因為網路問題擋單
-function applySlotCapacity(dateValue) {
+function applySlotCapacity(dateValue, ids) {
+  ids = ids || PICKUP_IDS_;
   const dateISO = getPickupDateISO(Number(dateValue));
   apiGet_({ action: 'slotCounts', storeId: 'meibao', date: dateISO }).then(data => {
     if (data.status !== 'ok' || !data.counts) return;
-    const grid = document.getElementById('pickup-time-grid');
-    if (document.getElementById('pickup-date').value !== dateValue) return; // 使用者已經切換到別的日期，這批結果過期不套用
+    const grid = document.getElementById(ids.grid);
+    if (document.getElementById(ids.date).value !== dateValue) return; // 使用者已經切換到別的日期，這批結果過期不套用
     const buttons = [...grid.querySelectorAll('.time-slot-btn')];
     buttons.forEach(btn => {
       if ((data.counts[btn.dataset.value] || 0) >= MAX_SLOT_CAPACITY) {
@@ -1915,15 +1993,15 @@ function applySlotCapacity(dateValue) {
         btn.classList.remove('active');
       }
     });
-    const currentValue = document.getElementById('pickup-time').value;
+    const currentValue = document.getElementById(ids.time).value;
     const currentBtn = buttons.find(b => b.dataset.value === currentValue);
     if (!currentBtn || currentBtn.disabled) {
       const nextAvailable = buttons.find(b => !b.disabled);
-      selectPickupTime_(nextAvailable ? nextAvailable.dataset.value : '');
+      selectPickupTime_(nextAvailable ? nextAvailable.dataset.value : '', ids);
     }
     if (buttons.length && buttons.every(b => b.disabled)) {
       grid.innerHTML = '<div style="font-size:0.85rem;color:var(--muted);padding:6px;">此日期時段皆已額滿</div>';
-      document.getElementById('pickup-time').value = '';
+      document.getElementById(ids.time).value = '';
     }
   }).catch(err => console.warn('讀取時段容量失敗（不影響選時段）', err));
 }
@@ -1938,6 +2016,365 @@ function checkOrderWindow() {
   }
   closedEl.style.display = 'none';
   return true;
+}
+
+// ---------------------------------------------------------------
+// 揪團（2026-09-24新增，老闆選完整版）：團主開團→分享連結→朋友驗證會員、填名字加餐→依付款模式結帳。
+// 付款模式(團主開團時選)：「我請客」團主結單後一次付清(點數歸團主)；「各付各的」每人送出時付自己那份(各自拿點數)。
+// 揪團一律要會員。後端只信任它自己存的揪團資料，這裡只負責畫面。先內部測試：網址帶 ?grouptest=1 才看得到
+// 「揪朋友一起點」按鈕，朋友收到的揪團連結(?g=)一律可用。正式開放時把 GROUP_ORDER_OPEN 改成 true
+// ---------------------------------------------------------------
+const GROUP_ORDER_OPEN = false;
+const URL_PARAMS_ = new URLSearchParams(location.search);
+const GROUP_ID_FROM_URL = URL_PARAMS_.get('g') || '';
+const GROUP_FEATURE_ON = GROUP_ORDER_OPEN || URL_PARAMS_.get('grouptest') === '1';
+const GROUP_PICKUP_IDS_ = { date: 'group-pickup-date', grid: 'group-pickup-time-grid', time: 'group-pickup-time' };
+let groupCtx = null;          // {groupId, hostToken, memberToken, name}，存在localStorage(同一支手機回來還認得)
+let groupView = null;         // 後端最新揪團內容
+let groupCheckoutMode = false; // 請客：團主結帳中，購物車暫時換成全團餐點
+let groupCartBackup_ = null;
+let groupPollTimer_ = null;
+
+function groupStoreKey_(gid) { return 'abao_group_' + gid; }
+function loadGroupCtx_(gid) { try { return JSON.parse(localStorage.getItem(groupStoreKey_(gid)) || 'null'); } catch (e) { return null; } }
+function saveGroupCtx_() { if (!groupCtx) return; try { localStorage.setItem(groupStoreKey_(groupCtx.groupId), JSON.stringify(groupCtx)); } catch (e) {} }
+function groupShareUrl_() { return location.origin + location.pathname + '?g=' + encodeURIComponent(groupCtx.groupId); }
+function groupItemsFromCart_() { return cart.map(c => ({ lineKey: c.lineKey, name: c.name, baseName: c.baseName, size: c.size || '', price: c.price, basePrice: c.basePrice, qty: c.qty, note: c.note || '' })); }
+function groupStatusClass_(st) { return st === '收單中' ? 'open' : (st === '已結單' || st === '已截止' || st === '付款中') ? 'locked' : st === '已成立' ? 'done' : 'dead'; }
+function groupMinutesLeft_() { if (!groupView || !groupView.deadline) return null; return Math.ceil((new Date(groupView.deadline).getTime() - Date.now()) / 60000); }
+function isGroupHost_() { return !!(groupCtx && groupCtx.hostToken); }
+function isGroupEach_() { return !!(groupView && groupView.payMode === 'each'); }
+function groupMe_() { return groupView ? groupView.members.find(m => m.isMe) : null; }
+// 揪團一律要會員：購物車裡的會員驗證要完成、且手機欄位沒被改過
+function groupVerifiedPhone_() {
+  const phone = document.getElementById('cust-phone').value.trim();
+  return (verifiedMember && verifiedMember.phone === phone) ? phone : '';
+}
+function groupPickupText_() {
+  if (!groupView || !groupView.pickupDate) return '';
+  const d = groupView.pickupDate.slice(5).replace('-', '/');
+  return `${d} ${groupView.pickupTime}`;
+}
+
+function fetchGroup_() {
+  if (!groupCtx) return Promise.resolve(null);
+  return apiPost_({ action: 'groupGet', groupId: groupCtx.groupId, token: groupCtx.hostToken || groupCtx.memberToken || '' }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取揪團失敗');
+    groupView = data;
+    // 團主用「團主管理連結」換到新手機/瀏覽器：後端認得團主後回傳團主自己那份的金鑰，存起來才能改自己的餐點
+    if (data.isHost && data.hostMemberToken && groupCtx.memberToken !== data.hostMemberToken) {
+      groupCtx.memberToken = data.hostMemberToken; groupCtx.name = groupCtx.name || data.hostName; saveGroupCtx_();
+    }
+    renderGroupBanner_();
+    return data;
+  });
+}
+
+function initGroupFromUrl_() {
+  if (!GROUP_ID_FROM_URL) return;
+  groupCtx = loadGroupCtx_(GROUP_ID_FROM_URL) || { groupId: GROUP_ID_FROM_URL };
+  // 團主管理連結(?g=…&h=團主金鑰)：換手機/從LINE內建瀏覽器打開時認回團主，存好後把金鑰從網址拿掉(避免截圖或轉貼外流)
+  const hostKeyFromUrl = URL_PARAMS_.get('h');
+  if (hostKeyFromUrl) {
+    groupCtx.hostToken = hostKeyFromUrl; saveGroupCtx_();
+    const u = new URL(location.href); u.searchParams.delete('h'); history.replaceState(null, '', u.toString());
+  }
+  fetchGroup_().then(() => {
+    // 第一次點連結進來的朋友：直接打開揪團說明
+    if (!groupCtx.memberToken && !groupCtx.hostToken) openGroupPanel();
+  }).catch(err => {
+    const b = document.getElementById('group-banner');
+    b.textContent = '⚠ ' + err.message; b.style.display = 'block';
+  });
+  setInterval(renderGroupBanner_, 30000);
+}
+
+function renderGroupBanner_() {
+  const b = document.getElementById('group-banner');
+  if (!groupView) { b.style.display = 'none'; return; }
+  const left = groupMinutesLeft_();
+  let t = `👥 ${groupView.hostName} 的揪團（${groupView.payModeText}）`;
+  if (groupView.groupStatus === '收單中') t += `・${groupView.deadlineText} 截止` + (left != null && left > 0 ? `（剩 ${left} 分）` : '');
+  else t += `・${groupView.groupStatus}`;
+  t += `・${groupView.members.length} 人　查看 ›`;
+  b.textContent = t; b.style.display = 'block';
+}
+
+// 購物車畫面：依揪團角色切換按鈕
+function refreshGroupCartUi_() {
+  const box = document.getElementById('group-cart-box');
+  const goCheckout = document.getElementById('go-checkout');
+  const goCreate = document.getElementById('go-group-create');
+  const inGroup = !!(groupCtx && groupView);
+  const voucherEls = [document.getElementById('checkout-voucher-list'), document.getElementById('checkout-total-preview')];
+  goCreate.style.display = (GROUP_FEATURE_ON && !inGroup && !groupCheckoutMode) ? 'block' : 'none';
+  voucherEls.forEach(el => el.style.display = '');
+  if (groupCheckoutMode || !inGroup) {   // 一般點餐，或請客團主結帳(走一般結帳流程：會員驗證/取餐時間/付款)
+    box.style.display = 'none'; goCheckout.style.display = 'block';
+    return;
+  }
+  // 在揪團裡：會員驗證照樣要做(揪團一律要會員)，但不走一般結帳，改成送出到揪團
+  const each = isGroupEach_();
+  box.style.display = 'block'; goCheckout.style.display = 'none';
+  if (!each) voucherEls.forEach(el => el.style.display = 'none');   // 請客：朋友不付錢，不用選兌換券
+  const nameInput = document.getElementById('group-my-name');
+  const known = groupCtx.name || '';
+  const hasName = !!known;
+  nameInput.style.display = hasName ? 'none' : 'block';
+  document.getElementById('group-my-name-label').style.display = hasName ? 'none' : 'block';
+  const me = groupMe_();
+  const paid = each && me && me.payState && me.payState !== '未付款';
+  const open = !paid && (groupView.groupStatus === '收單中' || (each && me && groupView.groupStatus === '已結單'));
+  const who = hasName ? `${known}，` : '';
+  document.getElementById('group-cart-hint').textContent = !open
+    ? (paid ? `你已經${me.payState === '付款中' ? '送出付款' : '付款'}，不能再修改餐點。` : `揪團目前「${groupView.groupStatus}」，已不能再修改餐點。`)
+    : each
+      ? `${who}請先在上方完成會員驗證，再送出並付款你自己那份（取餐時間：${groupPickupText_()}）。`
+      : `${who}請先在上方完成會員驗證，再把餐點送進「${groupView.hostName} 的揪團」（${groupView.hostName} 請客，不用付款）。`;
+  document.getElementById('group-agree-row').style.display = open && each ? 'flex' : 'none';
+  const btn = document.getElementById('group-submit-btn');
+  btn.style.display = open ? 'block' : 'none';
+  btn.textContent = each ? `送出並付款（$${cart.reduce((s, c) => s + c.qty * c.price, 0)}）` : '送出我的餐點到揪團';
+}
+
+function onGroupPayModeChange_() {
+  const each = document.querySelector('input[name="group-paymode"]:checked').value === 'each';
+  document.getElementById('group-pickup-box').style.display = each ? 'block' : 'none';
+  document.getElementById('group-create-note').textContent = each
+    ? '你目前購物車裡的餐點會算成你自己的份，開團後請記得付款你自己那份。每個人付款後訂單就各自成立，照上面的取餐時間出餐。'
+    : '你目前購物車裡的餐點會算成你自己的份。截止後 2 小時內沒有完成付款，揪團會自動作廢。';
+  if (each) { populatePickupDate(GROUP_PICKUP_IDS_); populatePickupTime(document.getElementById(GROUP_PICKUP_IDS_.date).value, GROUP_PICKUP_IDS_); }
+}
+function openGroupCreate() {
+  if (!cart.length) { alert('請先把你自己要吃的餐點加入購物車，再開團'); return; }
+  if (!groupVerifiedPhone_()) { alert('揪團需要會員，請先在下方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
+  closeCart();
+  const nm = document.getElementById('group-host-name');
+  if (!nm.value && verifiedMember && verifiedMember.name) nm.value = String(verifiedMember.name).slice(0, 12);
+  document.getElementById('group-create-overlay').classList.add('open');
+  onGroupPayModeChange_();
+}
+function closeGroupCreate() { document.getElementById('group-create-overlay').classList.remove('open'); }
+function createGroup() {
+  const name = document.getElementById('group-host-name').value.trim();
+  if (!name) { alert('請填寫你的名字'); return; }
+  const phone = groupVerifiedPhone_();
+  if (!phone) { alert('會員驗證資料有異動，請回購物車重新驗證'); return; }
+  const payMode = document.querySelector('input[name="group-paymode"]:checked').value;
+  const payload = { action: 'groupCreate', storeId: 'meibao', hostName: name, memberPhone: phone, payMode, deadlineMin: Number(document.getElementById('group-deadline').value), items: groupItemsFromCart_() };
+  if (payMode === 'each') {
+    const t = document.getElementById(GROUP_PICKUP_IDS_.time).value;
+    if (!t) { alert('請選擇取餐時間'); return; }
+    payload.pickupDate = getPickupDateISO(Number(document.getElementById(GROUP_PICKUP_IDS_.date).value));
+    payload.pickupTime = t;
+  }
+  const btn = document.getElementById('group-create-btn');
+  btn.disabled = true; btn.textContent = '開團中…';
+  apiPost_(payload).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '開團失敗');
+    groupCtx = { groupId: data.groupId, hostToken: data.hostToken, memberToken: data.memberToken, name };
+    saveGroupCtx_();
+    cart = []; saveCartSession(); updateCartBar();   // 你的餐點已經存進揪團
+    // 網址換成揪團連結(保留其他參數)，重新整理也回得來
+    const u = new URL(location.href); u.searchParams.set('g', data.groupId); history.replaceState(null, '', u.toString());
+    closeGroupCreate();
+    return fetchGroup_().then(() => openGroupPanel());
+  }).catch(err => alert(err.message)).finally(() => { btn.disabled = false; btn.textContent = '開團並產生分享連結'; });
+}
+
+function submitMyGroupItems() {
+  if (!cart.length) { alert('請先選購餐點'); return; }
+  const phone = groupVerifiedPhone_();
+  if (!phone) { alert('揪團需要會員，請先在上方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
+  const name = (groupCtx.name || document.getElementById('group-my-name').value).trim();
+  if (!name) { alert('請填寫你的名字'); document.getElementById('group-my-name').focus(); return; }
+  const each = isGroupEach_();
+  if (each && !document.getElementById('group-agree-terms').checked) { alert('請先勾選同意退款政策、服務條款及隱私權政策'); return; }
+  const btn = document.getElementById('group-submit-btn');
+  btn.disabled = true; btn.textContent = '送出中…';
+  const myCart = cart.slice();
+  apiPost_({ action: 'groupUpsertMember', groupId: groupCtx.groupId, memberToken: groupCtx.memberToken || '', name, memberPhone: phone, items: groupItemsFromCart_() }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '送出失敗');
+    groupCtx.memberToken = data.memberToken; groupCtx.name = name; saveGroupCtx_();
+    if (each) return payMyGroupShare_(myCart, phone, name);
+    cart = []; saveCartSession(); updateCartBar();
+    closeCart();
+    return fetchGroup_().then(() => { openGroupPanel(); alert(`已送出！等 ${groupView.hostName} 結帳付款後，這團才算成立。`); });
+  }).catch(err => alert(err.message)).finally(() => { btn.disabled = false; refreshGroupCartUi_(); });
+}
+
+// 各付各的：送出後直接建立自己那張訂單並導去藍新付款(品項/取餐時間/會員以後端揪團資料為準)
+function payMyGroupShare_(myCart, phone, name) {
+  const rawTotal = myCart.reduce((s, c) => s + c.qty * c.price, 0);
+  const voucherDiscount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
+  const total = Math.max(0, rawTotal - voucherDiscount);
+  const voucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
+  const orderNo = 'MB' + Date.now().toString().slice(-8);
+  const lines = myCart.map(c => `- ${c.name}${c.size ? '(' + c.size + ')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
+  const summary = `【${STORE_NAME}】揪團訂單（${groupView.hostName} 的揪團・各付各的）\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${groupPickupText_()}\n---\n${lines}\n---\n${voucherDiscount > 0 ? '已套用兌換券折抵：-$' + voucherDiscount + '\n' : ''}總計：$${total}\n（已完成線上信用卡付款，取餐時請出示此訂單編號）`;
+  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds, voucherPhone: phone, payAtPickup: false, cartBackup: myCart };
+  cart = []; saveCartSession(); updateCartBar();
+  return createPendingOrderOnBackend({
+    storeId: 'meibao', groupId: groupCtx.groupId, memberToken: groupCtx.memberToken,
+    items: myCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '' })),
+    totalAmount: total, memberPhone: phone, voucherIds,
+    note: `訂單編號:${orderNo}　姓名:${name}　電話:${phone}`
+  }).then(data => {
+    if (data.status !== 'ok') { restoreCartAfterFailure_((data.message || '送出失敗') + ''); return; }
+    pendingOrderContext.backendOrderId = data.orderId;
+    startMpgPayment(data.orderId, total);
+  }).catch(() => restoreCartAfterFailure_('訂單送出失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。'));
+}
+
+// 修改自己的餐點：把自己送出過的餐點放回購物車，改完再送出一次(會取代舊的)
+function editMyGroupItems() {
+  const me = groupMe_();
+  if (me) { cart = me.items.map(it => Object.assign({}, it)); saveCartSession(); updateCartBar(); }
+  closeGroupPanel();
+  openCart();
+}
+function leaveGroup() {
+  if (!confirm('確定要退出這個揪團？你送出的餐點會被刪除。')) return;
+  apiPost_({ action: 'groupUpsertMember', groupId: groupCtx.groupId, memberToken: groupCtx.memberToken, items: [] }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '退出失敗');
+    groupCtx.memberToken = ''; saveGroupCtx_();
+    return fetchGroup_().then(renderGroupPanel_);
+  }).catch(err => alert(err.message));
+}
+
+function openGroupPanel() {
+  document.getElementById('group-overlay').classList.add('open');
+  renderGroupPanel_();
+  fetchGroup_().then(renderGroupPanel_).catch(err => { document.getElementById('group-body').innerHTML = '<div style="color:#a30000">' + escapeHtml_(err.message) + '</div>'; });
+  clearInterval(groupPollTimer_);
+  groupPollTimer_ = setInterval(() => fetchGroup_().then(renderGroupPanel_).catch(() => {}), 20000);   // 只在面板開著時輪詢，省後端用量
+}
+function closeGroupPanel() { document.getElementById('group-overlay').classList.remove('open'); clearInterval(groupPollTimer_); }
+
+function renderGroupPanel_() {
+  const body = document.getElementById('group-body');
+  if (!groupView) return;
+  const g = groupView, host = isGroupHost_(), st = g.groupStatus, each = isGroupEach_(), me = groupMe_();
+  document.getElementById('group-title').innerHTML = escapeHtml_(g.hostName) + ' 的揪團<span class="group-status ' + groupStatusClass_(st) + '">' + escapeHtml_(st) + '</span>';
+  const left = groupMinutesLeft_();
+  const editable = st === '收單中' || st === '已截止' || st === '已結單';
+  let h = `<div style="font-size:0.85rem;margin-bottom:6px;">${each ? `💳 各付各的：每個人送出時付自己那份（各自拿點數）・取餐 <b>${escapeHtml_(groupPickupText_())}</b>` : `🎁 ${escapeHtml_(g.hostName)} 請客：${escapeHtml_(g.hostName)} 結單後一次付清`}</div>`;
+  if (st === '收單中') h += `<div style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;">${escapeHtml_(g.deadlineText)} 截止收單${left > 0 ? `（剩 ${left} 分鐘）` : ''}。${each ? '付款後你那份就成立。' : '團主付款後這團才算成立。'}需要會員才能參加。</div>`;
+  if (host && editable) {
+    h += `<div style="background:#f4faff;border:1px solid #b9dcff;border-radius:10px;padding:10px;margin-bottom:10px;">
+      <div style="font-size:0.85rem;margin-bottom:6px;">把連結分享給朋友：</div>
+      <input type="text" readonly value="${escapeHtml_(groupShareUrl_())}" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:0.8rem;" onclick="this.select()">
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button type="button" class="btn-secondary" style="margin-top:0;padding:8px;" onclick="copyGroupLink()">複製連結</button>
+        <button type="button" class="btn-primary" style="margin-top:0;padding:8px;background:#06c755;" onclick="shareGroupToLine()">分享到 LINE</button>
+      </div>
+      <details style="margin-top:8px;font-size:0.8rem;color:var(--muted);"><summary style="cursor:pointer;">團主管理連結（換手機或從 LINE 打開時用，不要分享）</summary>
+        <div style="margin:6px 0;">用這個連結打開才能繼續管理揪團${each ? '' : '、結單、結帳'}。拿到這個連結的人都能操作你的揪團，請只傳給自己。</div>
+        <button type="button" class="btn-secondary" style="margin-top:0;padding:6px;font-size:0.85rem;" onclick="copyGroupHostLink()">複製團主管理連結</button>
+      </details></div>`;
+  }
+  if (!host && !g.myMemberId && st === '收單中') {
+    h += `<div style="background:#fff3e0;border:1px solid #ffd699;border-radius:10px;padding:10px;margin-bottom:10px;font-size:0.88rem;line-height:1.6;">${escapeHtml_(g.hostName)} 邀請你一起點早餐！<br>在菜單點好你要的餐點 → 到「查看訂單」完成會員驗證 → ${each ? '按「送出並付款」付你自己那份' : '按「送出我的餐點到揪團」'}就完成了。</div>`;
+  }
+  g.members.forEach(m => {
+    const paid = each && m.payState && m.payState !== '未付款';
+    const canRemove = host && !m.isHost && editable && !paid;
+    const badge = each ? `<span class="group-status ${m.payState === '已付款' ? 'done' : m.payState === '付款中' ? 'locked' : m.payState === '已退款' ? 'dead' : ''}" style="margin-left:6px;">${escapeHtml_(m.payState)}</span>` : '';
+    h += `<div class="group-member${m.isMe ? ' me' : ''}"><div class="gm-head"><span>${escapeHtml_(m.name)}${m.isHost ? '（團主）' : ''}${m.isMe ? '（你）' : ''}${badge}</span><span>$${m.subtotal}</span></div>`;
+    m.items.forEach(it => { h += `<div class="gm-item"><span>${escapeHtml_(it.name)}${it.size ? ' (' + escapeHtml_(it.size) + ')' : ''} x${it.qty}</span><span>$${it.price * it.qty}</span></div>`; });
+    if (canRemove) h += `<div style="text-align:right;"><button type="button" style="border:none;background:none;color:#a30000;font-size:0.8rem;cursor:pointer;" onclick="removeGroupMember('${m.memberId}')">刪除這個人的餐點</button></div>`;
+    h += '</div>';
+  });
+  h += `<div class="cart-total"><span>合計（${g.members.length} 人）</span><span>$${g.total}</span></div>`;
+  if (each) {
+    // 各付各的：每個人管自己那份(團主也一樣)
+    const mePay = me ? me.payState : '';
+    const canEditMine = me && mePay === '未付款' && (st === '收單中' || st === '已結單');
+    if (canEditMine) h += `<button type="button" class="btn-primary" onclick="editMyGroupItems()">修改／付款我的餐點（$${me.subtotal}）</button>`;
+    if (me && mePay === '付款中') h += `<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">你那份已送出付款（訂單 ${escapeHtml_(me.orderId)}），還沒完成。</div><button type="button" class="btn-primary" onclick="resumeGroupPayment()">繼續付款</button>`;
+    if (me && mePay === '已付款') h += `<div style="font-size:0.9rem;margin-top:8px;">✅ 你那份已付款，訂單編號 <b>${escapeHtml_(me.orderId)}</b>，請於 ${escapeHtml_(groupPickupText_())} 取餐。</div>`;
+    if (canEditMine && !host) h += `<button type="button" class="btn-secondary" style="color:#a30000;border-color:#e0a0a0;" onclick="leaveGroup()">退出揪團</button>`;
+    if (!me && !host && st === '收單中') h += `<button type="button" class="btn-primary" onclick="closeGroupPanel()">開始點餐</button>`;
+    if (host && st === '收單中') h += `<button type="button" class="btn-secondary" onclick="lockGroup(true)">結單（不再收新朋友）</button>`;
+    if (host && st === '已結單' && left > 0) h += `<button type="button" class="btn-secondary" onclick="lockGroup(false)">重新開放朋友加入</button>`;
+    if (st === '已截止') h += `<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">揪團已截止。已付款的人訂單都已成立，沒付款的人這次沒有成立。</div>`;
+  } else {
+    if (st === '收單中' && g.myMemberId) h += `<button type="button" class="btn-secondary" onclick="editMyGroupItems()">修改我的餐點</button>` + (host ? '' : `<button type="button" class="btn-secondary" style="color:#a30000;border-color:#e0a0a0;" onclick="leaveGroup()">退出揪團</button>`);
+    if (st === '收單中' && !g.myMemberId && !host) h += `<button type="button" class="btn-primary" onclick="closeGroupPanel()">開始點餐</button>`;
+    if (host) {
+      if (st === '收單中' || st === '已截止') h += `<button type="button" class="btn-primary" onclick="lockGroup(true)">結單（鎖住，朋友不能再改）</button>`;
+      if (st === '已結單') {
+        h += `<button type="button" class="btn-primary" onclick="startGroupCheckout()">前往結帳（$${g.total}）</button>`;
+        if (left > 0) h += `<button type="button" class="btn-secondary" onclick="lockGroup(false)">重新開放朋友點餐</button>`;
+      }
+      if (st === '付款中') h += `<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">已送出付款（訂單 ${escapeHtml_(g.orderId)}），還沒完成。</div><button type="button" class="btn-primary" onclick="resumeGroupPayment()">繼續付款</button>`;
+      if (st === '已成立') h += `<div style="font-size:0.9rem;margin-top:8px;">✅ 已付款成立，訂單編號 <b>${escapeHtml_(g.orderId)}</b></div>`;
+      if (st === '已作廢') h += `<div style="font-size:0.85rem;color:#a30000;margin-top:8px;">這個揪團已作廢（沒有在時限內完成付款）。</div>`;
+    } else if (st !== '收單中') {
+      h += `<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">${st === '已成立' ? '團主已完成付款，揪團成立！請依團主約定的時間取餐。' : st === '已作廢' ? '這個揪團已作廢（團主沒有在時限內付款）。' : '揪團已截止，等團主結帳付款。'}</div>`;
+    }
+  }
+  h += `<button type="button" class="btn-secondary" onclick="openGroupPanel()">重新整理</button>`;
+  body.innerHTML = h;
+}
+
+function copyGroupLink() {
+  const url = groupShareUrl_();
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => alert('已複製連結')).catch(() => prompt('請長按複製連結：', url));
+}
+function copyGroupHostLink() {
+  const url = groupShareUrl_() + '&h=' + encodeURIComponent(groupCtx.hostToken);
+  (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).then(() => alert('已複製團主管理連結，請只傳給自己')).catch(() => prompt('請長按複製（只傳給自己）：', url));
+}
+function shareGroupToLine() {
+  const text = `${groupView.hostName} 揪你一起點 A-Bao 早餐（${groupView.payModeText}）！${groupView.deadlineText} 前點好喔 👉 ${groupShareUrl_()}`;
+  window.open('https://line.me/R/msg/text/?' + encodeURIComponent(text), '_blank');
+}
+function removeGroupMember(memberId) {
+  const m = groupView.members.find(x => x.memberId === memberId);
+  if (!m || !confirm('確定刪除「' + m.name + '」的餐點？')) return;
+  apiPost_({ action: 'groupRemoveMember', groupId: groupCtx.groupId, hostToken: groupCtx.hostToken, memberId }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
+    return fetchGroup_().then(renderGroupPanel_);
+  }).catch(err => alert(err.message));
+}
+function lockGroup(lock) {
+  if (lock && !confirm(isGroupEach_() ? '結單後就不能再有新朋友加入（已加入的人仍可付款），確定結單？' : '結單後朋友就不能再加點或修改，確定結單？')) return;
+  apiPost_({ action: 'groupLock', groupId: groupCtx.groupId, hostToken: groupCtx.hostToken, lock }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '操作失敗');
+    return fetchGroup_().then(renderGroupPanel_);
+  }).catch(err => alert(err.message));
+}
+
+// 請客：團主結帳，購物車暫時換成全團餐點(只供顯示與兌換券計算，後端以揪團明細建單、點數歸團主)，接著走一般結帳流程
+function startGroupCheckout() {
+  fetchGroup_().then(g => {
+    if (g.groupStatus !== '已結單') { renderGroupPanel_(); alert('揪團狀態已變更為「' + g.groupStatus + '」，請重新確認'); return; }
+    groupCartBackup_ = cart.slice();
+    cart = [];
+    g.members.forEach(m => m.items.forEach((it, i) => cart.push(Object.assign({}, it, { lineKey: m.memberId + '|' + i + '|' + it.lineKey, who: m.name }))));
+    groupCheckoutMode = true;
+    updateCartBar();
+    closeGroupPanel();
+    openCart();
+  }).catch(err => alert(err.message));
+}
+function exitGroupCheckout_() {
+  groupCheckoutMode = false;
+  cart = groupCartBackup_ || [];
+  groupCartBackup_ = null;
+  checkoutSelectedVouchers = [];
+  saveCartSession();
+  updateCartBar();
+}
+// 付款中斷(關掉藍新頁)：用原本那張待付款訂單繼續付款，不重新建單(請客=全團那張；各付各的=自己那張)
+function resumeGroupPayment() {
+  const me = groupMe_();
+  const each = isGroupEach_();
+  const orderId = each ? me.orderId : groupView.orderId;
+  const total = each ? me.subtotal : groupView.total;
+  pendingOrderContext = { orderNo: orderId, summary: `${groupView.hostName} 的揪團（${groupView.payModeText}）\n${each ? me.name + ' 的餐點' : groupView.members.length + ' 人'}\n合計：$${total}`, total, backendOrderId: orderId, voucherIds: [], payAtPickup: false, cartBackup: [] };
+  startMpgPayment(orderId, total);
 }
 
 // 菜單CMS化Phase 1（2026-09-06）：renderMenu()/applyItemAvailability()都要用到CATALOG/OPTION_GROUPS，
@@ -1957,6 +2394,7 @@ loadCartSession();
 updateCartBar();
 prefillRememberedPhone_();
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
+initGroupFromUrl_();
 
 // 讀取雲端平板設定的品項上下架狀態，同步反映到點餐頁（本日售完/永久下架→擋掉加入按鈕）；
 // 順便讀暫停接單/設為忙碌狀態，顯示非阻斷式提示（真正擋單是送出訂單時後端做，這裡只是提早讓客人知道）
