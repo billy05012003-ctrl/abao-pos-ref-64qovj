@@ -58,7 +58,7 @@
 
   <div class="card">
     <h2>③ 斷線偵測測試</h2>
-    <p>按「開始監控」後，每 5 秒自動問一次印表機。接著<b>把印表機關機</b>，看幾秒內跳出紅色警示＋嗶聲；再<b>開機</b>，看會不會自己恢復（不按任何按鈕），不會的話按「重新連線」。</p>
+    <p>不靠印表機回話，改看 Fully 的「連線狀態」和「送出結果」。按「開始監控」後，<b>把印表機關機</b>，看幾秒內跳出紅色警示＋嗶聲（沒跳＝這招抓不到）；再<b>開機</b>，等 30 秒看會不會自己恢復，不會的話按「重新連線」，最後按「印一張測試單」確認真的能印。</p>
     <button id="btnMon" class="sec">開始監控</button>
     <span id="monState" class="state">未執行</span>
   </div>
@@ -199,16 +199,24 @@ $('btnPrint').onclick = () => {
     log('測試單已送出（回傳值：' + r + '）', 'g');
   } catch (e) { log('送出失敗：' + e.message, 'e'); }
 };
+// 不靠印表機回話的連線訊號：①Fully 自己回報的連線狀態 ②送一個不會印出東西的小指令，看送出成功或失敗
+function linkSignals() {
+  let c = null, r = null, err = '';
+  try { c = F.btIsConnected(); } catch (e) { err = '連線狀態讀取出錯'; }
+  try { r = F.btSendHexData(toHex([0x10, 0x04, 1])); } catch (e) { r = false; err = '送出時出錯：' + e.message; }
+  const down = c === false || r === false;
+  return { c, r, down, err };
+}
 async function reconnect(auto) {
   try { F.btClose(); } catch (e) {}
   await new Promise(r => setTimeout(r, 500));
   if (lastOpen === 'mac' && $('btMac').value.trim()) F.btOpenByMac($('btMac').value.trim().toUpperCase());
   else F.btOpenByName($('btName').value.trim());
   await new Promise(r => setTimeout(r, 3000));
-  const s = await queryStatus(1);
-  log((auto ? '自動' : '手動') + '重新連線' + (s !== null ? '成功' : '失敗（印表機沒回話）'), s !== null ? 'g' : (auto ? 'y' : 'e'));
-  setPortState(s !== null, s !== null ? '已連線' : '斷線');
-  return s !== null;
+  const k = linkSignals();
+  log((auto ? '自動' : '手動') + '重新連線後：連線狀態=' + k.c + '　送出結果=' + k.r + (k.down ? '　→ 還是斷線' : '　→ 看起來連上了（請按「印一張測試單」確認真的會印）'), k.down ? (auto ? 'y' : 'e') : 'g');
+  setPortState(!k.down, k.down ? '斷線' : '已連線');
+  return !k.down;
 }
 $('btnReconnect').onclick = async () => { ensureAudio(); if (await reconnect(false)) setAlarm(false); };
 
@@ -227,24 +235,28 @@ $('btnPing').onclick = async () => {
   }
 };
 
-let monTimer = null, busy = false, downSince = 0;
+let monTimer = null, busy = false, downSince = 0, tick = 0, lastSig = '';
 $('btnMon').onclick = () => {
   ensureAudio();
   if (monTimer) { clearInterval(monTimer); monTimer = null; $('btnMon').textContent = '開始監控'; $('monState').textContent = '已停止'; $('monState').className = 'state'; return; }
   $('btnMon').textContent = '停止監控'; $('monState').textContent = '監控中'; $('monState').className = 'state ok';
-  log('開始監控：每 5 秒問一次印表機。現在可以把印表機關機');
+  tick = 0; lastSig = ''; downSince = 0;
+  log('開始監控（不靠回話）：每 5 秒檢查一次連線狀態＋送出結果。數值有變才會記一行。現在可以把印表機關機');
   monTimer = setInterval(async () => {
-    if (busy) return; busy = true;
+    if (busy) return; busy = true; tick++;
     try {
-      let s = null;
-      try { s = await queryStatus(1); } catch (e) { log('詢問時出錯：' + e.message, 'y'); }
-      if (s !== null) {
-        if (downSince) { log('✅ 印表機恢復回話（斷線 ' + Math.round((Date.now() - downSince) / 1000) + ' 秒）', 'g'); downSince = 0; setAlarm(false); setPortState(true, '已連線'); $('monState').textContent = '監控中'; }
+      const k = linkSignals();
+      const sig = '連線狀態=' + k.c + '　送出結果=' + k.r + (k.err ? '　' + k.err : '');
+      if (sig !== lastSig) { log('訊號變化：' + sig, k.down ? 'e' : 'g'); lastSig = sig; }
+      if (!k.down) {
+        if (downSince) { log('✅ 恢復連線（斷線 ' + Math.round((Date.now() - downSince) / 1000) + ' 秒）', 'g'); downSince = 0; setAlarm(false); setPortState(true, '已連線'); }
+        $('monState').textContent = '監控中（第 ' + tick + ' 次正常）';
       } else {
-        if (!downSince) { downSince = Date.now(); log('⚠ 印表機沒回話 → 已警示', 'e'); }
+        if (!downSince) { downSince = Date.now(); log('⚠ 偵測到斷線 → 已警示', 'e'); }
         setAlarm(true);
-        $('monState').textContent = '斷線 ' + Math.round((Date.now() - downSince) / 1000) + ' 秒';
-        if (await reconnect(true)) { log('✅ 不用按按鈕就自動恢復了（斷線 ' + Math.round((Date.now() - downSince) / 1000) + ' 秒）', 'g'); downSince = 0; setAlarm(false); $('monState').textContent = '監控中'; }
+        const sec = Math.round((Date.now() - downSince) / 1000);
+        $('monState').textContent = '斷線 ' + sec + ' 秒';
+        if (tick % 3 === 0) await reconnect(true);      // 每 15 秒自動試著重連一次
       }
     } finally { busy = false; }
   }, 5000);
