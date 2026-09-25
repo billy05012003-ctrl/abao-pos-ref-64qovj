@@ -1248,8 +1248,18 @@ function getPosCartTotalQty() {
 
 // 跨列合併資格判斷（2026-09-03新增）：同一基本品項(不管客製化不同)分成好幾條購物車列時，
 // 加總全部列的數量一起判斷夠不夠件數，不再只看被選中那一列自己的qty
-function getPosCartQtyForBaseName(baseName) {
-  return posCart.filter(c => c.baseName === baseName).reduce((s, c) => s + c.qty, 0);
+// 2026-09-25老闆定案：飲品(有M/L份量的品項)還要份量相同才算同一組(紅茶M+紅茶L不能湊)；
+// 餐點沒有size不受影響；套餐內附飲料的份量屬客製化，不看(不同飲料的同款套餐照樣能湊)
+function getPosCartQtyForBaseName(baseName, size) {
+  const sz = String(size || '').toUpperCase();
+  return posCart.filter(c => c.baseName === baseName && String(c.size || '').toUpperCase() === sz).reduce((s, c) => s + c.qty, 0);
+}
+
+// 同品項件數不足時的提示文字(飲品要註明同份量)
+function sameItemQtyAlert_(line, minQty, type) {
+  return line.size
+    ? `此飲品需要同份量(${String(line.size).toUpperCase()})${minQty}件以上才能套用「${type}」`
+    : `此品項需要有${minQty}件以上才能套用「${type}」`;
 }
 
 function applyVoucherToLine(lineKey) {
@@ -1259,9 +1269,9 @@ function applyVoucherToLine(lineKey) {
   if (!line) return;
   // 「週二第二件五折」不限定同一個商品湊件數，其餘效果(買一送一/第二件六折/加一元多一件)維持只看同商品數量
   const isDiscount50 = v.effect === 'discount50';
-  const qtyForThreshold = isDiscount50 ? getPosCartTotalQty() : getPosCartQtyForBaseName(line.baseName);
+  const qtyForThreshold = isDiscount50 ? getPosCartTotalQty() : getPosCartQtyForBaseName(line.baseName, line.size);
   if (qtyForThreshold < v.minQty) {
-    alert(isDiscount50 ? `購物車需要有${v.minQty}件以上品項才能套用「${v.type}」` : `此品項需要有${v.minQty}件以上才能套用「${v.type}」`);
+    alert(isDiscount50 ? `購物車需要有${v.minQty}件以上品項才能套用「${v.type}」` : sameItemQtyAlert_(line, v.minQty, v.type));
     return;
   }
 
@@ -1360,7 +1370,8 @@ function applyDrinkUpgradeOption_(idx) {
     // (跟套餐客製化畫面內建的飲品升級同一種bug，這裡是購物車已加入後另外套用的「活動飲品升級」路徑)
     const oldAddOn = comboDrinkOwnAddOn_(line.comboDrinkName, line.comboDrinkSize);
     line.price = line.price - oldAddOn + amount;
-    line.basePrice = line.price;
+    // 2026-09-25修正：basePrice維持套餐整組價不動——原本這裡設成line.price(含升級費/加起司等客製化加價)，
+    // 導致同一份套餐「點餐時選飲料」跟「加入後才用活動飲品升級換飲料」第二件六折折的金額不一樣
     line.comboDrinkName = o.rule.targetItem;
     line.comboDrinkSize = o.size.toLowerCase();
     closeDrinkUpgradePicker();
@@ -1437,9 +1448,9 @@ function applyDirectDiscountEffect_(type, effect, lineKey) {
   // 「週二第二件五折」不限定同一個商品湊件數，其餘效果(買一送一/第二件六折/加一元多一件)維持只看同商品數量
   if (behavior.minQty) {
     const isDiscount50 = effect === 'discount50';
-    const qtyForThreshold = isDiscount50 ? getPosCartTotalQty() : getPosCartQtyForBaseName(line.baseName);
+    const qtyForThreshold = isDiscount50 ? getPosCartTotalQty() : getPosCartQtyForBaseName(line.baseName, line.size);
     if (qtyForThreshold < behavior.minQty) {
-      alert(isDiscount50 ? `購物車需要有${behavior.minQty}件以上品項才能套用「${type}」` : `此品項需要有${behavior.minQty}件以上才能套用「${type}」`);
+      alert(isDiscount50 ? `購物車需要有${behavior.minQty}件以上品項才能套用「${type}」` : sameItemQtyAlert_(line, behavior.minQty, type));
       return;
     }
   }
