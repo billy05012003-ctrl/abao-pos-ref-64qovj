@@ -2090,6 +2090,22 @@ function initGroupFromUrl_() {
   setInterval(renderGroupBanner_, 30000);
 }
 
+// 揪團已經結束：不再佔住購物車(2026-09-25實測發現：揪完一團後網址帶著g=，開不了第二團)
+function isGroupFinished_() {
+  if (!groupView) return false;
+  const st = groupView.groupStatus;
+  return st === '已成立' || st === '已作廢' || st === '已退款' || (groupView.payMode === 'each' && st === '已截止');
+}
+// 離開目前這個揪團畫面(回到一般點餐)：只清掉這個頁面的揪團狀態、網址拿掉g/h，不會刪除或退出揪團，點原連結還能回來
+function leaveGroupView() {
+  closeGroupPanel();
+  if (groupCheckoutMode) exitGroupCheckout_();
+  groupCtx = null; groupView = null;
+  const u = new URL(location.href); u.searchParams.delete('g'); u.searchParams.delete('h'); history.replaceState(null, '', u.toString());
+  renderGroupBanner_();
+  refreshGroupCartUi_();
+}
+
 function renderGroupBanner_() {
   const b = document.getElementById('group-banner');
   if (!groupView) { b.style.display = 'none'; return; }
@@ -2106,7 +2122,7 @@ function refreshGroupCartUi_() {
   const box = document.getElementById('group-cart-box');
   const goCheckout = document.getElementById('go-checkout');
   const goCreate = document.getElementById('go-group-create');
-  const inGroup = !!(groupCtx && groupView);
+  const inGroup = !!(groupCtx && groupView) && !isGroupFinished_();
   const voucherEls = [document.getElementById('checkout-voucher-list'), document.getElementById('checkout-total-preview')];
   goCreate.style.display = (GROUP_FEATURE_ON && !inGroup && !groupCheckoutMode) ? 'block' : 'none';
   voucherEls.forEach(el => el.style.display = '');
@@ -2177,7 +2193,7 @@ function createGroup() {
     saveGroupCtx_();
     cart = []; saveCartSession(); updateCartBar();   // 你的餐點已經存進揪團
     // 網址換成揪團連結(保留其他參數)，重新整理也回得來
-    const u = new URL(location.href); u.searchParams.set('g', data.groupId); history.replaceState(null, '', u.toString());
+    const u = new URL(location.href); u.searchParams.set('g', data.groupId); u.searchParams.delete('h'); history.replaceState(null, '', u.toString());
     closeGroupCreate();
     return fetchGroup_().then(() => openGroupPanel());
   }).catch(err => alert(err.message)).finally(() => { btn.disabled = false; btn.textContent = '開團並產生分享連結'; });
@@ -2316,6 +2332,9 @@ function renderGroupPanel_() {
     }
   }
   h += `<button type="button" class="btn-secondary" onclick="openGroupPanel()">重新整理</button>`;
+  h += isGroupFinished_()
+    ? `<button type="button" class="btn-primary" onclick="leaveGroupView()">回到一般點餐${GROUP_FEATURE_ON ? '／開新的揪團' : ''}</button>`
+    : `<button type="button" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);font-size:0.82rem;text-decoration:underline;cursor:pointer;" onclick="leaveGroupView()">暫時離開，回到一般點餐（揪團資料會保留，點原連結可以回來）</button>`;
   body.innerHTML = h;
 }
 
