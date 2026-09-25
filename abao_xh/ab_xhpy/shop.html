@@ -134,6 +134,7 @@
   .overlay.open { display: flex; }
   #drink-overlay { z-index: 25; }
   #tier-overlay { z-index: 25; }
+  .tier-perk-badge { display: inline-block; margin-top: 3px; font-size: 0.72rem; font-weight: 700; color: #7a4f12; background: linear-gradient(155deg, #f6e3b4, #e8c77a); border-radius: 999px; padding: 1px 8px; }
   /* 會員等級與專屬好禮(2026-09-25改版，照設計稿Main.dc.html/abao-membership-tier-table.html)：
      寬螢幕＝左側金色標籤欄＋四欄等級的表格；手機＝每個等級一張卡片上下排列 */
   #tier-overlay .sheet { max-width: 1100px; background: #fbf7f1; }
@@ -965,6 +966,7 @@ function renderMemberVerified_(member) {
 
 function renderMemberNotFound_(phone) {
   verifiedMember = null;
+  setTimeout(updateCheckoutTotalDisplay, 0);   // 清掉會員權益/菜單標示
   document.getElementById('member-verify-result').innerHTML = `
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">
       <div style="color:var(--muted);">查無此會員，填姓名建立即可（免費，立即生效）</div>
@@ -983,6 +985,7 @@ function onCustPhoneInput_() {
     verifiedMember = null;
     document.getElementById('member-verify-result').innerHTML = '';
     document.getElementById('checkout-voucher-list').innerHTML = '';
+    updateCheckoutTotalDisplay();   // 清掉會員權益/菜單標示
   }
   if (isValidPhone_(phone)) { rememberPhone_(phone); verifyMember(); }
 }
@@ -1228,18 +1231,60 @@ function tierPerkText_(p) {
   return parts.join('、');
 }
 
+// 購物車應付金額(原價−兌換券−會員等級權益)；購物車總計/下方購物車列/結帳預覽共用
+function cartDue_() {
+  const raw = cart.reduce((s, c) => s + c.qty * c.price, 0);
+  const perks = myTierPerks_(cart);
+  const discount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
+  return { raw, perks, discount, due: Math.max(0, raw - discount - perks.total) };
+}
+// 購物車總計(2026-09-25老闆要求)：有折扣時顯示「原價(劃掉) → 應付」，避免總計跟應付金額對不起來
+function renderCartTotals_(d) {
+  const totalEl = document.getElementById('cart-total');
+  if (totalEl) totalEl.innerHTML = d.due < d.raw
+    ? `<span style="color:var(--muted);font-weight:normal;text-decoration:line-through;font-size:0.9rem;margin-right:6px;">$${d.raw}</span>應付 $${d.due}`
+    : '$' + d.raw;
+  const barEl = document.getElementById('cart-total-bar');
+  if (barEl) barEl.textContent = '$' + d.due;
+}
+
 function updateCheckoutTotalDisplay() {
   const el = document.getElementById('checkout-total-preview');
   if (!el) return;
-  const perks = myTierPerks_(cart);
-  if (checkoutSelectedVouchers.length === 0 && !perks.total) { el.textContent = ''; return; }
-  const rawTotal = cart.reduce((s, c) => s + c.qty * c.price, 0);
-  const discount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
-  const total = Math.max(0, rawTotal - discount - perks.total);
+  const d = cartDue_();
+  renderCartTotals_(d);
+  refreshTierPerkBadges_();
+  if (!d.discount && !d.perks.total) { el.textContent = ''; return; }
   const parts = [];
-  if (perks.total) parts.push(`會員權益（${verifiedMember.tier}）${tierPerkText_(perks)}`);
-  if (discount) parts.push(`兌換券折抵 -$${discount}`);
-  el.textContent = `${parts.join('；')}，應付金額 $${total}`;
+  if (d.perks.total) parts.push(`會員權益（${verifiedMember.tier}）${tierPerkText_(d.perks)}`);
+  if (d.discount) parts.push(`兌換券折抵 -$${d.discount}`);
+  el.textContent = `${parts.join('；')}，應付金額 $${d.due}`;
+}
+
+// 菜單標示(2026-09-25老闆要求)：已驗證的會員看得到自己等級的等級優惠品項，例如金寶看到本月飲品上的「金寶會員 買一送一」
+function tierPerkBadgeText_(p) {
+  const who = p.minTier + '會員 ';
+  if (p.effect === 'free') return who + ((Number(p.minQty) || 1) >= 2 ? '買一送一' : '免費');
+  if (p.effect === 'discount60') return who + '第二件6折';
+  if (p.effect === 'discount50') return who + '第二件5折';
+  return who + '優惠';
+}
+function refreshTierPerkBadges_() {
+  document.querySelectorAll('.tier-perk-badge').forEach(el => el.remove());
+  if (!verifiedMember) return;
+  const tier = SHOP_MEMBER_TIERS.find(t => t.name === verifiedMember.tier);
+  if (!tier) return;
+  const orderOf = name => { const t = SHOP_MEMBER_TIERS.find(x => x.name === name); return t ? t.order : Infinity; };
+  ALL_PROMOS.filter(p => isTierPerkPromo_(p) && orderOf(p.minTier) <= tier.order).forEach(p => {
+    document.querySelectorAll('#menu .item').forEach(card => {
+      if (card.dataset.itemName !== p.targetItem) return;
+      const b = document.createElement('div');
+      b.className = 'tier-perk-badge';
+      b.textContent = '👑 ' + tierPerkBadgeText_(p);
+      b.title = p.name;
+      card.querySelector('.info').appendChild(b);
+    });
+  });
 }
 
 function renderMenu() {
@@ -1309,6 +1354,7 @@ function renderMenu() {
     });
     menu.appendChild(section);
   });
+  refreshTierPerkBadges_();   // 菜單比會員驗證晚載入時補上等級優惠標示
 }
 
 function openItemModal(cat, key, item) {
@@ -1737,9 +1783,8 @@ function confirmAddToCart() {
 
 function updateCartBar() {
   const count = cart.reduce((s, c) => s + c.qty, 0);
-  const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
   document.getElementById('cart-count').textContent = count;
-  document.getElementById('cart-total-bar').textContent = '$' + total;
+  document.getElementById('cart-total-bar').textContent = '$' + cartDue_().due;   // 已扣兌換券/會員權益
 }
 
 function renderCart() {
