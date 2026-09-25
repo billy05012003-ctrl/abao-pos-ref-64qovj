@@ -398,6 +398,21 @@
   </div>
 </div>
 
+<div class="pos-overlay" id="pos-void-overlay" style="z-index:29;">
+  <div class="pos-sheet" style="max-width:380px;">
+    <h2 style="margin:0 0 4px;font-size:1rem;">作廢訂單 <span id="pos-void-order-id"></span></h2>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;">只有還沒收錢的單可以作廢；已經印出的單會加印一張「作廢通知」，請跟原單釘在一起。</div>
+    <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">作廢原因（必填）</label>
+    <div id="pos-void-reasons" style="display:flex;gap:6px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:4px;font-size:0.9rem;"><input type="radio" name="pos-void-reason" value="點錯單">點錯單</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:0.9rem;"><input type="radio" name="pos-void-reason" value="客人取消">客人取消</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:0.9rem;"><input type="radio" name="pos-void-reason" value="其他">其他</label>
+    </div>
+    <input type="text" id="pos-void-note" maxlength="60" placeholder="選「其他」請填寫原因" style="width:100%;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+    <button class="btn btn-danger" style="width:100%;padding:10px;margin-top:12px;" onclick="confirmVoidOrder()">確認作廢</button>
+    <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="closeVoidOrder()">取消</button>
+  </div>
+</div>
 <div class="pos-overlay" id="pos-staff-pin-overlay" style="z-index:30;">
   <div class="pos-sheet" style="max-width:380px;">
     <h2 style="margin:0 0 8px;font-size:1rem;" id="pos-staff-pin-title">需要店長以上權限</h2>
@@ -434,9 +449,9 @@ function apiPost(payload) {
 // ---- POS權限設定(2026-09-25)：每個功能的最低角色由POS後台「POS管理→權限設定」決定 ----
 // 設成「夥伴」=不用PIN直接做；店長/老闆=先選人輸入PIN(後端也會再驗一次)。讀不到設定時用預設值(敏感功能預設店長，偏安全)
 const POS_ROLE_RANK_ = { '夥伴': 1, '店長': 2, '老闆': 3 };
-const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', closeRegister: '店長', printSettings: '店長' };
+const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', voidOrder: '店長', closeRegister: '店長', printSettings: '店長' };
 // 碰錢的動作每次都要輸入PIN；其他日常動作輸入一次後5分鐘內不用再輸(櫃台操作才不會一直被打斷)
-const POS_PERM_ALWAYS_ASK_ = ['refund', 'confirmPayment', 'grantVoucher', 'closeRegister'];
+const POS_PERM_ALWAYS_ASK_ = ['refund', 'voidOrder', 'confirmPayment', 'grantVoucher', 'closeRegister'];
 const POS_PERM_SESSION_MS_ = 5 * 60000;
 let POS_PERMS = Object.assign({}, POS_PERM_DEFAULTS_);
 let posPermSession_ = null;   // {name, pin, role, until}
@@ -541,7 +556,7 @@ function loadOrders() {
           <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}</div>
         </div>
         ${o.unpaid
-          ? `<button class="btn btn-primary" onclick="markCollected('${o.orderId}')">標記已收款</button>`
+          ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;"><button class="btn btn-primary" onclick="markCollected('${o.orderId}')">標記已收款</button><button class="btn btn-secondary" onclick="openVoidOrder('${o.orderId}')">作廢</button></div>`
           : `<button class="btn btn-primary" onclick="markReady('${o.orderId}')">可以取餐</button>`}
       </div>
     `).join('');
@@ -635,6 +650,35 @@ function markReady(orderId) {
       loadOrders();
       loadRevenue();
     });
+  });
+}
+
+// 單筆作廢(2026-09-25)：只限還沒收錢的單；原因必填；權限照「權限設定」(預設店長，每次都要輸PIN)
+let voidOrderId_ = '';
+function openVoidOrder(orderId) {
+  voidOrderId_ = orderId;
+  document.getElementById('pos-void-order-id').textContent = orderId;
+  document.querySelectorAll('input[name="pos-void-reason"]').forEach(r => r.checked = false);
+  document.getElementById('pos-void-note').value = '';
+  document.getElementById('pos-void-overlay').classList.add('open');
+}
+function closeVoidOrder() { document.getElementById('pos-void-overlay').classList.remove('open'); voidOrderId_ = ''; }
+function confirmVoidOrder() {
+  const picked = document.querySelector('input[name="pos-void-reason"]:checked');
+  const reason = picked ? picked.value : '';
+  const reasonNote = document.getElementById('pos-void-note').value.trim();
+  if (!reason) { alert('請選擇作廢原因'); return; }
+  if (reason === '其他' && !reasonNote) { alert('選「其他」請填寫原因'); return; }
+  const orderId = voidOrderId_;
+  if (!confirm('確定作廢「' + orderId + '」？這個動作無法復原。')) return;
+  document.getElementById('pos-void-overlay').classList.remove('open');
+  withPosPerm_('voidOrder', '單筆作廢', (staffName, staffPin) => {
+    apiPost({ action: 'voidOrder', orderId, reason, reasonNote, staffName, staffPin, storeId: STORE_ID }).then(data => {
+      if (data.status !== 'ok') { alert('作廢失敗：' + (data.message || '')); return; }
+      alert('已作廢「' + orderId + '」' + (data.voidNotice ? '\n出單機會印一張「作廢通知」，請跟原單釘在一起' : '') + (data.vouchersRestored ? '\n已退回兌換券 ' + data.vouchersRestored + ' 張' : ''));
+      voidOrderId_ = '';
+      loadOrders(); loadRevenue();
+    }).catch(() => alert('網路異常，作廢結果不確定，請重新整理「待取餐訂單」確認'));
   });
 }
 
