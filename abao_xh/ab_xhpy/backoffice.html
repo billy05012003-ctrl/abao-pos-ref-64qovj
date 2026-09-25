@@ -2682,6 +2682,10 @@ function loadPromos() {
 // 沒有真的併進pmPromos這份資料；老闆希望在畫面上跟POS功能「優惠券」分類的按鈕順序對齊(...公關費之後緊接著
 // 就是活動飲品升級)，所以在清單裡插入一個可點擊的捷徑列導到「飲品升級」子分頁，資料本身仍各自獨立管理
 const PM_DRINK_UPGRADE_SHORTCUT_AFTER = '公關費';
+// 折數顯示用：90→「9折」、85→「85折」
+function pmPctLabel_(pct) {
+  return (pct % 10 === 0 ? pct / 10 : pct) + '折';
+}
 function renderPmList() {
   const el = document.getElementById('pm-list');
   if (!pmPromos.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何優惠券</div>'; return; }
@@ -2690,6 +2694,7 @@ function renderPmList() {
   </div>`;
   el.innerHTML = pmPromos.map(p => {
     const tags = [
+      p.mode === 'order' ? ('整張' + pmPctLabel_(p.amount)) : (p.effect === 'pct' ? ('單品' + pmPctLabel_(p.amount)) : null),
       p.showAsButton ? '按鈕' : null,
       p.manualGrantable ? '可贈送' : null,
       p.minTier ? ('限' + p.minTier + '以上') : null,
@@ -2721,6 +2726,14 @@ function pmModeChanged() {
   const mode = document.getElementById('pm-f-mode').value;
   document.getElementById('pm-fixed-fields').style.display = mode === 'fixed' ? 'flex' : 'none';
   document.getElementById('pm-item-fields').style.display = mode === 'item' ? 'flex' : 'none';
+  pmEffectChanged();
+}
+
+// 自訂折數(2026-09-25新增)：「整張訂單打折」或「依購買品項＋自訂折數」才需要填折數，存在「金額」欄
+function pmEffectChanged() {
+  const mode = document.getElementById('pm-f-mode').value;
+  const effect = document.getElementById('pm-f-effect').value;
+  document.getElementById('pm-pct-fields').style.display = (mode === 'order' || (mode === 'item' && effect === 'pct')) ? 'flex' : 'none';
 }
 
 // 「不限」時不需要另外決定非會員能不能用(本來就沒有等級限制)，所以只有選了實際等級才顯示這個勾選框
@@ -2742,18 +2755,20 @@ function renderPmEditor() {
       <select id="pm-f-mode" onchange="pmModeChanged()">
         <option value="fixed" ${mode === 'fixed' ? 'selected' : ''}>固定金額折抵</option>
         <option value="item" ${mode === 'item' ? 'selected' : ''}>依購買品項</option>
+        <option value="order" ${mode === 'order' ? 'selected' : ''}>整張訂單打折(限POS)</option>
       </select>
     </label>
     <div class="mc-field-row" id="pm-fixed-fields" style="display:${mode === 'fixed' ? 'flex' : 'none'};">
-      <label class="mc-field">折抵金額<input id="pm-f-amount" type="number" value="${p.amount ?? ''}"></label>
+      <label class="mc-field">折抵金額<input id="pm-f-amount" type="number" value="${mode === 'fixed' ? (p.amount ?? '') : ''}"></label>
     </div>
     <div class="mc-field-row" id="pm-item-fields" style="display:${mode === 'item' ? 'flex' : 'none'};">
       <label class="mc-field">效果類型
-        <select id="pm-f-effect">
+        <select id="pm-f-effect" onchange="pmEffectChanged()">
           <option value="free" ${p.effect === 'free' ? 'selected' : ''}>全額免費</option>
           <option value="discount60" ${p.effect === 'discount60' ? 'selected' : ''}>打6折(第二件六折用)</option>
           <option value="discount50" ${p.effect === 'discount50' ? 'selected' : ''}>打5折</option>
           <option value="addOne" ${p.effect === 'addOne' ? 'selected' : ''}>加一元多一件</option>
+          <option value="pct" ${p.effect === 'pct' ? 'selected' : ''}>自訂折數(限POS)</option>
         </select>
       </label>
       <label class="mc-field">最低購買件數<input id="pm-f-minqty" type="number" value="${p.minQty ?? 1}"></label>
@@ -2763,6 +2778,10 @@ function renderPmEditor() {
           ${pmAutoAddItemOptions_(p.autoAddItem)}
         </select>
       </label>
+    </div>
+    <div class="mc-field-row" id="pm-pct-fields" style="display:${(mode === 'order' || (mode === 'item' && p.effect === 'pct')) ? 'flex' : 'none'};">
+      <label class="mc-field">折數(填85=打85折，9折請填90)<input id="pm-f-pct" type="number" min="10" max="99" value="${(mode === 'order' || p.effect === 'pct') ? (p.amount ?? '') : ''}"></label>
+      <div style="font-size:0.78rem;color:var(--muted);align-self:center;">只折基準價(單點/套餐整組價)，加起司、飲料升級等加價不折；整張打折用原價計算，不受其他折抵影響</div>
     </div>
     <div class="mc-field-row">
       <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-showbtn" type="checkbox" ${p.showAsButton ? 'checked' : ''}> 顯示為優惠券按鈕(POS功能可直接點)</label>
@@ -2804,12 +2823,20 @@ function savePromo() {
   const lockedEl = document.getElementById('pm-f-locked');
   const minTier = document.getElementById('pm-f-mintier').value;
   const allowNonMemberEl = document.getElementById('pm-f-allownonmember');
+  const effect = mode === 'item' ? document.getElementById('pm-f-effect').value : '';
+  const usesPct = mode === 'order' || effect === 'pct';
+  let amount = mode === 'fixed' ? document.getElementById('pm-f-amount').value : '';
+  if (usesPct) {
+    const pct = Number(document.getElementById('pm-f-pct').value);
+    if (!Number.isInteger(pct) || pct < 10 || pct > 99) { alert('折數請填10～99的整數(例如85=打85折，9折請填90)'); return; }
+    amount = pct;
+  }
   const payload = {
     originalName: isNew ? undefined : pmCurrentName,
     name: name,
     mode: mode,
-    effect: mode === 'item' ? document.getElementById('pm-f-effect').value : '',
-    amount: mode === 'fixed' ? document.getElementById('pm-f-amount').value : '',
+    effect: effect,
+    amount: amount,
     minQty: mode === 'item' ? document.getElementById('pm-f-minqty').value : '',
     autoAddItem: mode === 'item' ? document.getElementById('pm-f-autoadd').value : '',
     showAsButton: document.getElementById('pm-f-showbtn').checked,

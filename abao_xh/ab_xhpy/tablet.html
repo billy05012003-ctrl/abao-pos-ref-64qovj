@@ -973,9 +973,12 @@ function applyPromoSettings_(data) {
   DIRECT_DISCOUNT_TYPES = [];
   MANUAL_GRANT_VOUCHER_TYPES = [];
   (data.promos || []).filter(p => p.status !== '停用').forEach(p => {
+    // 自訂折數(2026-09-25新增)：mode:'order'=整張訂單打折、effect:'pct'=單品打折，折數(85=打85折)存在amount欄
     VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed'
       ? { mode: 'fixed', amount: p.amount }
-      : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null };
+      : p.mode === 'order'
+        ? { mode: 'order', pct: p.amount }
+        : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null, pct: p.amount };
     if (p.showAsButton) DIRECT_DISCOUNT_TYPES.push(p.name);
     if (p.manualGrantable) MANUAL_GRANT_VOUCHER_TYPES.push(p.name);
   });
@@ -1218,9 +1221,15 @@ function selectVoucherToApplyAfterPerm_(voucherId, type) {
     renderPosCart();
     renderMemberVoucherPanel();
     alert(`已套用「${type}」，結帳金額折抵 $${behavior.amount}`);
+  } else if (behavior.mode === 'order') {
+    if (posCart.length === 0) { alert('購物車是空的，請先選購品項'); return; }
+    appliedVouchers.push({ voucherId, type, mode: 'order', pct: behavior.pct, discountAmount: 0 });
+    renderPosCart();
+    renderMemberVoucherPanel();
+    alert(`已套用「${type}」，整張訂單打${pctLabel_(behavior.pct)}`);
   } else {
     if (posCart.length === 0) { alert('購物車是空的，請先選購要套用兌換券的品項'); return; }
-    pendingVoucherForItemPick = { voucherId, type, effect: behavior.effect, minQty: behavior.minQty };
+    pendingVoucherForItemPick = { voucherId, type, effect: behavior.effect, minQty: behavior.minQty, pct: behavior.pct };
     showVoucherItemPicker();
   }
 }
@@ -1284,6 +1293,8 @@ function applyVoucherToLine(lineKey) {
     discountAmount = Math.round(base * 0.4); // 第二件六折＝其中一件折抵4成
   } else if (v.effect === 'discount50') {
     discountAmount = Math.round(base * 0.5); // 週二第二件五折＝其中一件折抵5成
+  } else if (v.effect === 'pct') {
+    discountAmount = pctDiscount_(base, v.pct); // 自訂折數：其中一件打N折
   } else if (v.effect === 'addOne') {
     changePosQty(lineKey, 1); // 直接多加一件到購物車
     discountAmount = base - 1; // 這一件基準價部分只收$1，加購部分仍全額收
@@ -1409,6 +1420,11 @@ function applyDirectDiscount(type) {
     renderPosCart();
     return;
   }
+  if (behavior.mode === 'order') {
+    directDiscounts.push({ type, mode: 'order', pct: behavior.pct, discountAmount: 0 });
+    renderPosCart();
+    return;
+  }
   if (behavior.autoAddItem) {
     // 自動加購品項(例如週四雞塊免費)：購物車沒有就自動加一份再折抵，不用店員自己選品項
     // 用baseName比對(而非name)，避免購物車已有客製化過的同名列(例如加辣)時誤判成沒有而重複新增
@@ -1464,6 +1480,8 @@ function applyDirectDiscountEffect_(type, effect, lineKey) {
     discountAmount = Math.round(base * 0.4);
   } else if (effect === 'discount50') {
     discountAmount = Math.round(base * 0.5);
+  } else if (effect === 'pct') {
+    discountAmount = pctDiscount_(base, behavior.pct);
   } else if (effect === 'addOne') {
     changePosQty(lineKey, 1);
     discountAmount = base - 1;
@@ -2431,6 +2449,7 @@ function renderPosCart() {
     div.querySelector('[data-act="inc"]').onclick = () => changePosQty(c.lineKey, 1);
     linesEl.appendChild(div);
   });
+  refreshOrderPctDiscounts_();
   const voucherEl = document.getElementById('pos-cart-voucher');
   if (voucherEl) {
     voucherEl.innerHTML = appliedVouchers.map(v => `
@@ -2451,8 +2470,27 @@ function renderPosCart() {
   updateMobileCartBar();
 }
 
+// 自訂折數(2026-09-25新增)：打N折＝折掉(100-N)%，四捨五入到元
+function pctDiscount_(base, pct) {
+  return Math.round(base * (100 - pct) / 100);
+}
+// 顯示用：90→「9折」、85→「85折」
+function pctLabel_(pct) {
+  return (pct % 10 === 0 ? pct / 10 : pct) + '折';
+}
+
+// 整張訂單打折：購物車每次變動都依目前內容重算(不像單品折抵在套用當下就定案)。
+// 老闆定案：只折基準價(單點/套餐整組價)、客製化加價不折；用原價計算，不先扣掉其他折抵
+function refreshOrderPctDiscounts_() {
+  const base = posCart.reduce((s, c) => s + c.qty * (c.basePrice != null ? c.basePrice : c.price), 0);
+  appliedVouchers.concat(directDiscounts).forEach(d => {
+    if (d.mode === 'order') d.discountAmount = pctDiscount_(base, d.pct);
+  });
+}
+
 // 購物車原始總額扣掉本次套用的所有兌換券+門市活動折抵金額加總(可複選多筆)，下限為$0
 function getPosCartFinalTotal() {
+  refreshOrderPctDiscounts_();
   const rawTotal = posCart.reduce((s, c) => s + c.qty * c.price, 0);
   const discount = appliedVouchers.reduce((s, v) => s + v.discountAmount, 0)
     + directDiscounts.reduce((s, d) => s + d.discountAmount, 0);

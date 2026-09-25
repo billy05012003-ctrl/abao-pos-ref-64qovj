@@ -441,7 +441,9 @@ let ALL_PROMOS = [];
 function applyPromoSettings_(data) {
   VOUCHER_BEHAVIOR = {};
   ALL_PROMOS = data.promos || [];
-  ALL_PROMOS.filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton)).forEach(p => {
+  // 自訂折數(整張訂單打折mode:'order'／單品effect:'pct'，2026-09-25新增)老闆定案先只在POS用，線上不列出
+  // (客人名下若有這種券，線上結帳清單會自動略過，要到門市POS使用)
+  ALL_PROMOS.filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton) && p.mode !== 'order' && p.effect !== 'pct').forEach(p => {
     VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed'
       ? { mode: 'fixed', amount: p.amount }
       : { mode: 'item', effect: p.effect, minQty: p.minQty };
