@@ -2501,6 +2501,12 @@ function renderMtEditor() {
       「半年」目前是後端Code.gs寫死的固定週期(computeRollingSpend_，往前推6個月)，這個畫面上的欄位只能改「門檻金額」，如果要把週期改成一年或其他長度，要請工程師改程式碼，不是在這裡設定
     </div>
     ${isLocked ? '<p style="font-size:0.75rem;color:var(--muted);">這是新會員註冊的預設等級，門檻鎖定為$0，只能改名稱。</p>' : ''}
+    <h4 style="margin:14px 0 4px;font-size:0.9rem;">滿額折（結帳自動套用，POS與線上點餐都適用）</h4>
+    <div class="mc-field-row">
+      <label class="mc-field">滿額門檻(每滿多少)<input id="mt-f-spendevery" type="number" min="0" placeholder="例如250，留空=沒有" value="${t.spendEvery || ''}"></label>
+      <label class="mc-field">滿額折抵(折多少)<input id="mt-f-spendoff" type="number" min="0" placeholder="例如10" value="${t.spendOff || ''}"></label>
+    </div>
+    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">累進計算：每滿250折10＝$250折10、$500折20；看點餐原價(扣任何折扣之前)。指定飲品買一送一這類等級優惠，請到「優惠券」設定(選最低適用等級＋適用品項)。</div>
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMtTier()">儲存</button>
       ${!isNew && !isLocked ? '<button type="button" class="mc-delete-btn" onclick="deleteMtTier()">刪除等級</button>' : ''}
@@ -2514,7 +2520,11 @@ function saveMtTier() {
   const threshold = document.getElementById('mt-f-threshold').value;
   const continuationThreshold = document.getElementById('mt-f-cont').value;
   const multiplier = document.getElementById('mt-f-mult').value;
-  if (hasNegativeAmount_([threshold, continuationThreshold, multiplier])) { alert('門檻與倍率不能是負數'); return; }
+  const spendEvery = document.getElementById('mt-f-spendevery').value;
+  const spendOff = document.getElementById('mt-f-spendoff').value;
+  if (hasNegativeAmount_([threshold, continuationThreshold, multiplier, spendEvery, spendOff])) { alert('門檻、倍率與折抵不能是負數'); return; }
+  if (!!Number(spendEvery) !== !!Number(spendOff)) { alert('滿額門檻與滿額折抵要一起填(或都留空)'); return; }
+  if (Number(spendOff) && Number(spendOff) >= Number(spendEvery)) { alert('滿額折抵要小於滿額門檻'); return; }
   if (!confirm('此修改會立即套用到所有會員，確定要儲存嗎？')) return;
   const isNew = mtCurrentName === 'NEW';
   const payload = {
@@ -2522,7 +2532,9 @@ function saveMtTier() {
     name: name,
     threshold: threshold,
     continuationThreshold: continuationThreshold,
-    multiplier: multiplier
+    multiplier: multiplier,
+    spendEvery: spendEvery,
+    spendOff: spendOff
   };
   apiPost({ action: 'upsertMemberTier', tier: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
@@ -2693,14 +2705,16 @@ function renderPmList() {
     <span>飲品升級</span><span class="mc-item-price">按鈕</span>
   </div>`;
   el.innerHTML = pmPromos.map(p => {
-    const tags = [
+    // 等級優惠(結帳自動套用，不是POS按鈕)只標「○○等級優惠」，其他標籤不適用
+    const isTierPerk = p.mode === 'item' && p.showAsButton && !p.manualGrantable && p.minTier && p.targetItem;
+    const tags = (isTierPerk ? [p.minTier + '等級優惠', p.status === '停用' ? '停用' : null] : [
       p.mode === 'order' ? ('整張' + pmPctLabel_(p.amount)) : (p.effect === 'pct' ? ('單品' + pmPctLabel_(p.amount)) : null),
       p.showAsButton ? '按鈕' : null,
       p.manualGrantable ? '可贈送' : null,
       p.minTier ? ('限' + p.minTier + '以上') : null,
       (p.minTier && !p.allowNonMember) ? '不開放非會員' : null,
       p.status === '停用' ? '停用' : null
-    ].filter(Boolean).join('・');
+    ]).filter(Boolean).join('・');
     const row = `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
       <span>${escapeHtml(p.name)}</span><span class="mc-item-price">${escapeHtml(tags)}</span>
     </div>`;
@@ -2726,6 +2740,7 @@ function pmModeChanged() {
   const mode = document.getElementById('pm-f-mode').value;
   document.getElementById('pm-fixed-fields').style.display = mode === 'fixed' ? 'flex' : 'none';
   document.getElementById('pm-item-fields').style.display = mode === 'item' ? 'flex' : 'none';
+  document.getElementById('pm-tierperk-hint').style.display = mode === 'item' ? 'block' : 'none';
   pmEffectChanged();
 }
 
@@ -2778,6 +2793,15 @@ function renderPmEditor() {
           ${pmAutoAddItemOptions_(p.autoAddItem)}
         </select>
       </label>
+      <label class="mc-field">適用品項(等級優惠用，選填)
+        <select id="pm-f-target">
+          <option value="">不指定</option>
+          ${pmAutoAddItemOptions_(p.targetItem)}
+        </select>
+      </label>
+    </div>
+    <div id="pm-tierperk-hint" style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;display:${mode === 'item' ? 'block' : 'none'};">
+      等級優惠（例如「金寶限定：本月檸檬紅茶買一送一」）：勾「顯示為優惠券按鈕」、不勾「可手動贈送」、選「最低適用等級」＋「適用品項」→ 達到等級的會員結帳自動套用，每張單一次（POS與線上點餐都會自動折，不會變成POS手動按鈕）。每月換飲品時改名稱與適用品項即可。
     </div>
     <div class="mc-field-row" id="pm-pct-fields" style="display:${(mode === 'order' || (mode === 'item' && p.effect === 'pct')) ? 'flex' : 'none'};">
       <label class="mc-field">折數(填85=打85折，9折請填90)<input id="pm-f-pct" type="number" min="10" max="99" value="${(mode === 'order' || p.effect === 'pct') ? (p.amount ?? '') : ''}"></label>
@@ -2826,6 +2850,12 @@ function savePromo() {
   const effect = mode === 'item' ? document.getElementById('pm-f-effect').value : '';
   const usesPct = mode === 'order' || effect === 'pct';
   let amount = mode === 'fixed' ? document.getElementById('pm-f-amount').value : '';
+  // 等級優惠(2026-09-25)：按鈕＋不可贈送＋有最低適用等級 的品項優惠，一定要選適用品項(系統才知道要送哪個品項，客人選錯也擋得住)
+  if (mode === 'item' && document.getElementById('pm-f-showbtn').checked && !document.getElementById('pm-f-grantable').checked
+      && document.getElementById('pm-f-mintier').value && !document.getElementById('pm-f-target').value) {
+    alert('這張有「最低適用等級」、是POS按鈕、不可贈送，會當成等級優惠自動套用，請選「適用品項」(例如本月的檸檬紅茶)');
+    return;
+  }
   if (usesPct) {
     const pct = Number(document.getElementById('pm-f-pct').value);
     if (!Number.isInteger(pct) || pct < 10 || pct > 99) { alert('折數請填10～99的整數(例如85=打85折，9折請填90)'); return; }
@@ -2839,6 +2869,7 @@ function savePromo() {
     amount: amount,
     minQty: mode === 'item' ? document.getElementById('pm-f-minqty').value : '',
     autoAddItem: mode === 'item' ? document.getElementById('pm-f-autoadd').value : '',
+    targetItem: mode === 'item' ? document.getElementById('pm-f-target').value : '',
     showAsButton: document.getElementById('pm-f-showbtn').checked,
     manualGrantable: document.getElementById('pm-f-grantable').checked,
     status: document.getElementById('pm-f-status').value,

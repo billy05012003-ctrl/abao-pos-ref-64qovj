@@ -134,6 +134,33 @@
   .overlay.open { display: flex; }
   #drink-overlay { z-index: 25; }
   #tier-overlay { z-index: 25; }
+  /* 會員等級與專屬好禮(2026-09-25改版，照設計稿Main.dc.html/abao-membership-tier-table.html)：
+     寬螢幕＝左側金色標籤欄＋四欄等級的表格；手機＝每個等級一張卡片上下排列 */
+  #tier-overlay .sheet { max-width: 1100px; background: #fbf7f1; }
+  .tier-rules { display: flex; gap: 10px; margin-bottom: 14px; }
+  .tier-rule { flex: 1; background: #fff; border: 1px solid #eee2d0; border-radius: 12px; padding: 10px 14px; }
+  .tier-rule .t { font-size: 0.72rem; color: #8a7d6f; font-weight: 600; margin-bottom: 2px; }
+  .tier-rule .d { font-size: 0.85rem; line-height: 1.5; color: #2b2420; }
+  .tier-grid { display: grid; grid-template-columns: 110px repeat(var(--tier-cols), 1fr); border: 1px solid #eee2d0; border-radius: 14px; overflow: hidden; }
+  .tier-grid .lbl { background: linear-gradient(155deg, #dda15e, #c98a44); color: #fff; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; font-size: 0.88rem; padding: 14px 8px; border-top: 1px solid rgba(255,255,255,0.25); }
+  .tier-grid .cell { background: #fff; border-left: 1px solid #ece2d4; border-top: 1px solid #ece2d4; padding: 14px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; font-size: 0.86rem; line-height: 1.6; color: #2b2420; }
+  .tier-grid .lbl.first, .tier-grid .cell.first { border-top: none; }
+  .tier-card-img { width: 100%; max-width: 210px; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+  .tier-name { font-weight: 700; font-size: 0.95rem; margin-top: 8px; }
+  .tier-muted { color: #8a7d6f; font-size: 0.8rem; }
+  .tier-strong { font-weight: 700; }
+  .tier-stack { display: none; }
+  @media (max-width: 760px) {
+    .tier-rules { flex-direction: column; }
+    .tier-grid { display: none; }
+    .tier-stack { display: block; }
+    .tier-stack-card { background: #fff; border: 1px solid #eee2d0; border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+    .tier-stack-head { display: flex; align-items: center; gap: 12px; padding: 12px; }
+    .tier-stack-head img { width: 42%; max-width: 170px; border-radius: 8px; box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
+    .tier-stack-row { display: flex; border-top: 1px solid #ece2d4; }
+    .tier-stack-row .k { flex: none; width: 84px; background: linear-gradient(155deg, #dda15e, #c98a44); color: #fff; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; padding: 8px 4px; }
+    .tier-stack-row .v { flex: 1; padding: 8px 12px; font-size: 0.85rem; line-height: 1.55; color: #2b2420; }
+  }
   .sheet {
     background: #fff;
     width: 100%;
@@ -473,6 +500,7 @@ function loadPromoSettings() {
   });
 }
 const promoSettingsReady = loadPromoSettings();
+loadShopMemberTiers_();   // 會員等級權益(2026-09-25)
 
 let cart = []; // {key, name, size, price, qty}
 // 品項上下架狀態快取(品項名稱→'本日售完'/'永久下架')，由applyItemAvailability()載入頁面時抓一次，
@@ -928,6 +956,7 @@ let verifiedMember = null;
 
 function renderMemberVerified_(member) {
   verifiedMember = member;
+  setTimeout(updateCheckoutTotalDisplay, 0);   // 等級權益依會員等級自動套用
   document.getElementById('member-verify-result').innerHTML = `
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--brand);">
       ✓ 您好，${escapeHtml_(member.name)}（${escapeHtml_(member.tier.endsWith('會員') ? member.tier : member.tier + '會員')}）
@@ -1005,30 +1034,68 @@ function closeTierOverlay() {
   document.getElementById('tier-overlay').classList.remove('open');
 }
 
+// 會員卡圖依等級排序對應(等級名稱可在後台改，所以用順序不用名稱)；超過4級沿用最後一張
+const TIER_CARD_IMAGES = ['general', 'bronze', 'silver', 'gold'];
+function tierCardImg_(idx) {
+  return IMG_BASE + 'member_cards/' + TIER_CARD_IMAGES[Math.min(idx, TIER_CARD_IMAGES.length - 1)] + '.png';
+}
+const money_ = n => '$' + Number(n).toLocaleString('en-US');
+
+// 每個等級的「結帳活動」：第一級顯示註冊禮(入會就送)；滿額折(後台會員分級)；等級優惠(優惠券：最低適用等級≤這個等級，
+// 例如「金寶限定：本月檸檬紅茶買一送一」，名稱每月由老闆在後台改)
+function tierPerkLines_(t, idx, tiers, registerGifts) {
+  const lines = [];
+  if (idx === 0) registerGifts.forEach(g => lines.push(escapeHtml_(g.voucherType)));
+  if (t.spendEvery > 0 && t.spendOff > 0) lines.push(`<span style="white-space:nowrap;">結帳每滿 ${t.spendEvery}</span> <span style="white-space:nowrap;">折 ${t.spendOff} 元</span>`);
+  const orderOf = name => { const x = tiers.find(y => y.name === name); return x ? x.order : Infinity; };
+  ALL_PROMOS.filter(p => isTierPerkPromo_(p) && orderOf(p.minTier) <= t.order).forEach(p => lines.push(`<span class="tier-strong">${escapeHtml_(p.name)}</span>`));
+  return lines;
+}
+
 function renderTierBenefits() {
   const el = document.getElementById('tier-overlay-result');
   el.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">載入中...</div>';
-  apiGet_({ action: 'memberTierData' }).then(data => {
+  const soft = p => p.catch(() => ({ gifts: [] })); // 註冊禮/生日禮讀不到不擋整張表
+  Promise.all([apiGet_({ action: 'memberTierData' }), soft(apiGet_({ action: 'registerGiftData' })), soft(apiGet_({ action: 'birthdayGiftData' }))]).then(([data, reg, bday]) => {
     if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
     const tiers = data.tiers.slice().sort((a, b) => a.order - b.order);
-    const orderOf = name => { const t = tiers.find(x => x.name === name); return t ? t.order : -1; };
-    el.innerHTML = tiers.map(t => {
-      const upgrade = t.threshold > 0 ? `半年內累積消費滿 $${t.threshold}` : '完成會員驗證即入會';
-      const renew = (t.continuationThreshold == null) ? '永久有效' : `等級內累積消費滿 $${t.continuationThreshold}`;
-      const bonus = (t.multiplier && t.multiplier > 1) ? `點數 ${t.multiplier} 倍送` : '無額外加成';
-      const perks = ALL_PROMOS.filter(p => p.minTier && p.status !== '停用' && orderOf(p.minTier) <= t.order).map(p => p.name);
-      const perksHtml = perks.length ? perks.map(n => `<span style="display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:2px 8px;margin:2px 4px 0 0;font-size:0.78rem;">${escapeHtml_(n)}</span>`).join('') : '<span style="color:var(--muted);font-size:0.8rem;">尚未設定專屬優惠</span>';
-      return `
-        <div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
-          <div style="font-weight:700;color:var(--brand);margin-bottom:6px;">${escapeHtml_(t.name)}</div>
-          <div style="font-size:0.82rem;color:var(--muted);line-height:1.7;">
-            升級條件：${upgrade}<br>
-            續等條件：${renew}<br>
-            點數加成：${bonus}
-          </div>
-          <div style="margin-top:6px;">${perksHtml}</div>
-        </div>`;
-    }).join('');
+    const registerGifts = (reg.gifts || []).filter(g => g.status !== '停用');
+    const bdayGifts = (bday.gifts || []).filter(g => g.status !== '停用').map(g => '「' + escapeHtml_(g.voucherType) + '」').join('、');
+    const rows = tiers.map((t, idx) => {
+      const prev = tiers[idx - 1];
+      const lines = tierPerkLines_(t, idx, tiers, registerGifts);
+      return {
+        img: tierCardImg_(idx),
+        name: escapeHtml_(t.name),
+        upgrade: t.threshold > 0 ? `半年內累積消費<br><b>滿 ${money_(t.threshold)}</b>` : '<b>完成會員驗證<br>即入會</b>',
+        renew: (t.continuationThreshold == null) ? '<span class="tier-muted">無（永久有效）</span>'
+          : `等級內消費滿 ${money_(t.continuationThreshold)}<br><span class="tier-muted">未達則回到${prev ? escapeHtml_(prev.name) : '前一級'}</span>`,
+        bonus: (t.multiplier && t.multiplier > 1) ? `<span class="tier-strong">點數 ${t.multiplier} 倍送</span>` : '<span class="tier-muted">無</span>',
+        perks: lines.length ? lines.join('<br>') : '<span class="tier-muted">—</span>'
+      };
+    });
+    const rules = `
+      <div class="tier-rules">
+        <div class="tier-rule"><div class="t">升等保護期</div><div class="d">每次升級，重新起算6個月保護期（期間內不降等）；降等一次只降一級</div></div>
+        <div class="tier-rule"><div class="t">集點基礎（各級通用）</div><div class="d">消費滿 $100，集 1 點</div></div>
+        ${bdayGifts ? `<div class="tier-rule"><div class="t">生日禮（各級通用）</div><div class="d">生日當月發送${bdayGifts}，當月月底前用完</div></div>` : ''}
+      </div>`;
+    const ROW_DEFS = [['升級條件', 'upgrade'], ['續等條件', 'renew'], ['點數加成', 'bonus'], ['結帳活動', 'perks']];
+    const grid = `
+      <div class="tier-grid" style="--tier-cols:${rows.length};">
+        <div class="lbl first">會員等級</div>
+        ${rows.map(r => `<div class="cell first"><img class="tier-card-img" src="${r.img}" alt="${r.name}會員卡"><div class="tier-name">${r.name}</div></div>`).join('')}
+        ${ROW_DEFS.map(([label, key]) => `<div class="lbl">${label}</div>` + rows.map(r => `<div class="cell">${r[key]}</div>`).join('')).join('')}
+      </div>`;
+    const stack = `
+      <div class="tier-stack">
+        ${rows.map(r => `
+          <div class="tier-stack-card">
+            <div class="tier-stack-head"><img src="${r.img}" alt="${r.name}會員卡"><div class="tier-name" style="margin-top:0;">${r.name}</div></div>
+            ${ROW_DEFS.map(([label, key]) => `<div class="tier-stack-row"><div class="k">${label}</div><div class="v">${r[key]}</div></div>`).join('')}
+          </div>`).join('')}
+      </div>`;
+    el.innerHTML = rules + grid + stack;
   }).catch(err => {
     el.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">讀取失敗，請確認網路連線後再試</div>';
     console.warn('會員等級資料讀取失敗', err);
@@ -1092,14 +1159,87 @@ function toggleCheckoutVoucher(voucherId, type) {
   updateCheckoutTotalDisplay();
 }
 
+// ---------------------------------------------------------------
+// 會員等級權益(2026-09-25老闆定案，自動套用)：跟後端computeTierPerks_、POS功能tierPerksFor_同一套算法(改一邊要改另一邊)——
+// ①滿額折(會員分級)＝點餐原價(單價含客製化加價×數量，扣任何折扣前)每滿spendEvery折spendOff；
+// ②等級優惠(優惠券：按鈕＋不可贈送＋最低適用等級＋適用品項，例如「金寶限定：本月檸檬紅茶買一送一」)＝
+//   適用品項同份量數量達最低件數，對其中1件本體價(加料照收)套用效果，每張單每種限一次；不同份量都符合套在價格低的。
+// 揪團看實際付錢的人：請客＝團主結帳時套團主等級、各付各的＝各自付自己那份時套自己等級；請客團的朋友不付錢，不套
+// ---------------------------------------------------------------
+let SHOP_MEMBER_TIERS = [];
+function loadShopMemberTiers_() {
+  return apiGet_({ action: 'memberTierData' }).then(d => {
+    if (d && d.status === 'ok') SHOP_MEMBER_TIERS = d.tiers || [];
+    updateCheckoutTotalDisplay();
+  }).catch(err => console.warn('會員分級讀取失敗(等級權益暫不顯示，結帳金額以後端為準)', err));
+}
+function isTierPerkPromo_(p) {
+  return !!(p && p.status !== '停用' && p.mode === 'item' && p.showAsButton && !p.manualGrantable && p.minTier && p.targetItem);
+}
+function tierPromoUnitDiscount_(effect, unit) {
+  if (effect === 'free') return unit;
+  if (effect === 'discount60') return Math.round(unit * 0.4);
+  if (effect === 'discount50') return Math.round(unit * 0.5);
+  return 0;
+}
+const NO_PERKS_ = () => ({ spend: 0, promos: [], total: 0 });
+function tierPerksFor_(tierName, lines) {
+  const res = NO_PERKS_();
+  const tier = SHOP_MEMBER_TIERS.find(t => t.name === tierName);
+  if (!tier || !lines.length) return res;
+  const raw = lines.reduce((s, c) => s + c.price * c.qty, 0);
+  if (tier.spendEvery > 0 && tier.spendOff > 0) res.spend = Math.floor(raw / tier.spendEvery) * tier.spendOff;
+  const orderOf = name => { const t = SHOP_MEMBER_TIERS.find(x => x.name === name); return t ? t.order : Infinity; };
+  ALL_PROMOS.filter(p => isTierPerkPromo_(p) && orderOf(p.minTier) <= tier.order).forEach(p => {
+    const need = Math.max(1, Number(p.minQty) || 1);
+    const groups = {};
+    lines.forEach(c => {
+      const baseName = c.baseName || String(c.name).split('（')[0].trim();
+      if (baseName !== p.targetItem) return;
+      const size = String(c.size || '').toUpperCase();
+      const g = groups[size] || (groups[size] = { size, qty: 0, unit: Infinity, minPrice: Infinity });
+      g.qty += c.qty;
+      g.unit = Math.min(g.unit, c.basePrice != null ? c.basePrice : c.price);
+      g.minPrice = Math.min(g.minPrice, c.price);
+    });
+    let best = null;
+    Object.values(groups).forEach(g => {
+      if (g.qty < need) return;
+      const unit = Math.min(g.unit, g.minPrice);
+      if (!best || unit < best.unit) best = { unit, size: g.size };
+    });
+    if (!best) return;
+    const amount = tierPromoUnitDiscount_(p.effect, best.unit);
+    if (amount > 0) res.promos.push({ name: p.name, item: p.targetItem + (best.size ? ' ' + best.size : ''), amount });
+  });
+  res.total = res.spend + res.promos.reduce((s, x) => s + x.amount, 0);
+  return res;
+}
+// 這張單(lines)由已驗證的會員付錢時的等級權益；請客團的朋友(只送餐點不付錢)不套
+function myTierPerks_(lines) {
+  if (!verifiedMember) return NO_PERKS_();
+  if (groupCtx && groupView && !groupCheckoutMode && !isGroupEach_() && !isGroupFinished_()) return NO_PERKS_();
+  return tierPerksFor_(verifiedMember.tier, lines);
+}
+function tierPerkText_(p) {
+  const parts = [];
+  if (p.spend) parts.push(`滿額折 -$${p.spend}`);
+  p.promos.forEach(x => parts.push(`${x.name}（${x.item}）-$${x.amount}`));
+  return parts.join('、');
+}
+
 function updateCheckoutTotalDisplay() {
   const el = document.getElementById('checkout-total-preview');
   if (!el) return;
-  if (checkoutSelectedVouchers.length === 0) { el.textContent = ''; return; }
+  const perks = myTierPerks_(cart);
+  if (checkoutSelectedVouchers.length === 0 && !perks.total) { el.textContent = ''; return; }
   const rawTotal = cart.reduce((s, c) => s + c.qty * c.price, 0);
   const discount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
-  const total = Math.max(0, rawTotal - discount);
-  el.textContent = `已套用兌換券折抵 -$${discount}，應付金額 $${total}`;
+  const total = Math.max(0, rawTotal - discount - perks.total);
+  const parts = [];
+  if (perks.total) parts.push(`會員權益（${verifiedMember.tier}）${tierPerkText_(perks)}`);
+  if (discount) parts.push(`兌換券折抵 -$${discount}`);
+  el.textContent = `${parts.join('；')}，應付金額 $${total}`;
 }
 
 function renderMenu() {
@@ -1628,10 +1768,8 @@ function renderCart() {
   const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
   document.getElementById('cart-total').textContent = '$' + total;
   // 購物車重繪時一併刷新兌換券清單/折抵預覽，反映最新的購物車內容(哪些券還能套用、金額對不對)
-  if (checkoutMemberVouchers.length || checkoutSelectedVouchers.length) {
-    renderCheckoutVoucherList();
-    updateCheckoutTotalDisplay();
-  }
+  if (checkoutMemberVouchers.length || checkoutSelectedVouchers.length) renderCheckoutVoucherList();
+  updateCheckoutTotalDisplay();   // 會員等級權益不用選券也會有折抵，一律刷新
 }
 
 function changeQty(lineKey, delta) {
@@ -1712,7 +1850,8 @@ function submitOrder(e) {
   const note = document.getElementById('cust-note').value;
   const rawTotal = cart.reduce((s, c) => s + c.qty * c.price, 0);
   const voucherDiscount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
-  const total = Math.max(0, rawTotal - voucherDiscount);
+  const perks = myTierPerks_(cart);   // 會員等級權益(後端會用同一套規則驗證)
+  const total = Math.max(0, rawTotal - voucherDiscount - perks.total);
   const appliedVoucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   // 2026-09-19：補送品項備註(note)，出單機廚房單會印在該品項下面；之前只送name/size/qty/price，客人寫的「少蔥」等會遺失
@@ -1723,7 +1862,7 @@ function submitOrder(e) {
   const payAtPickupChosen = PAY_AT_PICKUP_ENABLED && document.getElementById('checkout-payment-method').value === '取餐付款';
 
   const lines = cart.map(c => `- ${c.who ? '['+c.who+'] ' : ''}${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
-  const discountLine = voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '';
+  const discountLine = (perks.total ? `會員權益（${verifiedMember.tier}）：${tierPerkText_(perks)}\n` : '') + (voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '');
   const paymentNote = payAtPickupChosen
     ? '（已選擇取餐現場付款，請於取餐時完成付款）'
     : '（已完成線上信用卡付款，取餐時請出示此訂單編號）';
@@ -2153,7 +2292,7 @@ function refreshGroupCartUi_() {
   document.getElementById('group-agree-row').style.display = open && each ? 'flex' : 'none';
   const btn = document.getElementById('group-submit-btn');
   btn.style.display = open ? 'block' : 'none';
-  btn.textContent = each ? `送出並付款（$${cart.reduce((s, c) => s + c.qty * c.price, 0)}）` : '送出我的餐點到揪團';
+  btn.textContent = each ? `送出並付款（$${Math.max(0, cart.reduce((s, c) => s + c.qty * c.price, 0) - myTierPerks_(cart).total - checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0))}）` : '送出我的餐點到揪團';
 }
 
 function onGroupPayModeChange_() {
@@ -2226,11 +2365,12 @@ function submitMyGroupItems() {
 function payMyGroupShare_(myCart, phone, name) {
   const rawTotal = myCart.reduce((s, c) => s + c.qty * c.price, 0);
   const voucherDiscount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
-  const total = Math.max(0, rawTotal - voucherDiscount);
+  const perks = myTierPerks_(myCart);   // 各付各的：套自己的等級
+  const total = Math.max(0, rawTotal - voucherDiscount - perks.total);
   const voucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   const lines = myCart.map(c => `- ${c.name}${c.size ? '(' + c.size + ')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
-  const summary = `【${STORE_NAME}】揪團訂單（${groupView.hostName} 的揪團・各付各的）\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${groupPickupText_()}\n---\n${lines}\n---\n${voucherDiscount > 0 ? '已套用兌換券折抵：-$' + voucherDiscount + '\n' : ''}總計：$${total}\n（已完成線上信用卡付款，取餐時請出示此訂單編號）`;
+  const summary = `【${STORE_NAME}】揪團訂單（${groupView.hostName} 的揪團・各付各的）\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${groupPickupText_()}\n---\n${lines}\n---\n${perks.total ? '會員權益（' + verifiedMember.tier + '）：' + tierPerkText_(perks) + '\n' : ''}${voucherDiscount > 0 ? '已套用兌換券折抵：-$' + voucherDiscount + '\n' : ''}總計：$${total}\n（已完成線上信用卡付款，取餐時請出示此訂單編號）`;
   pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds, voucherPhone: phone, payAtPickup: false, cartBackup: myCart };
   cart = []; saveCartSession(); updateCartBar();
   return createPendingOrderOnBackend({

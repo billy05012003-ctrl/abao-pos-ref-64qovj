@@ -968,10 +968,12 @@ let MANUAL_GRANT_VOUCHER_TYPES = [];
 let DISCOUNT_CATEGORY_ITEMS = [];
 let POINT_REDEMPTION_CATALOG = [];
 
+let POS_ALL_PROMOS = [];   // 原始優惠券定義(含最低適用等級/適用品項)，會員等級優惠用
 function applyPromoSettings_(data) {
   VOUCHER_BEHAVIOR = {};
   DIRECT_DISCOUNT_TYPES = [];
   MANUAL_GRANT_VOUCHER_TYPES = [];
+  POS_ALL_PROMOS = data.promos || [];
   (data.promos || []).filter(p => p.status !== '停用').forEach(p => {
     // 自訂折數(2026-09-25新增)：mode:'order'=整張訂單打折、effect:'pct'=單品打折，折數(85=打85折)存在amount欄
     VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed'
@@ -979,7 +981,8 @@ function applyPromoSettings_(data) {
       : p.mode === 'order'
         ? { mode: 'order', pct: p.amount }
         : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null, pct: p.amount };
-    if (p.showAsButton) DIRECT_DISCOUNT_TYPES.push(p.name);
+    // 等級優惠(2026-09-25)結帳自動套用，不放成手動按鈕(避免店員再按一次重複折)
+    if (p.showAsButton && !isTierPerkPromo_(p)) DIRECT_DISCOUNT_TYPES.push(p.name);
     if (p.manualGrantable) MANUAL_GRANT_VOUCHER_TYPES.push(p.name);
   });
   // 「優惠券」分類（POS功能左側分類清單）：涵蓋全部門市活動折抵/加價按鈕，
@@ -1038,6 +1041,79 @@ function loadDrinkUpgradeRules() {
 }
 const drinkUpgradeRulesReady = loadDrinkUpgradeRules();
 
+// 會員等級(2026-09-25新增)：等級權益(滿額折/指定飲品買一送一)與點數倍率改讀後台「會員分級」，讀不到用本地快取
+let MEMBER_TIERS = [];
+const MEMBER_TIERS_CACHE_KEY = 'abao_pos_member_tiers_cache_v1';
+function applyMemberTiers_(resp) {
+  MEMBER_TIERS = (resp.tiers || []).slice().sort((a, b) => a.order - b.order);
+  MEMBER_TIERS.forEach(t => { MEMBER_TIER_MULTIPLIER[t.name] = t.multiplier || 1; });
+}
+function loadMemberTiers() {
+  return apiGet({ action: 'memberTierData' }).then(resp => {
+    if (!resp || resp.status !== 'ok') throw new Error('memberTierData回傳格式異常');
+    applyMemberTiers_(resp);
+    try { localStorage.setItem(MEMBER_TIERS_CACHE_KEY, JSON.stringify({ status: 'ok', tiers: resp.tiers })); } catch (e) {}
+    renderPosCart();
+    return true;
+  }).catch(err => {
+    console.warn('會員分級雲端讀取失敗，嘗試改用本地快取', err);
+    try {
+      const cached = JSON.parse(localStorage.getItem(MEMBER_TIERS_CACHE_KEY) || 'null');
+      if (cached && cached.status === 'ok') { applyMemberTiers_(cached); return true; }
+    } catch (e2) {}
+    return false;
+  });
+}
+const memberTiersReady = loadMemberTiers();
+
+// 會員等級權益：跟後端computeTierPerks_同一套算法(改一邊要改另一邊)——
+// ①滿額折(會員分級)＝點餐原價(單價含客製化加價×數量，扣任何折扣前)每滿spendEvery折spendOff；
+// ②等級優惠(優惠券：按鈕＋不可贈送＋最低適用等級＋適用品項，例如「金寶限定：本月檸檬紅茶買一送一」)＝
+//   適用品項同份量數量達最低件數，對其中1件本體價(basePrice，加料照收)套用效果，每張單每種限一次；不同份量都符合套在價格低的
+function isTierPerkPromo_(p) {
+  return !!(p && p.status !== '停用' && p.mode === 'item' && p.showAsButton && !p.manualGrantable && p.minTier && p.targetItem);
+}
+function tierPromoUnitDiscount_(effect, unit) {
+  if (effect === 'free') return unit;
+  if (effect === 'discount60') return Math.round(unit * 0.4);
+  if (effect === 'discount50') return Math.round(unit * 0.5);
+  return 0;
+}
+function tierPerksFor_(tierName, lines) {
+  const res = { spend: 0, promos: [], total: 0 };
+  const tier = MEMBER_TIERS.find(t => t.name === tierName);
+  if (!tier || !lines.length) return res;
+  const raw = lines.reduce((s, c) => s + c.price * c.qty, 0);
+  if (tier.spendEvery > 0 && tier.spendOff > 0) res.spend = Math.floor(raw / tier.spendEvery) * tier.spendOff;
+  const orderOf = name => { const t = MEMBER_TIERS.find(x => x.name === name); return t ? t.order : Infinity; };
+  POS_ALL_PROMOS.filter(p => isTierPerkPromo_(p) && orderOf(p.minTier) <= tier.order).forEach(p => {
+    const need = Math.max(1, Number(p.minQty) || 1);
+    const groups = {};
+    lines.forEach(c => {
+      if (c.baseName !== p.targetItem) return;
+      const size = String(c.size || '').toUpperCase();
+      const g = groups[size] || (groups[size] = { size, qty: 0, unit: Infinity, minPrice: Infinity });
+      g.qty += c.qty;
+      g.unit = Math.min(g.unit, c.basePrice != null ? c.basePrice : c.price);
+      g.minPrice = Math.min(g.minPrice, c.price);
+    });
+    let best = null;
+    Object.values(groups).forEach(g => {
+      if (g.qty < need) return;
+      const unit = Math.min(g.unit, g.minPrice);
+      if (!best || unit < best.unit) best = { unit, size: g.size };
+    });
+    if (!best) return;
+    const amount = tierPromoUnitDiscount_(p.effect, best.unit);
+    if (amount > 0) res.promos.push({ name: p.name, item: p.targetItem + (best.size ? ' ' + best.size : ''), amount });
+  });
+  res.total = res.spend + res.promos.reduce((s, x) => s + x.amount, 0);
+  return res;
+}
+function currentTierPerks_() {
+  return selectedMember ? tierPerksFor_(selectedMember.tier, posCart) : { spend: 0, promos: [], total: 0 };
+}
+
 // 依品項名稱查CATALOG目前的基本售價(單一定價品項用，飲料M/L這種不適用)，
 // 給「自動加購品項」(例如原本寫死的週四雞塊免費)算加入購物車的價格用
 function findCatalogItemPrice_(name) {
@@ -1078,8 +1154,10 @@ function lookupMember() {
       selectedMember = data.member;
       el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div><div id="member-voucher-panel"></div>`;
       loadMemberVouchers();
+      renderPosCart(); // 會員等級權益依等級自動套用
     } else if (data.status === 'not_found') {
       selectedMember = null;
+      renderPosCart();
       el.innerHTML = `
         <div>查無此會員，是否建立新會員？</div>
         <div class="row" style="margin-top:6px;">
@@ -1106,6 +1184,7 @@ function registerMemberSubmit_(phone, name, birthday, staffName, staffPin) {
       selectedMember = data.member;
       document.getElementById('member-info').innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $0　累計點數 0</div><div id="member-voucher-panel"></div>`;
       loadMemberVouchers();
+      renderPosCart();
     } else {
       alert(data.message || '建立失敗');
     }
@@ -2460,11 +2539,15 @@ function renderPosCart() {
   }
   const directEl = document.getElementById('pos-cart-direct-discount');
   if (directEl) {
+    const perks = currentTierPerks_();
+    const perkLine = (label, amt) => `<div style="font-size:0.8rem;color:#b5642a;padding:4px 0;">會員權益（${selectedMember.tier}）：${label} -$${amt}</div>`;
     directEl.innerHTML = directDiscounts.map((d, i) => `
       <div style="display:flex;align-items:center;justify-content:space-between;font-size:0.8rem;color:var(--brand);padding:4px 0;">
         <span>門市活動：${d.type} ${d.discountAmount >= 0 ? '-' : '+'}$${Math.abs(d.discountAmount)}</span>
         <button class="btn" style="padding:2px 7px;font-size:0.72rem;" onclick="clearDirectDiscount(${i})">取消</button>
-      </div>`).join('');
+      </div>`).join('')
+      + (perks.spend ? perkLine('滿額折', perks.spend) : '')
+      + perks.promos.map(x => perkLine(x.name + '（' + x.item + '）', x.amount)).join('');
   }
   document.getElementById('pos-cart-total').textContent = '$' + getPosCartFinalTotal();
   updateMobileCartBar();
@@ -2493,7 +2576,8 @@ function getPosCartFinalTotal() {
   refreshOrderPctDiscounts_();
   const rawTotal = posCart.reduce((s, c) => s + c.qty * c.price, 0);
   const discount = appliedVouchers.reduce((s, v) => s + v.discountAmount, 0)
-    + directDiscounts.reduce((s, d) => s + d.discountAmount, 0);
+    + directDiscounts.reduce((s, d) => s + d.discountAmount, 0)
+    + currentTierPerks_().total;   // 會員等級權益(自動套用，2026-09-25)
   return Math.max(0, rawTotal - discount);
 }
 
