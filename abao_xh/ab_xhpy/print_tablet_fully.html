@@ -131,6 +131,35 @@ function apiPost(payload) {
   return fetchJson(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) });
 }
 const getKey = () => { try { return localStorage.getItem('abao_print_key') || ''; } catch (e) { return ''; } };
+
+// ---------- POS權限設定(2026-09-25)：出單模組設定要照POS後台「權限設定」的最低角色 ----------
+const PRINT_ROLE_RANK = { '夥伴': 1, '店長': 2, '老闆': 3 };
+let printSettingsUntil_ = 0;
+function apiGetPrint_(params) {
+  const qs = new URLSearchParams({ ...params, appKey: APP_KEY, _: Date.now() }).toString();
+  return fetchJson(ORDER_BACKEND_URL + '?' + qs, { cache: 'no-store' });
+}
+async function requirePrintSettingsPerm_() {
+  if (Date.now() < printSettingsUntil_) return true;
+  let role = '店長';
+  try { const p = await apiGetPrint_({ action: 'posPermissions', storeId: STORE_ID }); if (p.status === 'ok' && p.perms && p.perms.printSettings) role = p.perms.printSettings; } catch (e) {}
+  if (role === '夥伴') return true;
+  let staff = [];
+  try { const l = await apiGetPrint_({ action: 'posStaffList', storeId: STORE_ID }); if (l.status === 'ok') staff = l.staff; } catch (e) { alert('網路異常，請稍後再試'); return false; }
+  if (!staff.length) return true;   // 這間店還沒建夥伴清單：不擋(跟POS其他功能一致)
+  const name = prompt('出單模組設定需要「' + role + '」以上權限\n請輸入姓名：');
+  if (!name) return false;
+  const pin = prompt('請輸入 ' + name.trim() + ' 的 PIN 碼：');
+  if (!pin) return false;
+  try {
+    const v = await apiPost({ action: 'verifyPosStaffPin', name: name.trim(), pin: pin.trim(), storeId: STORE_ID });
+    if (v.status !== 'ok') { alert(v.message || 'PIN碼錯誤'); return false; }
+    if ((PRINT_ROLE_RANK[v.role] || 0) < PRINT_ROLE_RANK[role]) { alert('需要「' + role + '」以上權限'); return false; }
+  } catch (e) { alert('網路異常，請稍後再試'); return false; }
+  printSettingsUntil_ = Date.now() + 5 * 60000;
+  log('出單模組設定已解鎖5分鐘（' + name.trim() + '）', 'g');
+  return true;
+}
 function getBtName() { return $('btName').value.trim() || DEFAULT_BT_NAME; }
 
 // ---------- 嗶聲（AudioContext 要有人點過畫面才能出聲）----------
@@ -242,7 +271,8 @@ $('btnConnect').onclick = async () => {
   if (ok) startLinkMonitor();
 };
 
-$('btnKey').onclick = () => {
+$('btnKey').onclick = async () => {
+  if (!(await requirePrintSettingsPerm_())) return;
   const v = prompt('請貼上出單密碼（只會存在這台平板）：', getKey());
   if (v === null) return;
   try { localStorage.setItem('abao_print_key', v.trim()); } catch (e) {}
@@ -293,7 +323,20 @@ function schedule(ms) {
   const sec = Math.max(5, Number($('interval').value) || 10);
   timer = setTimeout(tick, ms === undefined ? sec * 1000 : ms);
 }
-$('btnToggle').onclick = () => { if (running) wantRun = false; setRunning(!running); };
+$('btnToggle').onclick = async () => {
+  if (!(await requirePrintSettingsPerm_())) return;
+  if (running) wantRun = false; setRunning(!running);
+};
+// 查詢間隔/心跳間隔：改之前要先通過權限，沒通過就還原
+['interval', 'heartbeatMin'].forEach(id => {
+  let before = $(id).value;
+  $(id).addEventListener('focus', () => { before = $(id).value; });
+  $(id).addEventListener('change', async () => {
+    if (!(await requirePrintSettingsPerm_())) { $(id).value = before; return; }
+    before = $(id).value;
+    if (id === 'heartbeatMin' && heartbeatTimer) startHeartbeat();
+  });
+});
 
 async function tick() {
   if (!running || busy) return;

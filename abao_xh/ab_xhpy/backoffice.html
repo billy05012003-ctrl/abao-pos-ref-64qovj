@@ -111,17 +111,7 @@
 </head>
 <body>
 <script>
-if(new Date()>new Date('2026-12-31T23:59:59')){
-  document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:'Microsoft JhengHei',sans-serif;text-align:center;padding:20px">
-    <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
-      <div style="font-size:40px;margin-bottom:12px">⏳</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">「POS後台」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
-    </div>
-  </div>`;
-  document.title='已過期 - POS後台';
-  throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
-}
+// 2026-09-25老闆定案：拿掉到期日(原本2026/12/31到期後POS/後台/出單頁會全部打不開，是測試期的預覽期限，正式營運不該留)
 // 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
 (function(){
   const SITE_PASSWORD='3345678';
@@ -157,10 +147,27 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
 })();
 </script>
 
-<header>
+<header style="position:relative;">
   <h1>POS後台</h1>
   <div class="sub">美寶美食館（A-Bao溪湖培英店）</div>
+  <div id="bo-user" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:0.85rem;display:none;">
+    <span id="bo-user-text"></span>
+    <button type="button" onclick="boLogout()" style="margin-left:8px;background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.6);border-radius:6px;padding:4px 10px;cursor:pointer;">登出</button>
+  </div>
 </header>
+<div id="bo-login-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:28px 24px;width:320px;max-width:90vw;box-sizing:border-box;">
+    <div style="font-size:1.1rem;font-weight:bold;margin-bottom:4px;">POS後台登入</div>
+    <div id="bo-login-hint" style="font-size:0.8rem;color:#888;margin-bottom:14px;">限店長、老闆登入，12小時內不用重新登入</div>
+    <label style="display:block;font-size:0.85rem;color:#666;margin-bottom:4px;">姓名</label>
+    <select id="bo-login-name" style="width:100%;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:0.95rem;margin-bottom:10px;"></select>
+    <label style="display:block;font-size:0.85rem;color:#666;margin-bottom:4px;">PIN碼</label>
+    <input type="password" id="bo-login-pin" inputmode="numeric" maxlength="4" placeholder="4碼數字" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:0.95rem;" onkeydown="if(event.key==='Enter')boLogin()">
+    <div id="bo-login-err" style="font-size:0.8rem;color:#a32d2d;min-height:18px;margin:6px 0;"></div>
+    <button type="button" onclick="boLogin()" style="width:100%;background:#e8632c;color:#fff;border:none;border-radius:8px;padding:10px;font-size:0.95rem;cursor:pointer;">登入</button>
+    <div style="font-size:0.75rem;color:#aaa;margin-top:12px;">忘記PIN：請老闆幫你重設；老闆自己忘記請到Google試算表「POS夥伴」分頁修改</div>
+  </div>
+</div>
 <div class="app-shell">
 <nav class="sidebar" id="tabbar">
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">品項上下架</button>
@@ -198,6 +205,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   <div class="sub-list" id="posmanage-sublist">
     <button class="sub-item" id="pmg-sub-btn-log" onclick="switchPosManageSubview('log')">開關帳記錄</button>
     <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">POS夥伴管理</button>
+    <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">權限設定</button>
   </div>
 </nav>
 <main class="main-content">
@@ -250,6 +258,7 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
   </div>
 </div>
 <div id="view-payment" class="view" style="display:none;">
+  <div id="bo-owner-only-payment" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">付款方式設定只有老闆可以修改，目前是唯讀。</div>
   <div class="sched-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
     <button type="button" class="sched-tab-btn active" id="pm-tab-btn-online" onclick="switchPmSubview('online')">線上收款</button>
     <button type="button" class="sched-tab-btn" id="pm-tab-btn-thirdparty" onclick="switchPmSubview('thirdparty')">第三方收款</button>
@@ -460,11 +469,22 @@ if(new Date()>new Date('2026-12-31T23:59:59')){
     </p>
     <div id="pmg-log-list"><div class="empty-hint">載入中...</div></div>
   </div>
+  <div id="pmg-subview-perm" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">
+      每個POS功能選「最低要什麼角色」才能做：<b>夥伴</b>=任何人都能做、不用PIN；<b>店長</b>／<b>老闆</b>=POS上會跳出輸入PIN，角色不夠會被擋(後端也會再檢查一次)。
+      日常操作輸入一次PIN後5分鐘內不用再輸；退款、人工標記已付款、贈送兌換券、關帳每次都要輸入。標「僅畫面」的項目只控制POS畫面。
+    </p>
+    <div style="font-size:0.8rem;color:#a32d2d;margin-bottom:6px;">只有老闆可以修改權限設定。</div>
+    <div id="perm-list"><div class="empty-hint">載入中...</div></div>
+    <button type="button" class="mc-add-btn" style="width:auto;padding:8px 20px;" onclick="savePosPermissions()">儲存權限設定</button>
+    <span id="perm-save-result" style="font-size:0.85rem;margin-left:8px;"></span>
+  </div>
   <div id="pmg-subview-partner" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      3層角色：<b>夥伴</b>(點餐/結帳/開帳/查會員)、<b>店長</b>(夥伴權限+關帳/贈送兌換券)、<b>老闆</b>(等同店長，另外還有這個POS後台的完整權限)。
-      用4碼PIN碼識別身份，只在「關帳」「贈送兌換券」這兩個有實質影響的動作要求輸入姓名+PIN，後端會驗證角色是否足夠；
-      開帳只記錄是誰開的，不用驗證。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
+      3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>店長只能管理夥伴帳號</b>，店長／老闆帳號只有老闆能改。
+      建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設，老闆忘記請到Google試算表「POS夥伴」分頁修改。用4碼PIN碼識別身份，
+      <b>哪些功能要什麼角色，到「權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
+      <b>還沒建立任何夥伴之前，權限不會生效</b>(退款、人工標記已付款除外，這兩項一定要先建店長/老闆)。
     </p>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
@@ -509,7 +529,67 @@ function apiGet(params) {
   return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json());
 }
 function apiPost(payload) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) }).then(r => r.json());
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, boToken: boSession ? boSession.token : '', appKey: APP_KEY }) })
+    .then(r => r.json())
+    .then(d => { if (d && d.code === 'bo_auth') { boSession = null; saveBoSession_(); showBoLogin_(d.message); } return d; });
+}
+
+// ---- POS後台登入(2026-09-25)：閘門之外再用店長/老闆PIN登入，後端發12小時通行證，改資料都要帶著 ----
+// 老闆定案：店長也能登入，但權限設定、付款方式設定、店長/老闆帳號只有老闆能改(後端也會擋)；帳號只能停用不能刪除
+const BO_SESSION_KEY = 'abao_bo_session_meibao';
+let boSession = null;   // {token, name, role, exp}
+try { boSession = JSON.parse(localStorage.getItem(BO_SESSION_KEY) || 'null'); } catch (e) { boSession = null; }
+if (boSession && !(boSession.exp > Date.now())) boSession = null;
+function saveBoSession_() { try { if (boSession) localStorage.setItem(BO_SESSION_KEY, JSON.stringify(boSession)); else localStorage.removeItem(BO_SESSION_KEY); } catch (e) {} }
+function isBoOwner_() { return !!(boSession && boSession.role === '老闆'); }
+function showBoLogin_(msg) {
+  document.getElementById('bo-login-overlay').style.display = 'flex';
+  document.getElementById('bo-login-err').textContent = msg || '';
+  document.getElementById('bo-login-pin').value = '';
+  const sel = document.getElementById('bo-login-name');
+  sel.innerHTML = '<option value="">載入中…</option>';
+  apiGet({ action: 'posStaffList', storeId: 'meibao' }).then(data => {
+    const managers = (data.staff || []).filter(x => x.role === '店長' || x.role === '老闆');
+    sel.innerHTML = managers.length
+      ? '<option value="">請選擇</option>' + managers.map(x => `<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}（${escapeHtml(x.role)}）</option>`).join('')
+      : '<option value="">(尚未建立店長／老闆，直接按登入進行初始設定)</option>';
+  }).catch(() => { sel.innerHTML = '<option value="">讀取失敗，請重新整理</option>'; });
+}
+function boLogin() {
+  const name = document.getElementById('bo-login-name').value;
+  const pin = document.getElementById('bo-login-pin').value.trim();
+  const err = document.getElementById('bo-login-err');
+  err.textContent = '登入中…';
+  fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'boLogin', storeId: 'meibao', name, pin, appKey: APP_KEY }) }).then(r => r.json()).then(d => {
+    if (d.status !== 'ok') { err.textContent = d.message || '登入失敗'; return; }
+    boSession = { token: d.token, name: d.name, role: d.role, exp: d.exp };
+    saveBoSession_();
+    document.getElementById('bo-login-overlay').style.display = 'none';
+    renderBoUser_();
+  }).catch(() => { err.textContent = '網路異常，請稍後再試'; });
+}
+function boLogout() {
+  if (!confirm('確定要登出後台？')) return;
+  const t = boSession && boSession.token;
+  boSession = null; saveBoSession_(); renderBoUser_();
+  if (t) fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'boLogout', boToken: t, appKey: APP_KEY }) }).catch(() => {});
+  showBoLogin_();
+}
+function renderBoUser_() {
+  const box = document.getElementById('bo-user');
+  box.style.display = boSession ? 'block' : 'none';
+  if (boSession) document.getElementById('bo-user-text').textContent = '登入：' + boSession.name + '（' + boSession.role + '）';
+  applyBoRoleUi_();
+}
+// 店長登入時：只有老闆能改的地方改成唯讀並說明(後端也會擋，這裡是讓畫面不誤導)
+function applyBoRoleUi_() {
+  const owner = isBoOwner_();
+  const permBtn = document.querySelector('#pmg-subview-perm .mc-add-btn');
+  if (permBtn) { permBtn.disabled = !owner; permBtn.title = owner ? '' : '只有老闆可以修改'; }
+  document.querySelectorAll('#perm-list select').forEach(sel => sel.disabled = !owner);
+  const payNote = document.getElementById('bo-owner-only-payment');
+  if (payNote) payNote.style.display = owner ? 'none' : 'block';
+  document.querySelectorAll('#view-payment button, #view-payment input, #view-payment select').forEach(el => el.disabled = !owner);
 }
 
 // 2026-09-12品牌菜單多店架構：「菜單管理」頁籤現在可以切換編輯對象——自己的門市(meibao)草稿，
@@ -606,6 +686,47 @@ function loadPosManageLog() {
   });
 }
 
+// ---- POS權限設定(2026-09-25新增)：每個POS功能的最低角色 ----
+let posPermLoaded = false;
+let posPermDefs = [];
+function loadPosPermissionsAdmin() {
+  const box = document.getElementById('perm-list');
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'posPermissions', storeId: SCHED_STORE_ID }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
+    if (!Array.isArray(data.defs)) throw new Error('後端還沒更新到有「權限設定」的版本，部署新版後端後重新整理即可');
+    posPermDefs = data.defs;
+    let lastGroup = '';
+    box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:0.88rem;">' +
+      '<tr style="text-align:left;color:var(--muted);"><th style="padding:6px 4px;">分類</th><th style="padding:6px 4px;">POS功能</th><th style="padding:6px 4px;">最低角色</th><th style="padding:6px 4px;">預設</th></tr>' +
+      data.defs.map(d => {
+        const g = d.group !== lastGroup ? d.group : '';
+        lastGroup = d.group;
+        return `<tr style="border-top:1px solid var(--border);">
+          <td style="padding:6px 4px;color:var(--muted);white-space:nowrap;">${escapeHtml(g)}</td>
+          <td style="padding:6px 4px;">${escapeHtml(d.label)}${d.frontOnly ? ' <span style="font-size:0.75rem;color:var(--muted);">(僅畫面)</span>' : ''}</td>
+          <td style="padding:6px 4px;"><select data-perm-code="${escapeHtml(d.code)}" onchange="document.getElementById('perm-save-result').textContent='尚未儲存'" style="padding:4px 6px;border:1px solid var(--border);border-radius:6px;">
+            ${data.roles.map(r => `<option value="${r}" ${r === d.role ? 'selected' : ''}>${r}</option>`).join('')}
+          </select></td>
+          <td style="padding:6px 4px;color:var(--muted);">${escapeHtml(d.defaultRole)}</td>
+        </tr>`;
+      }).join('') + '</table>';
+    applyBoRoleUi_();
+  }).catch(err => { box.innerHTML = '<div class="empty-hint">載入失敗：' + escapeHtml(err.message) + '</div>'; });
+}
+function savePosPermissions() {
+  const perms = {};
+  document.querySelectorAll('#perm-list select[data-perm-code]').forEach(sel => { perms[sel.dataset.permCode] = sel.value; });
+  const low = posPermDefs.filter(d => ['refund', 'confirmPayment'].includes(d.code) && perms[d.code] === '夥伴').map(d => d.label);
+  if (low.length && !confirm('「' + low.join('、') + '」設成夥伴後，任何人不用PIN就能操作，確定嗎？')) return;
+  const res = document.getElementById('perm-save-result');
+  res.textContent = '儲存中...';
+  apiPost({ action: 'upsertPosPermissions', storeId: SCHED_STORE_ID, perms }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    res.textContent = '✓ 已儲存（POS重新整理後生效）';
+  }).catch(err => { res.textContent = '儲存失敗：' + err.message; });
+}
+
 // ---- 團購模組(2026-09-24新增)：線上點餐「揪團」清單，唯讀 ----
 let groupListLoaded = false;
 const GROUP_STATUS_COLOR = { '收單中': '#1f7a3d', '已截止': '#9a5b00', '已結單': '#9a5b00', '付款中': '#9a5b00', '已成立': '#0c447c', '已退款': '#777', '已作廢': '#a30000' };
@@ -667,15 +788,16 @@ function renderPsEditor() {
   const isNew = psCurrentName === null;
   const s = isNew ? {} : (posStaffList.find(x => x.name === psCurrentName) || {});
   if (!isNew && !posStaffList.find(x => x.name === psCurrentName)) { el.innerHTML = '<div class="empty-hint">選一位來編輯，或點「新增夥伴」</div>'; return; }
+  // 店長只能新增/修改夥伴；店長/老闆帳號只有老闆能改(後端也會擋)
+  if (!isBoOwner_() && !isNew && s.role !== '夥伴') { el.innerHTML = '<div class="empty-hint">「' + escapeHtml(s.name) + '」是' + escapeHtml(s.role) + '帳號，只有老闆可以修改</div>'; return; }
+  const roleOptions = isBoOwner_() ? ['夥伴', '店長', '老闆'] : ['夥伴'];
   el.innerHTML = `
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增夥伴' : '編輯夥伴'}</h3>
     <label class="mc-field">姓名<input id="ps-f-name" value="${escapeHtml(s.name || '')}"></label>
     <div class="mc-field-row">
       <label class="mc-field">角色
         <select id="ps-f-role">
-          <option value="夥伴" ${(s.role || '夥伴') === '夥伴' ? 'selected' : ''}>夥伴</option>
-          <option value="店長" ${s.role === '店長' ? 'selected' : ''}>店長</option>
-          <option value="老闆" ${s.role === '老闆' ? 'selected' : ''}>老闆</option>
+          ${roleOptions.map(r => `<option value="${r}" ${(s.role || '夥伴') === r ? 'selected' : ''}>${r}</option>`).join('')}
         </select>
       </label>
       <label class="mc-field">PIN碼(4碼數字)<input id="ps-f-pin" type="text" inputmode="numeric" maxlength="4" placeholder="${isNew ? '必填' : '留空＝不更改'}"></label>
@@ -688,8 +810,8 @@ function renderPsEditor() {
     </label>
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="savePosStaffRow()">儲存</button>
-      ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePosStaffRow()">刪除</button>' : ''}
     </div>
+    <div style="font-size:0.78rem;color:var(--muted);">帳號不能刪除；離職或暫停請把狀態改成「停用」(開帳、退款等紀錄會保留是誰操作的)。最後一個啟用中的老闆不能停用或降級。</div>
   `;
 }
 function savePosStaffRow() {
@@ -739,6 +861,9 @@ function switchBackofficeTab(name) {
   document.getElementById('view-posmanage').style.display = name === 'posmanage' ? 'block' : 'none';
   document.getElementById('pmg-sub-btn-log').classList.toggle('active', name === 'posmanage' && currentPosManageSubview === 'log');
   document.getElementById('pmg-sub-btn-partner').classList.toggle('active', name === 'posmanage' && currentPosManageSubview === 'partner');
+  document.getElementById('pmg-sub-btn-perm').classList.toggle('active', name === 'posmanage' && currentPosManageSubview === 'perm');
+  document.getElementById('pmg-subview-perm').style.display = (name === 'posmanage' && currentPosManageSubview === 'perm') ? 'block' : 'none';
+  if (name === 'posmanage' && currentPosManageSubview === 'perm' && !posPermLoaded) { posPermLoaded = true; loadPosPermissionsAdmin(); }
   document.getElementById('pmg-subview-log').style.display = (name === 'posmanage' && currentPosManageSubview === 'log') ? 'block' : 'none';
   document.getElementById('pmg-subview-partner').style.display = (name === 'posmanage' && currentPosManageSubview === 'partner') ? 'block' : 'none';
   if (name === 'posmanage') {
@@ -1318,6 +1443,10 @@ function buildStatusSelect(current, onChange) {
 }
 
 loadAvailability();
+// POS後台登入(2026-09-25)：沒登入就跳登入畫面；付款方式設定是動態載入的，內容一變就重新套用「店長唯讀」
+renderBoUser_();
+if (!boSession) showBoLogin_();
+new MutationObserver(() => { if (!isBoOwner_()) applyBoRoleUi_(); }).observe(document.getElementById('view-payment'), { childList: true, subtree: true });
 
 // ---------------------------------------------------------------
 // 菜單管理（Phase 2，2026-09-06新增）：品項/客製化選項CRUD + 接線規則(掛載)管理

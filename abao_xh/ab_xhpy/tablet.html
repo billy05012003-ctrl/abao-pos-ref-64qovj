@@ -109,17 +109,7 @@
 </head>
 <body>
 <script>
-if(new Date()>new Date('2026-12-31T23:59:59')){
-  document.body.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#f5f5f5;font-family:'Microsoft JhengHei',sans-serif;text-align:center;padding:20px">
-    <div style="background:#fff;border-radius:12px;padding:40px 30px;box-shadow:0 2px 12px rgba(0,0,0,0.1);max-width:420px">
-      <div style="font-size:40px;margin-bottom:12px">⏳</div>
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:#333">此版本已過期</div>
-      <div style="font-size:12px;color:#666;line-height:1.7">「POS功能」預覽期限至 2026/12/31。<br>請聯繫小保取得新版本後再繼續使用。</div>
-    </div>
-  </div>`;
-  document.title='已過期 - POS功能';
-  throw new Error('此版本已過期（適用至2026/12/31），請聯繫小保取得新版本');
-}
+// 2026-09-25老闆定案：拿掉到期日(原本2026/12/31到期後POS/後台/出單頁會全部打不開，是測試期的預覽期限，正式營運不該留)
 // 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
 (function(){
   const SITE_PASSWORD='3345678';
@@ -438,7 +428,36 @@ function apiGet(params) {
   return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json());
 }
 function apiPost(payload) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) }).then(r => r.json());
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ via: 'pos', ...payload, appKey: APP_KEY }) }).then(r => r.json());
+}
+
+// ---- POS權限設定(2026-09-25)：每個功能的最低角色由POS後台「POS管理→權限設定」決定 ----
+// 設成「夥伴」=不用PIN直接做；店長/老闆=先選人輸入PIN(後端也會再驗一次)。讀不到設定時用預設值(敏感功能預設店長，偏安全)
+const POS_ROLE_RANK_ = { '夥伴': 1, '店長': 2, '老闆': 3 };
+const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', closeRegister: '店長', printSettings: '店長' };
+// 碰錢的動作每次都要輸入PIN；其他日常動作輸入一次後5分鐘內不用再輸(櫃台操作才不會一直被打斷)
+const POS_PERM_ALWAYS_ASK_ = ['refund', 'confirmPayment', 'grantVoucher', 'closeRegister'];
+const POS_PERM_SESSION_MS_ = 5 * 60000;
+let POS_PERMS = Object.assign({}, POS_PERM_DEFAULTS_);
+let posPermSession_ = null;   // {name, pin, role, until}
+function loadPosPermissions() {
+  return apiGet({ action: 'posPermissions', storeId: STORE_ID }).then(d => { if (d.status === 'ok' && d.perms && typeof d.perms === 'object') POS_PERMS = d.perms; }).catch(() => {});   // 讀不到(例如後端還沒更新)就維持預設值
+}
+function posPermRole_(code) { return POS_PERMS[code] || POS_PERM_DEFAULTS_[code] || '夥伴'; }
+function withPosPerm_(code, label, fn, onCancel) {
+  const role = posPermRole_(code);
+  if (role === '夥伴') { fn('', ''); return; }
+  const sess = posPermSession_;
+  if (!POS_PERM_ALWAYS_ASK_.includes(code) && sess && Date.now() < sess.until && POS_ROLE_RANK_[sess.role] >= POS_ROLE_RANK_[role]) { fn(sess.name, sess.pin); return; }
+  openPosStaffPinPrompt_(label + '需要' + role + '以上權限確認', (name, pin) => {
+    if (!name) { fn('', ''); return; }   // 這間店還沒建夥伴清單：後端放行，這裡也不擋
+    apiPost({ action: 'verifyPosStaffPin', name, pin, storeId: STORE_ID }).then(v => {
+      if (v.status !== 'ok') { alert(v.message || 'PIN碼錯誤'); if (onCancel) onCancel(); return; }
+      if ((POS_ROLE_RANK_[v.role] || 0) < POS_ROLE_RANK_[role]) { alert('這個動作需要「' + role + '」以上權限'); if (onCancel) onCancel(); return; }
+      if (!POS_PERM_ALWAYS_ASK_.includes(code)) posPermSession_ = { name, pin, role: v.role, until: Date.now() + POS_PERM_SESSION_MS_ };
+      fn(name, pin);
+    }).catch(() => { alert('網路異常，請稍後再試'); if (onCancel) onCancel(); });
+  }, role, onCancel);
 }
 
 let currentStoreStatus = { busy: false, paused: false, items: {} };
@@ -467,31 +486,45 @@ function loadStoreStatus() {
   });
 }
 
+function posPermResult_(data) { if (data && data.status !== 'ok') alert(data.message || '操作失敗'); }
 function onBusyClick() {
-  if (currentStoreStatus.busy) {
-    apiPost({ action: 'clearBusy', storeId: STORE_ID }).then(loadStoreStatus);
-  } else {
-    const minutes = document.getElementById('busy-minutes').value;
-    apiPost({ action: 'setBusy', storeId: STORE_ID, minutes: Number(minutes) }).then(loadStoreStatus);
-  }
+  withPosPerm_('busy', '設為忙碌／取消忙碌', (staffName, staffPin) => {
+    if (currentStoreStatus.busy) {
+      apiPost({ action: 'clearBusy', storeId: STORE_ID, staffName, staffPin }).then(posPermResult_).then(loadStoreStatus);
+    } else {
+      const minutes = document.getElementById('busy-minutes').value;
+      apiPost({ action: 'setBusy', storeId: STORE_ID, minutes: Number(minutes), staffName, staffPin }).then(posPermResult_).then(loadStoreStatus);
+    }
+  });
 }
 
 function onPauseClick() {
-  if (currentStoreStatus.paused) {
-    apiPost({ action: 'clearPause', storeId: STORE_ID }).then(loadStoreStatus);
-  } else {
-    const minutes = document.getElementById('pause-minutes').value;
-    apiPost({ action: 'setPause', storeId: STORE_ID, minutes: Number(minutes) }).then(loadStoreStatus);
-  }
+  withPosPerm_('pause', '暫停接單／恢復接單', (staffName, staffPin) => {
+    if (currentStoreStatus.paused) {
+      apiPost({ action: 'clearPause', storeId: STORE_ID, staffName, staffPin }).then(posPermResult_).then(loadStoreStatus);
+    } else {
+      const minutes = document.getElementById('pause-minutes').value;
+      apiPost({ action: 'setPause', storeId: STORE_ID, minutes: Number(minutes), staffName, staffPin }).then(posPermResult_).then(loadStoreStatus);
+    }
+  });
 }
 
+let revenueUnlocked_ = false;
 function loadRevenue() {
+  // 權限設成店長/老闆時：先顯示上鎖，點一下輸入PIN才顯示(純畫面控制)
+  if (posPermRole_('revenue') !== '夥伴' && !revenueUnlocked_) {
+    document.getElementById('revenue-total').innerHTML = '<button class="btn" onclick="unlockRevenue_()">🔒 查看營收</button>';
+    document.getElementById('revenue-count').textContent = '需要' + posPermRole_('revenue') + '以上權限';
+    return;
+  }
   apiGet({ action: 'todayRevenue', storeId: STORE_ID }).then(data => {
     if (data.status !== 'ok') return;
     document.getElementById('revenue-total').textContent = `$${data.total}`;
     document.getElementById('revenue-count').textContent = `今日 ${data.count} 筆已付款訂單`;
   });
 }
+
+function unlockRevenue_() { withPosPerm_('revenue', '查看營收', () => { revenueUnlocked_ = true; loadRevenue(); }); }
 
 function loadOrders() {
   apiGet({ action: 'todayOrders', storeId: STORE_ID }).then(data => {
@@ -567,7 +600,7 @@ function loadRefundableOrders() {
 function doRefund(orderId, amount, viaGateway) {
   const how = viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回客人的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給客人。';
   if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。')) return;
-  openPosStaffPinPrompt_('退款需要店長以上權限確認', (staffName, staffPin) => {
+  withPosPerm_('refund', '退款', (staffName, staffPin) => {
     apiPost({ action: 'refundOrder', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
       if (data.status !== 'ok') { alert('退款失敗：' + (data.message || '')); loadRefundableOrders(); return; }
       if (data.pending) {
@@ -585,7 +618,7 @@ function doRefund(orderId, amount, viaGateway) {
 function manualConfirmPayment(orderId) {
   if (!confirm('確定「' + orderId + '」這筆訂單客人真的已經付款成功嗎？\n\n請先去藍新商店後台核對過交易紀錄再標記，標記後客人可以直接來取餐。')) return;
   // 2026-09-19：改成需要店長以上PIN(後端staffConfirmPayment)，原本任何人都能呼叫的confirmPayment已關閉
-  openPosStaffPinPrompt_('標記已付款需要店長以上權限確認', (staffName, staffPin) => {
+  withPosPerm_('confirmPayment', '人工標記已付款', (staffName, staffPin) => {
     apiPost({ action: 'staffConfirmPayment', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
       if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
       loadStuckPaymentOrders();
@@ -596,20 +629,24 @@ function manualConfirmPayment(orderId) {
 }
 
 function markReady(orderId) {
-  apiPost({ action: 'markPickupReady', orderId: orderId }).then(data => {
-    if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
-    loadOrders();
-    loadRevenue();
+  withPosPerm_('pickupReady', '標記可以取餐', (staffName, staffPin) => {
+    apiPost({ action: 'markPickupReady', orderId: orderId, staffName, staffPin }).then(data => {
+      if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
+      loadOrders();
+      loadRevenue();
+    });
   });
 }
 
 // 「取餐付款」訂單客人到店先結帳的標記(2026-09-16新增)：待收款→未取餐，之後才能按「可以取餐」
 function markCollected(orderId) {
   if (!confirm('確定「' + orderId + '」這筆訂單客人已經在現場付完款了嗎？')) return;
-  apiPost({ action: 'markOrderCollected', orderId: orderId }).then(data => {
-    if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
-    loadOrders();
-    loadRevenue();
+  withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
+    apiPost({ action: 'markOrderCollected', orderId: orderId, staffName, staffPin }).then(data => {
+      if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
+      loadOrders();
+      loadRevenue();
+    });
   });
 }
 
@@ -641,23 +678,28 @@ function loadPosStaffForOpenSelect_() {
 // 傳入標題文字跟「驗證通過後要做的事」callback(staffName, staffPin)；這間店還沒設定任何夥伴時直接放行，
 // 跟後端requirePosRole_同一套邏輯，避免功能上線當下卡住還沒建夥伴清單的店家
 let pendingStaffPinCallback_ = null;
-function openPosStaffPinPrompt_(title, callback) {
+function openPosStaffPinPrompt_(title, callback, minRole, onCancel) {
+  minRole = minRole || '店長';
   apiGet({ action: 'posStaffList', storeId: STORE_ID }).then(data => {
-    if (data.status !== 'ok') { alert('讀取夥伴清單失敗，請稍後再試'); return; }
+    if (data.status !== 'ok') { alert('讀取夥伴清單失敗，請稍後再試'); if (onCancel) onCancel(); return; }
     if (data.staff.length === 0) { callback('', ''); return; }
-    const managerOptions = data.staff.filter(s => s.role === '店長' || s.role === '老闆');
-    if (!managerOptions.length) { alert('目前沒有設定「店長」或「老闆」角色的夥伴，請先到POS後台「POS管理」設定'); return; }
+    const managerOptions = data.staff.filter(s => (POS_ROLE_RANK_[s.role] || 0) >= (POS_ROLE_RANK_[minRole] || 2));
+    if (!managerOptions.length) { alert('目前沒有「' + minRole + '」以上角色的夥伴，請先到POS後台「POS管理」設定'); if (onCancel) onCancel(); return; }
     document.getElementById('pos-staff-pin-title').textContent = title;
     document.getElementById('pos-staff-pin-input').value = '';
     document.getElementById('pos-staff-pin-select').innerHTML = '<option value="">請選擇</option>' +
       managerOptions.map(s => `<option value="${s.name}">${s.name}（${s.role}）</option>`).join('');
     pendingStaffPinCallback_ = callback;
+    pendingStaffPinCancel_ = onCancel || null;
     document.getElementById('pos-staff-pin-overlay').classList.add('open');
-  }).catch(() => alert('網路異常，請稍後再試'));
+  }).catch(() => { alert('網路異常，請稍後再試'); if (onCancel) onCancel(); });
 }
+let pendingStaffPinCancel_ = null;
 function closePosStaffPinOverlay_() {
   document.getElementById('pos-staff-pin-overlay').classList.remove('open');
   pendingStaffPinCallback_ = null;
+  const c = pendingStaffPinCancel_; pendingStaffPinCancel_ = null;
+  if (c) c();
 }
 function confirmPosStaffPin_() {
   const name = document.getElementById('pos-staff-pin-select').value;
@@ -666,20 +708,31 @@ function confirmPosStaffPin_() {
   const cb = pendingStaffPinCallback_;
   document.getElementById('pos-staff-pin-overlay').classList.remove('open');
   pendingStaffPinCallback_ = null;
+  pendingStaffPinCancel_ = null;
   if (cb) cb(name, pin);
 }
 
 function doOpenRegister() {
   if (!confirm('確定要開帳嗎？')) return;
-  const staffName = document.getElementById('pos-open-staff-select').value;
-  apiPost({ action: 'openRegister', storeId: STORE_ID, staffName }).then(data => {
-    if (data.status !== 'ok') { alert(data.message || '開帳失敗'); return; }
-    document.getElementById('pos-manage-result').textContent = '已開帳（' + new Date().toLocaleTimeString('zh-TW') + '）';
-    loadRegisterLog();
+  const openBy = document.getElementById('pos-open-staff-select').value;
+  withPosPerm_('openRegister', '開帳', (staffName, staffPin) => {
+    // 需要PIN時以驗證過的人為準；不需要時沿用下拉選單選的人(只記錄)
+    apiPost({ action: 'openRegister', storeId: STORE_ID, staffName: staffName || openBy, staffPin }).then(data => {
+      if (data.status !== 'ok') { alert(data.message || '開帳失敗'); return; }
+      document.getElementById('pos-manage-result').textContent = '已開帳（' + new Date().toLocaleTimeString('zh-TW') + '）';
+      loadRegisterLog();
+    });
   });
 }
 
+let registerLogUnlocked_ = false;
+function unlockRegisterLog_() { withPosPerm_('registerLog', '查看開關帳記錄', () => { registerLogUnlocked_ = true; loadRegisterLog(); }); }
 function loadRegisterLog() {
+  if (posPermRole_('registerLog') !== '夥伴' && !registerLogUnlocked_) {
+    const c = document.getElementById('register-log-list');
+    if (c) c.innerHTML = '<button class="btn" onclick="unlockRegisterLog_()">🔒 查看開關帳記錄（需要' + posPermRole_('registerLog') + '以上）</button>';
+    return;
+  }
   apiGet({ action: 'registerLog', storeId: STORE_ID }).then(data => {
     const container = document.getElementById('register-log-list');
     if (!container) return;
@@ -710,8 +763,10 @@ function openCloseRegisterPreview() {
     if (data.status !== 'ok') return;
     // 這間店完全還沒設定任何夥伴(剛上線這個功能)時，後端會直接放行不驗證，前端這裡也跟著不強制輸入，
     // 避免老闆自己都還沒建夥伴清單、卻先被這個新功能卡住不能關帳
-    closeRegisterStaffConfigured_ = data.staff.length > 0;
-    const managerOptions = data.staff.filter(s => s.role === '店長' || s.role === '老闆');
+    const closeRole = posPermRole_('closeRegister');
+    closeRegisterStaffConfigured_ = data.staff.length > 0 && closeRole !== '夥伴';
+    ['close-register-staff-select', 'close-register-staff-pin'].forEach(id => { const el = document.getElementById(id); if (el && el.parentElement) el.parentElement.style.display = closeRole === '夥伴' ? 'none' : ''; });
+    const managerOptions = data.staff.filter(s => (POS_ROLE_RANK_[s.role] || 0) >= (POS_ROLE_RANK_[closeRole] || 2));
     document.getElementById('close-register-staff-select').innerHTML = '<option value="">請選擇</option>' +
       managerOptions.map(s => `<option value="${s.name}">${s.name}（${s.role}）</option>`).join('');
   }).catch(() => {});
@@ -819,14 +874,16 @@ function renderMergedItemStatusList() {
           const previous = tabletCurrent;
           if (!currentStoreStatus.items) currentStoreStatus.items = {};
           currentStoreStatus.items[it.name] = val === '供應中' ? undefined : val;
-          apiPost({ action: 'setItemStatus', name: it.name, status: val })
-            .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
-            .catch(err => {
-              console.warn('雲端平板/線上點餐狀態同步失敗', err);
-              currentStoreStatus.items[it.name] = previous === '供應中' ? undefined : previous;
-              selectEl.value = previous;
-              alert(`「${it.name}」線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
-            });
+          const revert = () => { currentStoreStatus.items[it.name] = previous === '供應中' ? undefined : previous; selectEl.value = previous; };
+          withPosPerm_('itemStatus', '品項上下架', (staffName, staffPin) => {
+            apiPost({ action: 'setItemStatus', name: it.name, status: val, staffName, staffPin })
+              .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+              .catch(err => {
+                console.warn('雲端平板/線上點餐狀態同步失敗', err);
+                revert();
+                alert(`「${it.name}」線上點餐狀態沒有改成功：${err.message}(畫面已還原)`);
+              });
+          }, revert);
         });
         tabletGroup.appendChild(tabletSelect);
 
@@ -907,6 +964,7 @@ function loadPromoSettings() {
   });
 }
 const promoSettingsReady = loadPromoSettings();
+const posPermissionsReady = loadPosPermissions();   // POS權限設定(2026-09-25)
 
 // 飲品升級規則(2026-09-13新增)：來源分類→目標品項＋加價金額，取代原本店員自己輸入加價金額、
 // 品項不會真的換成目標飲品的舊做法(見applyDrinkUpgrade)
@@ -993,7 +1051,10 @@ function registerMember(phone) {
   const name = document.getElementById('member-new-name').value.trim();
   const birthday = document.getElementById('member-new-birthday').value.trim();
   if (!name) { alert('請輸入姓名'); return; }
-  apiPost({ action: 'registerMember', phone: phone, name: name, birthday: birthday }).then(data => {
+  withPosPerm_('member', '註冊會員', (staffName, staffPin) => registerMemberSubmit_(phone, name, birthday, staffName, staffPin));
+}
+function registerMemberSubmit_(phone, name, birthday, staffName, staffPin) {
+  apiPost({ action: 'registerMember', phone: phone, name: name, birthday: birthday, staffName, staffPin }).then(data => {
     if (data.status === 'ok') {
       selectedMember = data.member;
       document.getElementById('member-info').innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $0　累計點數 0</div><div id="member-voucher-panel"></div>`;
@@ -1063,7 +1124,7 @@ function grantVoucherToMember(btn, type) {
   if (!selectedMember) { alert('請先查詢/選擇會員'); return; }
   if (btn.disabled) return;
   if (!confirm(`確定要贈送「${type}」給${selectedMember.name}嗎？這是店家成本，不會扣會員點數。`)) return;
-  openPosStaffPinPrompt_('贈送兌換券需要店長以上權限確認', (staffName, staffPin) => {
+  withPosPerm_('grantVoucher', '贈送兌換券', (staffName, staffPin) => {
     btn.disabled = true;
     apiPost({ action: 'grantVoucher', phone: selectedMember.phone, type: type, staffName, staffPin, storeId: STORE_ID }).then(data => {
       if (data.status !== 'ok') { alert(data.message || '贈送失敗'); return; }
@@ -1080,8 +1141,11 @@ function grantVoucherToMember(btn, type) {
 function redeemPointsForVoucher(btn, voucherType) {
   if (!selectedMember) return;
   if (btn.disabled) return;
+  withPosPerm_('redeemPoints', '點數兌換', (staffName, staffPin) => redeemPointsSubmit_(btn, voucherType, staffName, staffPin));
+}
+function redeemPointsSubmit_(btn, voucherType, staffName, staffPin) {
   btn.disabled = true;
-  apiPost({ action: 'redeemPoints', phone: selectedMember.phone, voucherType: voucherType }).then(data => {
+  apiPost({ action: 'redeemPoints', phone: selectedMember.phone, voucherType: voucherType, staffName, staffPin }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '兌換失敗'); return; }
     selectedMember.points = data.remainingPoints;
     alert(`已兌換「${voucherType}」，剩餘點數 ${data.remainingPoints}`);
@@ -1095,7 +1159,14 @@ function redeemPointsForVoucher(btn, voucherType) {
 
 // 選定一張兌換券要套用在這筆訂單：fixed類直接套用扣總金額；item類要再選購物車裡哪一項
 // 可複選多張兌換券疊加套用，同一張券用過後會從「可用」清單移除，不能重複套用
+let posVoucherStaff_ = null;   // 使用兌換券時驗證過的人(結帳時一併送後端檢查)
 function selectVoucherToApply(voucherId, type) {
+  withPosPerm_('redeemVoucher', '使用兌換券', (staffName, staffPin) => {
+    if (staffName) posVoucherStaff_ = { staffName, staffPin };
+    selectVoucherToApplyAfterPerm_(voucherId, type);
+  });
+}
+function selectVoucherToApplyAfterPerm_(voucherId, type) {
   const behavior = VOUCHER_BEHAVIOR[type];
   if (!behavior) { alert('未知的兌換券類型：' + type); return; }
   if (behavior.mode === 'fixed') {
@@ -1485,14 +1556,16 @@ function setPosLocalItemStatus(cat, name, status) {
   const previous = posItemStatusMap[key]; // 記住寫入前的值，同步失敗時復原，避免畫面看起來改成功、雲端其實沒改到
   if (status === '供應中') delete posItemStatusMap[key];
   else posItemStatusMap[key] = status;
-  apiPost({ action: 'setPosItemStatus', category: cat, name: name, status: status })
-    .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
-    .catch(err => {
-      console.warn('POS功能上下架同步雲端失敗', err);
-      if (previous === undefined) delete posItemStatusMap[key]; else posItemStatusMap[key] = previous;
-      alert(`「${name}」上下架狀態同步雲端失敗，請確認網路連線後重試(畫面已還原)`);
-      renderMergedItemStatusList();
-    });
+  const revert = () => { if (previous === undefined) delete posItemStatusMap[key]; else posItemStatusMap[key] = previous; renderMergedItemStatusList(); };
+  withPosPerm_('itemStatus', '品項上下架', (staffName, staffPin) => {
+    apiPost({ action: 'setPosItemStatus', category: cat, name: name, status: status, staffName, staffPin })
+      .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+      .catch(err => {
+        console.warn('POS功能上下架同步雲端失敗', err);
+        revert();
+        alert(`「${name}」上下架狀態沒有改成功：${err.message}(畫面已還原)`);
+      });
+  }, revert);
 }
 
 function getPosLocalItemStatus(cat, name) {
@@ -1699,8 +1772,11 @@ function submitQuickOrder() {
   const invoiceNumber = invoiceNumberInput ? invoiceNumberInput.value.trim() : '';
   if (!amount || amount <= 0) { alert('請輸入有效的金額'); return; }
   if (invoiceType !== '無統編/無載具' && !invoiceNumber) { alert('請輸入統編或手機載具號碼'); return; }
+  withPosPerm_('quickOrder', '快速出單', (staffName, staffPin) => submitQuickOrderAfterPerm_(source, amount, invoiceType, invoiceNumber, invoiceNumberInput, staffName, staffPin));
+}
+function submitQuickOrderAfterPerm_(source, amount, invoiceType, invoiceNumber, invoiceNumberInput, staffName, staffPin) {
   apiPost({
-    action: 'quickOrder',
+    action: 'quickOrder', staffName, staffPin,
     storeId: STORE_ID,
     source: source,
     totalAmount: amount,
@@ -2354,6 +2430,7 @@ function closePosCartAll() {
   posCart = [];
   memberVouchers = [];
   appliedVouchers = [];
+  posVoucherStaff_ = null;
   pendingVoucherForItemPick = null;
   directDiscounts = [];
   pendingDirectDiscount = null;
@@ -2486,11 +2563,16 @@ function submitPosOrder() {
   }
   const btn = document.getElementById('pos-submit-order-btn');
   if (btn.disabled) return;
+  withPosPerm_('checkout', '結帳', (staffName, staffPin) => submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, pickupTime, staffName, staffPin));
+}
+function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, pickupTime, staffName, staffPin) {
   btn.disabled = true;
   const btnOriginalText = btn.textContent;
   btn.textContent = '送出中...';
+  const vStaff = posVoucherStaff_ || {};
   apiPost({
-    action: 'posCheckout',
+    action: 'posCheckout', staffName, staffPin,
+    voucherStaffName: vStaff.staffName || '', voucherStaffPin: vStaff.staffPin || '',
     storeId: STORE_ID,
     items: items,
     totalAmount: total,
