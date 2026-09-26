@@ -2750,6 +2750,17 @@ function submitPosOrder() {
   if (btn.disabled) return;
   withPosPerm_('checkout', '結帳', (staffName, staffPin) => submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, pickupTime, staffName, staffPin));
 }
+// 這張單所有折扣逐項：兌換券、門市活動按鈕(負數＝加價，例如舊的活動飲品加價)、會員等級權益
+function posDiscountLines_() {
+  refreshOrderPctDiscounts_();
+  const perks = currentTierPerks_();
+  return [
+    ...appliedVouchers.map(v => ({ label: v.type, amount: v.discountAmount })),
+    ...directDiscounts.map(d => ({ label: d.type, amount: d.discountAmount })),
+    ...(perks.spend ? [{ label: '滿額折', amount: perks.spend }] : []),
+    ...perks.promos.map(x => ({ label: x.name, amount: x.amount }))
+  ].filter(d => d.amount);
+}
 function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, pickupTime, staffName, staffPin) {
   btn.disabled = true;
   const btnOriginalText = btn.textContent;
@@ -2765,7 +2776,10 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     pickupDate: pickupDate,
     pickupTime: pickupTime,
     memberPhone: selectedMember ? selectedMember.phone : '',
-    voucherIds: appliedVouchers.map(v => v.voucherId)
+    voucherIds: appliedVouchers.map(v => v.voucherId),
+    // 折扣明細＋會員等級(2026-09-26)：出單在合計上面逐行印，訂單表也存一份供報表
+    discounts: posDiscountLines_(),
+    memberTier: selectedMember ? selectedMember.tier : ''
   }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '結帳失敗'); return; }
     document.getElementById('pos-confirm-order-no').textContent = data.orderId;
