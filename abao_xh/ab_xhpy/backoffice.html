@@ -2917,6 +2917,12 @@ function savePromo() {
     alert('這張有「最低適用等級」、是POS按鈕、不可贈送，會當成等級優惠自動套用，請選「適用品項」(例如本月的檸檬紅茶)');
     return;
   }
+  // 等級優惠自動套用只看得懂這三種效果(見後端tierPromoUnitDiscount_)，其他效果存了也不會折，直接擋下(2026-09-26)
+  if (mode === 'item' && document.getElementById('pm-f-showbtn').checked && !document.getElementById('pm-f-grantable').checked
+      && document.getElementById('pm-f-mintier').value && ['free', 'discount60', 'discount50'].indexOf(effect) === -1) {
+    alert('等級優惠（自動套用）只支援「全額免費、打6折、打5折」，請改選其中一種');
+    return;
+  }
   if (usesPct) {
     const pct = Number(document.getElementById('pm-f-pct').value);
     if (!Number.isInteger(pct) || pct < 10 || pct > 99) { alert('折數請填10～99的整數(例如85=打85折，9折請填90)'); return; }
