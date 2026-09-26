@@ -306,6 +306,7 @@
   </p>
   <div id="mc-publish-row" style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
     <button type="button" id="mc-publish-btn" class="mc-save-btn" onclick="publishMcStore()">發布到正式版</button>
+    <div id="mc-publish-diff" style="flex:1;min-width:240px;"></div>
   </div>
   <div id="mc-sync-row" style="display:none;flex-direction:column;gap:8px;margin-bottom:16px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
     <div style="font-size:0.82rem;font-weight:600;">同步到分店</div>
@@ -1462,6 +1463,7 @@ function loadMenuCms() {
     mcItemGroups = data.itemGroups;
     mcItemComboGroups = data.itemComboGroups || {};
     mcCategoryOrder = data.categoryOrder || Object.keys(data.catalog);
+    if (MC_STATUS === 'draft') refreshMenuPublishDiff_();   // 草稿還沒發布提醒
     renderMcCatList();
     renderGroupLibrary();
     renderGroupEditor();
@@ -1561,6 +1563,7 @@ function publishMcStore() {
   apiPost({ action: 'publishStoreMenu', storeId: MC_STORE_ID }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
     alert('已發布成正式上線版本');
+    refreshMenuPublishDiff_();
   }).catch(err => alert('發布失敗：' + err.message))
     .finally(() => { btn.disabled = false; btn.textContent = '發布到正式版'; });
 }
@@ -2581,8 +2584,9 @@ function renderPromoDomainControls() {
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:0.8rem;color:var(--muted);">
       目前編輯：<b>${escapeHtml(storeLabel)}</b>${isBrand ? '' : '的草稿版本'}（要切換門市請到「菜單管理」分頁切，集點禮/優惠券跟菜單共用同一個門市切換）
     </div>
-    <div style="display:${isBrand ? 'none' : 'flex'};gap:10px;align-items:center;margin-bottom:12px;">
+    <div style="display:${isBrand ? 'none' : 'flex'};gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
       <button type="button" class="mc-save-btn" onclick="publishPromoDomain(this)">發布到正式版</button>
+      <div class="promo-publish-diff" style="flex:1;min-width:240px;"></div>
     </div>
     <div class="promo-sync-row" style="display:${isBrand ? 'flex' : 'none'};flex-direction:column;gap:8px;margin-bottom:12px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
       <div style="font-size:0.82rem;font-weight:600;">同步到分店</div>
@@ -2606,6 +2610,61 @@ function renderPromoDomainControls() {
   document.getElementById('pg-domain-controls').innerHTML = html;
 }
 
+// ---- 草稿還沒發布提醒(2026-09-26)：比對草稿與正式版，列出新增/修改/刪除 ----
+// 優惠券、集點禮、菜單管理共用。只比對內容欄位，不比門市/版本欄
+function diffByKey_(draftMap, liveMap, labelOf) {
+  const out = [];
+  Object.keys(draftMap).forEach(k => {
+    if (!(k in liveMap)) out.push('新增' + labelOf(k));
+    else if (JSON.stringify(draftMap[k]) !== JSON.stringify(liveMap[k])) out.push('修改' + labelOf(k));
+  });
+  Object.keys(liveMap).forEach(k => { if (!(k in draftMap)) out.push('刪除' + labelOf(k)); });
+  return out;
+}
+function renderPublishDiff_(els, changes, errorMsg) {
+  const html = errorMsg
+    ? `<span style="font-size:0.8rem;color:var(--muted);">${escapeHtml(errorMsg)}</span>`
+    : !changes.length
+      ? '<span style="font-size:0.82rem;color:#2e7d32;">✅ 草稿跟正式版一致，沒有要發布的內容</span>'
+      : `<div style="font-size:0.82rem;background:#fff8e1;border:1px solid #f0c36d;border-radius:8px;padding:6px 10px;color:#7a5a00;">
+           <b>⚠ 草稿有 ${changes.length} 項還沒發布</b>（按「發布到正式版」才會生效）：<br>
+           ${changes.slice(0, 15).map(escapeHtml).join('、')}${changes.length > 15 ? `…等共 ${changes.length} 項` : ''}
+         </div>`;
+  els.forEach(el => { el.innerHTML = html; });
+}
+const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'locked', 'order'];
+function refreshPromoPublishDiff_() {
+  const els = [...document.querySelectorAll('.promo-publish-diff')];
+  if (!els.length || MC_STORE_ID === '__brand__') return Promise.resolve();
+  els.forEach(el => { el.innerHTML = '<span style="font-size:0.8rem;color:var(--muted);">比對草稿與正式版中…</span>'; });
+  const get = v => apiGet({ action: 'promoSettings', storeId: MC_STORE_ID, version: v });
+  return Promise.all([get('draft'), get('live')]).then(([d, l]) => {
+    if (d.status !== 'ok' || l.status !== 'ok') throw new Error();
+    const promoMap = list => Object.fromEntries((list || []).map(p => [p.name, PROMO_DIFF_FIELDS_.map(f => p[f] === undefined ? '' : p[f])]));
+    const giftMap = list => Object.fromEntries((list || []).map(g => [g.voucherType, [g.points, g.order, g.status, g.locked]]));
+    const changes = diffByKey_(promoMap(d.promos), promoMap(l.promos), k => '優惠券「' + k + '」')
+      .concat(diffByKey_(giftMap(d.pointGifts), giftMap(l.pointGifts), k => '集點禮「' + k + '」'));
+    renderPublishDiff_(els, changes);
+  }).catch(() => renderPublishDiff_(els, [], '暫時無法比對草稿與正式版(網路問題)，發布前請自行確認'));
+}
+function refreshMenuPublishDiff_() {
+  const el = document.getElementById('mc-publish-diff');
+  if (!el) return Promise.resolve();
+  if (MC_STORE_ID === '__brand__') { el.innerHTML = ''; return Promise.resolve(); }
+  el.innerHTML = '<span style="font-size:0.8rem;color:var(--muted);">比對草稿與正式版中…</span>';
+  const get = s => apiGet({ action: 'menuCmsData', storeId: MC_STORE_ID, status: s });
+  return Promise.all([get('draft'), get('live')]).then(([d, l]) => {
+    if (d.status !== 'ok' || l.status !== 'ok') throw new Error();
+    const itemMap = cat => { const m = {}; Object.keys(cat || {}).forEach(c => (cat[c] || []).forEach(it => { m[c + '||' + it.name] = it; })); return m; };
+    const itemLabel = k => { const [c, n] = k.split('||'); return '品項「' + n + '」(' + (c.split('_').pop()) + ')'; };
+    const changes = diffByKey_(itemMap(d.catalog), itemMap(l.catalog), itemLabel)
+      .concat(diffByKey_(d.optionGroups || {}, l.optionGroups || {}, k => '客製化選項「' + (((d.optionGroups || {})[k] || (l.optionGroups || {})[k] || {}).label || k) + '」'))
+      .concat(diffByKey_(Object.assign({}, d.itemGroups, d.itemComboGroups && { __combo: d.itemComboGroups }), Object.assign({}, l.itemGroups, l.itemComboGroups && { __combo: l.itemComboGroups }), k => k === '__combo' ? '套餐限定客製化掛載' : '客製化掛載「' + k.split('||').pop() + '」'));
+    if (JSON.stringify(d.categoryOrder || []) !== JSON.stringify(l.categoryOrder || [])) changes.push('修改分類排序');
+    renderPublishDiff_([el], changes);
+  }).catch(() => renderPublishDiff_([el], [], '暫時無法比對草稿與正式版(網路問題)，發布前請自行確認'));
+}
+
 function publishPromoDomain(btn) {
   if (MC_STORE_ID === '__brand__') { alert('品牌範本本身不能發布，請用下方「同步到分店」'); return; }
   if (!confirm('確定要把「' + MC_STORE_ID + '」的集點禮/優惠券草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
@@ -2613,6 +2672,7 @@ function publishPromoDomain(btn) {
   apiPost({ action: 'publishStorePromos', storeId: MC_STORE_ID }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
     alert('已發布到正式版');
+    refreshPromoPublishDiff_();
   }).catch(err => alert('發布失敗：' + err.message))
     .finally(() => { btn.disabled = false; btn.textContent = '發布到正式版'; });
 }
@@ -2684,6 +2744,7 @@ function loadPromos() {
   return Promise.all([fetchPromoSettings_(), ensureMemberTiersLoaded_()]).then(() => {
     renderPmList();
     renderPmEditor();
+    refreshPromoPublishDiff_();   // 草稿還沒發布提醒(存檔後會重新載入，順便重新比對)
   }).catch(err => {
     document.getElementById('pm-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
     console.warn('優惠券資料讀取失敗', err);
@@ -2904,6 +2965,7 @@ function loadPointGifts() {
   return fetchPromoSettings_().then(() => {
     renderPgList();
     renderPgEditor();
+    refreshPromoPublishDiff_();
   }).catch(err => {
     document.getElementById('pg-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
     console.warn('集點禮資料讀取失敗', err);
