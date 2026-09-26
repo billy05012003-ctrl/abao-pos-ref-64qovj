@@ -3011,7 +3011,7 @@ function renderBgEditor() {
     <label class="mc-field">優惠券名稱<select id="bg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
     <div class="mc-field-row">
       <label class="mc-field">發放後第幾天生效<input id="bg-f-effoffset" type="number" value="${g.effectiveOffset ?? 0}"></label>
-      <label class="mc-field">發放後第幾天到期<input id="bg-f-expoffset" type="number" value="${g.expiryOffset ?? 27}"></label>
+      <div class="mc-field">到期日<div style="padding:8px 0;font-size:0.85rem;">生日當月最後一天（固定）</div><input id="bg-f-expoffset" type="hidden" value="${g.expiryOffset ?? 27}"></div>
     </div>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="bg-f-status">
