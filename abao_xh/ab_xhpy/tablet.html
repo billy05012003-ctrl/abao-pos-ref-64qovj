@@ -32,7 +32,7 @@
   .pos-col-detail { width:280px; flex:none; border-right:1px solid var(--border); }
   .pos-detail-empty { color:var(--muted); text-align:center; padding:40px 10px; font-size:0.85rem; }
   .pos-col-cart { width:250px; flex:none; display:flex; flex-direction:column; }
-  .pos-cart-lines-scroll { flex:1 1 auto; overflow-y:auto; min-height:60px; }
+  .pos-cart-lines-scroll { flex:1 1 auto; overflow-y:auto; min-height:110px; }
   .pos-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:20; align-items:center; justify-content:center; }
   .pos-overlay.open { display:flex; }
   #pos-drink-overlay { z-index:25; }
@@ -1152,6 +1152,7 @@ function lookupMember() {
   apiGet({ action: 'getMember', phone: phone }).then(data => {
     if (data.status === 'ok') {
       selectedMember = data.member;
+      memberPanelOpen_ = false;
       el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div><div id="member-voucher-panel"></div>`;
       loadMemberVouchers();
       renderPosCart(); // 會員等級權益依等級自動套用
@@ -1230,7 +1231,12 @@ function renderMemberVoucherPanel() {
     <button class="btn" style="padding:4px 8px;font-size:0.76rem;margin:2px 4px 2px 0;" onclick="grantVoucherToMember(this,'${type}')">贈送：${type}</button>
   `).join('');
 
+  // 2026-09-26：三區預設收起(只顯示一行摘要)，筆電/平板螢幕高度不夠時才不會把「目前訂單」擠到看不到；
+  // 展開狀態記在memberPanelOpen_，套用兌換券等動作重畫時維持原本開或關
+  const redeemableCount = POINT_REDEMPTION_CATALOG.filter(e => selectedMember.points >= e.points).length;
   panel.innerHTML = `
+    <details class="member-voucher-details" ${memberPanelOpen_ ? 'open' : ''} ontoggle="memberPanelOpen_ = this.open" style="margin-top:8px;">
+    <summary style="cursor:pointer;font-size:0.82rem;font-weight:600;color:var(--brand);padding:6px 8px;border-radius:8px;background:#fff8f2;border:1px solid #ffd699;">兌換券 ${usable.length} 張・可兌換 ${redeemableCount} 項・店員贈送（點開）</summary>
     <div style="margin-top:8px;padding:6px 8px;border-radius:8px;background:#f5f5f5;">
       <div style="font-size:0.8rem;font-weight:600;color:var(--muted);margin-bottom:2px;">目前可用兌換券</div>
       ${usableHtml}
@@ -1243,8 +1249,10 @@ function renderMemberVoucherPanel() {
       <div style="font-size:0.8rem;font-weight:600;color:#a35b00;margin-bottom:4px;">店員贈送（店家成本，不扣會員點數）</div>
       ${grantHtml}
     </div>
+    </details>
   `;
 }
+let memberPanelOpen_ = false;   // 會員兌換券/集點/贈送區是否展開(換查另一位會員時重設為收起)
 
 function grantVoucherToMember(btn, type) {
   if (!selectedMember) { alert('請先查詢/選擇會員'); return; }
