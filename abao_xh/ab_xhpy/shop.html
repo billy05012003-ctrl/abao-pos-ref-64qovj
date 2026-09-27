@@ -177,6 +177,9 @@
   .sheet h2 { margin-top: 0; }
   .cart-line { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .cart-line .qty-btn { border: 1px solid var(--border); background: #fff; width: 26px; height: 26px; border-radius: 6px; font-size: 1rem; cursor: pointer; }
+  /* 套餐分步驟裡「點了才顯示價格」(2026-09-28老闆定案)：body加wiz-hide-price時，選項價格只在勾選後出現；頂部小計、確認頁照常有金額 */
+  body.wiz-hide-price .opt-price { display: none; }
+  body.wiz-hide-price label:has(input:checked) .opt-price { display: inline; }
   /* 麥當勞式「變更」鈕放最右側(2026-09-27)；不能改的列用隱形佔位，讓數量鈕上下對齊 */
   .cart-line .chg-btn { border: 1px solid #777; background: #fff; color: var(--text, #333); border-radius: 999px; padding: 4px 12px; font-size: 0.85rem; white-space: nowrap; cursor: pointer; }
   .cart-total { display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold; padding: 12px 0; }
@@ -1568,9 +1571,10 @@ function renderOptionGroup(container, gKey) {
       const sizeParts = [];
       if (opt.priceM != null) sizeParts.push(`M +$${opt.priceM}`);
       if (opt.priceL != null) sizeParts.push(`L +$${opt.priceL}`);
-      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''} ${unavailStatus ? 'disabled' : ''}> ${displayName}${unavailLabel}<br><span style="margin-left:20px;color:var(--muted);font-size:0.76rem;">${sizeParts.join('　')}</span>`;
+      label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''} ${unavailStatus ? 'disabled' : ''}> ${displayName}${unavailLabel}<span class="opt-price"><br><span style="margin-left:20px;color:var(--muted);font-size:0.76rem;">${sizeParts.join('　')}</span></span>`;
     } else {
-      const priceLabel = opt.price ? ' +$' + opt.price : '';
+      // 價格包在.opt-price：套餐分步驟裡「點了才顯示價格」(見.wiz-hide-price)，一般單點照常顯示
+      const priceLabel = opt.price ? `<span class="opt-price"> ${opt.price < 0 ? '-$' + Math.abs(opt.price) : '+$' + opt.price}</span>` : '';
       label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''} ${unavailStatus ? 'disabled' : ''}> ${displayName}${priceLabel}${unavailLabel}`;
     }
     optWrap.appendChild(label);
@@ -1669,7 +1673,7 @@ function openDrinkCustom(drinkName) {
       if (prices[sz] == null) return;
       const label = document.createElement('label');
       label.style.cssText = 'display:inline-block;margin:2px 10px 2px 0;font-size:0.82rem;';
-      label.innerHTML = `<input type="radio" name="combo_drink_size" value="${sz}" autocomplete="off"> ${sz.toUpperCase()} +$${prices[sz]}`;
+      label.innerHTML = `<input type="radio" name="combo_drink_size" value="${sz}" autocomplete="off"> ${sz.toUpperCase()}<span class="opt-price"> +$${prices[sz]}</span>`;
       sizeEl.appendChild(label);
     });
     sizeEl.querySelectorAll('input').forEach(inp => {
@@ -1984,6 +1988,7 @@ function wizRender_() {
   custom.innerHTML = stepNow && stepNow.custom ? wizCustomHtml_(stepNow) : '';
   const sizeEl = wizEl_('item-modal-size'), noteWrap = wizEl_('item-modal-note-wrap'), qtyRow = wizEl_('item-modal-qty-row'), btn = wizEl_('item-modal-confirm-btn');
   const wraps = [...document.querySelectorAll('#item-modal-groups [data-gkey]')];
+  document.body.classList.toggle('wiz-hide-price', !!w);   // 套餐流程裡選項點了才顯示價格(含冰塊甜度視窗)
   if (!w) {
     head.innerHTML = ''; nav.innerHTML = ''; conf.innerHTML = ''; conf.style.display = 'none';
     sizeEl.style.display = ''; wraps.forEach(x => { x.style.display = ''; });
@@ -2088,6 +2093,7 @@ function wizAfterRestore_() {
 
 function closeItemModal() {
   const wasEditing = !!(currentModal && currentModal.editingLineKey);
+  document.body.classList.remove('wiz-hide-price');
   document.getElementById('item-overlay').classList.remove('open');
   const btn = document.querySelector('#item-overlay button.btn-primary[onclick="confirmAddToCart()"]');
   if (btn) btn.innerHTML = '新增至購物車　<span id="item-modal-total"></span>';
