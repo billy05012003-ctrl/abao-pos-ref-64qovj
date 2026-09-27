@@ -883,6 +883,9 @@ function renderMergedItemStatusList() {
     if (!grouped.has(it.category)) grouped.set(it.category, []);
     grouped.get(it.category).push(it);
   });
+  // 加價購(2026-09-27)：後台「優惠券 → 加價購」設定的×1/×2項目，只在線上點餐出現，所以只有「線上點餐」開關；
+  // 狀態存在同一份品項狀態表，名稱加前綴ADDON_STATUS_PREFIX避免跟菜單品項撞名
+  if (POS_ADDONS.length) grouped.set(ADDON_STATUS_GROUP, POS_ADDONS.map(a => ({ category: ADDON_STATUS_GROUP, name: a.name, statusKey: ADDON_STATUS_PREFIX + a.name, addonType: a.type })));
   grouped.forEach((items, cat) => {
     const expanded = itemStatusExpandedCats.has(cat);
     const row = document.createElement('div');
@@ -893,7 +896,7 @@ function renderMergedItemStatusList() {
     const toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
     toggleBtn.className = 'mc-accordion-toggle';
-    const displayCat = cat === POS_LOCAL_ADDON_STATUS_CATEGORY ? cat : shortCatName(cat);
+    const displayCat = (cat === POS_LOCAL_ADDON_STATUS_CATEGORY || cat === ADDON_STATUS_GROUP) ? cat : shortCatName(cat);
     toggleBtn.innerHTML = `<span class="mc-accordion-caret">${expanded ? '▼' : '▶'}</span><span>${displayCat}</span><span style="color:var(--muted);font-size:0.78rem;">(${items.length})</span>`;
     toggleBtn.onclick = () => {
       if (expanded) itemStatusExpandedCats.delete(cat); else itemStatusExpandedCats.add(cat);
@@ -906,12 +909,13 @@ function renderMergedItemStatusList() {
       const body = document.createElement('div');
       body.className = 'mc-accordion-body';
       items.forEach(it => {
-        const tabletCurrent = overrides[it.name] || '供應中';
+        const statusKey = it.statusKey || it.name;
+        const tabletCurrent = overrides[statusKey] || '供應中';
         const posCurrent = getPosLocalItemStatus(it.category, it.name) || '供應中';
 
         const itemRow = document.createElement('div');
         itemRow.className = 'mc-accordion-item-row';
-        itemRow.innerHTML = `<span class="name">${it.name}</span>`;
+        itemRow.innerHTML = `<span class="name">${it.name}${it.addonType ? `<span style="color:var(--muted);font-size:0.75rem;">（${it.addonType === 'x2' ? '其他需求' : '加購價'}）</span>` : ''}</span>`;
 
         const controls = document.createElement('div');
         controls.className = 'controls';
@@ -922,10 +926,10 @@ function renderMergedItemStatusList() {
         const tabletSelect = buildAvailSelect_(tabletCurrent, (val, selectEl) => {
           const previous = tabletCurrent;
           if (!currentStoreStatus.items) currentStoreStatus.items = {};
-          currentStoreStatus.items[it.name] = val === '供應中' ? undefined : val;
-          const revert = () => { currentStoreStatus.items[it.name] = previous === '供應中' ? undefined : previous; selectEl.value = previous; };
+          currentStoreStatus.items[statusKey] = val === '供應中' ? undefined : val;
+          const revert = () => { currentStoreStatus.items[statusKey] = previous === '供應中' ? undefined : previous; selectEl.value = previous; };
           withPosPerm_('itemStatus', '品項上下架', (staffName, staffPin) => {
-            apiPost({ action: 'setItemStatus', name: it.name, status: val, staffName, staffPin })
+            apiPost({ action: 'setItemStatus', name: statusKey, status: val, staffName, staffPin })
               .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
               .catch(err => {
                 console.warn('雲端平板/線上點餐狀態同步失敗', err);
@@ -943,7 +947,7 @@ function renderMergedItemStatusList() {
         posGroup.appendChild(posSelect);
 
         controls.appendChild(tabletGroup);
-        controls.appendChild(posGroup);
+        if (!it.statusKey) controls.appendChild(posGroup);   // 加價購只在線上點餐，沒有POS功能開關
         itemRow.appendChild(controls);
         body.appendChild(itemRow);
       });
@@ -974,7 +978,12 @@ let DISCOUNT_CATEGORY_ITEMS = [];
 let POINT_REDEMPTION_CATALOG = [];
 
 let POS_ALL_PROMOS = [];   // 原始優惠券定義(含最低適用等級/適用品項)，會員等級優惠用
+// 加價購(2026-09-27)：POS前台不賣，只拿來在「上下架管理」列出售完開關(見renderMergedItemStatusList)
+let POS_ADDONS = [];
+const ADDON_STATUS_GROUP = '加價購（線上點餐）';
+const ADDON_STATUS_PREFIX = '加價購｜';   // 跟後端ADDON_STATUS_PREFIX_一致
 function applyPromoSettings_(data) {
+  POS_ADDONS = (data.addons || []).filter(a => a.status !== '停用');
   VOUCHER_BEHAVIOR = {};
   DIRECT_DISCOUNT_TYPES = [];
   MANUAL_GRANT_VOUCHER_TYPES = [];
