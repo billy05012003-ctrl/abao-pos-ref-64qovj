@@ -2633,7 +2633,7 @@ function renderPublishDiff_(els, changes, errorMsg) {
          </div>`;
   els.forEach(el => { el.innerHTML = html; });
 }
-const ADDON_DIFF_FIELDS_ = ['type', 'amount', 'photoUrl', 'sauces', 'sets', 'drinkOnly', 'excludes', 'startDate', 'endDate', 'order', 'status', 'locked'];
+const ADDON_DIFF_FIELDS_ = ['type', 'amount', 'photoUrl', 'sauceGroups', 'sets', 'drinkOnly', 'excludes', 'startDate', 'endDate', 'order', 'status', 'locked'];
 const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'locked', 'order', 'startDate', 'endDate'];
 function refreshPromoPublishDiff_() {
   const els = [...document.querySelectorAll('.promo-publish-diff')];
@@ -3024,7 +3024,7 @@ let pmEditorMode = 'promo';
 let adCurrentName = null;        // null＝新增
 let adNewType = 'x1';            // 新增時的類型
 let adPendingPhotoUrl;           // undefined＝照片沒動；''＝移除；網址＝剛上傳還沒存檔
-let adSauceDraft = [];           // 編輯中的醬料清單
+let adSauceDraft = [];           // 編輯中的醬料分組 [{name, options}]
 let adEditingKey = null;         // 目前編輯區載入的是哪一筆(換筆時才重設醬料草稿)
 let adCatalog_ = null;           // 算適用套餐用的菜單(沒開過菜單管理時自己抓一次)
 let adItemGroups_ = null;
@@ -3049,7 +3049,7 @@ function ensureAdCatalog_() {
 function adRowHtml_(a) {
   const tags = [
     (a.amount > 0 ? '+$' : a.amount < 0 ? '-$' : '$') + Math.abs(a.amount),
-    a.type === 'x1' && a.sauces.length ? '醬料' + a.sauces.length + '種' : null,
+    a.type === 'x1' && (a.sauceGroups || []).length ? (a.sauceGroups.length > 1 ? '醬料' + a.sauceGroups.length + '組' : '醬料' + a.sauces.length + '種') : null,
     a.type === 'x1' ? (a.sets.length ? a.sets.map(c => mcShortCatName(c)).join('/') : '⚠還沒選適用套餐') : null,
     a.type === 'x2' && a.drinkOnly ? '有點飲料才顯示' : null,
     a.type === 'x2' && a.excludes.length ? '不能跟' + a.excludes.join('/') + '一起選' : null,
@@ -3087,7 +3087,7 @@ function renderAdEditor() {
   const key = isNew ? '__new__' + a.type : a.name;
   // 同一筆重畫(加醬料、換照片)時保留已經打的字，不然名稱/金額/勾選會被清掉
   if (adEditingKey === key && document.getElementById('ad-f-name')) a = Object.assign({}, a, adReadForm_());
-  else { adSauceDraft = a.sauces.slice(); adEditingKey = key; }
+  else { adSauceDraft = JSON.parse(JSON.stringify(a.sauceGroups || [])); adEditingKey = key; }
   const isX1 = a.type === 'x1';
   const photo = adPendingPhotoUrl !== undefined ? adPendingPhotoUrl : a.photoUrl;
   const setCats = adSetCategories_();
@@ -3110,14 +3110,23 @@ function renderAdEditor() {
         <span id="ad-photo-status" style="font-size:0.75rem;color:var(--muted);">${adPendingPhotoUrl !== undefined ? '（照片要按「儲存」才會生效）' : ''}</span>
       </div>
     </div>
-    <div class="mc-field">醬料（選填，客人可複選也可都不選，全部免費）
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0;">
-        ${adSauceDraft.map((n, i) => `<span style="background:#faf6f2;border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:0.82rem;">${escapeHtml(n)} <a href="javascript:void(0)" style="color:#c0392b;text-decoration:none;" onclick="adSauceDraft.splice(${i},1);renderAdEditor();">✕</a></span>`).join('') || '<span style="font-size:0.78rem;color:var(--muted);">沒設醬料＝客人選了這項不會跳醬料頁</span>'}
-      </div>
-      <div style="display:flex;gap:6px;max-width:320px;">
-        <input id="ad-f-sauce" placeholder="例：蕃茄醬包" onkeydown="if(event.key==='Enter'){event.preventDefault();adAddSauce();}">
-        <button type="button" class="mc-save-btn" style="padding:6px 12px;white-space:nowrap;" onclick="adAddSauce()">加入</button>
-      </div>
+    <div class="mc-field">醬料（選填，全部免費）
+      <div style="font-size:0.75rem;color:var(--muted);margin:2px 0 4px;">可以分組：兩樣東西組成的加購品(例如脆薯和雞塊)就設「脆薯醬料」「雞塊醬料」兩組。客人每組一頁、可複選，每頁都有「無須加價購」。沒設醬料＝不會跳醬料頁。</div>
+      ${adSauceDraft.map((g, gi) => `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin:6px 0;background:#fffdfb;">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input value="${escapeHtml(g.name)}" placeholder="組名，例：雞塊醬料" style="max-width:200px;" oninput="adSauceDraft[${gi}].name=this.value">
+          <button type="button" class="mc-delete-btn" style="padding:4px 10px;font-size:0.78rem;" onclick="adSauceDraft.splice(${gi},1);renderAdEditor();">刪除這組</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;">
+          ${g.options.map((n, i) => `<span style="background:#faf6f2;border:1px solid var(--border);border-radius:999px;padding:3px 10px;font-size:0.82rem;">${escapeHtml(n)} <a href="javascript:void(0)" style="color:#c0392b;text-decoration:none;" onclick="adSauceDraft[${gi}].options.splice(${i},1);renderAdEditor();">✕</a></span>`).join('') || '<span style="font-size:0.78rem;color:var(--muted);">這組還沒有醬料</span>'}
+        </div>
+        <div style="display:flex;gap:6px;max-width:320px;">
+          <input id="ad-f-sauce-${gi}" placeholder="例：蕃茄醬包" onkeydown="if(event.key==='Enter'){event.preventDefault();adAddSauce(${gi});}">
+          <button type="button" class="mc-save-btn" style="padding:6px 12px;white-space:nowrap;" onclick="adAddSauce(${gi})">加入</button>
+        </div>
+      </div>`).join('')}
+      <button type="button" class="mc-add-btn" style="margin-top:4px;" onclick="adSauceDraft.push({ name: adSauceDraft.length ? '' : '醬料', options: [] });renderAdEditor();">+ 新增一組醬料</button>
     </div>
     <div class="mc-field">適用套餐（勾了的套餐，加價購那一步才會出現這項）
       <div style="display:flex;gap:10px 16px;flex-wrap:wrap;margin-top:4px;font-size:0.85rem;">
@@ -3164,13 +3173,15 @@ function adReadForm_() {
   return out;
 }
 
-function adAddSauce() {
-  const v = (document.getElementById('ad-f-sauce').value || '').trim();
+const AD_SAUCE_FORBIDDEN_RE_ = /[=；\/、:：]/;   // 跟後端serializeSauceGroups_一致(這些符號是試算表/出單的分隔字)
+function adAddSauce(gi) {
+  const input = document.getElementById('ad-f-sauce-' + gi);
+  const v = (input.value || '').trim();
   if (!v) return;
-  if (v.indexOf('、') !== -1) { alert('醬料名稱不能有「、」，一次加一種'); return; }
-  if (adSauceDraft.indexOf(v) === -1) adSauceDraft.push(v);
+  if (AD_SAUCE_FORBIDDEN_RE_.test(v)) { alert('醬料名稱不能有 = ； / 、 : 這些符號，一次加一種'); return; }
+  if (adSauceDraft[gi].options.indexOf(v) === -1) adSauceDraft[gi].options.push(v);
   renderAdEditor();
-  document.getElementById('ad-f-sauce').focus();
+  document.getElementById('ad-f-sauce-' + gi).focus();
 }
 
 function onAdPhotoSelected() {
@@ -3214,7 +3225,14 @@ function saveAddon(btn) {
   if (type === 'x1') {
     const sets = [...document.querySelectorAll('.ad-f-set:checked')].map(cb => cb.value);
     if (!sets.length && !confirm('還沒勾「適用套餐」，這項不會出現在任何套餐裡。確定先這樣存嗎？')) return;
-    Object.assign(payload, { sauces: adSauceDraft.slice(), sets });
+    const groups = adSauceDraft.map(g => ({ name: String(g.name || '').trim(), options: g.options.slice() }));
+    for (const g of groups) {
+      if (!g.name) { alert('每一組醬料都要有組名(例如：雞塊醬料)'); return; }
+      if (AD_SAUCE_FORBIDDEN_RE_.test(g.name)) { alert('醬料組名不能有 = ； / 、 : 這些符號'); return; }
+      if (!g.options.length) { alert('醬料組「' + g.name + '」還沒有加任何醬料，不需要的話按「刪除這組」'); return; }
+    }
+    if (new Set(groups.map(g => g.name)).size !== groups.length) { alert('醬料組名重複了'); return; }
+    Object.assign(payload, { sauceGroups: groups, sets });
     if (adPendingPhotoUrl !== undefined) payload.photoUrl = adPendingPhotoUrl;
   } else {
     Object.assign(payload, { drinkOnly: document.getElementById('ad-f-drinkonly').checked, excludes: [...document.querySelectorAll('.ad-f-exclude:checked')].map(cb => cb.value) });
