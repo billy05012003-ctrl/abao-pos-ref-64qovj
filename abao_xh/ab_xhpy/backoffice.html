@@ -2773,30 +2773,53 @@ function pmPeriodTag_(p) {
   return null;
 }
 
+// 優惠券清單分組收合(2026-09-27老闆選B)：POS按鈕／等級優惠／兌換券(只能靠贈送或集點取得)三組，
+// 預設收起，目前選中的那張所在的組自動展開；展開狀態記在pmGroupOpen_(重畫清單時維持)
+const pmGroupOpen_ = {};
+function pmGroupOf_(p) {
+  if (p.mode === 'item' && p.showAsButton && !p.manualGrantable && p.minTier && p.targetItem) return 'tier';
+  return p.showAsButton ? 'button' : 'voucher';
+}
+function pmRowHtml_(p) {
+  const isTierPerk = pmGroupOf_(p) === 'tier';
+  const periodTag = pmPeriodTag_(p);
+  // 等級優惠(結帳自動套用，不是POS按鈕)只標「○○等級優惠」，其他標籤不適用
+  const tags = (isTierPerk ? [p.minTier + '等級優惠', periodTag, p.status === '停用' ? '停用' : null] : [
+    periodTag,
+    p.mode === 'order' ? ('整張' + pmPctLabel_(p.amount)) : (p.effect === 'pct' ? ('單品' + pmPctLabel_(p.amount)) : null),
+    p.manualGrantable ? '可贈送' : null,
+    p.minTier ? ('限' + p.minTier + '以上') : null,
+    (p.minTier && !p.allowNonMember) ? '不開放非會員' : null,
+    p.status === '停用' ? '停用' : null
+  ]).filter(Boolean).join('・');
+  // 標籤放名稱下一行(09-27：並排時標籤一長名稱會被擠成一字一行)；組名已經說明是按鈕/兌換券，列上不再重複標「按鈕」
+  return `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
+      <span>${escapeHtml(p.name)}</span>${tags ? `<span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span>` : ''}
+    </div>`;
+}
 function renderPmList() {
   const el = document.getElementById('pm-list');
   if (!pmPromos.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何優惠券</div>'; return; }
-  const shortcutRow = `<div class="mc-item-row" onclick="switchMemberSubview('drinkupgrade')">
-    <span>飲品升級</span><span class="mc-item-price">按鈕</span>
-  </div>`;
-  el.innerHTML = pmPromos.map(p => {
-    // 等級優惠(結帳自動套用，不是POS按鈕)只標「○○等級優惠」，其他標籤不適用
-    const isTierPerk = p.mode === 'item' && p.showAsButton && !p.manualGrantable && p.minTier && p.targetItem;
-    const periodTag = pmPeriodTag_(p);
-    const tags = (isTierPerk ? [p.minTier + '等級優惠', periodTag, p.status === '停用' ? '停用' : null] : [
-      periodTag,
-      p.mode === 'order' ? ('整張' + pmPctLabel_(p.amount)) : (p.effect === 'pct' ? ('單品' + pmPctLabel_(p.amount)) : null),
-      p.showAsButton ? '按鈕' : null,
-      p.manualGrantable ? '可贈送' : null,
-      p.minTier ? ('限' + p.minTier + '以上') : null,
-      (p.minTier && !p.allowNonMember) ? '不開放非會員' : null,
-      p.status === '停用' ? '停用' : null
-    ]).filter(Boolean).join('・');
-    // 2026-09-27：標籤改放在名稱下面一行(原本並排，標籤一長名稱就被擠成一字一行)
-    const row = `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
-      <span>${escapeHtml(p.name)}</span>${tags ? `<span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span>` : ''}
+  const shortcutRow = `<div class="mc-item-row" style="flex-direction:column;gap:2px;" onclick="switchMemberSubview('drinkupgrade')">
+      <span>飲品升級</span><span class="mc-item-price" style="font-size:0.75rem;">另有設定頁，點這裡前往</span>
     </div>`;
-    return p.name === PM_DRINK_UPGRADE_SHORTCUT_AFTER ? row + shortcutRow : row;
+  const GROUPS = [['button', 'POS 按鈕', '店員在 POS 直接點'], ['tier', '等級優惠', '達到等級的會員結帳自動套用'], ['voucher', '兌換券', '只能靠贈送、集點、註冊禮、生日禮取得']];
+  const cur = pmPromos.find(p => p.name === pmCurrentName);
+  el.innerHTML = GROUPS.map(([key, title, hint]) => {
+    const list = pmPromos.filter(p => pmGroupOf_(p) === key);
+    let rows = list.map(p => pmRowHtml_(p) + (p.name === PM_DRINK_UPGRADE_SHORTCUT_AFTER ? shortcutRow : '')).join('');
+    let count = list.length;
+    if (key === 'button' && !list.some(p => p.name === PM_DRINK_UPGRADE_SHORTCUT_AFTER)) { rows += shortcutRow; }
+    if (key === 'button') count += 1;   // 飲品升級
+    const warn = list.filter(p => /⚠/.test(pmPeriodTag_(p) || '')).length;
+    const open = pmGroupOpen_[key] != null ? pmGroupOpen_[key] : !!(cur && pmGroupOf_(cur) === key);
+    return `<details ${open ? 'open' : ''} ontoggle="pmGroupOpen_['${key}'] = this.open" style="margin-bottom:6px;">
+      <summary style="cursor:pointer;font-weight:600;font-size:0.88rem;padding:8px 6px;border-radius:6px;background:#faf6f2;">
+        ${title}（${count}）${warn ? `<span style="color:#c0392b;font-size:0.78rem;">・⚠ ${warn} 張快到期或已過期</span>` : ''}
+        <div style="font-weight:normal;font-size:0.72rem;color:var(--muted);margin-top:2px;">${hint}</div>
+      </summary>
+      ${rows || '<div class="empty-hint" style="padding:6px;">目前沒有</div>'}
+    </details>`;
   }).join('');
 }
 
