@@ -227,7 +227,7 @@
 
 <header>
   <button id="cat-menu-btn" onclick="openCategoryMenu()" aria-label="餐點分類" style="position:absolute; left:12px; top:14px; background:none; border:none; color:#fff; font-size:1.4rem; cursor:pointer; padding:4px 6px; line-height:1;">☰</button>
-  <button id="voucher-menu-btn" onclick="openVoucherLookup()" aria-label="我的兌換券" style="position:absolute; right:12px; top:14px; background:none; border:none; color:#fff; font-size:1.4rem; cursor:pointer; padding:4px 6px; line-height:1;">🎫</button>
+  <!-- 2026-09-27 老闆指示拿掉「🎫 我的兌換券」查詢(只要輸入手機就能看別人的資料)；LINE 登入做好後改成「我的會員」頁 -->
   <div style="padding-left:34px; padding-right:34px;">
     <h1>A-Bao溪湖培英店</h1>
     <p>線上預訂・到店自取</p>
@@ -245,20 +245,6 @@
       <button type="button" onclick="closeCategoryMenu()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
     </div>
     <div id="category-list"></div>
-  </div>
-</div>
-
-<div class="overlay" id="voucher-overlay">
-  <div class="sheet" style="max-height:80vh;">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-      <h2 style="margin:0;">我的兌換券</h2>
-      <button type="button" onclick="closeVoucherLookup()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
-    </div>
-    <div class="row" style="display:flex; gap:8px; margin-bottom:12px;">
-      <input type="tel" id="voucher-lookup-phone" placeholder="輸入您的手機號碼" maxlength="10" pattern="09\d{8}" inputmode="numeric" autocomplete="tel" style="flex:1; min-width:0; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.95rem;">
-      <button type="button" class="btn-primary" style="width:auto; margin-top:0; padding:8px 16px;" onclick="queryMyVouchers()">查詢</button>
-    </div>
-    <div id="voucher-lookup-result"></div>
   </div>
 </div>
 
@@ -340,6 +326,7 @@
         <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="verifyMember()">確認手機號碼</button>
         <button type="button" style="width:auto;padding:6px 0;margin-top:6px;margin-left:10px;background:none;border:none;color:var(--brand);font-size:0.85rem;text-decoration:underline;cursor:pointer;" onclick="openTierOverlay()">會員等級與專屬好禮</button>
         <div id="member-verify-result" style="margin-top:8px;font-size:0.85rem;"></div>
+        <div id="cart-redeem-box" style="margin-top:8px;"></div>
         <div id="checkout-voucher-list" style="margin-top:8px;"></div>
         <div id="checkout-total-preview" style="font-size:0.85rem;color:var(--brand);margin-top:6px;"></div>
       </div>
@@ -808,22 +795,11 @@ function goToCategory(i) {
 function openCategoryMenu() { document.getElementById('category-overlay').classList.add('open'); }
 function closeCategoryMenu() { document.getElementById('category-overlay').classList.remove('open'); }
 
-// ---------------------------------------------------------------
-// 兌換券顧客自助查詢：輸入電話直接查(比照POS功能查會員的信任情境，沒有額外驗證步驟)，
-// 純查詢不能核銷，核銷仍要到現場由店員在POS功能操作
-// ---------------------------------------------------------------
-function openVoucherLookup() {
-  document.getElementById('voucher-overlay').classList.add('open');
-}
-function closeVoucherLookup() {
-  document.getElementById('voucher-overlay').classList.remove('open');
-}
-
 function isValidPhone_(phone) {
   return /^09\d{8}$/.test(phone);
 }
 
-// 記住最近一次輸入的手機號碼(2026-09-17新增)：「我的兌換券」查詢欄跟「會員手機」欄是同一支手機的機率很高，
+// 記住最近一次輸入的手機號碼(2026-09-17新增，09-27拿掉「我的兌換券」後只預填會員手機欄)，
 // 記住後互相預填，客人不用打兩次。只存在客人自己的瀏覽器localStorage，不會上傳到雲端
 function rememberPhone_(phone) {
   if (!isValidPhone_(phone)) return;
@@ -834,9 +810,7 @@ function prefillRememberedPhone_() {
   try { saved = localStorage.getItem('abao_last_phone') || ''; } catch (e) {}
   if (!saved) return;
   const custPhone = document.getElementById('cust-phone');
-  const voucherPhone = document.getElementById('voucher-lookup-phone');
   if (custPhone && !custPhone.value) custPhone.value = saved;
-  if (voucherPhone && !voucherPhone.value) voucherPhone.value = saved;
 }
 
 function updateItemModalNoteCount_() {
@@ -844,75 +818,6 @@ function updateItemModalNoteCount_() {
   const el = document.getElementById('item-modal-note-count');
   el.textContent = `${len}/100`;
   el.style.color = len >= 100 ? '#c0392b' : 'var(--muted)';
-}
-
-function queryMyVouchers() {
-  const phone = document.getElementById('voucher-lookup-phone').value.trim();
-  const resultEl = document.getElementById('voucher-lookup-result');
-  if (!phone) { resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">請輸入手機號碼</div>'; return; }
-  if (!isValidPhone_(phone)) { resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">手機號碼格式不正確，請輸入09開頭的10碼數字</div>'; return; }
-  rememberPhone_(phone);
-  resultEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">查詢中...</div>';
-
-  Promise.all([
-    apiGet_({ action: 'getMember', phone }),
-    apiGet_({ action: 'getMemberVouchers', phone })
-  ]).then(([memberData, voucherData]) => {
-    if (memberData.status === 'not_found') {
-      resultEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;">查無此會員，請確認電話號碼，或到門市加入LINE好友完成入會。</div>';
-      return;
-    }
-    if (memberData.status !== 'ok') {
-      resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">查詢失敗，請稍後再試。</div>';
-      return;
-    }
-    const m = memberData.member;
-    const vouchers = (voucherData.status === 'ok') ? voucherData.vouchers : [];
-    let html = `<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
-      <strong>${m.name}</strong>（${m.tier}）<br>
-      <span style="font-size:0.85rem;color:var(--muted);">半年內累積消費 $${m.periodSpend}　累計點數 ${m.points}</span>
-    </div>`;
-    if (vouchers.length === 0) {
-      html += '<div style="color:var(--muted);font-size:0.85rem;">目前沒有兌換券紀錄</div>';
-    } else {
-      html += vouchers.map(v => {
-        const dim = !v.usable;
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);${dim ? 'opacity:0.5;' : ''}">
-          <div>
-            <div>${v.type}<span style="color:var(--muted);font-size:0.72rem;">（${v.source}）</span></div>
-            <div style="font-size:0.72rem;color:var(--muted);">效期 ${v.effectiveDate} ～ ${v.expiryDate}</div>
-          </div>
-          <span style="font-size:0.8rem;font-weight:600;${v.usable ? 'color:var(--brand);' : 'color:var(--muted);'}">${v.statusText}</span>
-        </div>`;
-      }).join('');
-    }
-    // 集點兌換（2026-09-03新增）：顧客自己也能兌換，不用等店員提醒；扣點成功後發放的券不限時使用
-    const redeemableHtml = POINT_REDEMPTION_CATALOG.map(entry => {
-      const enough = m.points >= entry.points;
-      return `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.85rem;${enough ? '' : 'opacity:0.5;'}">
-          <span>${entry.points}點 → ${entry.voucherType}</span>
-          <button type="button" class="btn-primary" style="width:auto;padding:4px 12px;margin-top:0;font-size:0.8rem;" ${enough ? '' : 'disabled'} onclick="redeemMyPoints('${phone}','${entry.voucherType}')">兌換</button>
-        </div>`;
-    }).join('');
-    html += `<div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:8px;">
-      <div style="font-size:0.85rem;font-weight:600;color:var(--muted);margin-bottom:4px;">集點兌換</div>
-      ${redeemableHtml}
-    </div>`;
-    html += '<div style="font-size:0.72rem;color:var(--muted);margin-top:8px;">＊兌換券可在「我的訂單」畫面查詢並選擇套用折抵，或到現場結帳時由店員核銷</div>';
-    resultEl.innerHTML = html;
-  }).catch(err => {
-    console.warn('查詢兌換券失敗', err);
-    resultEl.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">查詢失敗，請確認網路連線後再試。</div>';
-  });
-}
-
-function redeemMyPoints(phone, voucherType) {
-  apiPost_({ action: 'redeemPoints', phone, voucherType }).then(data => {
-    if (data.status !== 'ok') { alert(data.message || '兌換失敗'); return; }
-    alert(`已兌換「${voucherType}」，剩餘點數 ${data.remainingPoints}`);
-    queryMyVouchers();
-  }).catch(() => alert('兌換失敗，請確認網路連線後再試'));
 }
 
 // ---------------------------------------------------------------
@@ -977,8 +882,43 @@ function tierProgressText_(member) {
   }
   return '';
 }
+// 集點兌換(2026-09-27從「我的兌換券」視窗搬到購物車)：驗證手機後顯示目前點數與可兌換項目，換到的券馬上可在這張單套用
+function renderCartRedeem_() {
+  const box = document.getElementById('cart-redeem-box');
+  if (!box) return;
+  if (!verifiedMember || !POINT_REDEMPTION_CATALOG.length) { box.innerHTML = ''; return; }
+  const pts = Number(verifiedMember.points) || 0;
+  box.innerHTML = `
+    <div style="border:1px dashed var(--border);border-radius:8px;padding:6px 10px;">
+      <div style="font-size:0.82rem;font-weight:600;color:var(--muted);margin-bottom:2px;">集點兌換（目前 ${pts} 點）</div>
+      ${POINT_REDEMPTION_CATALOG.map((e, idx) => {
+        const enough = pts >= e.points;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:0.82rem;${enough ? '' : 'opacity:0.5;'}">
+          <span>${e.points}點 → ${escapeHtml_(e.voucherType)}${enough ? '' : `<span style="color:#c0392b;">（還差${e.points - pts}點）</span>`}</span>
+          <button type="button" class="btn-secondary" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" ${enough ? '' : 'disabled'} onclick="redeemPointsInCart_(this, ${idx})">兌換</button>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+function redeemPointsInCart_(btn, idx) {
+  const entry = POINT_REDEMPTION_CATALOG[idx];
+  if (!entry) return;
+  const voucherType = entry.voucherType, points = entry.points;
+  if (!verifiedMember) { alert('請先完成會員驗證'); return; }
+  if (!confirm(`確定要用 ${points} 點兌換「${voucherType}」嗎？`)) return;
+  btn.disabled = true;
+  apiPost_({ action: 'redeemPoints', phone: verifiedMember.phone, voucherType }).then(data => {
+    if (data.status !== 'ok') { alert(data.message || '兌換失敗'); btn.disabled = false; return; }
+    verifiedMember.points = data.remainingPoints;
+    alert(`已兌換「${voucherType}」，剩餘 ${data.remainingPoints} 點。下方「可用兌換券」可以直接套用在這張單。`);
+    renderCartRedeem_();
+    loadCheckoutVouchers();   // 新換到的券馬上出現在可用清單
+  }).catch(() => { alert('兌換失敗，請確認網路連線後再試'); btn.disabled = false; });
+}
+
 function renderMemberVerified_(member) {
   verifiedMember = member;
+  setTimeout(renderCartRedeem_, 0);
   setTimeout(updateCheckoutTotalDisplay, 0);   // 等級權益依會員等級自動套用
   const progress = tierProgressText_(member);
   document.getElementById('member-verify-result').innerHTML = `
@@ -990,6 +930,7 @@ function renderMemberVerified_(member) {
 
 function renderMemberNotFound_(phone) {
   verifiedMember = null;
+  renderCartRedeem_();
   setTimeout(updateCheckoutTotalDisplay, 0);   // 清掉會員權益/菜單標示
   document.getElementById('member-verify-result').innerHTML = `
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">
@@ -1009,6 +950,7 @@ function onCustPhoneInput_() {
     verifiedMember = null;
     document.getElementById('member-verify-result').innerHTML = '';
     document.getElementById('checkout-voucher-list').innerHTML = '';
+    renderCartRedeem_();
     updateCheckoutTotalDisplay();   // 清掉會員權益/菜單標示
   }
   if (isValidPhone_(phone)) { rememberPhone_(phone); verifyMember(); }
@@ -1806,7 +1748,7 @@ function confirmAddToCart() {
 
   const existing = cart.find(c => c.lineKey === lineKey);
   if (existing) existing.qty += currentModal.qty;
-  // baseName/basePrice供顧客自助套用兌換券折抵用：只免基準價(客製化加購仍要收錢)，見queryMyVouchers/checkout流程
+  // baseName/basePrice供顧客自助套用兌換券折抵用：只免基準價(客製化加購仍要收錢)，見結帳頁兌換券流程
   else cart.push({lineKey, name: displayName, baseName: currentModal.item.name, size: currentModal.size, price: unit, basePrice: currentModal.basePrice, qty: currentModal.qty, note});
   saveCartSession();
   updateCartBar();
@@ -2341,7 +2283,7 @@ function refreshGroupCartUi_() {
   const goCheckout = document.getElementById('go-checkout');
   const goCreate = document.getElementById('go-group-create');
   const inGroup = !!(groupCtx && groupView) && !isGroupFinished_();
-  const voucherEls = [document.getElementById('checkout-voucher-list'), document.getElementById('checkout-total-preview')];
+  const voucherEls = [document.getElementById('checkout-voucher-list'), document.getElementById('checkout-total-preview'), document.getElementById('cart-redeem-box')];
   goCreate.style.display = (GROUP_FEATURE_ON && !inGroup && !groupCheckoutMode) ? 'block' : 'none';
   voucherEls.forEach(el => el.style.display = '');
   if (groupCheckoutMode || !inGroup) {   // 一般點餐，或請客團主結帳(走一般結帳流程：會員驗證/取餐時間/付款)

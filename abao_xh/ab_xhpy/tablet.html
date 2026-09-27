@@ -32,13 +32,16 @@
   .pos-col-detail { width:280px; flex:none; border-right:1px solid var(--border); }
   .pos-detail-empty { color:var(--muted); text-align:center; padding:40px 10px; font-size:0.85rem; }
   .pos-col-cart { width:250px; flex:none; display:flex; flex-direction:column; }
+  /* 訂單欄依螢幕寬度加寬(2026-09-27)：筆電/平板橫放時品名不用斷成好幾行 */
+  @media (min-width: 1200px) { .pos-col-cart { width:320px; } }
+  @media (min-width: 1500px) { .pos-col-cart { width:380px; } }
   .pos-cart-lines-scroll { flex:1 1 auto; overflow-y:auto; min-height:110px; }
   .pos-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:20; align-items:center; justify-content:center; }
   .pos-overlay.open { display:flex; }
   #pos-drink-overlay { z-index:25; }
   .pos-sheet { background:#fff; width:100%; max-width:420px; max-height:85vh; overflow-y:auto; border-radius:16px; padding:16px; }
   .pos-cart-line { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
-  .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:40px; height:40px; border-radius:6px; font-size:1.1rem; cursor:pointer; }
+  .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:30px; height:30px; border-radius:6px; font-size:1rem; line-height:1; padding:0; cursor:pointer; }   /* 2026-09-27由40px改小，讓品名多一點寬度 */
   .pos-cart-total { display:flex; justify-content:space-between; font-size:1.05rem; font-weight:bold; padding:10px 0; flex:none; }
   .pos-size-select { font-size:0.78rem; margin-top:4px; }
   .pos-size-select label { margin-right:6px; cursor:pointer; }
@@ -2532,7 +2535,7 @@ function renderPosCart() {
     div.className = 'pos-cart-line';
     div.innerHTML = `
       <div>${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div style="display:flex;align-items:center;gap:4px;flex:none;">
         <button class="qty-btn" data-act="dec">-</button>
         <span>${c.qty}</span>
         <button class="qty-btn" data-act="inc">+</button>

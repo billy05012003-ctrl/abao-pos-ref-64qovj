@@ -2792,8 +2792,9 @@ function renderPmList() {
       (p.minTier && !p.allowNonMember) ? '不開放非會員' : null,
       p.status === '停用' ? '停用' : null
     ]).filter(Boolean).join('・');
-    const row = `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
-      <span>${escapeHtml(p.name)}</span><span class="mc-item-price">${escapeHtml(tags)}</span>
+    // 2026-09-27：標籤改放在名稱下面一行(原本並排，標籤一長名稱就被擠成一字一行)
+    const row = `<div class="mc-item-row${p.name === pmCurrentName ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
+      <span>${escapeHtml(p.name)}</span>${tags ? `<span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span>` : ''}
     </div>`;
     return p.name === PM_DRINK_UPGRADE_SHORTCUT_AFTER ? row + shortcutRow : row;
   }).join('');
