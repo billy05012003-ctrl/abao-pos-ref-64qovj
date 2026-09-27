@@ -41,6 +41,8 @@
   #pos-drink-overlay { z-index:25; }
   .pos-sheet { background:#fff; width:100%; max-width:420px; max-height:85vh; overflow-y:auto; border-radius:16px; padding:16px; }
   .pos-cart-line { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+  /* 麥當勞式「變更」鈕放最右側(2026-09-27)；疊在數量鈕下方，不跟品名搶寬度(橫向訂單欄只有320px) */
+  .pos-cart-line .chg-btn { border:1px solid #777; background:#fff; border-radius:999px; padding:3px 12px; font-size:0.8rem; white-space:nowrap; cursor:pointer; }
   .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:30px; height:30px; border-radius:6px; font-size:1rem; line-height:1; padding:0; cursor:pointer; }   /* 2026-09-27由40px改小，讓品名多一點寬度 */
   .pos-cart-total { display:flex; justify-content:space-between; font-size:1.05rem; font-weight:bold; padding:10px 0; flex:none; }
   .pos-size-select { font-size:0.78rem; margin-top:4px; }
@@ -2594,14 +2596,18 @@ function renderPosCart() {
     const div = document.createElement('div');
     div.className = 'pos-cart-line';
     div.innerHTML = `
-      <div class="pos-cart-line-name" style="cursor:${c.edit ? 'pointer' : 'default'};">${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}${c.edit ? '　<span style="color:var(--brand);">✎ 點我修改</span>' : ''}</span></div>
-      <div style="display:flex;align-items:center;gap:4px;flex:none;">
-        <button class="qty-btn" data-act="dec">-</button>
-        <span>${c.qty}</span>
-        <button class="qty-btn" data-act="inc">+</button>
+      <div class="pos-cart-line-name" style="cursor:${c.edit ? 'pointer' : 'default'};">${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <button class="qty-btn" data-act="dec">-</button>
+          <span>${c.qty}</span>
+          <button class="qty-btn" data-act="inc">+</button>
+        </div>
+        ${c.edit ? '<button class="chg-btn" data-act="edit">變更</button>' : ''}
       </div>
     `;
     div.querySelector('.pos-cart-line-name').onclick = () => editPosCartLine(c.lineKey);
+    if (c.edit) div.querySelector('[data-act="edit"]').onclick = () => editPosCartLine(c.lineKey);
     div.querySelector('[data-act="dec"]').onclick = () => changePosQty(c.lineKey, -1);
     div.querySelector('[data-act="inc"]').onclick = () => changePosQty(c.lineKey, 1);
     linesEl.appendChild(div);

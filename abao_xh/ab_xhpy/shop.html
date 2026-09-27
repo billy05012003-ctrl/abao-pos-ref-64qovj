@@ -177,6 +177,8 @@
   .sheet h2 { margin-top: 0; }
   .cart-line { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
   .cart-line .qty-btn { border: 1px solid var(--border); background: #fff; width: 26px; height: 26px; border-radius: 6px; font-size: 1rem; cursor: pointer; }
+  /* 麥當勞式「變更」鈕放最右側(2026-09-27)；不能改的列用隱形佔位，讓數量鈕上下對齊 */
+  .cart-line .chg-btn { border: 1px solid #777; background: #fff; color: var(--text, #333); border-radius: 999px; padding: 4px 12px; font-size: 0.85rem; white-space: nowrap; cursor: pointer; }
   .cart-total { display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold; padding: 12px 0; }
   form#checkout-form label, #cart-view label { display: block; font-size: 0.85rem; margin: 10px 0 4px; color: var(--muted); }
   form#checkout-form input, form#checkout-form select, form#checkout-form textarea,
@@ -1837,14 +1839,18 @@ function renderCart() {
     const div = document.createElement('div');
     div.className = 'cart-line';
     div.innerHTML = `
-      <div class="cart-line-name" style="cursor:${c.edit && !groupCheckoutMode ? 'pointer' : 'default'};">${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}${c.edit && !groupCheckoutMode ? '　<span style="color:var(--brand);">✎ 修改</span>' : ''}</span></div>
-      <div style="display:flex;align-items:center;gap:8px">
+      <div class="cart-line-name" style="cursor:${c.edit && !groupCheckoutMode ? 'pointer' : 'default'};">${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
+      <div style="display:flex;align-items:center;gap:8px;flex:none;">
         <button class="qty-btn" data-act="dec">-</button>
         <span>${c.qty}</span>
         <button class="qty-btn" data-act="inc">+</button>
+        <button class="chg-btn" data-act="edit" style="${c.edit && !groupCheckoutMode ? '' : 'visibility:hidden;'}">變更</button>
       </div>
     `;
-    if (c.edit && !groupCheckoutMode) div.querySelector('.cart-line-name').onclick = () => editCartLine(c.lineKey);
+    if (c.edit && !groupCheckoutMode) {
+      div.querySelector('.cart-line-name').onclick = () => editCartLine(c.lineKey);
+      div.querySelector('[data-act="edit"]').onclick = () => editCartLine(c.lineKey);
+    }
     div.querySelector('[data-act="dec"]').onclick = () => changeQty(c.lineKey, -1);
     div.querySelector('[data-act="inc"]').onclick = () => changeQty(c.lineKey, 1);
     // 揪團結帳：品項是全團的餐點(後端以揪團明細為準)，這裡不能加減，要改請回揪團
