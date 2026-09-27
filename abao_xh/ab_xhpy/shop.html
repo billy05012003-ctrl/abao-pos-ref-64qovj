@@ -151,6 +151,9 @@
   .tier-muted { color: #8a7d6f; font-size: 0.8rem; }
   .tier-strong { font-weight: 700; }
   .tier-stack { display: none; }
+  .tier-mine-tag { display: inline-block; margin-top: 4px; font-size: 0.72rem; font-weight: 700; color: #fff; background: var(--brand); border-radius: 999px; padding: 1px 8px; }
+  .tier-grid .cell.mine, .tier-stack-card.mine { box-shadow: inset 0 0 0 2px var(--brand); }
+  .tier-progress { background: #fff; border: 1px solid #ffd699; border-radius: 10px; padding: 8px 12px; margin-bottom: 12px; font-size: 0.85rem; color: #2b2420; }
   @media (max-width: 760px) {
     .tier-rules { flex-direction: column; }
     .tier-grid { display: none; }
@@ -957,12 +960,31 @@ function pruneStaleVoucherSelections_() {
 // ---------------------------------------------------------------
 let verifiedMember = null;
 
+// 升等進度(2026-09-26老闆要求)：還有下一級＝「再消費$X就升級○○」；已是最高級＝續等進度。periodSpend＝半年內累積(後端算的)
+function tierProgressText_(member) {
+  if (!member || !SHOP_MEMBER_TIERS.length) return '';
+  const tiers = SHOP_MEMBER_TIERS.slice().sort((a, b) => a.order - b.order);
+  const cur = tiers.find(t => t.name === member.tier);
+  if (!cur) return '';
+  const spend = Number(member.periodSpend) || 0;
+  const fmt = n => '$' + Number(n).toLocaleString('en-US');
+  const next = tiers.find(t => t.order > cur.order && t.threshold > spend);
+  if (next) return `再消費 <b>${fmt(next.threshold - spend)}</b> 就升級${escapeHtml_(next.name)}（半年內累積 ${fmt(spend)} / ${fmt(next.threshold)}）`;
+  if (!tiers.some(t => t.order > cur.order) && cur.continuationThreshold != null) {
+    return spend >= cur.continuationThreshold
+      ? `已是最高等級，半年內累積 ${fmt(spend)}，已達續等門檻 ${fmt(cur.continuationThreshold)}`
+      : `已是最高等級，半年內累積 ${fmt(spend)}，續等需 ${fmt(cur.continuationThreshold)}`;
+  }
+  return '';
+}
 function renderMemberVerified_(member) {
   verifiedMember = member;
   setTimeout(updateCheckoutTotalDisplay, 0);   // 等級權益依會員等級自動套用
+  const progress = tierProgressText_(member);
   document.getElementById('member-verify-result').innerHTML = `
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--brand);">
       ✓ 您好，${escapeHtml_(member.name)}（${escapeHtml_(member.tier.endsWith('會員') ? member.tier : member.tier + '會員')}）
+      ${progress ? `<div style="color:var(--text);font-size:0.8rem;margin-top:3px;">${progress}</div>` : ''}
     </div>`;
 }
 
@@ -1070,6 +1092,7 @@ function renderTierBenefits() {
       const prev = tiers[idx - 1];
       const lines = tierPerkLines_(t, idx, tiers, registerGifts);
       return {
+        mine: !!(verifiedMember && verifiedMember.tier === t.name),
         img: tierCardImg_(idx),
         name: escapeHtml_(t.name),
         upgrade: t.threshold > 0 ? `半年內累積消費<br><b>滿 ${money_(t.threshold)}</b>` : '<b>完成會員驗證<br>即入會</b>',
@@ -1089,18 +1112,20 @@ function renderTierBenefits() {
     const grid = `
       <div class="tier-grid" style="--tier-cols:${rows.length};">
         <div class="lbl first">會員等級</div>
-        ${rows.map(r => `<div class="cell first"><img class="tier-card-img" src="${r.img}" alt="${r.name}會員卡"><div class="tier-name">${r.name}</div></div>`).join('')}
-        ${ROW_DEFS.map(([label, key]) => `<div class="lbl">${label}</div>` + rows.map(r => `<div class="cell">${r[key]}</div>`).join('')).join('')}
+        ${rows.map(r => `<div class="cell first${r.mine ? ' mine' : ''}"><img class="tier-card-img" src="${r.img}" alt="${r.name}會員卡"><div class="tier-name">${r.name}</div>${r.mine ? '<span class="tier-mine-tag">您目前的等級</span>' : ''}</div>`).join('')}
+        ${ROW_DEFS.map(([label, key]) => `<div class="lbl">${label}</div>` + rows.map(r => `<div class="cell${r.mine ? ' mine' : ''}">${r[key]}</div>`).join('')).join('')}
       </div>`;
     const stack = `
       <div class="tier-stack">
         ${rows.map(r => `
-          <div class="tier-stack-card">
-            <div class="tier-stack-head"><img src="${r.img}" alt="${r.name}會員卡"><div class="tier-name" style="margin-top:0;">${r.name}</div></div>
+          <div class="tier-stack-card${r.mine ? ' mine' : ''}">
+            <div class="tier-stack-head"><img src="${r.img}" alt="${r.name}會員卡"><div><div class="tier-name" style="margin-top:0;">${r.name}</div>${r.mine ? '<span class="tier-mine-tag">您目前的等級</span>' : ''}</div></div>
             ${ROW_DEFS.map(([label, key]) => `<div class="tier-stack-row"><div class="k">${label}</div><div class="v">${r[key]}</div></div>`).join('')}
           </div>`).join('')}
       </div>`;
-    el.innerHTML = rules + grid + stack;
+    const myProgress = verifiedMember ? tierProgressText_(verifiedMember) : '';
+    const progressBox = myProgress ? `<div class="tier-progress">👤 ${escapeHtml_(verifiedMember.name)}（${escapeHtml_(verifiedMember.tier)}）：${myProgress}</div>` : '';
+    el.innerHTML = progressBox + rules + grid + stack;
   }).catch(err => {
     el.innerHTML = '<div style="color:#a30000;font-size:0.85rem;">讀取失敗，請確認網路連線後再試</div>';
     console.warn('會員等級資料讀取失敗', err);
@@ -1175,6 +1200,7 @@ let SHOP_MEMBER_TIERS = [];
 function loadShopMemberTiers_() {
   return apiGet_({ action: 'memberTierData' }).then(d => {
     if (d && d.status === 'ok') SHOP_MEMBER_TIERS = d.tiers || [];
+    if (verifiedMember) renderMemberVerified_(verifiedMember);   // 等級資料比會員驗證晚到時，補上升等進度
     updateCheckoutTotalDisplay();
   }).catch(err => console.warn('會員分級讀取失敗(等級權益暫不顯示，結帳金額以後端為準)', err));
 }
