@@ -1226,8 +1226,10 @@ function cartHasDrink_() {
   return cart.some(c => DRINK_ITEM_CATEGORY[c.baseName] || (c.edit && (DRINK_FAMILY.includes(c.edit.cat) || c.edit.comboDrinkName
     || ((c.edit.groups || {}).small_drink || []).length || ((c.edit.groups || {}).combo_drink || []).length)));
 }
+// 揪團也問(2026-09-27老闆追加)：每個人在自己的購物車畫面選(開團的團主、朋友送出餐點時)，跟著自己的餐點存進揪團；
+// 只有請客團主「前往結帳」那一步不再問(全團的選擇已經在各人的餐點裡)
 function otherNeedsOptions_() {
-  if (groupCheckoutMode || (groupCtx && groupView)) return [];
+  if (groupCheckoutMode) return [];
   const hasDrink = cartHasDrink_();
   return SHOP_ADDONS.filter(a => a.type === 'x2' && a.status !== '停用' && isPromoInPeriod_(a)
     && !itemAvailabilityMap[ADDON_STATUS_PREFIX + a.name] && (!a.drinkOnly || hasDrink));
@@ -1236,6 +1238,18 @@ function otherNeedsChosen_() {
   return otherNeedsOptions_().filter(a => otherNeedsSel.includes(a.name));
 }
 function otherNeedsSum_() { return otherNeedsChosen_().reduce((s, a) => s + a.amount, 0); }
+// 還沒選(也沒勾無須)就擋下並捲到那一塊；一般結帳、開團、送出揪團餐點共用
+function otherNeedsReady_() {
+  if (!otherNeedsOptions_().length || otherNeedsNone || otherNeedsChosen_().length) return true;
+  alert('請選擇「其他需求」，不需要的話請勾「無須加價購」');
+  const box = document.getElementById('otherneeds-box');
+  if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.style.borderColor = '#c0392b'; }
+  return false;
+}
+// 揪團：其他需求當成自己的品項(帶x2)送進揪團，金額後端會照後台價重算
+function otherNeedsAsGroupItems_() {
+  return otherNeedsChosen_().map(a => ({ lineKey: 'x2|' + a.name, name: a.name, baseName: a.name, size: '', price: a.amount, basePrice: a.amount, qty: 1, note: '', x2: true }));
+}
 function otherNeedPriceText_(amt) { return amt ? (amt > 0 ? '+$' : '-$') + Math.abs(amt) : ''; }
 function renderOtherNeeds_() {
   const el = document.getElementById('cart-otherneeds');
@@ -2226,7 +2240,7 @@ function renderCart() {
     const div = document.createElement('div');
     div.className = 'cart-line';
     div.innerHTML = `
-      <div class="cart-line-name" style="cursor:${c.edit && !groupCheckoutMode ? 'pointer' : 'default'};">${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
+      <div class="cart-line-name" style="cursor:${c.edit && !groupCheckoutMode ? 'pointer' : 'default'};">${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.x2 ? '其他需求：' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
       <div style="display:flex;align-items:center;gap:8px;flex:none;">
         <button class="qty-btn" data-act="dec">-</button>
         <span>${c.qty}</span>
@@ -2280,12 +2294,7 @@ function showCheckout() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
   const currentPhone = document.getElementById('cust-phone').value.trim();
   if (!verifiedMember || verifiedMember.phone !== currentPhone) { alert('請先完成會員驗證，才能填寫取餐資訊'); document.getElementById('cust-phone').focus(); return; }
-  if (otherNeedsOptions_().length && !otherNeedsNone && !otherNeedsChosen_().length) {
-    alert('請選擇「其他需求」，不需要的話請勾「無須加價購」');
-    const box = document.getElementById('otherneeds-box');
-    if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.style.borderColor = '#c0392b'; }
-    return;
-  }
+  if (!otherNeedsReady_()) return;
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
   populatePickupDate();
   populatePickupTime(document.getElementById('pickup-date').value);
@@ -2673,7 +2682,10 @@ function loadGroupCtx_(gid) { try { return JSON.parse(localStorage.getItem(group
 function saveGroupCtx_() { if (!groupCtx) return; try { localStorage.setItem(groupStoreKey_(groupCtx.groupId), JSON.stringify(groupCtx)); } catch (e) {} }
 // 第二次健檢(2026-09-24)：內部測試走藍新測試站(?mpgtest=1)時，分享給朋友的連結也要帶著，否則朋友付款會走到正式站
 function groupShareUrl_() { return location.origin + location.pathname + '?g=' + encodeURIComponent(groupCtx.groupId) + (MPG_SANDBOX ? '&mpgtest=1' : ''); }
-function groupItemsFromCart_() { return cart.map(c => ({ lineKey: c.lineKey, name: c.name, baseName: c.baseName, size: c.size || '', price: c.price, basePrice: c.basePrice, qty: c.qty, note: c.note || '', x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined })); }
+function groupItemsFromCart_() {
+  return cart.map(c => ({ lineKey: c.lineKey, name: c.name, baseName: c.baseName, size: c.size || '', price: c.price, basePrice: c.basePrice, qty: c.qty, note: c.note || '', x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined }))
+    .concat(otherNeedsAsGroupItems_());   // 自己選的其他需求一起存進揪團
+}
 function groupStatusClass_(st) { return st === '收單中' ? 'open' : (st === '已結單' || st === '已截止' || st === '付款中') ? 'locked' : st === '已成立' ? 'done' : 'dead'; }
 function groupMinutesLeft_() { if (!groupView || !groupView.deadline) return null; return Math.ceil((new Date(groupView.deadline).getTime() - Date.now()) / 60000); }
 function isGroupHost_() { return !!(groupCtx && groupCtx.hostToken); }
@@ -2784,7 +2796,8 @@ function refreshGroupCartUi_() {
   document.getElementById('group-agree-row').style.display = open && each ? 'flex' : 'none';
   const btn = document.getElementById('group-submit-btn');
   btn.style.display = open ? 'block' : 'none';
-  btn.textContent = each ? `送出並付款（$${Math.max(0, cart.reduce((s, c) => s + c.qty * c.price, 0) - myTierPerks_(cart).total - checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0))}）` : '送出我的餐點到揪團';
+  const eachLines = cart.concat(otherNeedsAsGroupItems_());   // 含自己的其他需求(跟payMyGroupShare_同一套算法)
+  btn.textContent = each ? `送出並付款（$${Math.max(0, eachLines.reduce((s, c) => s + c.qty * c.price, 0) - myTierPerks_(eachLines).total - checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0))}）` : '送出我的餐點到揪團';
 }
 
 function onGroupPayModeChange_() {
@@ -2798,6 +2811,7 @@ function onGroupPayModeChange_() {
 function openGroupCreate() {
   if (!cart.length) { alert('請先把你自己要吃的餐點加入購物車，再開團'); return; }
   if (!groupVerifiedPhone_()) { alert('揪團需要會員，請先在下方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
+  if (!otherNeedsReady_()) return;   // 團主自己的其他需求
   closeCart();
   const nm = document.getElementById('group-host-name');
   if (!nm.value && verifiedMember && verifiedMember.name) nm.value = String(verifiedMember.name).slice(0, 12);
@@ -2825,6 +2839,7 @@ function createGroup() {
     groupCtx = { groupId: data.groupId, hostToken: data.hostToken, memberToken: data.memberToken, name };
     saveGroupCtx_();
     cart = []; saveCartSession(); updateCartBar();   // 你的餐點已經存進揪團
+    otherNeedsSel = []; otherNeedsNone = false;
     // 網址換成揪團連結(保留其他參數)，重新整理也回得來
     const u = new URL(location.href); u.searchParams.set('g', data.groupId); u.searchParams.delete('h'); history.replaceState(null, '', u.toString());
     closeGroupCreate();
@@ -2839,14 +2854,17 @@ function submitMyGroupItems() {
   const name = (groupCtx.name || document.getElementById('group-my-name').value).trim();
   if (!name) { alert('請填寫你的名字'); document.getElementById('group-my-name').focus(); return; }
   const each = isGroupEach_();
+  if (!otherNeedsReady_()) return;   // 自己的其他需求
   if (each && !document.getElementById('group-agree-terms').checked) { alert('請先勾選同意退款政策、服務條款及隱私權政策'); return; }
   const btn = document.getElementById('group-submit-btn');
   btn.disabled = true; btn.textContent = '送出中…';
   const myCart = cart.slice();
+  const myNeeds = otherNeedsAsGroupItems_();
   apiPost_({ action: 'groupUpsertMember', groupId: groupCtx.groupId, memberToken: groupCtx.memberToken || '', name, memberPhone: phone, items: groupItemsFromCart_() }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '送出失敗');
     groupCtx.memberToken = data.memberToken; groupCtx.name = name; saveGroupCtx_();
-    if (each) return payMyGroupShare_(myCart, phone, name);
+    otherNeedsSel = []; otherNeedsNone = false;
+    if (each) return payMyGroupShare_(myCart, phone, name, myNeeds);
     cart = []; saveCartSession(); updateCartBar();
     closeCart();
     return fetchGroup_().then(() => { openGroupPanel(); alert(`已送出！等 ${groupView.hostName} 結帳付款後，這團才算成立。`); });
@@ -2854,14 +2872,16 @@ function submitMyGroupItems() {
 }
 
 // 各付各的：送出後直接建立自己那張訂單並導去藍新付款(品項/取餐時間/會員以後端揪團資料為準)
-function payMyGroupShare_(myCart, phone, name) {
-  const rawTotal = myCart.reduce((s, c) => s + c.qty * c.price, 0);
+function payMyGroupShare_(myCart, phone, name, myNeeds) {
+  // 其他需求也是自己那份的品項：後端建單用揪團裡存的品項(含其他需求)算等級權益與金額，這裡用同一份才對得上
+  const allLines = myCart.concat(myNeeds || []);
+  const rawTotal = allLines.reduce((s, c) => s + c.qty * c.price, 0);
   const voucherDiscount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
-  const perks = myTierPerks_(myCart);   // 各付各的：套自己的等級
+  const perks = myTierPerks_(allLines);   // 各付各的：套自己的等級
   const total = Math.max(0, rawTotal - voucherDiscount - perks.total);
   const voucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
-  const lines = myCart.map(c => `- ${c.name}${c.size ? '(' + c.size + ')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
+  const lines = allLines.map(c => `- ${c.x2 ? '其他需求：' : ''}${c.name}${c.size ? '(' + c.size + ')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
   const summary = `【${STORE_NAME}】揪團訂單（${groupView.hostName} 的揪團・各付各的）\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${groupPickupText_()}\n---\n${lines}\n---\n${perks.total ? '會員權益（' + verifiedMember.tier + '）：' + tierPerkText_(perks) + '\n' : ''}${voucherDiscount > 0 ? '已套用兌換券折抵：-$' + voucherDiscount + '\n' : ''}總計：$${total}\n（已完成線上信用卡付款，取餐時請出示此訂單編號）`;
   pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds, voucherPhone: phone, payAtPickup: false, cartBackup: myCart };
   cart = []; saveCartSession(); updateCartBar();
@@ -2880,7 +2900,13 @@ function payMyGroupShare_(myCart, phone, name) {
 // 修改自己的餐點：把自己送出過的餐點放回購物車，改完再送出一次(會取代舊的)
 function editMyGroupItems() {
   const me = groupMe_();
-  if (me) { cart = me.items.map(it => Object.assign({}, it)); saveCartSession(); updateCartBar(); }
+  if (me) {
+    // 其他需求不放回購物車當餐點，還原成「其他需求」那一塊的勾選(當初沒選任何一項＝勾了無須)
+    cart = me.items.filter(it => !it.x2).map(it => Object.assign({}, it));
+    otherNeedsSel = me.items.filter(it => it.x2).map(it => it.name);
+    otherNeedsNone = !otherNeedsSel.length;
+    saveCartSession(); updateCartBar();
+  }
   closeGroupPanel();
   openCart();
 }
@@ -2932,7 +2958,7 @@ function renderGroupPanel_() {
     const canRemove = host && !m.isHost && editable && !paid;
     const badge = each ? `<span class="group-status ${m.payState === '已付款' ? 'done' : m.payState === '付款中' ? 'locked' : m.payState === '已退款' ? 'dead' : ''}" style="margin-left:6px;">${escapeHtml_(m.payState)}</span>` : '';
     h += `<div class="group-member${m.isMe ? ' me' : ''}"><div class="gm-head"><span>${escapeHtml_(m.name)}${m.isHost ? '（團主）' : ''}${m.isMe ? '（你）' : ''}${badge}</span><span>$${m.subtotal}</span></div>`;
-    m.items.forEach(it => { h += `<div class="gm-item"><span>${escapeHtml_(it.name)}${it.size ? ' (' + escapeHtml_(it.size) + ')' : ''} x${it.qty}</span><span>$${it.price * it.qty}</span></div>`; });
+    m.items.forEach(it => { h += `<div class="gm-item"><span>${it.x2 ? '其他需求：' : ''}${escapeHtml_(it.name)}${it.size ? ' (' + escapeHtml_(it.size) + ')' : ''}${it.x2 ? '' : ' x' + it.qty}</span><span>${it.x2 && !it.price ? '' : '$' + it.price * it.qty}</span></div>`; });
     if (canRemove) h += `<div style="text-align:right;"><button type="button" style="border:none;background:none;color:#a30000;font-size:0.8rem;cursor:pointer;" onclick="removeGroupMember('${m.memberId}')">刪除這個人的餐點</button></div>`;
     h += '</div>';
   });

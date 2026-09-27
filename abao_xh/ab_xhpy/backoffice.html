@@ -3095,8 +3095,8 @@ function renderAdEditor() {
   el.innerHTML = `
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增' : '編輯'}${isX1 ? '加購價商品（×1）' : '其他需求（×2）'}</h3>
     <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 10px;">${isX1
-      ? '客人點套餐時，在「加價購」那一步看到（單選＋無須加價購）；選了以後接「醬料選擇」頁。單點、單點飲品不會出現。'
-      : '客人結帳時看到一次（可複選＋無須加價購），名稱請寫客人看得懂的說法，例如「我有帶環保杯」。'}</div>
+      ? '客人點套餐時，在「加價購」那一步看到（單選＋無須加價購）；選了以後接「醬料選擇」頁。單點、單點飲品不會出現。「✕ 無須加價購」系統會自動加在最後，不用新增。'
+      : '客人結帳時看到一次（可複選＋無須加價購），名稱請寫客人看得懂的說法，例如「我有帶環保杯」。「✕ 無須加價購」系統會自動加在最後，不用新增。'}</div>
     <label class="mc-field">名稱<input id="ad-f-name" value="${escapeHtml(a.name)}" placeholder="${isX1 ? '例：雞塊(6入)' : '例：我有帶環保杯'}"></label>
     <label class="mc-field" style="max-width:220px;">${isX1 ? '加購價（顧客看到「+$金額」）' : '金額（0＝免費，負數＝折錢）'}<input id="ad-f-amount" type="number" step="1" value="${a.amount === '' ? '' : a.amount}"></label>
     ${isX1 ? `
@@ -3174,10 +3174,15 @@ function adReadForm_() {
 }
 
 const AD_SAUCE_FORBIDDEN_RE_ = /[=；\/、:：]/;   // 跟後端serializeSauceGroups_一致(這些符號是試算表/出單的分隔字)
+// 防呆(2026-09-27老闆同意)：「✕ 無須加價購」是點餐頁自動接在每一頁最後的選項，不是一筆資料；
+// 在名稱、醬料、醬料組名填這幾個字就擋下，不然客人會看到兩個
+const AD_NONE_RE_ = /無須加價購|不需加價購/;
+const AD_NONE_MSG_ = '「無須加價購」不用新增：點餐頁的加價購、每一組醬料、其他需求，最後都會自動多一個「✕ 無須加價購」。';
 function adAddSauce(gi) {
   const input = document.getElementById('ad-f-sauce-' + gi);
   const v = (input.value || '').trim();
   if (!v) return;
+  if (AD_NONE_RE_.test(v)) { alert(AD_NONE_MSG_); input.value = ''; return; }
   if (AD_SAUCE_FORBIDDEN_RE_.test(v)) { alert('醬料名稱不能有 = ； / 、 : 這些符號，一次加一種'); return; }
   if (adSauceDraft[gi].options.indexOf(v) === -1) adSauceDraft[gi].options.push(v);
   renderAdEditor();
@@ -3208,6 +3213,7 @@ function saveAddon(btn) {
   const type = isNew ? adNewType : adCurrent_().type;
   const name = document.getElementById('ad-f-name').value.trim();
   if (!name) { alert('請輸入名稱'); return; }
+  if (AD_NONE_RE_.test(name)) { alert(AD_NONE_MSG_); return; }
   if (name.indexOf('、') !== -1) { alert('名稱不能有「、」'); return; }
   const amountStr = document.getElementById('ad-f-amount').value;
   const amount = Number(amountStr);
@@ -3228,6 +3234,7 @@ function saveAddon(btn) {
     const groups = adSauceDraft.map(g => ({ name: String(g.name || '').trim(), options: g.options.slice() }));
     for (const g of groups) {
       if (!g.name) { alert('每一組醬料都要有組名(例如：雞塊醬料)'); return; }
+      if (AD_NONE_RE_.test(g.name) || g.options.some(o => AD_NONE_RE_.test(o))) { alert(AD_NONE_MSG_ + '\n請把醬料組「' + g.name + '」裡的「無須加價購」刪掉。'); return; }
       if (AD_SAUCE_FORBIDDEN_RE_.test(g.name)) { alert('醬料組名不能有 = ； / 、 : 這些符號'); return; }
       if (!g.options.length) { alert('醬料組「' + g.name + '」還沒有加任何醬料，不需要的話按「刪除這組」'); return; }
     }
