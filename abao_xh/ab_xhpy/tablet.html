@@ -1467,6 +1467,7 @@ function applyDrinkUpgradeOption_(idx) {
   const line = posCart.find(c => c.lineKey === o.line.lineKey);
   if (!line) return;
   const amount = pickUpgradeAmount_(o.rule, o.size);
+  line.edit = null;   // 換過飲料後當初的客製化快照已不準，不提供點選修改(2026-09-27)
   if (o.isCombo) {
     // 套餐內建飲料：把「舊飲料名+舊份量」那段文字換成「新飲料名+選的份量」
     const oldLabel = line.comboDrinkName + (line.comboDrinkSize ? ' ' + String(line.comboDrinkSize).toUpperCase() : '');
@@ -2513,15 +2514,74 @@ function confirmAddToPosCart() {
   const lineKey = currentPosModal.key + (currentPosModal.size || '') + '|' + optionParts.join(',') + '|' + note;
   const displayName = currentPosModal.item.name + (optionParts.length ? '（' + optionParts.join('、') + '）' : '');
 
+  // 修改訂單上的品項(2026-09-27)：先拿掉原本那一項(記住位置)，新內容放回同一個位置；
+  // 那一項如果已經套用品項折扣(第二件六折/兌換券等)，金額基準可能變了，一律取消並提醒重新套用
+  let insertAt = -1;
+  const editingKey = currentPosModal.editingLineKey;
+  if (editingKey) {
+    insertAt = posCart.findIndex(c => c.lineKey === editingKey);
+    if (insertAt !== -1) posCart.splice(insertAt, 1);
+    const hadDiscount = appliedVouchers.some(v => v.targetLineKey === editingKey) || directDiscounts.some(d => d.targetLineKey === editingKey);
+    if (hadDiscount) {
+      appliedVouchers = appliedVouchers.filter(v => v.targetLineKey !== editingKey);
+      directDiscounts = directDiscounts.filter(d => d.targetLineKey !== editingKey);
+      renderMemberVoucherPanel();
+      setTimeout(() => alert('這一項原本套用的折扣已取消，修改後請重新套用'), 0);
+    }
+  }
+  // 存一份當下的選擇，之後點訂單上的這一項可以還原回客製化畫面修改
+  const editSnap = {
+    cat: currentPosModal.cat, key: currentPosModal.key, itemName: currentPosModal.item.name,
+    size: currentPosModal.size, basePrice: currentPosModal.basePrice, qty: currentPosModal.qty, note,
+    groups: JSON.parse(JSON.stringify(currentPosModal.groups)),
+    comboDrinkName: currentPosModal.comboDrinkName, comboDrinkSize: currentPosModal.comboDrinkSize,
+    comboDrinkPrice: currentPosModal.comboDrinkPrice, comboDrinkBasePrice: currentPosModal.comboDrinkBasePrice,
+    comboDrinkUpgradeFee: currentPosModal.comboDrinkUpgradeFee, appliedUpgradeRule: currentPosModal.appliedUpgradeRule || null,
+    comboDrinkExtraGroups: (currentPosModal.comboDrinkExtraGroups || []).slice(), activeDrinkGroupKey: currentPosModal.activeDrinkGroupKey
+  };
   const existing = posCart.find(c => c.lineKey === lineKey);
-  if (existing) existing.qty += currentPosModal.qty;
+  if (existing) { existing.qty += currentPosModal.qty; existing.edit = Object.assign({}, editSnap, { qty: existing.qty }); }
   // baseName/basePrice供「第二件六折」等折抵套用：baseName不含客製化(用來跨列合併同品項數量判斷資格)，
   // basePrice是客人選單點或升級套餐當下的整組價(客製化加價之前)，折抵只算這個金額，加購一律不打折
   // cat/comboDrinkName/comboDrinkSize(2026-09-13新增)：讓套餐已經加入購物車後，「活動飲品升級」
   // 頂部按鈕也能回頭找到裡面的飲料——比對依據是主餐自己的分類(cat)，不是飲料本身
-  else posCart.push({lineKey, name: displayName, baseName: currentPosModal.item.name, size: currentPosModal.size, price: unit, basePrice: currentPosModal.basePrice, qty: currentPosModal.qty, note, cat: currentPosModal.cat, comboDrinkName: currentPosModal.comboDrinkName, comboDrinkSize: currentPosModal.comboDrinkSize});
+  else {
+    const newLine = {lineKey, name: displayName, baseName: currentPosModal.item.name, size: currentPosModal.size, price: unit, basePrice: currentPosModal.basePrice, qty: currentPosModal.qty, note, cat: currentPosModal.cat, comboDrinkName: currentPosModal.comboDrinkName, comboDrinkSize: currentPosModal.comboDrinkSize, edit: editSnap};
+    if (insertAt >= 0) posCart.splice(insertAt, 0, newLine); else posCart.push(newLine);
+  }
   closePosItemModal();
   renderPosCart();
+}
+
+// 點訂單上的品項 → 打開客製化畫面並還原當初的選擇(2026-09-27)。沒有快照的列(自動加購/活動飲品升級換過的)不能這樣改
+function editPosCartLine(lineKey) {
+  const line = posCart.find(c => c.lineKey === lineKey);
+  if (!line) return;
+  const snap = line.edit;
+  const item = snap && (CATALOG[snap.cat] || []).find(it => it.name === snap.itemName);
+  if (!snap || !item) { alert('這一項不能直接修改(可能是自動加入或換過飲品的品項)，請用「－」刪掉後重新點'); return; }
+  openPosItemModal(snap.cat, snap.key, item);
+  const detail = document.getElementById('pos-col-detail');
+  const pick = (name, value) => { const r = detail.querySelector(`input[name="${name}"][value="${value}"]`); if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event('change')); } };
+  // 1) 份量／單點套餐／份量二選一：觸發原本的change，讓價格與套餐限定選項跟著出現
+  if (item.price_m && item.price_l && snap.size) pick('pos-size', snap.size);
+  if (item.price_alt) pick('pos-qty', snap.basePrice === item.price_alt ? 'b' : 'a');
+  if (item.price_set) pick('pos-setform', snap.basePrice === item.price_set ? 'set' : 'single');
+  // 2) 各選項群組：直接勾回去(不觸發change，避免又跳出飲料小視窗)；飲料自己的甜度冰塊等存在groups裡一併還原
+  Object.keys(snap.groups).forEach(gKey => {
+    currentPosModal.groups[gKey] = snap.groups[gKey].slice();
+    snap.groups[gKey].forEach(v => { const inp = detail.querySelector(`input[name="pos_${gKey}"][value="${v}"]`); if (inp) inp.checked = true; });
+  });
+  ['comboDrinkName', 'comboDrinkSize', 'comboDrinkPrice', 'comboDrinkBasePrice', 'comboDrinkUpgradeFee', 'appliedUpgradeRule', 'activeDrinkGroupKey'].forEach(k => { currentPosModal[k] = snap[k]; });
+  currentPosModal.comboDrinkExtraGroups = (snap.comboDrinkExtraGroups || []).slice();
+  currentPosModal.basePrice = snap.basePrice;
+  currentPosModal.qty = line.qty;
+  document.getElementById('pos-item-modal-qty').textContent = line.qty;
+  document.getElementById('pos-item-modal-note').value = snap.note || '';
+  currentPosModal.editingLineKey = lineKey;
+  const btn = detail.querySelector('button.btn-primary');
+  if (btn) btn.innerHTML = '更新訂單　<span id="pos-item-modal-total"></span>';
+  updatePosItemModalTotal();
 }
 
 function renderPosCart() {
@@ -2534,13 +2594,14 @@ function renderPosCart() {
     const div = document.createElement('div');
     div.className = 'pos-cart-line';
     div.innerHTML = `
-      <div>${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
+      <div class="pos-cart-line-name" style="cursor:${c.edit ? 'pointer' : 'default'};">${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}${c.edit ? '　<span style="color:var(--brand);">✎ 點我修改</span>' : ''}</span></div>
       <div style="display:flex;align-items:center;gap:4px;flex:none;">
         <button class="qty-btn" data-act="dec">-</button>
         <span>${c.qty}</span>
         <button class="qty-btn" data-act="inc">+</button>
       </div>
     `;
+    div.querySelector('.pos-cart-line-name').onclick = () => editPosCartLine(c.lineKey);
     div.querySelector('[data-act="dec"]').onclick = () => changePosQty(c.lineKey, -1);
     div.querySelector('[data-act="inc"]').onclick = () => changePosQty(c.lineKey, 1);
     linesEl.appendChild(div);

@@ -276,7 +276,7 @@
 <div class="overlay" id="item-overlay">
   <div class="sheet">
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button type="button" onclick="closeItemModal()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <button type="button" onclick="if (closeItemModal()) openCart();" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
       <h2 id="item-modal-title" style="margin:0; flex:1;"></h2>
     </div>
     <div id="item-modal-size"></div>
@@ -1686,8 +1686,12 @@ function updateItemModalTotal() {
 }
 
 function closeItemModal() {
+  const wasEditing = !!(currentModal && currentModal.editingLineKey);
   document.getElementById('item-overlay').classList.remove('open');
+  const btn = document.querySelector('#item-overlay button.btn-primary[onclick="confirmAddToCart()"]');
+  if (btn) btn.innerHTML = '新增至購物車　<span id="item-modal-total"></span>';
   currentModal = null;
+  return wasEditing;
 }
 
 function confirmAddToCart() {
@@ -1746,13 +1750,75 @@ function confirmAddToCart() {
   const lineKey = currentModal.key + (currentModal.size || '') + '|' + optionParts.join(',') + '|' + note;
   const displayName = currentModal.item.name + (optionParts.length ? '（' + optionParts.join('、') + '）' : '');
 
+  // 修改購物車裡的品項(2026-09-27)：先拿掉原本那一項(記住位置)，新內容放回同一個位置；
+  // 那一項如果已經套用了兌換券，金額基準可能變了，取消該券並提醒重新套用
+  let insertAt = -1;
+  const editingKey = currentModal.editingLineKey;
+  if (editingKey) {
+    insertAt = cart.findIndex(c => c.lineKey === editingKey);
+    if (insertAt !== -1) cart.splice(insertAt, 1);
+    if (checkoutSelectedVouchers.some(v => v.targetLineKey === editingKey)) {
+      checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => v.targetLineKey !== editingKey);
+      setTimeout(() => alert('這一項原本套用的兌換券已取消，修改後請重新套用'), 0);
+    }
+  }
+  // 存一份當下的選擇，之後點購物車的這一項可以還原回客製化畫面修改
+  const editSnap = {
+    cat: currentModal.cat, key: currentModal.key, itemName: currentModal.item.name,
+    size: currentModal.size, basePrice: currentModal.basePrice, note,
+    groups: JSON.parse(JSON.stringify(currentModal.groups)),
+    comboDrinkName: currentModal.comboDrinkName, comboDrinkSize: currentModal.comboDrinkSize,
+    comboDrinkPrice: currentModal.comboDrinkPrice, comboDrinkBasePrice: currentModal.comboDrinkBasePrice,
+    comboDrinkUpgradeFee: currentModal.comboDrinkUpgradeFee, appliedUpgradeRule: currentModal.appliedUpgradeRule || null,
+    comboDrinkExtraGroups: (currentModal.comboDrinkExtraGroups || []).slice(), activeDrinkGroupKey: currentModal.activeDrinkGroupKey
+  };
   const existing = cart.find(c => c.lineKey === lineKey);
-  if (existing) existing.qty += currentModal.qty;
+  if (existing) { existing.qty += currentModal.qty; existing.edit = editSnap; }
   // baseName/basePrice供顧客自助套用兌換券折抵用：只免基準價(客製化加購仍要收錢)，見結帳頁兌換券流程
-  else cart.push({lineKey, name: displayName, baseName: currentModal.item.name, size: currentModal.size, price: unit, basePrice: currentModal.basePrice, qty: currentModal.qty, note});
+  else {
+    const newLine = {lineKey, name: displayName, baseName: currentModal.item.name, size: currentModal.size, price: unit, basePrice: currentModal.basePrice, qty: currentModal.qty, note, edit: editSnap};
+    if (insertAt >= 0) cart.splice(insertAt, 0, newLine); else cart.push(newLine);
+  }
   saveCartSession();
   updateCartBar();
+  const reopenCart = !!editingKey;
   closeItemModal();
+  if (reopenCart) openCart();   // 從購物車點進來修改的，改完回到購物車
+}
+
+// 點購物車裡的品項 → 打開客製化畫面並還原當初的選擇(2026-09-27)。
+// 沒有快照的列(揪團帶進來的餐點、舊版頁面加入的)不能這樣改
+function editCartLine(lineKey) {
+  if (groupCheckoutMode) return;
+  const line = cart.find(c => c.lineKey === lineKey);
+  if (!line) return;
+  const snap = line.edit;
+  const item = snap && (CATALOG[snap.cat] || []).find(it => it.name === snap.itemName);
+  if (!snap || !item) { alert('這一項不能直接修改，請用「－」刪掉後重新點'); return; }
+  document.getElementById('cart-overlay').classList.remove('open');
+  openItemModal(snap.cat, snap.key, item);
+  const ov = document.getElementById('item-overlay');
+  const pick = (name, value) => { const r = ov.querySelector(`input[name="${name}"][value="${value}"]`); if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event('change')); } };
+  // 1) 份量／單點套餐／份量二選一：觸發原本的change，讓價格與套餐限定選項跟著出現
+  if (item.price_m && item.price_l && snap.size) pick('size', snap.size);
+  if (item.price_alt) pick('qty', snap.basePrice === item.price_alt ? 'b' : 'a');
+  if (item.price_set) pick('setform', snap.basePrice === item.price_set ? 'set' : 'single');
+  // 2) 各選項群組直接勾回去(不觸發change，避免又跳出飲料小視窗)；飲料自己的甜度冰塊存在groups裡一併還原
+  Object.keys(snap.groups).forEach(gKey => {
+    currentModal.groups[gKey] = snap.groups[gKey].slice();
+    snap.groups[gKey].forEach(v => { const inp = ov.querySelector(`#item-modal-groups input[name="${gKey}"][value="${v}"]`); if (inp) inp.checked = true; });
+  });
+  ['comboDrinkName', 'comboDrinkSize', 'comboDrinkPrice', 'comboDrinkBasePrice', 'comboDrinkUpgradeFee', 'appliedUpgradeRule', 'activeDrinkGroupKey'].forEach(k => { currentModal[k] = snap[k]; });
+  currentModal.comboDrinkExtraGroups = (snap.comboDrinkExtraGroups || []).slice();
+  currentModal.basePrice = snap.basePrice;
+  currentModal.qty = line.qty;
+  document.getElementById('item-modal-qty').textContent = line.qty;
+  document.getElementById('item-modal-note').value = snap.note || '';
+  updateItemModalNoteCount_();
+  currentModal.editingLineKey = lineKey;
+  const btn = ov.querySelector('button.btn-primary[onclick="confirmAddToCart()"]');
+  if (btn) btn.innerHTML = '更新餐點　<span id="item-modal-total"></span>';
+  updateItemModalTotal();
 }
 
 function updateCartBar() {
@@ -1771,13 +1837,14 @@ function renderCart() {
     const div = document.createElement('div');
     div.className = 'cart-line';
     div.innerHTML = `
-      <div>${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
+      <div class="cart-line-name" style="cursor:${c.edit && !groupCheckoutMode ? 'pointer' : 'default'};">${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}${c.edit && !groupCheckoutMode ? '　<span style="color:var(--brand);">✎ 修改</span>' : ''}</span></div>
       <div style="display:flex;align-items:center;gap:8px">
         <button class="qty-btn" data-act="dec">-</button>
         <span>${c.qty}</span>
         <button class="qty-btn" data-act="inc">+</button>
       </div>
     `;
+    if (c.edit && !groupCheckoutMode) div.querySelector('.cart-line-name').onclick = () => editCartLine(c.lineKey);
     div.querySelector('[data-act="dec"]').onclick = () => changeQty(c.lineKey, -1);
     div.querySelector('[data-act="inc"]').onclick = () => changeQty(c.lineKey, 1);
     // 揪團結帳：品項是全團的餐點(後端以揪團明細為準)，這裡不能加減，要改請回揪團
