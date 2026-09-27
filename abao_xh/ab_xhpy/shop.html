@@ -476,7 +476,9 @@ function applyPromoSettings_(data) {
       ? { mode: 'fixed', amount: p.amount }
       : { mode: 'item', effect: p.effect, minQty: p.minQty };
   });
-  POINT_REDEMPTION_CATALOG = (data.pointGifts || []).filter(g => g.status !== '停用').map(g => ({ points: g.points, voucherType: g.voucherType }));
+  // 集點禮兌換的券若不在期間內就先不列(後端也會擋)
+  const promoByName_ = Object.fromEntries((data.promos || []).map(p => [p.name, p]));
+  POINT_REDEMPTION_CATALOG = (data.pointGifts || []).filter(g => g.status !== '停用' && isPromoInPeriod_(promoByName_[g.voucherType])).map(g => ({ points: g.points, voucherType: g.voucherType }));
 }
 
 const PROMO_SETTINGS_CACHE_KEY = 'abao_pos_promo_settings_cache_v1';
@@ -1176,8 +1178,12 @@ function loadShopMemberTiers_() {
     updateCheckoutTotalDisplay();
   }).catch(err => console.warn('會員分級讀取失敗(等級權益暫不顯示，結帳金額以後端為準)', err));
 }
+// 優惠券期間(2026-09-26)：今天在生效日～到期日之間(含頭尾，沒填的那端不限)；期間外視同停用(不顯示按鈕/不自動套用/不能兌換)，
+// 但客人手上已經拿到的兌換券照常可用，所以VOUCHER_BEHAVIOR(套用持有的券)不看期間
+function todayYmd_() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function isPromoInPeriod_(p) { const t = todayYmd_(); return !(p && ((p.startDate && t < p.startDate) || (p.endDate && t > p.endDate))); }
 function isTierPerkPromo_(p) {
-  return !!(p && p.status !== '停用' && p.mode === 'item' && p.showAsButton && !p.manualGrantable && p.minTier && p.targetItem);
+  return !!(p && p.status !== '停用' && p.mode === 'item' && p.showAsButton && !p.manualGrantable && p.minTier && p.targetItem && isPromoInPeriod_(p));
 }
 function tierPromoUnitDiscount_(effect, unit) {
   if (effect === 'free') return unit;

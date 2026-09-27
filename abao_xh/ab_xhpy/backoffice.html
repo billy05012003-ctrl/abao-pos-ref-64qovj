@@ -2632,7 +2632,7 @@ function renderPublishDiff_(els, changes, errorMsg) {
          </div>`;
   els.forEach(el => { el.innerHTML = html; });
 }
-const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'locked', 'order'];
+const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'locked', 'order', 'startDate', 'endDate'];
 function refreshPromoPublishDiff_() {
   const els = [...document.querySelectorAll('.promo-publish-diff')];
   if (!els.length || MC_STORE_ID === '__brand__') return Promise.resolve();
@@ -2759,6 +2759,20 @@ const PM_DRINK_UPGRADE_SHORTCUT_AFTER = '公關費';
 function pmPctLabel_(pct) {
   return (pct % 10 === 0 ? pct / 10 : pct) + '折';
 }
+// 優惠券期間提醒(2026-09-26)：已過期／尚未開始／還有N天到期(3天內)；沒設期間回傳null
+function pmPeriodTag_(p) {
+  if (!p.startDate && !p.endDate) return null;
+  const d = new Date(); const t = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  if (p.endDate && t > p.endDate) return '⚠已過期';
+  if (p.startDate && t < p.startDate) return '尚未開始(' + p.startDate.slice(5).replace('-', '/') + '起)';
+  if (p.endDate) {
+    const days = Math.round((new Date(p.endDate + 'T00:00:00') - new Date(t + 'T00:00:00')) / 86400000);
+    if (days <= 3) return days === 0 ? '⚠今天到期' : '⚠還有' + days + '天到期';
+    return '到' + p.endDate.slice(5).replace('-', '/');
+  }
+  return null;
+}
+
 function renderPmList() {
   const el = document.getElementById('pm-list');
   if (!pmPromos.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何優惠券</div>'; return; }
@@ -2768,7 +2782,9 @@ function renderPmList() {
   el.innerHTML = pmPromos.map(p => {
     // 等級優惠(結帳自動套用，不是POS按鈕)只標「○○等級優惠」，其他標籤不適用
     const isTierPerk = p.mode === 'item' && p.showAsButton && !p.manualGrantable && p.minTier && p.targetItem;
-    const tags = (isTierPerk ? [p.minTier + '等級優惠', p.status === '停用' ? '停用' : null] : [
+    const periodTag = pmPeriodTag_(p);
+    const tags = (isTierPerk ? [p.minTier + '等級優惠', periodTag, p.status === '停用' ? '停用' : null] : [
+      periodTag,
       p.mode === 'order' ? ('整張' + pmPctLabel_(p.amount)) : (p.effect === 'pct' ? ('單品' + pmPctLabel_(p.amount)) : null),
       p.showAsButton ? '按鈕' : null,
       p.manualGrantable ? '可贈送' : null,
@@ -2879,6 +2895,11 @@ function renderPmEditor() {
       </select>
     </label>
     <div class="mc-field-row">
+      <label class="mc-field" style="max-width:180px;">生效日(選填)<input id="pm-f-start" type="date" value="${escapeHtml(p.startDate || '')}"></label>
+      <label class="mc-field" style="max-width:180px;">到期日(選填)<input id="pm-f-end" type="date" value="${escapeHtml(p.endDate || '')}"></label>
+    </div>
+    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">期間外視同停用(不顯示POS按鈕、等級優惠不自動套用、不能再贈送或用點數兌換)；客人手上已經拿到的兌換券照常可用。不填＝永久。金寶限定每月換飲品時，名稱、適用品項、期間一起改。</div>
+    <div class="mc-field-row">
       <label class="mc-field" style="max-width:220px;">最低適用等級(限定發券/兌換用，不影響POS店內即時折扣按鈕)
         <select id="pm-f-mintier" onchange="pmMinTierChanged()">
           <option value="" ${!p.minTier ? 'selected' : ''}>不限</option>
@@ -2923,6 +2944,8 @@ function savePromo() {
     alert('等級優惠（自動套用）只支援「全額免費、打6折、打5折」，請改選其中一種');
     return;
   }
+  const pStart = document.getElementById('pm-f-start').value, pEnd = document.getElementById('pm-f-end').value;
+  if (pStart && pEnd && pStart > pEnd) { alert('生效日不能晚於到期日'); return; }
   if (usesPct) {
     const pct = Number(document.getElementById('pm-f-pct').value);
     if (!Number.isInteger(pct) || pct < 10 || pct > 99) { alert('折數請填10～99的整數(例如85=打85折，9折請填90)'); return; }
@@ -2944,6 +2967,8 @@ function savePromo() {
     version: MC_STATUS,
     locked: lockedEl ? lockedEl.checked : false,
     minTier: minTier,
+    startDate: document.getElementById('pm-f-start').value,
+    endDate: document.getElementById('pm-f-end').value,
     allowNonMember: minTier ? (allowNonMemberEl ? allowNonMemberEl.checked : true) : true
   };
   apiPost({ action: 'upsertPromo', promo: payload }).then(data => {
