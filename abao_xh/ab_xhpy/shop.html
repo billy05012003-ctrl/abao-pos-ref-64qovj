@@ -1574,7 +1574,13 @@ function renderOptionGroup(container, gKey) {
       label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''} ${unavailStatus ? 'disabled' : ''}> ${displayName}${unavailLabel}<span class="opt-price"><br><span style="margin-left:20px;color:var(--muted);font-size:0.76rem;">${sizeParts.join('　')}</span></span>`;
     } else {
       // 價格包在.opt-price：套餐分步驟裡「點了才顯示價格」(見.wiz-hide-price)，一般單點照常顯示
-      const priceLabel = opt.price ? `<span class="opt-price"> ${opt.price < 0 ? '-$' + Math.abs(opt.price) : '+$' + opt.price}</span>` : '';
+      let priceLabel = opt.price ? `<span class="opt-price"> ${opt.price < 0 ? '-$' + Math.abs(opt.price) : '+$' + opt.price}</span>` : '';
+      // 套餐飲料(美式狂想/定食)：選項本身價格是0，實際加價在份量(M/L)，點了先顯示兩種份量的加價
+      const cdp = gKey === 'combo_drink' && COMBO_DRINK_PRICES[opt.name];
+      if (cdp) {
+        const parts = cdp.single != null ? (cdp.single ? ['+$' + cdp.single] : []) : ['m', 'l'].filter(sz => cdp[sz] != null).map(sz => sz.toUpperCase() + ' +$' + cdp[sz]);
+        if (parts.length) priceLabel = `<span class="opt-price"> ${parts.join('／')}</span>`;
+      }
       label.innerHTML = `${optThumb}<input type="${inputType}" name="${gKey}" value="${opt.name}" id="${id}" autocomplete="off" ${autoCheck ? 'checked' : ''} ${unavailStatus ? 'disabled' : ''}> ${displayName}${priceLabel}${unavailLabel}`;
     }
     optWrap.appendChild(label);
@@ -1606,7 +1612,13 @@ function renderOptionGroup(container, gKey) {
         if (inp.checked) currentModal.groups[gKey].push(inp.value);
         else currentModal.groups[gKey] = currentModal.groups[gKey].filter(v => v !== inp.value);
       }
-      if (gKey === 'combo_drink') {
+      if ((gKey === 'combo_drink' || gKey === 'small_drink') && currentModal.wiz) {
+        // 套餐分步驟(2026-09-28老闆定案)：點飲料只選取＋顯示價格，不馬上跳冰塊甜度；
+        // 下面出現「冰塊甜度（必選）›」，一定要按它設定完，「下一步」才會亮(見wizMissing_/wizUpdateDrinkLink_)
+        clearDrinkCustom();
+        currentModal.drinkDone = false;
+        if (inp.checked) { currentModal.comboDrinkName = inp.value; currentModal.activeDrinkGroupKey = gKey; }
+      } else if (gKey === 'combo_drink') {
         if (inp.checked) openDrinkCustom(inp.value);
         else clearDrinkCustom();
       } else if (gKey === 'small_drink') {
@@ -1729,6 +1741,7 @@ function confirmDrinkCustom() {
     }
   }
   document.getElementById('drink-overlay').classList.remove('open');
+  currentModal.drinkDone = true;
   updateItemModalTotal();
   // 套餐分步驟：飲料那一步只有選飲料一件事，冰塊甜度按「確定」後直接進下一步，不用回清單再按一次(2026-09-28老闆要求)
   const w = currentModal && currentModal.wiz;
@@ -1737,6 +1750,16 @@ function confirmDrinkCustom() {
 
 function cancelDrinkCustom() {
   const gk = currentModal.activeDrinkGroupKey || 'combo_drink';
+  if (currentModal.wiz) {
+    // 套餐分步驟：取消只關視窗，飲料維持選取；冰塊甜度沒設定完，「下一步」不會亮
+    const name = currentModal.comboDrinkName;
+    clearDrinkCustom();
+    currentModal.comboDrinkName = name;
+    currentModal.drinkDone = false;
+    document.getElementById('drink-overlay').classList.remove('open');
+    updateItemModalTotal();
+    return;
+  }
   clearDrinkCustom();
   currentModal.groups[gk] = [];
   document.querySelectorAll(`input[name="${gk}"]`).forEach(r => { r.checked = false; });
@@ -1938,6 +1961,7 @@ function wizMissing_(step) {
   const m = currentModal;
   if (step.key === 'x1' && !m.x1 && !m.wiz.none.x1) return '請選一項，不需要的話請勾「無須加價購」';
   if (step.key === 'x1sauce' && !((m.x1Sauces || {})[step.group] || []).length && !m.wiz.none['x1s:' + step.group]) return '請選擇「' + step.group + '」，不需要的話請勾「無須加價購」';
+  if (WIZ_DRINK_GROUPS.includes(step.key) && (m.groups[step.key] || []).length && !m.drinkDone) return '請按飲料下面的「餐點特製」選好冰塊甜度';
   for (const gk of (step.gkeys || [])) {
     const g = OPTION_GROUPS[gk] || {};
     const sel = m.groups[gk] || [];
@@ -1975,9 +1999,59 @@ function itemModalBack_() {
   const w = currentModal && currentModal.wiz;
   if (w) {
     if (w.fromConfirm) { wizGo_(w.steps.length - 1); return; }
-    if (w.idx > 0) { if (w.mode === 'upgrade' && w.idx === 1) wizDowngrade_(); else wizGo_(w.idx - 1); return; }
+    if (w.idx > 0) {
+      wizClearStep_(w.steps[w.idx]);   // 09-28老闆要求：按上一步＝這一頁的選擇取消，小計跟著退回
+      if (w.mode === 'upgrade' && w.idx === 1) wizDowngrade_(); else wizGo_(Math.min(w.idx - 1, w.steps.length - 1));
+      return;
+    }
   }
   if (closeItemModal()) openCart();
+}
+// 取消某一步的選擇(畫面勾選一起取消)
+function wizClearStep_(step) {
+  const m = currentModal;
+  if (step.key === 'confirm') return;
+  if (step.key === 'x1') { m.x1 = null; m.x1Sauces = {}; delete m.wiz.none.x1; Object.keys(m.wiz.none).filter(k => k.startsWith('x1s:')).forEach(k => delete m.wiz.none[k]); wizSyncX1Steps_(); }
+  else if (step.key === 'x1sauce') { m.x1Sauces[step.group] = []; delete m.wiz.none['x1s:' + step.group]; }
+  else if (step.key !== 'single' && step.key !== 'main') {
+    (step.gkeys || []).forEach(gk => {
+      m.groups[gk] = [];
+      document.querySelectorAll(`#item-modal-groups input[name="${gk}"]`).forEach(i => { i.checked = false; });
+      if (WIZ_DRINK_GROUPS.includes(gk)) { clearDrinkCustom(); m.drinkDone = false; }
+      if (step.exclusive) delete m.wiz.none[gk];
+    });
+  }
+  updateItemModalTotal();
+}
+// 飲料那一步：選了的飲料下面放「冰塊甜度（必選）›」，一定要按它設定(2026-09-28老闆定案)；設定完顯示選了什麼、可再按修改
+function wizOpenDrinkCustom_(gk) {
+  const name = (currentModal.groups[gk] || [])[0];
+  if (!name) return;
+  if (gk === 'combo_drink') openDrinkCustom(name); else openSmallDrinkCustom(name);
+}
+function wizUpdateDrinkLink_() {
+  const m = currentModal;
+  document.querySelectorAll('.wiz-drink-link').forEach(e => e.remove());
+  const step = m.wiz.steps[m.wiz.idx];
+  if (!WIZ_DRINK_GROUPS.includes(step.key)) return;
+  const gk = step.key, sel = (m.groups[gk] || [])[0];
+  if (!sel) return;
+  const inp = [...document.querySelectorAll(`#item-modal-groups input[name="${gk}"]`)].find(i => i.value === sel);
+  const label = inp && inp.closest('label');
+  if (!label) return;
+  const p = gk === 'combo_drink' ? COMBO_DRINK_PRICES[sel] : null;
+  const needSize = !!(p && p.single == null);
+  const picks = (m.comboDrinkExtraGroups || []).flatMap(g => m.groups[g] || []);
+  const done = m.drinkDone;
+  // 樣式參照麥當勞：選了的飲料下面一個藍色底線「餐點特製」連結；沒設定時標必選，設定完顯示選了什麼
+  const info = done
+    ? `<span style="color:var(--muted);font-size:0.8rem;">${escapeHtml_((needSize && m.comboDrinkSize ? m.comboDrinkSize.toUpperCase() + '・' : '') + (picks.join('、') || '已設定'))}</span>　`
+    : `<span style="color:#c94f1f;font-size:0.78rem;">（必選：${needSize ? '份量、' : ''}冰塊甜度）</span>`;
+  const div = document.createElement('div');
+  div.className = 'wiz-drink-link';
+  div.style.cssText = 'grid-column:1/-1;margin:2px 0 8px 26px;';
+  div.innerHTML = `${done ? info : ''}<a href="javascript:void(0)" onclick="wizOpenDrinkCustom_('${gk}')" style="color:#1a6fd1;text-decoration:underline;font-size:0.9rem;">餐點特製</a>${done ? '' : info}`;
+  label.insertAdjacentElement('afterend', div);
 }
 
 function wizRender_() {
@@ -2033,6 +2107,7 @@ function wizRefresh_() {
   if (st) st.textContent = '$' + calcModalUnitPrice() * m.qty;
   const sub = wizEl_('wiz-subtotal');
   if (sub) sub.textContent = '$' + calcModalUnitPrice() * m.qty;
+  wizUpdateDrinkLink_();
   m.wiz.steps.filter(s => s.exclusive).forEach(s => {
     const gk = s.gkeys[0], hasSel = (m.groups[gk] || []).length > 0;
     if (hasSel) m.wiz.none[gk] = false;
@@ -2048,7 +2123,7 @@ function wizSummaryHtml_() {
     let text;
     if (s.key === 'x1') {
       const a = m.x1 && shopX1For_(m.cat).find(x => x.name === m.x1);
-      text = `<span style="color:var(--muted);font-size:0.78rem;">加價購</span><br>${a ? escapeHtml_(a.name) + ' +$' + a.amount : '無須加價購'}`;
+      text = `<span style="color:var(--muted);font-size:0.78rem;">加價購</span><br>${a ? escapeHtml_(a.name) : '無須加價購'}`;   // 09-28老闆：確認頁不顯示加購價
     } else if (s.key === 'x1sauce') {
       text = `<span style="color:var(--muted);font-size:0.78rem;">${escapeHtml_(s.group)}</span><br>${escapeHtml_(((m.x1Sauces || {})[s.group] || []).join('、') || '無須加價購')}`;
     } else if (s.key === 'single' || s.key === 'main') {
@@ -2233,6 +2308,7 @@ function editCartLine(lineKey) {
   document.getElementById('item-modal-note').value = snap.note || '';
   updateItemModalNoteCount_();
   currentModal.editingLineKey = lineKey;
+  currentModal.drinkDone = !!snap.comboDrinkName;  // 當初加入時飲料一定設定過冰塊甜度
   currentModal.x1 = snap.x1 || null;              // 套餐加購價(×1)與醬料
   currentModal.x1Sauces = snap.x1Sauces && !Array.isArray(snap.x1Sauces) ? JSON.parse(JSON.stringify(snap.x1Sauces)) : {};
   const btn = ov.querySelector('button.btn-primary[onclick="confirmAddToCart()"]');
