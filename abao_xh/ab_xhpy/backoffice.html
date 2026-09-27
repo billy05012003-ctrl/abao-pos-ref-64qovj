@@ -1454,8 +1454,10 @@ new MutationObserver(() => { if (!isBoOwner_()) applyBoRoleUi_(); }).observe(doc
 // (mcCatalog等變數宣告已搬到前面的loadAvailability()之前，這裡不用重複宣告)
 // ---------------------------------------------------------------
 
+// 2026-09-28修正：原本一進來就把mcCurrentGroupCode清掉——每次存選項後重新讀菜單，編輯中的那組都會被關掉，
+// 而且讀取的那幾秒畫面還停在原本那組，這時再按「新增」會送出沒有群組的請求(老闆實際遇到「缺少群組代碼」)。
+// 改成讀完後那組還在就停在原本那組；切換門市、版本回溯這種換了編輯對象的情況，呼叫前自己清掉
 function loadMenuCms() {
-  mcCurrentGroupCode = null;
   return apiGet({ action: 'menuCmsData', storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
     mcCatalog = data.catalog;
@@ -1463,6 +1465,7 @@ function loadMenuCms() {
     mcItemGroups = data.itemGroups;
     mcItemComboGroups = data.itemComboGroups || {};
     mcCategoryOrder = data.categoryOrder || Object.keys(data.catalog);
+    if (mcCurrentGroupCode && mcCurrentGroupCode !== 'NEW' && !mcOptionGroups[mcCurrentGroupCode]) mcCurrentGroupCode = null;   // 那組已經不在(被刪/回溯)才關
     if (MC_STATUS === 'draft') refreshMenuPublishDiff_();   // 草稿還沒發布提醒
     renderMcCatList();
     renderGroupLibrary();
@@ -1501,6 +1504,7 @@ function mcSwitchStore(storeId) {
   document.getElementById('mc-publish-row').style.display = storeId === '__brand__' ? 'none' : 'flex';
   document.getElementById('mc-sync-row').style.display = storeId === '__brand__' ? 'flex' : 'none';
   document.getElementById('mc-snapshot-panel').style.display = 'none'; // 換了編輯對象，收合快照面板避免看到上一個門市的快照
+  mcCurrentGroupCode = null;   // 換門市：關掉正在編輯的群組
   loadMenuCms();
   mbLoaded.points = false;
   mbLoaded.promo = false;
@@ -2309,7 +2313,23 @@ function hasNegativeAmount_(values) {
   return values.some(v => v !== '' && v !== undefined && v !== null && Number(v) < 0);
 }
 
+// 選項的儲存/新增/刪除送出期間(含存完重新讀菜單那幾秒)：整組按鈕先變灰，避免按兩次(2026-09-28)
+let mcValueBusy_ = false;
+function mcValueBusy_run_(work) {
+  if (mcValueBusy_) return;
+  const editor = document.getElementById('mc-group-editor') || document;
+  const btns = [...editor.querySelectorAll('.mc-value-row button, button[onclick="addMcOptionValue()"]')];
+  mcValueBusy_ = true;
+  btns.forEach(b => { b.disabled = true; b.style.opacity = '0.45'; });
+  const p = work();
+  (p && p.finally ? p : Promise.resolve()).finally(() => {
+    mcValueBusy_ = false;
+    btns.forEach(b => { b.disabled = false; b.style.opacity = ''; });   // 成功時編輯區會重畫，這裡是失敗時還原
+  });
+}
+
 function saveMcOptionValueRow(btn) {
+  if (mcValueBusy_) return;
   const row = btn.closest('.mc-value-row');
   const nameInput = row.querySelector('.mc-v-name');
   const name = nameInput.value.trim();
@@ -2327,23 +2347,25 @@ function saveMcOptionValueRow(btn) {
     status: MC_STATUS
   };
   if (mcHasNegativePrice_(payload)) { alert('加價金額不能是負數'); return; }
-  apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
+  mcValueBusy_run_(() => apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     return loadMenuCms();
-  }).catch(err => alert('儲存失敗：' + err.message));
+  }).catch(err => alert('儲存失敗：' + err.message)));
 }
 
 function deleteMcOptionValueRow(btn) {
+  if (mcValueBusy_) return;
   const row = btn.closest('.mc-value-row');
   const name = row.querySelector('.mc-v-name').getAttribute('data-orig');
   if (!confirm('確定要刪除選項「' + name + '」嗎？')) return;
-  apiPost({ action: 'deleteOptionValue', groupCode: mcCurrentGroupCode, name: name, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
+  mcValueBusy_run_(() => apiPost({ action: 'deleteOptionValue', groupCode: mcCurrentGroupCode, name: name, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     return loadMenuCms();
-  }).catch(err => alert('刪除失敗：' + err.message));
+  }).catch(err => alert('刪除失敗：' + err.message)));
 }
 
 function addMcOptionValue() {
+  if (mcValueBusy_) return;
   const name = document.getElementById('mc-newv-name').value.trim();
   if (!name) { alert('請輸入選項名稱'); return; }
   const payload = {
@@ -2357,10 +2379,10 @@ function addMcOptionValue() {
     status: MC_STATUS
   };
   if (mcHasNegativePrice_(payload)) { alert('加價金額不能是負數'); return; }
-  apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
+  mcValueBusy_run_(() => apiPost({ action: 'upsertOptionValue', value: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '新增失敗');
     return loadMenuCms();
-  }).catch(err => alert('新增失敗：' + err.message));
+  }).catch(err => alert('新增失敗：' + err.message)));
 }
 
 function saveMcGroup() {
