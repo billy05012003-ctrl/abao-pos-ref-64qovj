@@ -899,9 +899,11 @@ function renderCartRedeem_() {
   if (!box) return;
   if (!verifiedMember || !POINT_REDEMPTION_CATALOG.length) { box.innerHTML = ''; return; }
   const pts = Number(verifiedMember.points) || 0;
+  // 2026-09-28老闆要求：購物車太長，集點兌換預設收起，標題列顯示點數與可兌換幾項，點開才列清單(開關狀態記在cartRedeemOpen_)
+  const canCount = POINT_REDEMPTION_CATALOG.filter(e => pts >= e.points).length;
   box.innerHTML = `
-    <div style="border:1px dashed var(--border);border-radius:8px;padding:6px 10px;">
-      <div style="font-size:0.82rem;font-weight:600;color:var(--muted);margin-bottom:2px;">集點兌換（目前 ${pts} 點）</div>
+    <details ${cartRedeemOpen_ ? 'open' : ''} ontoggle="cartRedeemOpen_ = this.open" style="border:1px dashed var(--border);border-radius:8px;padding:6px 10px;">
+      <summary style="font-size:0.82rem;font-weight:600;color:var(--muted);cursor:pointer;">集點兌換（目前 ${pts} 點${canCount ? `，可兌換 ${canCount} 項` : ''}）</summary>
       ${POINT_REDEMPTION_CATALOG.map((e, idx) => {
         const enough = pts >= e.points;
         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:0.82rem;${enough ? '' : 'opacity:0.5;'}">
@@ -909,8 +911,9 @@ function renderCartRedeem_() {
           <button type="button" class="btn-secondary" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" ${enough ? '' : 'disabled'} onclick="redeemPointsInCart_(this, ${idx})">兌換</button>
         </div>`;
       }).join('')}
-    </div>`;
+    </details>`;
 }
+var cartRedeemOpen_ = false;   // var：renderCartRedeem_寫在前面，避免let暫時性死區
 function redeemPointsInCart_(btn, idx) {
   const entry = POINT_REDEMPTION_CATALOG[idx];
   if (!entry) return;
@@ -1723,6 +1726,9 @@ function confirmDrinkCustom() {
   }
   document.getElementById('drink-overlay').classList.remove('open');
   updateItemModalTotal();
+  // 套餐分步驟：飲料那一步只有選飲料一件事，冰塊甜度按「確定」後直接進下一步，不用回清單再按一次(2026-09-28老闆要求)
+  const w = currentModal && currentModal.wiz;
+  if (w && WIZ_DRINK_GROUPS.includes(w.steps[w.idx].key) && !wizMissing_(w.steps[w.idx])) wizNext_();
 }
 
 function cancelDrinkCustom() {
@@ -1840,9 +1846,10 @@ function wizCustomHtml_(step) {
         <input type="radio" name="wiz-x1" style="width:20px;height:20px;flex:none;" ${checked ? 'checked' : ''} onchange="${onclick}">
         ${thumb}<span style="flex:1;font-size:0.92rem;">${label}${price ? `<br><span style="color:var(--muted);font-size:0.82rem;">${price}</span>` : ''}</span>
       </label>`;
+    // 2026-09-28老闆定案：加價購品項「點了才顯示價格」，沒點的只顯示品名
     return shopX1For_(m.cat).map(a => row(m.x1 === a.name, `wizPickX1_(${JSON.stringify(a.name).replace(/"/g, '&quot;')})`,
         a.photoUrl ? `<img src="${escapeHtml_(a.photoUrl)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex:none;">` : '<span style="width:52px;flex:none;"></span>',
-        escapeHtml_(a.name), '+$' + a.amount)).join('')
+        escapeHtml_(a.name), m.x1 === a.name ? '+$' + a.amount : '')).join('')
       + row(!m.x1 && m.wiz.none.x1, 'wizPickX1_(null)', '<span style="width:52px;flex:none;text-align:center;font-size:1.3rem;color:var(--muted);">✕</span>', '無須加價購', '');
   }
   if (step.key === 'x1sauce') {
@@ -1990,8 +1997,10 @@ function wizRender_() {
   sizeEl.style.display = step.size ? '' : 'none';
   const setform = sizeEl.querySelector('input[name="setform"]');
   if (setform) setform.closest('.size-select').style.display = 'none';   // 單點/套餐改用兩顆按鈕
-  const numbered = w.mode === 'upgrade' ? w.idx : w.idx + 1, count = w.mode === 'upgrade' ? w.steps.length - 1 : w.steps.length;
-  head.innerHTML = isSinglePage ? '' : `<div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">${w.mode === 'upgrade' ? '套餐 ' : ''}步驟 ${numbered}/${count}</div>
+  // 2026-09-28老闆要求：拿掉步驟總數(選了有醬料的加購品步驟數會變，1/4突然變3/6)，右邊改顯示目前小計
+  const numbered = w.mode === 'upgrade' ? w.idx : w.idx + 1;
+  head.innerHTML = isSinglePage ? '' : `<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:0.78rem;color:var(--muted);margin-top:2px;">
+      <span>${isConfirm ? '' : (w.mode === 'upgrade' ? '套餐 ' : '') + '步驟 ' + numbered}</span><span>小計 <b id="wiz-subtotal" style="color:var(--text);font-size:0.95rem;"></b></span></div>
     <div style="font-size:1.12rem;font-weight:700;margin:2px 0 4px;">${escapeHtml_(step.title)}</div>`;
   conf.style.display = isConfirm ? '' : 'none';
   if (isConfirm) conf.innerHTML = wizSummaryHtml_();
@@ -2017,6 +2026,8 @@ function wizRefresh_() {
   if (b) b.style.opacity = wizMissing_(m.wiz.steps[m.wiz.idx]) ? '0.45' : '1';
   const st = wizEl_('wiz-single-total');
   if (st) st.textContent = '$' + calcModalUnitPrice() * m.qty;
+  const sub = wizEl_('wiz-subtotal');
+  if (sub) sub.textContent = '$' + calcModalUnitPrice() * m.qty;
   m.wiz.steps.filter(s => s.exclusive).forEach(s => {
     const gk = s.gkeys[0], hasSel = (m.groups[gk] || []).length > 0;
     if (hasSel) m.wiz.none[gk] = false;
