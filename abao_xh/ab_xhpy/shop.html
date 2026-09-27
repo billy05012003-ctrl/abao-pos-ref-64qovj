@@ -2655,8 +2655,9 @@ function checkOrderWindow() {
 // 付款模式(團主開團時選)：「我請客」團主結單後一次付清(點數歸團主)；「各付各的」每人送出時付自己那份(各自拿點數)。
 // 揪團一律要會員。後端只信任它自己存的揪團資料，這裡只負責畫面。先內部測試：網址帶 ?grouptest=1 才看得到
 // 「揪朋友一起點」按鈕，朋友收到的揪團連結(?g=)一律可用。正式開放時把 GROUP_ORDER_OPEN 改成 true
+// 2026-09-27老闆指示：shop.html還沒對外公布，直接打開(不用再加?grouptest=1)
 // ---------------------------------------------------------------
-const GROUP_ORDER_OPEN = false;
+const GROUP_ORDER_OPEN = true;
 const URL_PARAMS_ = new URLSearchParams(location.search);
 const GROUP_ID_FROM_URL = URL_PARAMS_.get('g') || '';
 const GROUP_FEATURE_ON = GROUP_ORDER_OPEN || URL_PARAMS_.get('grouptest') === '1';
