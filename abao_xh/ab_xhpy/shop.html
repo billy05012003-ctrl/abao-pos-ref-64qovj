@@ -278,20 +278,25 @@
 <div class="overlay" id="item-overlay">
   <div class="sheet">
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
-      <button type="button" onclick="if (closeItemModal()) openCart();" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <button type="button" onclick="itemModalBack_()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
       <h2 id="item-modal-title" style="margin:0; flex:1;"></h2>
     </div>
+    <div id="item-wizard-head"></div>
     <div id="item-modal-size"></div>
     <div id="item-modal-groups"></div>
-    <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填，這則是給「這個品項」的備註）</label>
-    <textarea id="item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem;" maxlength="100" placeholder="例如：不要洋蔥" oninput="updateItemModalNoteCount_()"></textarea>
-    <div id="item-modal-note-count" style="text-align:right; font-size:0.75rem; color:var(--muted); margin-top:2px;">0/100</div>
-    <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:14px;">
+    <div id="item-wizard-confirm" style="display:none;"></div>
+    <div id="item-modal-note-wrap">
+      <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填，這則是給「這個品項」的備註）</label>
+      <textarea id="item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem;" maxlength="100" placeholder="例如：不要洋蔥" oninput="updateItemModalNoteCount_()"></textarea>
+      <div id="item-modal-note-count" style="text-align:right; font-size:0.75rem; color:var(--muted); margin-top:2px;">0/100</div>
+    </div>
+    <div id="item-modal-qty-row" style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:14px;">
       <button type="button" class="qty-btn" onclick="itemModalQty(-1)" style="width:34px;height:34px;font-size:1.2rem;">-</button>
       <span id="item-modal-qty" style="font-size:1.1rem; min-width:20px; text-align:center;">1</span>
       <button type="button" class="qty-btn" onclick="itemModalQty(1)" style="width:34px;height:34px;font-size:1.2rem;">+</button>
     </div>
-    <button class="btn-primary" onclick="confirmAddToCart()">新增至購物車　<span id="item-modal-total"></span></button>
+    <div id="item-wizard-nav"></div>
+    <button class="btn-primary" id="item-modal-confirm-btn" onclick="confirmAddToCart()">新增至購物車　<span id="item-modal-total"></span></button>
   </div>
 </div>
 
@@ -1469,6 +1474,7 @@ function openItemModal(cat, key, item) {
     sizeEl.querySelectorAll('input[name="setform"]').forEach(r => r.addEventListener('change', renderBundleExtras));
   }
 
+  setupSetWizard_();   // 套餐分步驟(2026-09-27)：不是套餐的品項會維持原本一頁選完
   updateItemModalTotal();
   document.getElementById('item-overlay').classList.add('open');
 }
@@ -1491,6 +1497,7 @@ function renderOptionGroup(container, gKey) {
   currentModal.groups[gKey] = [];
   const wrap = document.createElement('div');
   wrap.style.marginTop = '12px';
+  wrap.dataset.gkey = gKey;   // 套餐分步驟(2026-09-27)用來決定每一步顯示哪些群組
   if (gKey === 'drink_topping') wrap.id = 'option-group-drink_topping'; // 供尺寸切換時定位重繪
   wrap.innerHTML = `<div style="font-size:0.85rem;color:var(--muted);margin-bottom:4px;">${g.label}${g.required ? ' <span style=\"color:#c94f1f\">*必選</span>' : ''}</div>`;
   const optWrap = document.createElement('div');
@@ -1743,6 +1750,209 @@ function updateItemModalTotal() {
   if (!currentModal) return;
   const unit = calcModalUnitPrice();
   document.getElementById('item-modal-total').textContent = '$' + (unit * currentModal.qty);
+  wizRefresh_();
+}
+
+// ---- 套餐分步驟(2026-09-27加價購第3波，參考麥當勞手機點餐，設計見 線上點餐加購設計_2026-09-27.md) ----
+// 套餐一頁問一件事，按鈕寫「下一步：○○」，必選沒選完按鈕變淡；最後「確認您的餐點」頁逐項「變更」、選數量、加入購物車。
+// 兩種品項走分步驟：①有套餐價、選套餐會多出選項的(炒麵/鳳梨/特酥)：第一頁是單點，兩顆按鈕「加入購物車／升級套餐 +$差價」，
+// 升級才進步驟；②本身就是套餐的(掛了套餐飲料combo_drink：美式狂想/定食)。其他品項維持原本一頁選完。
+// 只改畫面(每一步顯示哪些群組)，選項、價格計算、送出、購物車都沿用原本的renderOptionGroup/calcModalUnitPrice/confirmAddToCart
+const WIZ_DRINK_GROUPS = ['combo_drink', 'small_drink'];
+const WIZ_EXCLUSIVE_GROUPS = ['deluxe_upgrade', 'dine_set_addon'];   // 套餐專屬加購：要選一項或勾「無須加價購」
+function wizGroupTitle_(gk) { return String((OPTION_GROUPS[gk] || {}).label || gk).replace('*必選', '').replace(/[（(].*$/, '').trim(); }
+function wizEl_(id) { return document.getElementById(id); }
+
+function setupSetWizard_() {
+  const m = currentModal;
+  m.wiz = null;
+  const gAll = groupsForCategory(m.cat, m.item.name);
+  if (m.item.price_set && comboOnlyGroupsFor(m.cat, m.item.name).length) {
+    m.wiz = { mode: 'upgrade', steps: [{ key: 'single', title: '餐點特製', gkeys: gAll.slice(), size: true }], idx: 0, none: {}, fromConfirm: false };
+  } else if (gAll.some(gk => WIZ_DRINK_GROUPS.includes(gk))) {
+    const steps = [{ key: 'main', title: '餐點特製', gkeys: gAll.filter(gk => !WIZ_DRINK_GROUPS.includes(gk) && !WIZ_EXCLUSIVE_GROUPS.includes(gk)), size: true }];
+    gAll.filter(gk => WIZ_DRINK_GROUPS.includes(gk)).forEach(gk => steps.push({ key: gk, title: wizGroupTitle_(gk), gkeys: [gk] }));
+    gAll.filter(gk => WIZ_EXCLUSIVE_GROUPS.includes(gk)).forEach(gk => steps.push({ key: gk, title: wizGroupTitle_(gk), gkeys: [gk], exclusive: true }));
+    steps.push({ key: 'confirm', title: '確認您的餐點' });
+    m.wiz = { mode: 'set', steps, idx: 0, none: {}, fromConfirm: false };
+    steps.filter(s => s.exclusive).forEach(s => wizAddNoneOption_(s.gkeys[0]));
+  }
+  wizRender_();
+}
+
+// 升級套餐：切到套餐價(原本的單點/套餐切換會長出套餐限定選項)，再依套餐限定選項排出步驟：點心 → 飲料 → 確認
+function wizBuildUpgradeSteps_() {
+  const m = currentModal;
+  const extra = comboOnlyGroupsFor(m.cat, m.item.name);
+  m.wiz.steps = [m.wiz.steps[0]];
+  extra.filter(gk => !WIZ_DRINK_GROUPS.includes(gk)).forEach(gk => m.wiz.steps.push({ key: gk, title: wizGroupTitle_(gk), gkeys: [gk], required: true }));
+  extra.filter(gk => WIZ_DRINK_GROUPS.includes(gk)).forEach(gk => m.wiz.steps.push({ key: gk, title: wizGroupTitle_(gk), gkeys: [gk], required: true }));
+  m.wiz.steps.push({ key: 'confirm', title: '確認您的餐點' });
+}
+function wizUpgrade_() {
+  const r = document.querySelector('#item-modal-size input[name="setform"][value="set"]');
+  if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event('change')); }
+  wizBuildUpgradeSteps_();
+  wizGo_(1);
+}
+function wizDowngrade_() {
+  clearDrinkCustom();   // 套餐飲料的冰塊甜度不能跟著留在單點上
+  const r = document.querySelector('#item-modal-size input[name="setform"][value="single"]');
+  if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event('change')); }
+  currentModal.wiz.steps = [currentModal.wiz.steps[0]];
+  wizGo_(0);
+}
+
+function wizAddNoneOption_(gk) {
+  const wrap = document.querySelector(`#item-modal-groups [data-gkey="${gk}"]`);
+  if (!wrap) return;
+  const lab = document.createElement('label');
+  lab.style.cssText = 'display:block;margin:8px 0 2px;font-size:0.82rem;';
+  lab.innerHTML = `<input type="radio" id="wiz-none-${gk}" autocomplete="off"> ✕ 無須加價購`;
+  wrap.appendChild(lab);
+  lab.querySelector('input').onchange = e => {
+    if (!e.target.checked) return;
+    currentModal.wiz.none[gk] = true;
+    currentModal.groups[gk] = [];
+    wrap.querySelectorAll(`input[name="${gk}"]`).forEach(i => { i.checked = false; });
+    updateItemModalTotal();
+  };
+}
+
+// 這一步還缺什麼(空字串＝可以下一步)；最後加入購物車時confirmAddToCart還會再完整檢查一次
+function wizMissing_(step) {
+  const m = currentModal;
+  for (const gk of (step.gkeys || [])) {
+    const g = OPTION_GROUPS[gk] || {};
+    const sel = m.groups[gk] || [];
+    if (step.exclusive) { if (!sel.length && !m.wiz.none[gk]) return '請選一項，不需要的話請勾「無須加價購」'; continue; }
+    if ((g.required || step.required) && !sel.length) return '請選擇「' + wizGroupTitle_(gk) + '」';
+    if (WIZ_DRINK_GROUPS.includes(gk) && sel.length) {
+      if (gk === 'combo_drink') { const p = COMBO_DRINK_PRICES[sel[0]]; if (p && p.single == null && !m.comboDrinkSize) return '請選擇飲料的份量（M/L）'; }
+      for (const dgk of (m.comboDrinkExtraGroups || [])) {
+        const dg = OPTION_GROUPS[dgk];
+        if (dg && dg.required && !(m.groups[dgk] || []).length) return '請選擇飲料的「' + dg.label + '」';
+      }
+    }
+  }
+  return '';
+}
+
+function wizGo_(idx, fromConfirm) {
+  const w = currentModal.wiz;
+  w.idx = idx;
+  if (fromConfirm !== undefined) w.fromConfirm = fromConfirm;
+  if (w.steps[idx].key === 'confirm') w.fromConfirm = false;
+  wizRender_();
+  const sheet = document.querySelector('#item-overlay .sheet');
+  if (sheet) sheet.scrollTop = 0;
+}
+function wizNext_() {
+  const w = currentModal.wiz;
+  const miss = wizMissing_(w.steps[w.idx]);
+  if (miss) { alert(miss); return; }
+  wizGo_(w.fromConfirm ? w.steps.length - 1 : w.idx + 1);
+}
+function wizEdit_(i) { wizGo_(i, true); }
+// 左上角←：變更中＝回確認頁；步驟中＝上一步(升級套餐的第一步再往回＝回到單點)；第一頁＝關閉(原本行為)
+function itemModalBack_() {
+  const w = currentModal && currentModal.wiz;
+  if (w) {
+    if (w.fromConfirm) { wizGo_(w.steps.length - 1); return; }
+    if (w.idx > 0) { if (w.mode === 'upgrade' && w.idx === 1) wizDowngrade_(); else wizGo_(w.idx - 1); return; }
+  }
+  if (closeItemModal()) openCart();
+}
+
+function wizRender_() {
+  const m = currentModal, w = m.wiz;
+  const head = wizEl_('item-wizard-head'), nav = wizEl_('item-wizard-nav'), conf = wizEl_('item-wizard-confirm');
+  const sizeEl = wizEl_('item-modal-size'), noteWrap = wizEl_('item-modal-note-wrap'), qtyRow = wizEl_('item-modal-qty-row'), btn = wizEl_('item-modal-confirm-btn');
+  const wraps = [...document.querySelectorAll('#item-modal-groups [data-gkey]')];
+  if (!w) {
+    head.innerHTML = ''; nav.innerHTML = ''; conf.innerHTML = ''; conf.style.display = 'none';
+    sizeEl.style.display = ''; wraps.forEach(x => { x.style.display = ''; });
+    noteWrap.style.display = ''; qtyRow.style.display = ''; btn.style.display = '';
+    return;
+  }
+  const step = w.steps[w.idx];
+  const isConfirm = step.key === 'confirm';
+  const isSinglePage = w.mode === 'upgrade' && w.idx === 0 && !w.fromConfirm;
+  wraps.forEach(x => { x.style.display = (!isConfirm && (step.gkeys || []).includes(x.dataset.gkey)) ? '' : 'none'; });
+  sizeEl.style.display = step.size ? '' : 'none';
+  const setform = sizeEl.querySelector('input[name="setform"]');
+  if (setform) setform.closest('.size-select').style.display = 'none';   // 單點/套餐改用兩顆按鈕
+  const numbered = w.mode === 'upgrade' ? w.idx : w.idx + 1, count = w.mode === 'upgrade' ? w.steps.length - 1 : w.steps.length;
+  head.innerHTML = isSinglePage ? '' : `<div style="font-size:0.78rem;color:var(--muted);margin-top:2px;">${w.mode === 'upgrade' ? '套餐 ' : ''}步驟 ${numbered}/${count}</div>
+    <div style="font-size:1.12rem;font-weight:700;margin:2px 0 4px;">${escapeHtml_(step.title)}</div>`;
+  conf.style.display = isConfirm ? '' : 'none';
+  if (isConfirm) conf.innerHTML = wizSummaryHtml_();
+  noteWrap.style.display = (isConfirm || isSinglePage) ? '' : 'none';
+  qtyRow.style.display = (isConfirm || isSinglePage) ? '' : 'none';
+  btn.style.display = isConfirm ? '' : 'none';
+  if (isSinglePage) {
+    const diff = m.item.price_set - m.item.price;
+    nav.innerHTML = `<div style="display:flex;gap:10px;margin-top:12px;">
+      <button type="button" class="btn-secondary" style="flex:1;margin:0;" onclick="confirmAddToCart()">${m.editingLineKey ? '更新餐點' : '加入購物車'}　<span id="wiz-single-total"></span></button>
+      <button type="button" class="btn-primary" style="flex:1;margin:0;" onclick="wizUpgrade_()">升級套餐 +$${diff}</button>
+    </div>`;
+  } else if (!isConfirm) {
+    nav.innerHTML = `<button type="button" class="btn-primary" id="wiz-next-btn" onclick="wizNext_()">${w.fromConfirm ? '完成變更' : '下一步：' + escapeHtml_(w.steps[w.idx + 1].title)}</button>`;
+  } else nav.innerHTML = '';
+  wizRefresh_();
+}
+
+function wizRefresh_() {
+  const m = currentModal;
+  if (!m || !m.wiz) return;
+  const b = wizEl_('wiz-next-btn');
+  if (b) b.style.opacity = wizMissing_(m.wiz.steps[m.wiz.idx]) ? '0.45' : '1';
+  const st = wizEl_('wiz-single-total');
+  if (st) st.textContent = '$' + calcModalUnitPrice() * m.qty;
+  m.wiz.steps.filter(s => s.exclusive).forEach(s => {
+    const gk = s.gkeys[0], hasSel = (m.groups[gk] || []).length > 0;
+    if (hasSel) m.wiz.none[gk] = false;
+    const n = wizEl_('wiz-none-' + gk);
+    if (n) n.checked = !!m.wiz.none[gk];
+  });
+}
+
+function wizSummaryHtml_() {
+  const m = currentModal, w = m.wiz;
+  return w.steps.map((s, i) => {
+    if (s.key === 'confirm') return '';
+    let text;
+    if (s.key === 'single' || s.key === 'main') {
+      const opts = (s.gkeys || []).flatMap(gk => m.groups[gk] || []);
+      const name = m.item.name + (m.size ? ' ' + m.size : '') + (w.mode === 'upgrade' ? '（套餐）' : '');
+      text = `<b>${escapeHtml_(name)}</b>${opts.length ? '<br><span style="color:var(--muted);font-size:0.82rem;">' + escapeHtml_(opts.join('、')) + '</span>' : ''}`;
+    } else {
+      const gk = s.gkeys[0], sel = m.groups[gk] || [];
+      let v = sel.join('、');
+      if (WIZ_DRINK_GROUPS.includes(gk) && sel.length) {
+        const extra = (m.comboDrinkExtraGroups || []).flatMap(dgk => m.groups[dgk] || []);
+        v = sel[0] + (gk === 'combo_drink' && m.comboDrinkSize ? ' ' + m.comboDrinkSize.toUpperCase() : '') + (extra.length ? '（' + extra.join('、') + '）' : '');
+      }
+      if (!sel.length && s.exclusive) v = '無須加價購';
+      text = `<span style="color:var(--muted);font-size:0.78rem;">${escapeHtml_(s.title)}</span><br>${escapeHtml_(v || '（未選）')}`;
+    }
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;font-size:0.9rem;line-height:1.45;">${text}</div>
+      <button type="button" onclick="wizEdit_(${i})" style="border:1px solid #777;background:#fff;color:var(--text);border-radius:999px;padding:5px 14px;font-size:0.85rem;white-space:nowrap;cursor:pointer;">變更</button>
+    </div>`;
+  }).join('');
+}
+
+// 從購物車點「變更」回來(editCartLine還原完選擇之後)：套餐直接進確認頁，單點停在第一頁
+function wizAfterRestore_() {
+  const m = currentModal;
+  if (!m || !m.wiz) return;
+  if (m.wiz.mode === 'upgrade') {
+    if (m.basePrice !== m.item.price_set) { wizRender_(); return; }
+    wizBuildUpgradeSteps_();
+  }
+  m.wiz.steps.filter(s => s.exclusive).forEach(s => { m.wiz.none[s.gkeys[0]] = !(m.groups[s.gkeys[0]] || []).length; });
+  wizGo_(m.wiz.steps.length - 1);
 }
 
 function closeItemModal() {
@@ -1879,6 +2089,7 @@ function editCartLine(lineKey) {
   const btn = ov.querySelector('button.btn-primary[onclick="confirmAddToCart()"]');
   if (btn) btn.innerHTML = '更新餐點　<span id="item-modal-total"></span>';
   updateItemModalTotal();
+  wizAfterRestore_();   // 套餐分步驟：套餐直接進「確認您的餐點」頁，要改哪項按那項的「變更」
 }
 
 function updateCartBar() {
