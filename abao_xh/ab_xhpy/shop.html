@@ -312,6 +312,7 @@
       <h2>我的訂單</h2>
       <div id="cart-lines"></div>
       <div class="cart-total"><span>總計</span><span id="cart-total">$0</span></div>
+      <div id="cart-otherneeds"></div>
       <div id="group-cart-box" style="display:none;margin:10px 0;padding:10px;border:1px solid #b9dcff;border-radius:10px;background:#f4faff;">
         <div id="group-cart-hint" style="font-size:0.85rem;color:#0c447c;margin-bottom:6px;"></div>
         <label id="group-my-name-label">你的名字（出單會印在你的餐點上）</label>
@@ -457,10 +458,12 @@ let POINT_REDEMPTION_CATALOG = [];
 // 2026-09-16會員等級說明頁新增：保留一份原始promos陣列(含minTier/allowNonMember)，
 // 上面VOUCHER_BEHAVIOR轉換過程會把這些欄位丟掉，等級說明頁篩選「這個等級能用的限定優惠」要用原始資料
 let ALL_PROMOS = [];
+let SHOP_ADDONS = [];   // 加價購(2026-09-27)：×1套餐加購價商品／×2結帳其他需求，後台「優惠券 → 加價購」設定
 
 function applyPromoSettings_(data) {
   VOUCHER_BEHAVIOR = {};
   ALL_PROMOS = data.promos || [];
+  SHOP_ADDONS = data.addons || [];
   // 自訂折數(整張訂單打折mode:'order'／單品effect:'pct'，2026-09-25新增)老闆定案先只在POS用，線上不列出
   // (客人名下若有這種券，線上結帳清單會自動略過，要到門市POS使用)
   ALL_PROMOS.filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton) && p.mode !== 'order' && p.effect !== 'pct').forEach(p => {
@@ -1207,19 +1210,73 @@ function tierPerkText_(p) {
   return parts.join('、');
 }
 
-// 購物車應付金額(原價−兌換券−會員等級權益)；購物車總計/下方購物車列/結帳預覽共用
+// ---- 加價購×2「其他需求」(2026-09-27老闆定案)：整張訂單結帳前問一次，可複選＋「無須加價購」，
+// 選了才能填取餐資訊；金額不參加任何折扣，直接加在應付金額上。揪團先不問(後端也不收)。
+// 勾「有點飲料才顯示」的項目(自用杯這類)購物車有飲料才出現；互斥的項目勾了對方就變灰
+let otherNeedsSel = [];       // 勾選的名稱
+let otherNeedsNone = false;   // 勾了「無須加價購」
+const ADDON_STATUS_PREFIX = '加價購｜';   // 平板「本日售完」存在品項狀態表的前綴，跟後端一致
+function cartHasDrink_() {
+  return cart.some(c => DRINK_ITEM_CATEGORY[c.baseName] || (c.edit && (DRINK_FAMILY.includes(c.edit.cat) || c.edit.comboDrinkName
+    || ((c.edit.groups || {}).small_drink || []).length || ((c.edit.groups || {}).combo_drink || []).length)));
+}
+function otherNeedsOptions_() {
+  if (groupCheckoutMode || (groupCtx && groupView)) return [];
+  const hasDrink = cartHasDrink_();
+  return SHOP_ADDONS.filter(a => a.type === 'x2' && a.status !== '停用' && isPromoInPeriod_(a)
+    && !itemAvailabilityMap[ADDON_STATUS_PREFIX + a.name] && (!a.drinkOnly || hasDrink));
+}
+function otherNeedsChosen_() {
+  return otherNeedsOptions_().filter(a => otherNeedsSel.includes(a.name));
+}
+function otherNeedsSum_() { return otherNeedsChosen_().reduce((s, a) => s + a.amount, 0); }
+function otherNeedPriceText_(amt) { return amt ? (amt > 0 ? '+$' : '-$') + Math.abs(amt) : ''; }
+function renderOtherNeeds_() {
+  const el = document.getElementById('cart-otherneeds');
+  if (!el) return;
+  const opts = otherNeedsOptions_();
+  if (!opts.length || !cart.length) { el.innerHTML = ''; return; }
+  const chosen = opts.filter(a => otherNeedsSel.includes(a.name));
+  const blocked = a => chosen.some(c => c.name !== a.name && (c.excludes.includes(a.name) || a.excludes.includes(c.name)));
+  const row = (checked, disabled, label, price, onchange) => `
+    <label style="display:flex;align-items:center;gap:10px;padding:7px 2px;font-size:0.92rem;cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? 0.45 : 1};">
+      <input type="checkbox" style="width:20px;height:20px;flex:none;" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="${onchange}">
+      <span style="flex:1;">${label}</span><span style="color:var(--muted);font-size:0.85rem;">${price}</span>
+    </label>`;
+  el.innerHTML = `<div id="otherneeds-box" style="margin:10px 0;padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
+      <div style="font-weight:600;font-size:0.92rem;margin:2px 0 4px;">其他需求（可複選）<span style="color:#c0392b;font-size:0.78rem;font-weight:normal;">*必選</span></div>
+      ${opts.map(a => row(otherNeedsSel.includes(a.name), blocked(a), escapeHtml_(a.name), otherNeedPriceText_(a.amount), `toggleOtherNeed_(${JSON.stringify(a.name).replace(/"/g, '&quot;')}, this.checked)`)).join('')}
+      ${row(otherNeedsNone, false, '✕ 無須加價購', '', 'toggleOtherNeedNone_(this.checked)')}
+    </div>`;
+}
+function toggleOtherNeed_(name, checked) {
+  otherNeedsSel = otherNeedsSel.filter(n => n !== name);
+  if (checked) { otherNeedsSel.push(name); otherNeedsNone = false; }
+  renderOtherNeeds_();
+  updateCheckoutTotalDisplay();
+}
+function toggleOtherNeedNone_(checked) {
+  otherNeedsNone = checked;
+  if (checked) otherNeedsSel = [];
+  renderOtherNeeds_();
+  updateCheckoutTotalDisplay();
+}
+
+// 購物車應付金額(原價−兌換券−會員等級權益＋其他需求)；購物車總計/下方購物車列/結帳預覽共用
 function cartDue_() {
   const raw = cart.reduce((s, c) => s + c.qty * c.price, 0);
   const perks = myTierPerks_(cart);
   const discount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
-  return { raw, perks, discount, due: Math.max(0, raw - discount - perks.total) };
+  const needs = otherNeedsSum_();
+  return { raw, perks, discount, needs, due: Math.max(0, Math.max(0, raw - discount - perks.total) + needs) };
 }
-// 購物車總計(2026-09-25老闆要求)：有折扣時顯示「原價(劃掉) → 應付」，避免總計跟應付金額對不起來
+// 購物車總計(2026-09-25老闆要求)：有折扣時顯示「原價(劃掉) → 應付」，避免總計跟應付金額對不起來；
+// 其他需求有加錢時(應付比原價多)直接顯示應付金額
 function renderCartTotals_(d) {
   const totalEl = document.getElementById('cart-total');
   if (totalEl) totalEl.innerHTML = d.due < d.raw
     ? `<span style="color:var(--muted);font-weight:normal;text-decoration:line-through;font-size:0.9rem;margin-right:6px;">$${d.raw}</span>應付 $${d.due}`
-    : '$' + d.raw;
+    : d.due > d.raw ? '應付 $' + d.due : '$' + d.raw;
   const barEl = document.getElementById('cart-total-bar');
   if (barEl) barEl.textContent = '$' + d.due;
 }
@@ -1230,10 +1287,11 @@ function updateCheckoutTotalDisplay() {
   const d = cartDue_();
   renderCartTotals_(d);
   refreshTierPerkBadges_();
-  if (!d.discount && !d.perks.total) { el.textContent = ''; return; }
+  if (!d.discount && !d.perks.total && !d.needs) { el.textContent = ''; return; }
   const parts = [];
   if (d.perks.total) parts.push(`會員權益（${verifiedMember.tier}）${tierPerkText_(d.perks)}`);
   if (d.discount) parts.push(`兌換券折抵 -$${d.discount}`);
+  if (d.needs) parts.push(`其他需求 ${otherNeedPriceText_(d.needs)}`);
   el.textContent = `${parts.join('；')}，應付金額 $${d.due}`;
 }
 
@@ -1861,6 +1919,7 @@ function renderCart() {
   document.getElementById('cart-total').textContent = '$' + total;
   // 購物車重繪時一併刷新兌換券清單/折抵預覽，反映最新的購物車內容(哪些券還能套用、金額對不對)
   if (checkoutMemberVouchers.length || checkoutSelectedVouchers.length) renderCheckoutVoucherList();
+  renderOtherNeeds_();            // 其他需求(購物車有沒有飲料會影響「有點飲料才顯示」的項目)
   updateCheckoutTotalDisplay();   // 會員等級權益不用選券也會有折抵，一律刷新
 }
 
@@ -1892,6 +1951,12 @@ function showCheckout() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
   const currentPhone = document.getElementById('cust-phone').value.trim();
   if (!verifiedMember || verifiedMember.phone !== currentPhone) { alert('請先完成會員驗證，才能填寫取餐資訊'); document.getElementById('cust-phone').focus(); return; }
+  if (otherNeedsOptions_().length && !otherNeedsNone && !otherNeedsChosen_().length) {
+    alert('請選擇「其他需求」，不需要的話請勾「無須加價購」');
+    const box = document.getElementById('otherneeds-box');
+    if (box) { box.scrollIntoView({ behavior: 'smooth', block: 'center' }); box.style.borderColor = '#c0392b'; }
+    return;
+  }
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
   populatePickupDate();
   populatePickupTime(document.getElementById('pickup-date').value);
@@ -1911,6 +1976,7 @@ function closeAll() {
   cart = [];
   checkoutMemberVouchers = [];
   checkoutSelectedVouchers = [];
+  otherNeedsSel = []; otherNeedsNone = false;
   saveCartSession();
   updateCartBar();
 }
@@ -1943,7 +2009,9 @@ function submitOrder(e) {
   const rawTotal = cart.reduce((s, c) => s + c.qty * c.price, 0);
   const voucherDiscount = checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
   const perks = myTierPerks_(cart);   // 會員等級權益(後端會用同一套規則驗證)
-  const total = Math.max(0, rawTotal - voucherDiscount - perks.total);
+  const otherNeeds = otherNeedsChosen_();   // 加價購×2其他需求(不打折，直接加在應付金額上)
+  const otherNeedsSum = otherNeeds.reduce((s, a) => s + a.amount, 0);
+  const total = Math.max(0, Math.max(0, rawTotal - voucherDiscount - perks.total) + otherNeedsSum);
   const appliedVoucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   // 2026-09-19：補送品項備註(note)，出單機廚房單會印在該品項下面；之前只送name/size/qty/price，客人寫的「少蔥」等會遺失
@@ -1954,7 +2022,8 @@ function submitOrder(e) {
   const payAtPickupChosen = PAY_AT_PICKUP_ENABLED && document.getElementById('checkout-payment-method').value === '取餐付款';
 
   const lines = cart.map(c => `- ${c.who ? '['+c.who+'] ' : ''}${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
-  const discountLine = (perks.total ? `會員權益（${verifiedMember.tier}）：${tierPerkText_(perks)}\n` : '') + (voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '');
+  const discountLine = (perks.total ? `會員權益（${verifiedMember.tier}）：${tierPerkText_(perks)}\n` : '') + (voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '')
+    + (otherNeeds.length ? `其他需求：${otherNeeds.map(a => a.name + (a.amount ? '(' + otherNeedPriceText_(a.amount) + ')' : '')).join('、')}\n` : '');
   const paymentNote = payAtPickupChosen
     ? '（已選擇取餐現場付款，請於取餐時完成付款）'
     : '（已完成線上信用卡付款，取餐時請出示此訂單編號）';
@@ -1984,6 +2053,7 @@ function submitOrder(e) {
     // 2026-09-19：帶上已驗證的會員電話與所選兌換券編號，由後端驗證券、付款成功時核銷券並核發點數(不再靠付款後回到本頁才核銷)
     memberPhone: phone,
     voucherIds: appliedVoucherIds,
+    otherNeeds: otherNeeds.map(a => a.name),   // 只送名稱，金額由後端照後台正式版重算
     paymentMethod: payAtPickupChosen ? '取餐付款' : undefined,
     // 揪團結帳：後端改用揪團明細建單(不信任這裡的items)，並把訂單掛回揪團
     groupId: groupCheckoutMode && groupCtx ? groupCtx.groupId : undefined,
