@@ -333,9 +333,9 @@
         <button type="button" class="btn-primary" id="group-submit-btn" onclick="submitMyGroupItems()">送出我的餐點到揪團</button>
       </div>
       <div id="cart-member-block" style="margin:10px 0;padding-top:10px;border-top:1px dashed var(--border);">
-        <label>會員手機（需完成會員驗證才能送出訂單）</label>
+        <label id="cust-phone-label">會員手機（需完成會員驗證才能送出訂單）</label>
         <input type="tel" id="cust-phone" maxlength="10" pattern="09\d{8}" inputmode="numeric" autocomplete="tel" oninput="onCustPhoneInput_()" onblur="onCustPhoneInput_()">
-        <button type="button" class="btn-secondary" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="verifyMember()">確認手機號碼</button>
+        <button type="button" class="btn-secondary" id="cust-phone-verify-btn" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="verifyMember()">確認手機號碼</button>
         <button type="button" style="width:auto;padding:6px 0;margin-top:6px;margin-left:10px;background:none;border:none;color:var(--brand);font-size:0.85rem;text-decoration:underline;cursor:pointer;" onclick="openTierOverlay()">會員等級與專屬好禮</button>
         <div id="member-verify-result" style="margin-top:8px;font-size:0.85rem;"></div>
         <div id="cart-redeem-box" style="margin-top:8px;"></div>
@@ -445,12 +445,135 @@ const APP_KEY = 'abao-meibao-2026';
 // 2026-09-13發現：同一組查詢字串重複打會被瀏覽器/Google那邊快取住，改後台設定後同分頁沒重新整理
 // 還是讀到舊資料，過去交接記錄裡好幾次寫的「Google暫時性404/延遲」很可能有一部分其實是這個快取問題。
 // 補上_=時間戳記防快取參數，確保每次都真的打到最新資料
+// 2026-09-29 LINE 登入：登入後每個請求自動帶 LINE 通行證(lineSession)，後端以 LINE 綁定的會員為準
 function apiGet_(params) {
-  const qs = new URLSearchParams({ ...params, appKey: APP_KEY, _: Date.now() }).toString();
-  return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json());
+  const qs = new URLSearchParams({ ...params, ...(lineSession_ ? { lineSession: lineSession_ } : {}), appKey: APP_KEY, _: Date.now() }).toString();
+  return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json()).then(lineSessionCheck_);
 }
 function apiPost_(payload) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) }).then(r => r.json());
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, ...(lineSession_ ? { lineSession: lineSession_ } : {}), appKey: APP_KEY }) }).then(r => r.json()).then(lineSessionCheck_);
+}
+
+// ---------------------------------------------------------------
+// LINE 登入（2026-09-29，設計見 LINE登入設計_2026-09-28.md）：老闆定案點餐一定要 LINE 登入。
+// LIFF 登入 → ID token 送後端 lineLogin(後端向 LINE 驗證) → 拿 6 小時通行證；沒綁過會員就填手機姓名 lineRegister。
+// 會員手機仍放在原本的 #cust-phone(隱藏)，後面結帳/揪團/兌換券的既有流程都照舊讀它，不用各自改
+// ---------------------------------------------------------------
+const LIFF_ID = '2011773510-WG4YyKFL';
+// 正式上線時改 true(同時後端 LINE_LOGIN_REQUIRED_ 改 true、LINE Login 頻道要先 Publish)；
+// 上線前只有測試頁 line_test.html(或網址加 ?linetest=1)走 LINE 登入
+const LINE_LOGIN_OPEN = false;
+const LINE_LOGIN_ON = LINE_LOGIN_OPEN || /\/line_test\.html$/.test(location.pathname) || new URLSearchParams(location.search).get('linetest') === '1';
+var lineSession_ = '';   // var：apiGet_/apiPost_ 可能在這行之前就被呼叫
+var lineExpiredShown_ = false;
+function lineSessionCheck_(data) {
+  if (LINE_LOGIN_ON && data && data.code === 'line_session' && !lineExpiredShown_) {
+    lineExpiredShown_ = true;
+    alert('LINE 登入已過期，將重新整理頁面');
+    location.reload();
+  }
+  return data;
+}
+function loadLiffSdk_() {
+  if (window.liff) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
+    s.charset = 'utf-8';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('LINE 登入元件載入失敗'));
+    document.head.appendChild(s);
+  });
+}
+function lineStatusHtml_(html) {
+  document.getElementById('member-verify-result').innerHTML = html;
+}
+function lineLoginRedirect_() {
+  liff.login({ redirectUri: location.href });
+}
+function renderLineLoginButton_(msg) {
+  lineStatusHtml_(`
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;">
+      <div style="color:var(--muted);margin-bottom:8px;">${msg || '線上點餐需要 LINE 登入，登入後自動帶入會員資料'}</div>
+      <button type="button" class="btn-primary" style="margin-top:0;background:#06C755;border-color:#06C755;" onclick="lineLoginRedirect_()">用 LINE 登入</button>
+    </div>`);
+}
+async function initLineLogin_() {
+  document.getElementById('cust-phone-label').style.display = 'none';
+  document.getElementById('cust-phone').style.display = 'none';
+  document.getElementById('cust-phone-verify-btn').style.display = 'none';
+  document.getElementById('cust-phone').value = '';
+  lineStatusHtml_('<div style="color:var(--muted);">LINE 登入中...</div>');
+  try {
+    await loadLiffSdk_();
+    await liff.init({ liffId: LIFF_ID });
+  } catch (e) {
+    console.warn('LIFF 初始化失敗', e);
+    lineStatusHtml_(`<div style="color:#a30000;">LINE 登入元件載入失敗，請重新整理頁面，或從 LINE 官方帳號「A-Bao溪湖直營」的選單打開。</div>`);
+    return;
+  }
+  if (!liff.isLoggedIn()) { renderLineLoginButton_(); return; }
+  const idToken = liff.getIDToken();
+  if (!idToken) { renderLineLoginButton_('請重新用 LINE 登入'); return; }
+  let data;
+  try { data = await apiPost_({ action: 'lineLogin', idToken }); }
+  catch (e) { lineStatusHtml_('<div style="color:#a30000;">LINE 登入失敗，請確認網路連線後重新整理頁面</div>'); return; }
+  if (data.status === 'error' && data.code === 'line_token') {
+    // ID token 過期(LIFF 會沿用上次登入拿到的 token)：自動重新登入一次，還是失敗才顯示按鈕，避免無限重導
+    let retried = false;
+    try { retried = sessionStorage.getItem('abao_line_relogin') === '1'; } catch (e) {}
+    if (!retried) {
+      try { sessionStorage.setItem('abao_line_relogin', '1'); } catch (e) {}
+      liff.logout();
+      lineLoginRedirect_();
+      return;
+    }
+    renderLineLoginButton_('LINE 登入驗證失敗，請再登入一次');
+    return;
+  }
+  try { sessionStorage.removeItem('abao_line_relogin'); } catch (e) {}
+  if (!data.lineSession) { lineStatusHtml_(`<div style="color:#a30000;">${escapeHtml_(data.message || 'LINE 登入失敗，請重新整理頁面')}</div>`); return; }
+  lineSession_ = data.lineSession;
+  if (data.status === 'ok') applyLineMember_(data.member);
+  else renderLineRegister_(data.lineName || '');
+}
+function applyLineMember_(member) {
+  document.getElementById('cust-phone').value = member.phone;
+  const nameEl = document.getElementById('cust-name');
+  if (nameEl && !nameEl.value) nameEl.value = member.name || '';
+  renderMemberVerified_(member);
+  loadCheckoutVouchers();
+}
+function renderLineRegister_(lineName) {
+  lineStatusHtml_(`
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;">
+      <div style="color:var(--brand);font-weight:600;">歡迎加入會員（免費，立即生效）</div>
+      <div style="color:var(--muted);font-size:0.8rem;margin:2px 0 8px;">第一次用 LINE 點餐，請填手機與姓名，之後就自動認得你</div>
+      <label style="margin-top:0;">手機</label>
+      <input type="tel" id="line-reg-phone" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="09xxxxxxxx">
+      <label>姓名</label>
+      <input type="text" id="line-reg-name" maxlength="20" autocomplete="name" value="${escapeHtml_(lineName)}">
+      <div id="line-reg-msg" style="color:#a30000;font-size:0.82rem;margin-top:6px;"></div>
+      <button type="button" class="btn-primary" id="line-reg-btn" onclick="submitLineRegister_()">建立會員</button>
+    </div>`);
+}
+function submitLineRegister_() {
+  const phone = document.getElementById('line-reg-phone').value.trim();
+  const name = document.getElementById('line-reg-name').value.trim();
+  const msg = document.getElementById('line-reg-msg');
+  if (!isValidPhone_(phone)) { msg.textContent = '手機號碼格式不正確，請輸入09開頭的10碼數字'; return; }
+  if (!name) { msg.textContent = '請輸入姓名'; return; }
+  const btn = document.getElementById('line-reg-btn');
+  btn.disabled = true;
+  msg.textContent = '';
+  apiPost_({ action: 'lineRegister', phone, name }).then(data => {
+    if (data.status !== 'ok') {
+      msg.textContent = (data.message || '建立會員失敗') + ((data.code === 'phone_exists' || data.code === 'phone_bound_other') ? '（客服 0909-504662）' : '');
+      btn.disabled = false;
+      return;
+    }
+    applyLineMember_(data.member);
+  }).catch(() => { msg.textContent = '建立會員失敗，請確認網路連線後再試'; btn.disabled = false; });
 }
 // ---------------------------------------------------------------
 // 顧客自助兌換券系統（2026-09-03新增）：跟POS功能共用同一套後端API(getMember/getMemberVouchers/
@@ -2931,7 +3054,7 @@ function onGroupPayModeChange_() {
 }
 function openGroupCreate() {
   if (!cart.length) { alert('請先把你自己要吃的餐點加入購物車，再開團'); return; }
-  if (!groupVerifiedPhone_()) { alert('揪團需要會員，請先在下方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
+  if (!groupVerifiedPhone_()) { alert(LINE_LOGIN_ON ? '揪團需要會員，請先在下方用 LINE 登入並完成會員註冊' : '揪團需要會員，請先在下方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
   if (!otherNeedsReady_()) return;   // 團主自己的其他需求
   closeCart();
   const nm = document.getElementById('group-host-name');
@@ -2971,7 +3094,7 @@ function createGroup() {
 function submitMyGroupItems() {
   if (!cart.length) { alert('請先選購餐點'); return; }
   const phone = groupVerifiedPhone_();
-  if (!phone) { alert('揪團需要會員，請先在上方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
+  if (!phone) { alert(LINE_LOGIN_ON ? '揪團需要會員，請先在上方用 LINE 登入並完成會員註冊' : '揪團需要會員，請先在上方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
   const name = (groupCtx.name || document.getElementById('group-my-name').value).trim();
   if (!name) { alert('請填寫你的名字'); document.getElementById('group-my-name').focus(); return; }
   const each = isGroupEach_();
@@ -3193,7 +3316,15 @@ scheduleSettingsReady.then(() => {
 });
 loadCartSession();
 updateCartBar();
-prefillRememberedPhone_();
+if (LINE_LOGIN_ON) initLineLogin_();
+else {
+  prefillRememberedPhone_();
+  // 2026-09-29：LINE 登入完/從 liff.line.me 進來時，LINE 一律先回到 LIFF 設定的網址(本頁)並帶 liff.state=要去的頁；
+  // 正式頁還沒開 LINE 登入時也要交給 LIFF 處理登入結果並轉過去(測試頁 line_test.html)，不然會停在這裡。一般客人網址沒有 liff.state，不受影響
+  if (new URLSearchParams(location.search).has('liff.state')) {
+    loadLiffSdk_().then(() => liff.init({ liffId: LIFF_ID })).catch(e => console.warn('LIFF 轉址失敗', e));
+  }
+}
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 initGroupFromUrl_();
 

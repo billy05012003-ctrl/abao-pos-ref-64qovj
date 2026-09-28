@@ -3316,7 +3316,15 @@ scheduleSettingsReady.then(() => {
 });
 loadCartSession();
 updateCartBar();
-if (LINE_LOGIN_ON) initLineLogin_(); else prefillRememberedPhone_();
+if (LINE_LOGIN_ON) initLineLogin_();
+else {
+  prefillRememberedPhone_();
+  // 2026-09-29：LINE 登入完/從 liff.line.me 進來時，LINE 一律先回到 LIFF 設定的網址(本頁)並帶 liff.state=要去的頁；
+  // 正式頁還沒開 LINE 登入時也要交給 LIFF 處理登入結果並轉過去(測試頁 line_test.html)，不然會停在這裡。一般客人網址沒有 liff.state，不受影響
+  if (new URLSearchParams(location.search).has('liff.state')) {
+    loadLiffSdk_().then(() => liff.init({ liffId: LIFF_ID })).catch(e => console.warn('LIFF 轉址失敗', e));
+  }
+}
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 initGroupFromUrl_();
 
