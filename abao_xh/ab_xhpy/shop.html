@@ -2608,12 +2608,40 @@ function checkMpgReturn() {
   try { ctx = JSON.parse(localStorage.getItem('abao_mpg_pending_' + orderId) || 'null'); } catch (e) {}
   document.getElementById('checkout-form').style.display = 'none';
   document.getElementById('cart-view').style.display = 'none';
+  document.getElementById('confirm-view').style.display = 'none';
   document.getElementById('mpg-waiting-view').style.display = 'block';
+  // 2026-09-28(T7實測)：等待/完成畫面都在購物車視窗裡，導回後是新載入的頁面、視窗預設關著，
+  // 原本沒打開=客人付完款回來只看到菜單、看不到訂單編號
+  document.getElementById('cart-overlay').classList.add('open');
   pollMpgOrderStatus_(orderId, ctx, 0);
+}
+// 2026-09-28(T7實測)：導回網址的mpgreturn/orderId有結果後就從網址拿掉(保留mpgtest/grouptest等其他參數)，
+// 不然重新整理、從歷史紀錄/書籤打開、把網址傳到LINE，都會一直跳回那張舊單的畫面；
+// 逾時還沒確認到的情況不拿掉，客人照提示重新整理時才能再查一次
+function clearMpgReturnParams_() {
+  const u = new URL(location.href);
+  u.searchParams.delete('mpgreturn');
+  u.searchParams.delete('orderId');
+  history.replaceState(null, '', u.toString());
+}
+// 已退款/已作廢/找不到的單：不能卡在「確認付款中」，說明狀況並讓客人回到點餐
+function showMpgReturnEnded_(orderId, text) {
+  clearMpgReturnParams_();
+  const view = document.getElementById('mpg-waiting-view');
+  view.innerHTML = '<h2>訂單 ' + escapeHtml_(orderId) + '</h2><p style="color:#888;font-size:0.9rem;">' + escapeHtml_(text) +
+    '</p><button type="button" class="btn-primary" onclick="location.replace(location.href)">回到點餐</button>';
 }
 function pollMpgOrderStatus_(orderId, ctx, attempt) {
   apiGet_({ action: 'orderStatus', orderId }).then(data => {
-    if (data.status === 'ok' && (data.orderStatus === '未取餐' || data.orderStatus === '已取餐')) {
+    if (data.status === 'ok' && (data.orderStatus === '已退款' || data.orderStatus === '退款處理中' || data.orderStatus === '已作廢')) {
+      showMpgReturnEnded_(orderId, data.orderStatus === '已作廢'
+        ? '這筆訂單已作廢（未付款或已取消），如有疑問請來電客服 0909-504662。'
+        : '這筆訂單已' + (data.orderStatus === '已退款' ? '退款' : '在退款處理中') + '，如有疑問請來電客服 0909-504662。');
+      try { localStorage.removeItem('abao_mpg_pending_' + orderId); } catch (e) {}
+    } else if (data.status === 'error' && /找不到訂單/.test(data.message || '')) {
+      showMpgReturnEnded_(orderId, '查不到這筆訂單，請確認網址是否正確，或來電客服 0909-504662。');
+    } else if (data.status === 'ok' && (data.orderStatus === '未取餐' || data.orderStatus === '已取餐')) {
+      clearMpgReturnParams_();
       document.getElementById('mpg-waiting-view').style.display = 'none';
       if (ctx) {
         // 藍新付款已由NotifyURL在後端確認過，不能再呼叫confirmPayment(已停用，且不需要)
