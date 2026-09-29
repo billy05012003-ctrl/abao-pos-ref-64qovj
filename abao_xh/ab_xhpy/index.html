@@ -1083,6 +1083,44 @@ function voucherTargetText_(type) {
   const b = VOUCHER_BEHAVIOR[type];
   return b && b.targetItem ? b.targetItem + (b.targetSize ? ' ' + b.targetSize : '') : '';
 }
+// 用券點餐(2026-09-30，老闆選 B)：按了直接打開對應品項(有設份量就固定那個份量)，加入購物車時自動套用這張券；
+// 美式狂想乙套兌換券跳到美式狂想分類讓客人挑一款。還沒套上之前(例如開了又取消)記號會留著，之後加入對應品項一樣自動套
+let pendingVoucherUse_ = null;   // {voucherId, type}
+function useVoucherToOrder_(voucherId, type) {
+  const b = VOUCHER_BEHAVIOR[type] || {};
+  closeWallet_();
+  pendingVoucherUse_ = { voucherId, type };
+  if (type === '美式狂想乙套兌換券') {
+    const names = (CATALOG[SET_MEAL_CATEGORY] || []).map(it => it.name);
+    const card = [...document.querySelectorAll('#menu .item')].find(el => names.includes(el.dataset.itemName));
+    const sec = card && card.closest('section.category');
+    if (sec) goToCategory(Number(sec.id.replace('cat-', '')));
+    alert('請選一款美式狂想套餐，加入購物車時會自動套用這張券（只折套餐本身，加購、升級另外計價）');
+    return;
+  }
+  const card = [...document.querySelectorAll('#menu .item')].find(el => el.dataset.itemName === b.targetItem);
+  const btn = card && card.querySelector('.add');
+  if (!btn) { pendingVoucherUse_ = null; alert(`菜單上找不到「${b.targetItem}」，請洽門市`); return; }
+  if (btn.disabled) { pendingVoucherUse_ = null; alert(`「${b.targetItem}」今天已售完`); return; }
+  btn.click();
+  // 份量固定成券上的份量(中杯券只能選 M)
+  const radios = document.querySelectorAll('#item-modal-size input[name="size"]');
+  if (b.targetSize && radios.length) {
+    radios.forEach(r => {
+      if (r.value === b.targetSize) { if (!r.checked) { r.checked = true; r.dispatchEvent(new Event('change')); } }
+      else r.disabled = true;
+    });
+  }
+}
+function applyPendingVoucherUse_() {
+  const pv = pendingVoucherUse_;
+  if (!pv) return;
+  if (!checkoutMemberVouchers.some(v => v.voucherId === pv.voucherId) || checkoutSelectedVouchers.some(v => v.voucherId === pv.voucherId)) { pendingVoucherUse_ = null; return; }
+  if (!findCartLineForVoucher(pv.type)) return;   // 加的不是對應品項，先留著
+  pendingVoucherUse_ = null;
+  toggleCheckoutVoucher(pv.voucherId, pv.type);
+  alert(`已套用「${pv.type}」`);
+}
 function findCartLineForVoucher(type) {
   if (type === '美式狂想乙套兌換券') {
     const mainNames = (CATALOG[SET_MEAL_CATEGORY] || []).map(it => it.name);
@@ -1381,8 +1419,10 @@ function renderCheckoutVoucherList() {
     const behavior = VOUCHER_BEHAVIOR[v.type];
     if (!behavior) return '';
     if (behavior.mode === 'item' && !findCartLineForVoucher(v.type)) {
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.5;">
-        <span>${v.type}</span><span style="color:var(--muted);font-size:0.74rem;">${voucherTargetText_(v.type) ? '需點「' + escapeHtml_(voucherTargetText_(v.type)) + '」' : (v.type === '美式狂想乙套兌換券' ? '需點美式狂想套餐' : '尚未開放線上使用')}</span>
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;${(voucherTargetText_(v.type) || v.type === '美式狂想乙套兌換券') ? '' : 'opacity:0.5;'}">
+        <span>${v.type}${voucherTargetText_(v.type) ? `<br><span style="color:var(--muted);font-size:0.74rem;">${escapeHtml_(voucherTargetText_(v.type))}</span>` : ''}</span>${(voucherTargetText_(v.type) || v.type === '美式狂想乙套兌換券')
+          ? `<button type="button" class="btn-secondary" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" onclick="useVoucherToOrder_('${v.voucherId}','${v.type}')">用券點餐</button>`
+          : '<span style="color:var(--muted);font-size:0.74rem;">尚未開放線上使用</span>'}
       </div>`;
     }
     const isSelected = selectedIds.has(v.voucherId);
@@ -2552,6 +2592,7 @@ function confirmAddToCart() {
   updateCartBar();
   const reopenCart = !!editingKey;
   closeItemModal();
+  applyPendingVoucherUse_();   // 用券點餐(2026-09-30)：加入的是券對應的品項就自動套用
   if (reopenCart) openCart();   // 從購物車點進來修改的，改完回到購物車
 }
 
