@@ -204,8 +204,8 @@
   </button>
   <div class="sub-list" id="posmanage-sublist">
     <button class="sub-item" id="pmg-sub-btn-log" onclick="switchPosManageSubview('log')">開關帳記錄</button>
-    <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">POS夥伴管理</button>
-    <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">權限設定</button>
+    <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">夥伴帳號管理</button>
+    <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">角色權限設定</button>
   </div>
 </nav>
 <main class="main-content">
@@ -475,16 +475,16 @@
       每個POS功能選「最低要什麼角色」才能做：<b>夥伴</b>=任何人都能做、不用PIN；<b>店長</b>／<b>老闆</b>=POS上會跳出輸入PIN，角色不夠會被擋(後端也會再檢查一次)。
       日常操作輸入一次PIN後5分鐘內不用再輸；退款、人工標記已付款、贈送兌換券、關帳每次都要輸入。標「僅畫面」的項目只控制POS畫面。
     </p>
-    <div style="font-size:0.8rem;color:#a32d2d;margin-bottom:6px;">只有老闆可以修改權限設定。</div>
+    <div style="font-size:0.8rem;color:#a32d2d;margin-bottom:6px;">只有老闆可以修改角色權限設定。</div>
     <div id="perm-list"><div class="empty-hint">載入中...</div></div>
-    <button type="button" class="mc-add-btn" style="width:auto;padding:8px 20px;" onclick="savePosPermissions()">儲存權限設定</button>
+    <button type="button" class="mc-add-btn" style="width:auto;padding:8px 20px;" onclick="savePosPermissions()">儲存角色權限設定</button>
     <span id="perm-save-result" style="font-size:0.85rem;margin-left:8px;"></span>
   </div>
   <div id="pmg-subview-partner" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
       3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>店長只能管理夥伴帳號</b>，店長／老闆帳號只有老闆能改。
       建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設，老闆忘記請到Google試算表「POS夥伴」分頁修改。用4碼PIN碼識別身份，
-      <b>哪些功能要什麼角色，到「權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
+      <b>哪些功能要什麼角色，到「角色權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
       <b>還沒建立任何夥伴之前，權限不會生效</b>(退款、人工標記已付款除外，這兩項一定要先建店長/老闆)。
     </p>
     <div class="mc-layout">
@@ -695,7 +695,7 @@ function loadPosPermissionsAdmin() {
   box.innerHTML = '<div class="empty-hint">載入中...</div>';
   apiGet({ action: 'posPermissions', storeId: SCHED_STORE_ID }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
-    if (!Array.isArray(data.defs)) throw new Error('後端還沒更新到有「權限設定」的版本，部署新版後端後重新整理即可');
+    if (!Array.isArray(data.defs)) throw new Error('後端還沒更新到有「角色權限設定」的版本，部署新版後端後重新整理即可');
     posPermDefs = data.defs;
     let lastGroup = '';
     box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:0.88rem;">' +

@@ -378,8 +378,8 @@
 
     <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
     <section style="margin:0 0 12px;">
-      <h2 style="font-size:0.95rem;">POS夥伴管理</h2>
-      <div style="font-size:0.76rem;color:var(--muted);">新增/編輯夥伴請到POS後台「POS管理」→「POS夥伴管理」設定。這裡「開帳」的夥伴清單、「關帳」跟「贈送兌換券」需要的店長/老闆PIN驗證，都是讀同一份設定。</div>
+      <h2 style="font-size:0.95rem;">夥伴帳號管理</h2>
+      <div style="font-size:0.76rem;color:var(--muted);">新增/編輯夥伴請到POS後台「POS管理」→「夥伴帳號管理」設定。這裡「開帳」的夥伴清單、「關帳」跟「贈送兌換券」需要的店長/老闆PIN驗證，都是讀同一份設定。</div>
     </section>
   </div>
 </div>
@@ -689,7 +689,7 @@ function markReady(orderId) {
   });
 }
 
-// 單筆作廢(2026-09-25)：只限還沒收錢的單；原因必填；權限照「權限設定」(預設店長，每次都要輸PIN)
+// 單筆作廢(2026-09-25)：只限還沒收錢的單；原因必填；權限照「角色權限設定」(預設店長，每次都要輸PIN)
 let voidOrderId_ = '';
 function openVoidOrder(orderId) {
   voidOrderId_ = orderId;
