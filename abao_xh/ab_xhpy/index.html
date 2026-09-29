@@ -2299,6 +2299,26 @@ function closeItemModal() {
   return wasEditing;
 }
 
+// 品名後面括號的選項順序＝出單的配料順序(2026-09-29 老闆定案)：餐點選項 → 飲料(冰塊甜度等併進同一段) → 加購。
+// 原本照點選順序，套餐飲料會夾在餐點選項中間、冰塊甜度跟飲料分開。飲料段內用「、」，出單解析只拆最外層的「、」
+function comboOptionParts_(m) {
+  const drinkKey = m.activeDrinkGroupKey;
+  const extras = m.comboDrinkExtraGroups || [];
+  const has = gk => m.groups[gk] && m.groups[gk].length;
+  const parts = [];
+  Object.keys(m.groups).forEach(gKey => {
+    if (!has(gKey) || gKey === drinkKey || (drinkKey && extras.includes(gKey))) return;
+    if (gKey === 'combo_drink' && m.comboDrinkSize) parts.push(m.groups[gKey][0] + ' ' + m.comboDrinkSize.toUpperCase());
+    else parts.push(m.groups[gKey].join('/'));
+  });
+  if (drinkKey && has(drinkKey)) {
+    const drink = m.groups[drinkKey][0] + (drinkKey === 'combo_drink' && m.comboDrinkSize ? ' ' + m.comboDrinkSize.toUpperCase() : '');
+    const ex = extras.filter(has).map(gk => m.groups[gk].join('/'));
+    parts.push('飲料：' + drink + (ex.length ? '（' + ex.join('、') + '）' : ''));
+  }
+  return parts;
+}
+
 function confirmAddToCart() {
   if (!currentModal) return;
   for (const gKey of groupsForCategory(currentModal.cat, currentModal.item.name)) {
@@ -2343,15 +2363,7 @@ function confirmAddToCart() {
   }
   const note = document.getElementById('item-modal-note').value.trim();
   const unit = calcModalUnitPrice();
-  const optionParts = [];
-  Object.keys(currentModal.groups).forEach(gKey => {
-    if (!currentModal.groups[gKey].length) return;
-    if (gKey === 'combo_drink' && currentModal.comboDrinkSize) {
-      optionParts.push(currentModal.groups[gKey][0] + ' ' + currentModal.comboDrinkSize.toUpperCase());
-    } else {
-      optionParts.push(currentModal.groups[gKey].join('/'));
-    }
-  });
+  const optionParts = comboOptionParts_(currentModal);
   // 套餐加購價(×1)：接在選項最後面「加購：加購脆薯和雞塊(4入)」，每組醬料一段「脆薯醬料：蕃茄醬包」「雞塊醬料：不要」
   // (醬料用/隔開，出單拆選項才不會拆散)
   const x1Addon = currentModal.x1 && shopX1For_(currentModal.cat).find(a => a.name === currentModal.x1);
@@ -2646,8 +2658,10 @@ function submitOrder(e) {
 // submitOrder)，傳true代表只需要核銷兌換券+顯示完成畫面，不能呼叫confirmPayment誤標成已付款
 function completeOrderConfirmation_(ctx, skipConfirmPayment) {
   const finish = () => {
-    document.getElementById('order-no').textContent = ctx.orderNo;
-    document.getElementById('order-summary').textContent = ctx.summary;
+    // 2026-09-29：客人畫面改顯示後端正式編號(出單/平板上的 20260929-0001)，原本顯示前端暫編的 MBxxxxxxxx，店員對不到單
+    const shownNo = ctx.backendOrderId || ctx.orderNo;
+    document.getElementById('order-no').textContent = shownNo;
+    document.getElementById('order-summary').textContent = String(ctx.summary || '').split(ctx.orderNo).join(shownNo);
     const msg = document.getElementById('confirm-msg');
     if (msg && ctx.payAtPickup) msg.textContent = '訂單已成立，請於取餐時完成付款。如需協助請來電客服 0909-504662。';
     document.getElementById('confirm-view').style.display = 'block';

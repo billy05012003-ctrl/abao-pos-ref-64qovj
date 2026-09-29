@@ -1176,6 +1176,13 @@ function lookupMember() {
       el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div><div id="member-voucher-panel"></div>`;
       loadMemberVouchers();
       renderPosCart(); // 會員等級權益依等級自動套用
+    } else if (data.status === 'not_found' && LINE_MEMBER_REGISTER) {
+      selectedMember = null;
+      renderPosCart();
+      el.innerHTML = `
+        <div>查無此會員。請客人用手機掃下面的 QR，用 <b>LINE</b> 註冊會員（免費），註冊好再重新查詢。</div>
+        <div id="member-line-qr" style="margin-top:8px;display:inline-block;padding:8px;background:#fff;border:1px solid #ddd;border-radius:8px;"></div>`;
+      showLineRegisterQr_();
     } else if (data.status === 'not_found') {
       selectedMember = null;
       renderPosCart();
@@ -1191,6 +1198,25 @@ function lookupMember() {
       el.textContent = data.message || '查詢失敗';
     }
   });
+}
+
+// 2026-09-29 LINE 登入(設計見 LINE登入設計_2026-09-28.md)：老闆定案門市不再用手機直接建會員，改請客人掃 QR 用 LINE 註冊。
+// 正式上線(點餐頁 LINE_LOGIN_OPEN、後端 LINE_LOGIN_REQUIRED_ 一起)時改 true；之前照舊用手機建會員
+const LINE_MEMBER_REGISTER = false;
+const LINE_REGISTER_URL = 'https://liff.line.me/2011773510-WG4YyKFL';
+function showLineRegisterQr_() {
+  const draw = () => {
+    const box = document.getElementById('member-line-qr');
+    if (!box) return;
+    box.innerHTML = '';
+    new QRCode(box, { text: LINE_REGISTER_URL, width: 180, height: 180 });
+  };
+  if (window.QRCode) { draw(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload = draw;
+  s.onerror = () => { const box = document.getElementById('member-line-qr'); if (box) box.textContent = 'QR 載入失敗，請客人加 LINE 好友 @056bofyb 後從選單註冊'; };
+  document.head.appendChild(s);
 }
 
 function registerMember(phone) {
@@ -2513,15 +2539,24 @@ function confirmAddToPosCart() {
   }
   const note = document.getElementById('pos-item-modal-note').value.trim();
   const unit = calcPosModalUnitPrice();
+  // 2026-09-29 老闆定案出單配料順序：餐點選項 → 飲料(冰塊甜度併進同一段) → 其他(同線上點餐 comboOptionParts_)
   const optionParts = [];
+  const posDrinkKey = currentPosModal.activeDrinkGroupKey;
+  const posDrinkExtras = currentPosModal.comboDrinkExtraGroups || [];
+  const posHas = gk => currentPosModal.groups[gk] && currentPosModal.groups[gk].length;
   Object.keys(currentPosModal.groups).forEach(gKey => {
-    if (!currentPosModal.groups[gKey].length) return;
+    if (!posHas(gKey) || gKey === posDrinkKey || (posDrinkKey && posDrinkExtras.includes(gKey))) return;
     if (gKey === 'combo_drink' && currentPosModal.comboDrinkSize) {
       optionParts.push(currentPosModal.groups[gKey][0] + ' ' + currentPosModal.comboDrinkSize.toUpperCase());
     } else {
       optionParts.push(currentPosModal.groups[gKey].join('/'));
     }
   });
+  if (posDrinkKey && posHas(posDrinkKey)) {
+    const drink = currentPosModal.groups[posDrinkKey][0] + (posDrinkKey === 'combo_drink' && currentPosModal.comboDrinkSize ? ' ' + currentPosModal.comboDrinkSize.toUpperCase() : '');
+    const ex = posDrinkExtras.filter(posHas).map(gk => currentPosModal.groups[gk].join('/'));
+    optionParts.push('飲料：' + drink + (ex.length ? '（' + ex.join('、') + '）' : ''));
+  }
   const lineKey = currentPosModal.key + (currentPosModal.size || '') + '|' + optionParts.join(',') + '|' + note;
   const displayName = currentPosModal.item.name + (optionParts.length ? '（' + optionParts.join('、') + '）' : '');
 
