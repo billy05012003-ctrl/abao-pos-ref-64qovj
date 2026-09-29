@@ -1029,7 +1029,7 @@ function applyPromoSettings_(data) {
       ? { mode: 'fixed', amount: p.amount }
       : p.mode === 'order'
         ? { mode: 'order', pct: p.amount }
-        : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null, pct: p.amount };
+        : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null, pct: p.amount, targetItem: p.targetItem || '', targetSize: p.targetSize || '' };
     // 等級優惠(2026-09-25)結帳自動套用，不放成手動按鈕(避免店員再按一次重複折)
     if (p.showAsButton && !isTierPerkPromo_(p) && isPromoInPeriod_(p)) DIRECT_DISCOUNT_TYPES.push(p.name);   // 期間外不顯示按鈕
     if (p.manualGrantable && isPromoInPeriod_(p)) MANUAL_GRANT_VOUCHER_TYPES.push(p.name);                     // 期間外不能再贈送
@@ -1405,7 +1405,17 @@ function selectVoucherToApplyAfterPerm_(voucherId, type) {
 
 function showVoucherItemPicker() {
   const listEl = document.getElementById('pos-voucher-picker-list');
-  listEl.innerHTML = posCart.map(c => `
+  // 2026-09-30：兌換券有設「適用品項(＋份量)」就只列符合的品項，店員不會點錯；沒設的(例如美式狂想乙套)照舊列全部
+  const b = VOUCHER_BEHAVIOR[pendingVoucherForItemPick.type] || {};
+  const lines = b.targetItem
+    ? posCart.filter(c => c.baseName === b.targetItem && (!b.targetSize || String(c.size || '').toUpperCase() === b.targetSize))
+    : posCart;
+  if (!lines.length) {
+    alert(`購物車裡要有「${b.targetItem}${b.targetSize ? ' ' + b.targetSize : ''}」才能套用「${pendingVoucherForItemPick.type}」`);
+    pendingVoucherForItemPick = null;
+    return;
+  }
+  listEl.innerHTML = lines.map(c => `
     <button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:6px;padding:8px 10px;" onclick="applyVoucherToLine('${c.lineKey}')">
       ${c.name}${c.size ? ' ('+c.size+')' : ''}　$${c.price} x ${c.qty}
     </button>

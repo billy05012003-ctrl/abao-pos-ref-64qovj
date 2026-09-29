@@ -2698,7 +2698,7 @@ function renderPublishDiff_(els, changes, errorMsg) {
   els.forEach(el => { el.innerHTML = html; });
 }
 const ADDON_DIFF_FIELDS_ = ['type', 'amount', 'photoUrl', 'sauceGroups', 'sets', 'drinkOnly', 'excludes', 'startDate', 'endDate', 'order', 'status', 'locked'];
-const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'locked', 'order', 'startDate', 'endDate'];
+const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'targetSize', 'locked', 'order', 'startDate', 'endDate'];
 function refreshPromoPublishDiff_() {
   const els = [...document.querySelectorAll('.promo-publish-diff')];
   if (!els.length || MC_STORE_ID === '__brand__') return Promise.resolve();
@@ -2962,16 +2962,23 @@ function renderPmEditor() {
           ${pmAutoAddItemOptions_(p.autoAddItem)}
         </select>
       </label>
-      <label class="mc-field">適用品項(等級優惠用，選填)
+      <label class="mc-field">適用品項(等級優惠、兌換券用)
         <select id="pm-f-target">
           <option value="">不指定</option>
           ${pmAutoAddItemOptions_(p.targetItem)}
         </select>
       </label>
+      <label class="mc-field">適用份量
+        <select id="pm-f-target-size">
+          <option value="" ${!p.targetSize ? 'selected' : ''}>不限</option>
+          <option value="M" ${p.targetSize === 'M' ? 'selected' : ''}>M</option>
+          <option value="L" ${p.targetSize === 'L' ? 'selected' : ''}>L</option>
+        </select>
+      </label>
     </div>
     <div id="pm-tierperk-hint" style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;display:${mode === 'item' ? 'block' : 'none'};">
       等級優惠（例如「金寶限定：本月檸檬紅茶買一送一」）：勾「顯示為優惠券按鈕」、不勾「可手動贈送」、選「最低適用等級」＋「適用品項」→ 達到等級的會員結帳自動套用，每張單一次（POS與線上點餐都會自動折，不會變成POS手動按鈕）。每月換飲品時改名稱與適用品項即可。
-    </div>
+    <br>兌換券（例如「中杯紅茶兌換券」）：選「適用品項」＋「適用份量」→ 購物車裡品名、份量都一樣的那一杯才能用這張券（沒選適用品項的兌換券線上不能用）。</div>
     <div class="mc-field-row" id="pm-pct-fields" style="display:${(mode === 'order' || (mode === 'item' && p.effect === 'pct')) ? 'flex' : 'none'};">
       <label class="mc-field">折數(填85=打85折，9折請填90)<input id="pm-f-pct" type="number" min="10" max="99" value="${(mode === 'order' || p.effect === 'pct') ? (p.amount ?? '') : ''}"></label>
       <div style="font-size:0.78rem;color:var(--muted);align-self:center;">只折基準價(單點/套餐整組價)，加起司、飲料升級等加價不折；整張打折用原價計算，不受其他折抵影響</div>
@@ -3052,6 +3059,7 @@ function savePromo() {
     minQty: mode === 'item' ? document.getElementById('pm-f-minqty').value : '',
     autoAddItem: mode === 'item' ? document.getElementById('pm-f-autoadd').value : '',
     targetItem: mode === 'item' ? document.getElementById('pm-f-target').value : '',
+    targetSize: mode === 'item' ? document.getElementById('pm-f-target-size').value : '',
     showAsButton: document.getElementById('pm-f-showbtn').checked,
     manualGrantable: document.getElementById('pm-f-grantable').checked,
     status: document.getElementById('pm-f-status').value,

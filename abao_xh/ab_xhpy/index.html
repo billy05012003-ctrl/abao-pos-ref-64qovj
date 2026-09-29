@@ -704,7 +704,7 @@ function applyPromoSettings_(data) {
   ALL_PROMOS.filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton) && p.mode !== 'order' && p.effect !== 'pct').forEach(p => {
     VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed'
       ? { mode: 'fixed', amount: p.amount }
-      : { mode: 'item', effect: p.effect, minQty: p.minQty };
+      : { mode: 'item', effect: p.effect, minQty: p.minQty, targetItem: p.targetItem || '', targetSize: p.targetSize || '' };
   });
   // 集點禮兌換的券若不在期間內就先不列(後端也會擋)
   const promoByName_ = Object.fromEntries((data.promos || []).map(p => [p.name, p]));
@@ -1077,26 +1077,20 @@ function updateItemModalNoteCount_() {
 let checkoutMemberVouchers = []; // 查回來的可用券清單
 let checkoutSelectedVouchers = []; // 已勾選要套用的：[{voucherId, type, discountAmount, targetLineKey}]
 
-const VOUCHER_ITEM_MATCH_KEYWORD = {
-  '荷包蛋兌換券': '荷包蛋',
-  '中杯紅茶兌換券': '紅茶',
-  '中杯義式咖啡兌換券': '義式咖啡',
-  '中杯鮮奶茶兌換券': '鮮奶茶',
-  '脆薯兌換券': '脆薯',
-  '米花雞球兌換券': '米花雞球',
-  '中杯黑糖牛奶兌換券': '黑糖牛奶'
-};
-
-// 找購物車裡符合這張券的品項：美式狂想乙套兌換券比對SET_MEAL_CATEGORY底下任一主餐(拆分後有12個獨立品項)，
-// 其餘用關鍵字比對baseName，找不到就回傳null(前端會擋掉不能套用)
+// 品項券對照(2026-09-30改)：照後台優惠券的「適用品項＋適用份量」，購物車裡品名一樣、份量也一樣(有設份量時)才能套；
+// 美式狂想乙套兌換券＝任一款美式狂想套餐主餐(12款選不出單一品項，維持特例)。原本寫死的關鍵字表已拿掉
+function voucherTargetText_(type) {
+  const b = VOUCHER_BEHAVIOR[type];
+  return b && b.targetItem ? b.targetItem + (b.targetSize ? ' ' + b.targetSize : '') : '';
+}
 function findCartLineForVoucher(type) {
   if (type === '美式狂想乙套兌換券') {
     const mainNames = (CATALOG[SET_MEAL_CATEGORY] || []).map(it => it.name);
     return cart.find(c => mainNames.includes(c.baseName));
   }
-  const keyword = VOUCHER_ITEM_MATCH_KEYWORD[type];
-  if (!keyword) return null;
-  return cart.find(c => c.baseName && c.baseName.includes(keyword));
+  const b = VOUCHER_BEHAVIOR[type];
+  if (!b || !b.targetItem) return null;
+  return cart.find(c => !c.x2 && c.baseName === b.targetItem && (!b.targetSize || String(c.size || '').toUpperCase() === b.targetSize)) || null;
 }
 
 // 兌換券選擇現在發生在「我的訂單」畫面(購物車還沒鎖定)，客人可能選完券又回頭改購物車數量，
@@ -1388,7 +1382,7 @@ function renderCheckoutVoucherList() {
     if (!behavior) return '';
     if (behavior.mode === 'item' && !findCartLineForVoucher(v.type)) {
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.5;">
-        <span>${v.type}</span><span style="color:var(--muted);font-size:0.74rem;">購物車沒有對應品項</span>
+        <span>${v.type}</span><span style="color:var(--muted);font-size:0.74rem;">${voucherTargetText_(v.type) ? '需點「' + escapeHtml_(voucherTargetText_(v.type)) + '」' : (v.type === '美式狂想乙套兌換券' ? '需點美式狂想套餐' : '尚未開放線上使用')}</span>
       </div>`;
     }
     const isSelected = selectedIds.has(v.voucherId);
@@ -1409,7 +1403,7 @@ function toggleCheckoutVoucher(voucherId, type) {
       checkoutSelectedVouchers.push({ voucherId, type, discountAmount: behavior.amount, targetLineKey: null });
     } else {
       const line = findCartLineForVoucher(type);
-      if (!line) { alert('購物車裡沒有對應的品項，無法套用此券'); return; }
+      if (!line) { alert(voucherTargetText_(type) ? `購物車裡要有「${voucherTargetText_(type)}」才能套用此券` : '購物車裡沒有對應的品項，無法套用此券'); return; }
       const base = line.basePrice != null ? line.basePrice : line.price;
       checkoutSelectedVouchers.push({ voucherId, type, discountAmount: base, targetLineKey: line.lineKey });
     }
