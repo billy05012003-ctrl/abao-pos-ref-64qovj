@@ -196,7 +196,30 @@
     width: 100%; background: #fff; color: var(--brand); border: 1px solid var(--brand); border-radius: 10px;
     padding: 12px; font-size: 1rem; margin-top: 8px; cursor: pointer;
   }
-  #pickup-time-grid, #group-pickup-time-grid { display: flex; flex-wrap: wrap; gap: 6px; max-height: 200px; overflow-y: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
+  /* 首頁上方：取餐時間列＋地址＋揪團/自取規則(2026-09-30 老闆參考大麥定案，頁面少文字、說明集中到「訂餐資訊」) */
+  #store-strip { background: #fff; border-bottom: 1px solid var(--border); padding: 10px 12px; }
+  #pickup-bar { width: 100%; display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; color: var(--text); cursor: pointer; text-align: left; }
+  #pickup-bar .pb-mode { font-weight: 700; padding-right: 8px; border-right: 1px solid #ccc; }
+  #pickup-bar .pb-time { flex: 1; }
+  #member-strip { display: none; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 0.88rem; }
+  #member-strip .ms-who { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+  #member-strip .ms-tier { color: var(--brand); font-weight: 700; }
+  #member-strip .ms-pill { flex: none; border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 0.8rem; color: var(--text); cursor: pointer; white-space: nowrap; }
+  #member-strip .ms-pill.on { border-color: var(--brand); color: var(--brand); font-weight: 700; }
+  #cart-pickup-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font-size: 0.9rem; cursor: pointer; }
+  #cart-pickup-row .cp-text { flex: 1; }
+  #cart-pickup-row .cp-more { color: var(--brand); flex: none; }
+  #store-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  #store-actions button { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; border: 1px solid var(--border); background: #fff; border-radius: 10px; padding: 8px 4px; font-size: 0.85rem; font-weight: 600; line-height: 1.3; color: var(--text); cursor: pointer; white-space: nowrap; }
+  #store-actions .sa-ic { font-size: 1.2rem; }
+  #store-actions small { font-size: 0.72rem; font-weight: 400; color: var(--muted); }
+  .si-tabs { display: flex; border-bottom: 1px solid var(--border); margin: 0 -16px 12px; }
+  .si-tabs button { flex: 1; border: none; background: #f5f5f5; padding: 10px; font-size: 0.95rem; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+  .si-tabs button.active { background: #fff; color: var(--text); font-weight: 700; border-bottom-color: var(--text); }
+  .si-block { font-size: 0.9rem; line-height: 1.7; }
+  .si-block .si-k { font-weight: 700; margin-top: 12px; }
+  .si-rules { white-space: pre-line; font-size: 0.92rem; line-height: 1.8; }
+  #pickup-time-grid, #group-pickup-time-grid, #top-pickup-time-grid { display: flex; flex-wrap: wrap; gap: 6px; max-height: 200px; overflow-y: auto; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
   .time-slot-btn { flex: 0 0 auto; min-width: 68px; padding: 8px 6px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-size: 0.88rem; cursor: pointer; text-align: center; }
   .time-slot-btn.active { background: var(--brand); color: #fff; border-color: var(--brand); font-weight: 600; }
   .time-slot-btn:disabled { opacity: 0.35; cursor: not-allowed; text-decoration: line-through; }
@@ -238,10 +261,70 @@
     <p>線上預訂・到店自取</p>
   </div>
 </header>
-<div class="notice">營業時間：每日 05:20～13:00（無公休日）。線上訂單以信用卡付款，付款完成後請依所選時段到店取餐。</div>
+<!-- 2026-09-30：原本這裡寫死的「營業時間＋信用卡付款」說明拿掉，營業時間改由後台設定自動產生，說明文字集中到「訂餐資訊」頁 -->
+<div id="store-strip">
+  <div id="member-strip">
+    <span class="ms-who" onclick="openTierOverlay()">👋 <b id="ms-name"></b> <span class="ms-tier" id="ms-tier"></span></span>
+    <button type="button" class="ms-pill" id="ms-voucher-pill" onclick="openWallet_('voucher')">🎟 券 0</button>
+    <button type="button" class="ms-pill" id="ms-points-pill" onclick="openWallet_('points')">⭐ 0 點</button>
+  </div>
+  <button type="button" id="pickup-bar" onclick="openPickupPicker_()"><span class="pb-mode">自取</span><span class="pb-time" id="pickup-bar-text">載入中…</span><span style="color:var(--muted);">▾</span></button>
+  <div id="store-actions">
+    <button type="button" id="home-group-btn" style="display:none;" onclick="onHomeGroupClick_()"><span class="sa-ic">👥</span><span>揪團</span><small>我請／你訂</small></button>
+    <button type="button" onclick="openStoreInfo_('info')"><span class="sa-ic">🏪</span><span>店家資訊</span><small>自取規則</small></button>
+    <button type="button" onclick="openTierOverlay()"><span class="sa-ic">👑</span><span>會員等級</span><small>專屬好禮</small></button>
+  </div>
+</div>
 <div class="notice" id="closed-notice" style="display:none; background:#ffe0e0; border-color:#ffb3b3; color:#a30000;"></div>
 <div class="notice" id="store-status-notice" style="display:none; background:#ffe0e0; border-color:#ffb3b3; color:#a30000;"></div>
 <div id="group-banner" onclick="openGroupPanel()"></div>
+
+<div class="overlay" id="storeinfo-overlay" style="z-index:26;">
+  <div class="sheet" style="max-height:80vh;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <h2 style="margin:0;">訂餐資訊</h2>
+      <button type="button" onclick="closeStoreInfo_()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <div class="si-tabs">
+      <button type="button" id="si-tab-info" onclick="switchStoreInfoTab_('info')">店家資訊</button>
+      <button type="button" id="si-tab-rules" onclick="switchStoreInfoTab_('rules')">自取規則</button>
+    </div>
+    <div id="si-panel-info" class="si-block"></div>
+    <div id="si-panel-rules" class="si-rules" style="display:none;"></div>
+  </div>
+</div>
+
+<div class="overlay" id="wallet-overlay" style="z-index:26;">
+  <div class="sheet" style="max-height:80vh;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <h2 style="margin:0;">兌換券與集點</h2>
+      <button type="button" onclick="closeWallet_()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <div class="si-tabs">
+      <button type="button" id="wallet-tab-voucher" onclick="switchWalletTab_('voucher')">兌換券</button>
+      <button type="button" id="wallet-tab-points" onclick="switchWalletTab_('points')">集點兌換</button>
+    </div>
+    <div id="wallet-panel-voucher"><div id="checkout-voucher-list"></div></div>
+    <div id="wallet-panel-points" style="display:none;"><div id="cart-redeem-box"></div></div>
+    <button type="button" class="btn-primary" onclick="closeWallet_()">完成</button>
+  </div>
+</div>
+
+<div class="overlay" id="pickup-overlay" style="z-index:26;">
+  <div class="sheet">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <h2 style="margin:0;">取餐資訊</h2>
+      <button type="button" onclick="closePickupPicker_()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <label style="display:block;font-size:0.85rem;margin:0 0 4px;color:var(--muted);">取餐人姓名</label>
+    <input type="text" id="cust-name" maxlength="20" autocomplete="name" oninput="updatePickupBar_()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;margin-bottom:10px;">
+    <label style="display:block;font-size:0.85rem;margin:0 0 4px;color:var(--muted);">取餐時間（自取）</label>
+    <select id="top-pickup-date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;margin-bottom:8px;"></select>
+    <input type="hidden" id="top-pickup-time">
+    <div id="top-pickup-time-grid"></div>
+    <button type="button" class="btn-primary" onclick="confirmPickupPicker_()">確定</button>
+  </div>
+</div>
 
 <div class="overlay" id="category-overlay">
   <div class="sheet" style="max-height:80vh;">
@@ -269,8 +352,8 @@
 
 <footer id="site-footer" style="text-align:center; font-size:0.8rem; color:var(--muted); line-height:1.8; padding:18px 16px 8px;">
   <div><a href="info.html" style="color:var(--brand-dark);">商店資訊</a>　|　<a href="info.html#refund" style="color:var(--brand-dark);">退款政策</a>　|　<a href="info.html#privacy" style="color:var(--brand-dark);">隱私權政策</a>　|　<a href="info.html#terms" style="color:var(--brand-dark);">服務條款</a></div>
-  <div>A-Bao溪湖培英店（美寶美食館　統一編號 82416619）</div>
-  <div>彰化縣溪湖鎮東寮里培英路16號1樓　客服電話 0909-504662</div>
+  <div><span style="white-space:nowrap;">A-Bao溪湖培英店（美寶美食館</span>　<span style="white-space:nowrap;">統一編號 82416619）</span></div>
+  <div><span style="white-space:nowrap;">彰化縣溪湖鎮東寮里培英路16號1樓</span>　<span style="white-space:nowrap;">客服電話 0909-504662</span></div>
 </footer>
 
 <div id="cart-bar" onclick="openCart()">
@@ -290,7 +373,7 @@
     <div id="item-wizard-custom" style="display:none;"></div>
     <div id="item-wizard-confirm" style="display:none;"></div>
     <div id="item-modal-note-wrap">
-      <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填，這則是給「這個品項」的備註）</label>
+      <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填）</label>
       <textarea id="item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem;" maxlength="100" placeholder="例如：不要洋蔥" oninput="updateItemModalNoteCount_()"></textarea>
       <div id="item-modal-note-count" style="text-align:right; font-size:0.75rem; color:var(--muted); margin-top:2px;">0/100</div>
     </div>
@@ -322,13 +405,17 @@
       <div id="cart-lines"></div>
       <div class="cart-total"><span>總計</span><span id="cart-total">$0</span></div>
       <div id="cart-otherneeds"></div>
+      <div id="cust-note-box">
+        <label>備註（選填，其他需求未滿足）</label>
+        <textarea id="cust-note" rows="2" placeholder="例如：外帶請幫我多裝一個袋子"></textarea>
+      </div>
       <div id="group-cart-box" style="display:none;margin:10px 0;padding:10px;border:1px solid #b9dcff;border-radius:10px;background:#f4faff;">
         <div id="group-cart-hint" style="font-size:0.85rem;color:#0c447c;margin-bottom:6px;"></div>
         <label id="group-my-name-label">你的名字（出單會印在你的餐點上）</label>
         <input type="text" id="group-my-name" maxlength="12" placeholder="例如：阿華">
         <label id="group-agree-row" style="display:none;align-items:flex-start;gap:8px;margin-top:10px;font-size:0.82rem;line-height:1.5;cursor:pointer;color:var(--text);">
           <input type="checkbox" id="group-agree-terms" style="width:20px;height:20px;margin-top:1px;flex:none;">
-          <span>我已閱讀並同意<a href="info.html#refund" target="_blank" rel="noopener">退款政策</a>、<a href="info.html#terms" target="_blank" rel="noopener">服務條款</a>及<a href="info.html#privacy" target="_blank" rel="noopener">隱私權政策</a>。<b>已付款訂單，非特殊因素，不可退款</b>。</span>
+          <span>我已閱讀並同意<a href="javascript:void(0)" onclick="openStoreInfo_('rules')">自取規則</a>、<a href="info.html#refund" target="_blank" rel="noopener">退款政策</a>、<a href="info.html#terms" target="_blank" rel="noopener">服務條款</a>及<a href="info.html#privacy" target="_blank" rel="noopener">隱私權政策</a></span>
         </label>
         <button type="button" class="btn-primary" id="group-submit-btn" onclick="submitMyGroupItems()">送出我的餐點到揪團</button>
       </div>
@@ -336,40 +423,30 @@
         <label id="cust-phone-label">會員手機（需完成會員驗證才能送出訂單）</label>
         <input type="tel" id="cust-phone" maxlength="10" pattern="09\d{8}" inputmode="numeric" autocomplete="tel" oninput="onCustPhoneInput_()" onblur="onCustPhoneInput_()">
         <button type="button" class="btn-secondary" id="cust-phone-verify-btn" style="width:auto;padding:6px 14px;margin-top:6px;font-size:0.85rem;" onclick="verifyMember()">確認手機號碼</button>
-        <button type="button" style="width:auto;padding:6px 0;margin-top:6px;margin-left:10px;background:none;border:none;color:var(--brand);font-size:0.85rem;text-decoration:underline;cursor:pointer;" onclick="openTierOverlay()">會員等級與專屬好禮</button>
         <div id="member-verify-result" style="margin-top:8px;font-size:0.85rem;"></div>
-        <div id="cart-redeem-box" style="margin-top:8px;"></div>
-        <div id="checkout-voucher-list" style="margin-top:8px;"></div>
         <div id="checkout-total-preview" style="font-size:0.85rem;color:var(--brand);margin-top:6px;"></div>
       </div>
-      <button class="btn-primary" id="go-checkout" onclick="showCheckout()">填寫取餐資訊</button>
-      <button class="btn-secondary" id="go-group-create" style="display:none;" onclick="openGroupCreate()">👥 揪朋友一起點（我請客／代付）</button>
-      <button class="btn-secondary" onclick="closeCart()">繼續點餐</button>
-    </div>
-
-    <form id="checkout-form" style="display:none" onsubmit="return submitOrder(event)">
-      <h2>取餐資訊</h2>
-      <label>姓名<span style="color:#c0392b;">*必填</span></label>
-      <input type="text" id="cust-name" required autocomplete="name">
-      <label>取餐方式：自取</label>
-      <label>取餐日期<span style="color:#c0392b;">*必填</span></label>
-      <select id="pickup-date" required></select>
-      <label>希望取餐時間<span style="color:#c0392b;">*必填</span></label>
-      <input type="hidden" id="pickup-time">
-      <div id="pickup-time-grid"></div>
+      <div id="cart-pickup-row" onclick="openPickupPicker_()"><span>取餐</span><b class="cp-text" id="cart-pickup-text"></b><span class="cp-more">變更 ›</span></div>
       <label id="checkout-paymethod-label" style="display:none;">付款方式</label>
       <select id="checkout-payment-method" style="display:none;">
         <option value="取餐付款">取餐現場付款</option>
         <option value="online">線上付款（信用卡）</option>
       </select>
-      <label>備註（選填，這則是給「整張訂單」的備註，例如外帶提醒）</label>
-      <textarea id="cust-note" rows="2" placeholder="例如：外帶請幫我多裝一個袋子"></textarea>
-      <label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:0.85rem; line-height:1.5; cursor:pointer;">
+      <!-- 2026-09-30 老闆：同意條款提前到「我的訂單」頁，跟「前往付款」按鈕一起顯示(揪團朋友走自己的同意框) -->
+      <label id="agree-terms-row" style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:0.85rem; line-height:1.5; cursor:pointer; color:var(--text);">
         <input type="checkbox" id="agree-terms" style="width:20px; height:20px; margin-top:1px; flex:none;">
-        <span>我已閱讀並同意<a href="info.html#refund" target="_blank" rel="noopener">退款政策</a>、<a href="info.html#terms" target="_blank" rel="noopener">服務條款</a>及<a href="info.html#privacy" target="_blank" rel="noopener">隱私權政策</a>。本店餐點為現做，<b>已付款訂單，非特殊因素，不可退款</b>。</span>
+        <span>我已閱讀並同意<a href="javascript:void(0)" onclick="openStoreInfo_('rules')">自取規則</a>、<a href="info.html#refund" target="_blank" rel="noopener">退款政策</a>、<a href="info.html#terms" target="_blank" rel="noopener">服務條款</a>及<a href="info.html#privacy" target="_blank" rel="noopener">隱私權政策</a></span>
       </label>
-      <button type="submit" class="btn-primary">前往付款</button>
-      <button type="button" class="btn-secondary" onclick="backToCart()">返回訂單</button>
+      <button class="btn-primary" id="go-checkout" onclick="goToPayment_()">前往付款</button>
+      <button class="btn-secondary" onclick="closeCart()">繼續點餐</button>
+    </div>
+
+    <!-- 2026-09-30 老闆定案：拿掉「取餐資訊」頁，姓名與取餐時間在首頁「取餐資訊」視窗設定，我的訂單直接「前往付款」。
+         這個表單永遠隱藏，只當取餐日期/時段的唯一資料來源(首頁列、我的訂單摘要都讀它) -->
+    <form id="checkout-form" style="display:none" onsubmit="return submitOrder(event)">
+      <select id="pickup-date" required></select>
+      <input type="hidden" id="pickup-time">
+      <div id="pickup-time-grid"></div>
     </form>
 
     <div id="mpg-waiting-view" style="display:none; text-align:center; padding:10px 0;">
@@ -567,6 +644,7 @@ function applyLineMember_(member) {
   document.getElementById('cust-phone').value = member.phone;
   const nameEl = document.getElementById('cust-name');
   if (nameEl && !nameEl.value) nameEl.value = member.name || '';
+  updatePickupBar_();
   renderMemberVerified_(member);
   loadCheckoutVouchers();
 }
@@ -675,6 +753,12 @@ let ALLOW_SAME_DAY_ORDER = true;
 let BUSINESS_HOURS_BY_WEEKDAY = {}; // {0:[{start,end},...], 1:[...], ...} 0=日...6=六，同JS Date.getDay()
 let ORDER_HOURS_BY_WEEKDAY = {};
 let SPECIAL_DATES = {}; // 'YYYY-MM-DD' -> {closed, start, end, note}
+// 店家資訊(2026-09-30)：後台「商家管理→店家資訊」編輯，跟商店時段設定一起讀回來；這裡是讀不到時的保底內容
+let STORE_INFO_ = {
+  name: 'A-Bao溪湖培英店', address: '彰化縣溪湖鎮東寮里培英路16號1樓', phone: '04-8852662',
+  pickupRules: '備餐時間15分鐘，請提早預訂。\n線上訂單以信用卡付款，付款完成後請依所選時段到店取餐。\n本店餐點為現做，已付款訂單，非特殊因素，不可退款。'
+};
+let BUSINESS_HOURS_LIST_ = [];
 
 function getNowMinutes() {
   const d = new Date();
@@ -737,6 +821,8 @@ function applyScheduleSettings_(data) {
   });
   SPECIAL_DATES = {};
   (data.specialDates || []).forEach(s => { SPECIAL_DATES[s.date] = s; });
+  BUSINESS_HOURS_LIST_ = data.businessHours || [];
+  if (data.storeInfo) STORE_INFO_ = data.storeInfo;
 }
 
 const SCHEDULE_SETTINGS_CACHE_KEY = 'abao_pos_schedule_settings_cache_v1';
@@ -749,7 +835,8 @@ function builtinDefaultScheduleSettings_() {
     businessHours: weekdays.map(w => ({ weekday: w, start: '05:20', end: '13:00' })),
     orderHours: weekdays.map(w => ({ weekday: w, start: '00:00', end: '12:45' })),
     specialDates: [],
-    config: { slotStepMinutes: 15, maxSlotCapacity: 2, allowSameDayOrder: true, maxAdvanceDays: 1, prepBufferMinutes: 10 }
+    config: { slotStepMinutes: 15, maxSlotCapacity: 2, allowSameDayOrder: true, maxAdvanceDays: 1, prepBufferMinutes: 10 },
+    storeInfo: STORE_INFO_
   };
 }
 function loadScheduleSettings() {
@@ -1064,8 +1151,9 @@ function renderCartRedeem_() {
         </div>`;
       }).join('')}
     </details>`;
+  updateWalletPills_();
 }
-var cartRedeemOpen_ = false;   // var：renderCartRedeem_寫在前面，避免let暫時性死區
+var cartRedeemOpen_ = true;   // 2026-09-30 搬到首頁「兌換券與集點」視窗，預設展開   // var：renderCartRedeem_寫在前面，避免let暫時性死區
 function redeemPointsInCart_(btn, idx) {
   const entry = POINT_REDEMPTION_CATALOG[idx];
   if (!entry) return;
@@ -1076,14 +1164,46 @@ function redeemPointsInCart_(btn, idx) {
   apiPost_({ action: 'redeemPoints', phone: verifiedMember.phone, voucherType }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '兌換失敗'); btn.disabled = false; return; }
     verifiedMember.points = data.remainingPoints;
-    alert(`已兌換「${voucherType}」，剩餘 ${data.remainingPoints} 點。下方「可用兌換券」可以直接套用在這張單。`);
+    alert(`已兌換「${voucherType}」，剩餘 ${data.remainingPoints} 點。到「兌換券」分頁就可以套用在這張單。`);
     renderCartRedeem_();
     loadCheckoutVouchers();   // 新換到的券馬上出現在可用清單
   }).catch(() => { alert('兌換失敗，請確認網路連線後再試'); btn.disabled = false; });
 }
 
+function renderMemberStrip_(member) {
+  const el = document.getElementById('member-strip');
+  if (!el) return;
+  if (!member) { el.style.display = 'none'; return; }
+  document.getElementById('ms-name').textContent = member.name || '';
+  document.getElementById('ms-tier').textContent = member.tier ? (member.tier.endsWith('會員') ? member.tier : member.tier + '會員') : '';
+  el.style.display = 'flex';
+  updateWalletPills_();
+}
+// 會員列兩顆按鈕：可用兌換券張數(有套用就顯示已套用幾張)、目前點數
+function updateWalletPills_() {
+  const vp = document.getElementById('ms-voucher-pill'), pp = document.getElementById('ms-points-pill');
+  if (!vp || !pp) return;
+  const used = checkoutSelectedVouchers.length;
+  vp.textContent = used ? `🎟 已套用 ${used}` : `🎟 券 ${checkoutMemberVouchers.length}`;
+  vp.classList.toggle('on', used > 0);
+  pp.textContent = `⭐ ${verifiedMember ? (Number(verifiedMember.points) || 0) : 0} 點`;
+}
+function switchWalletTab_(tab) {
+  document.getElementById('wallet-tab-voucher').classList.toggle('active', tab === 'voucher');
+  document.getElementById('wallet-tab-points').classList.toggle('active', tab === 'points');
+  document.getElementById('wallet-panel-voucher').style.display = tab === 'voucher' ? '' : 'none';
+  document.getElementById('wallet-panel-points').style.display = tab === 'points' ? '' : 'none';
+}
+function openWallet_(tab) {
+  renderCartRedeem_();
+  renderCheckoutVoucherList();
+  switchWalletTab_(tab || 'voucher');
+  document.getElementById('wallet-overlay').classList.add('open');
+}
+function closeWallet_() { document.getElementById('wallet-overlay').classList.remove('open'); }
 function renderMemberVerified_(member) {
   verifiedMember = member;
+  renderMemberStrip_(member);
   setTimeout(renderCartRedeem_, 0);
   setTimeout(updateCheckoutTotalDisplay, 0);   // 等級權益依會員等級自動套用
   const progress = tierProgressText_(member);
@@ -1096,6 +1216,7 @@ function renderMemberVerified_(member) {
 
 function renderMemberNotFound_(phone) {
   verifiedMember = null;
+  renderMemberStrip_(null);
   renderCartRedeem_();
   setTimeout(updateCheckoutTotalDisplay, 0);   // 清掉會員權益/菜單標示
   document.getElementById('member-verify-result').innerHTML = `
@@ -1257,8 +1378,9 @@ function loadCheckoutVouchers() {
 
 function renderCheckoutVoucherList() {
   const listEl = document.getElementById('checkout-voucher-list');
+  updateWalletPills_();
   if (checkoutMemberVouchers.length === 0) {
-    listEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;">目前沒有可用兌換券</div>';
+    listEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:6px 0;">目前沒有可用兌換券</div>';
     return;
   }
   const selectedIds = new Set(checkoutSelectedVouchers.map(v => v.voucherId));
@@ -2543,22 +2665,24 @@ function closeCart() {
   document.getElementById('cart-overlay').classList.remove('open');
   if (groupCheckoutMode) exitGroupCheckout_();
 }
-function showCheckout() {
+// 2026-09-30 老闆定案：拿掉「取餐資訊」頁，我的訂單直接前往付款(姓名/取餐時間在首頁「取餐資訊」視窗)
+function goToPayment_() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
   const currentPhone = document.getElementById('cust-phone').value.trim();
-  if (!verifiedMember || verifiedMember.phone !== currentPhone) { alert('請先完成會員驗證，才能填寫取餐資訊'); document.getElementById('cust-phone').focus(); return; }
+  if (!verifiedMember || verifiedMember.phone !== currentPhone) { alert('請先完成會員驗證，才能送出訂單'); return; }
   if (!otherNeedsReady_()) return;
+  if (!document.getElementById('agree-terms').checked) { alert('請先勾選同意自取規則、退款政策、服務條款及隱私權政策'); return; }
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
-  populatePickupDate();
-  populatePickupTime(document.getElementById('pickup-date').value);
-  // 2026-09-13：兌換券改在「我的訂單」畫面就查詢/套用，進結帳頁不再清空選擇(狀態一路帶過來)。
-  // 購物車內容若在中途被改動，靠changeQty()裡的pruneStaleVoucherSelections_()清掉對不上的選擇，
-  // 不用等進到這一步才處理
-  document.getElementById('cart-view').style.display = 'none';
-  document.getElementById('checkout-form').style.display = 'block';
+  // 頁面開很久時，原本選的時段可能已經過了：重新整理一次，時間被改掉就停下來請客人確認，不能讓客人付了錢才發現時間不對
+  const prevD = document.getElementById('pickup-date').value, prevT = document.getElementById('pickup-time').value;
+  restoreCheckoutPickup_();
+  const nowD = document.getElementById('pickup-date').value, nowT = document.getElementById('pickup-time').value;
+  if (!nowT) { alert('請選擇取餐時間'); openPickupPicker_(); return; }
+  if (prevT && (nowD !== prevD || nowT !== prevT)) { alert('原本選的取餐時間已經不能選，已改成「' + document.getElementById('cart-pickup-text').textContent + '」，請確認後再按一次「前往付款」'); return; }
+  if (!document.getElementById('cust-name').value.trim()) { alert('請填寫取餐人姓名'); openPickupPicker_(); return; }
+  submitOrder({ preventDefault() {} });
 }
 function backToCart() {
-  document.getElementById('checkout-form').style.display = 'none';
   document.getElementById('cart-view').style.display = 'block';
 }
 function closeAll() {
@@ -2588,9 +2712,10 @@ function submitOrder(e) {
   // 取餐時間改成按鈕格子後不再是<form>裡的原生欄位，required不會擋，改用JS檢查(2026-09-18)
   if (!document.getElementById('pickup-time').value) { alert('請選擇取餐時間'); return false; }
   const name = document.getElementById('cust-name').value.trim();
+  if (!name) { alert('請填寫取餐人姓名'); openPickupPicker_(); return false; }
   const phone = document.getElementById('cust-phone').value.trim();
   // 手機欄位搬到「我的訂單」畫面後不再是<form>裡的欄位，瀏覽器原生required不會擋，改用JS檢查
-  if (!document.getElementById('agree-terms').checked) { alert('請先勾選同意退款政策、服務條款及隱私權政策'); return false; }
+  if (!document.getElementById('agree-terms').checked) { alert('請先勾選同意自取規則、退款政策、服務條款及隱私權政策'); backToCart(); return false; }
   if (!phone) { alert('請輸入手機號碼'); backToCart(); document.getElementById('cust-phone').focus(); return false; }
   // 2026-09-16：保險檢查，防止驗證成功後又手動改了手機號碼欄位(showCheckout()已經擋過一次，這裡是雙重防呆)
   if (!verifiedMember || verifiedMember.phone !== phone) { alert('會員驗證資料有異動，請重新驗證'); backToCart(); return false; }
@@ -2633,7 +2758,7 @@ function submitOrder(e) {
   pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, cartBackup: cartBackup };
   cart = [];
   saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
-  document.getElementById('checkout-form').style.display = 'none';
+  document.getElementById('cart-view').style.display = 'none';
 
   createPendingOrderOnBackend({
     storeId: 'meibao',
@@ -2872,6 +2997,7 @@ function populatePickupTime(dateValue, ids) {
   });
   if (!slots.length) {
     grid.innerHTML = '<div style="font-size:0.85rem;color:var(--muted);padding:6px;">此日期暫無可預訂時段</div>';
+    if (ids === PICKUP_IDS_) updatePickupBar_();
     return;
   }
   let firstValue = '';
@@ -2898,6 +3024,7 @@ function selectPickupTime_(value, ids) {
   document.querySelectorAll('#' + ids.grid + ' .time-slot-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.value === value);
   });
+  if (ids === PICKUP_IDS_) updatePickupBar_();
 }
 
 // 讀取該取餐日期各時段目前已訂張數，額滿(達MAX_SLOT_CAPACITY)的時段從格子裡disable掉，避免同一時段塞爆備餐量。
@@ -2926,8 +3053,102 @@ function applySlotCapacity(dateValue, ids) {
     if (buttons.length && buttons.every(b => b.disabled)) {
       grid.innerHTML = '<div style="font-size:0.85rem;color:var(--muted);padding:6px;">此日期時段皆已額滿</div>';
       document.getElementById(ids.time).value = '';
+      if (ids === PICKUP_IDS_) updatePickupBar_();
     }
   }).catch(err => console.warn('讀取時段容量失敗（不影響選時段）', err));
+}
+
+// ---- 首頁上方取餐時間列＋訂餐資訊(2026-09-30，老闆參考大麥定案) ----
+// 取餐時間只有一份：結帳頁的 pickup-date/pickup-time。首頁列顯示它、按下去開選擇視窗，確定後寫回結帳頁欄位
+const TOP_PICKUP_IDS_ = { date: 'top-pickup-date', grid: 'top-pickup-time-grid', time: 'top-pickup-time' };
+function updatePickupBar_() {
+  const el = document.getElementById('pickup-bar-text');
+  if (!el) return;
+  const sel = document.getElementById('pickup-date');
+  const t = document.getElementById('pickup-time').value;
+  const opt = sel.options[sel.selectedIndex];
+  const nm = (document.getElementById('cust-name').value || '').trim();
+  const txt = (opt && t) ? `${opt.textContent} ${t}` + (nm ? `・${nm}` : '') : '請選擇取餐時間';
+  el.textContent = txt;
+  const cp = document.getElementById('cart-pickup-text');
+  if (cp) cp.textContent = txt;
+}
+// 重新整理日期選單/時段格子，但盡量保留原本選好的日期與時間(額滿或過了就改成最早的時段)
+function setCheckoutPickup_(dateValue, timeValue) {
+  const sel = document.getElementById('pickup-date');
+  populatePickupDate();
+  if (dateValue !== undefined && [...sel.options].some(o => o.value === String(dateValue))) sel.value = String(dateValue);
+  populatePickupTime(sel.value);
+  const btn = timeValue && document.querySelector('#pickup-time-grid .time-slot-btn[data-value="' + timeValue + '"]');
+  if (btn && !btn.disabled) selectPickupTime_(timeValue);
+}
+function restoreCheckoutPickup_() {
+  setCheckoutPickup_(document.getElementById('pickup-date').value, document.getElementById('pickup-time').value);
+}
+function openPickupPicker_() {
+  const topSel = document.getElementById(TOP_PICKUP_IDS_.date);
+  const curDate = document.getElementById('pickup-date').value, curTime = document.getElementById('pickup-time').value;
+  populatePickupDate(TOP_PICKUP_IDS_);
+  if ([...topSel.options].some(o => o.value === curDate)) topSel.value = curDate;
+  populatePickupTime(topSel.value, TOP_PICKUP_IDS_);
+  const btn = curTime && document.querySelector('#top-pickup-time-grid .time-slot-btn[data-value="' + curTime + '"]');
+  if (btn && !btn.disabled) selectPickupTime_(curTime, TOP_PICKUP_IDS_);
+  document.getElementById('pickup-overlay').classList.add('open');
+}
+function closePickupPicker_() { document.getElementById('pickup-overlay').classList.remove('open'); }
+function confirmPickupPicker_() {
+  const d = document.getElementById(TOP_PICKUP_IDS_.date).value, t = document.getElementById(TOP_PICKUP_IDS_.time).value;
+  if (!t) { alert('請選擇取餐時間'); return; }
+  setCheckoutPickup_(d, t);
+  closePickupPicker_();
+}
+// 營業時間由後台「商店時段設定」的營業時間自動產生：每天一樣→「每日 05:20～13:00」；不一樣→連續同時段的星期合併列出
+function formatBusinessHoursLines_(list) {
+  const names = ['日', '一', '二', '三', '四', '五', '六'], order = [1, 2, 3, 4, 5, 6, 0];
+  const byDay = {};
+  (list || []).forEach(r => { (byDay[r.weekday] = byDay[r.weekday] || []).push(r); });
+  const keys = order.map(d => (byDay[d] || []).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)))
+    .map(r => r.start + '～' + r.end).join('、') || '公休');
+  if (keys.every(k => k === keys[0])) return [keys[0] === '公休' ? '公休' : '每日 ' + keys[0]];
+  const lines = [];
+  for (let i = 0; i < 7;) {
+    let j = i;
+    while (j + 1 < 7 && keys[j + 1] === keys[i]) j++;
+    lines.push((i === j ? '週' + names[order[i]] : '週' + names[order[i]] + '～週' + names[order[j]]) + ' ' + keys[i]);
+    i = j + 1;
+  }
+  return lines;
+}
+function renderStoreStrip_() {
+  document.getElementById('home-group-btn').style.display = GROUP_FEATURE_ON ? '' : 'none';
+}
+function renderStoreInfoPanels_() {
+  const si = STORE_INFO_;
+  const hours = BUSINESS_HOURS_LIST_.length ? formatBusinessHoursLines_(BUSINESS_HOURS_LIST_) : [];
+  let h = `<div style="font-weight:700;font-size:1.05rem;">${escapeHtml_(si.name || '')}</div>`;
+  if (si.address) h += `<div>${escapeHtml_(si.address)}</div>`;
+  if (si.phone) h += `<div><a href="tel:${escapeHtml_(si.phone.replace(/[^0-9+]/g, ''))}" style="color:inherit;">${escapeHtml_(si.phone)}</a></div>`;
+  if (hours.length) h += `<div class="si-k">營業時間</div>` + hours.map(l => `<div>${escapeHtml_(l)}</div>`).join('');
+  document.getElementById('si-panel-info').innerHTML = h;
+  document.getElementById('si-panel-rules').textContent = si.pickupRules || '（尚未設定）';
+}
+function switchStoreInfoTab_(tab) {
+  document.getElementById('si-tab-info').classList.toggle('active', tab === 'info');
+  document.getElementById('si-tab-rules').classList.toggle('active', tab === 'rules');
+  document.getElementById('si-panel-info').style.display = tab === 'info' ? '' : 'none';
+  document.getElementById('si-panel-rules').style.display = tab === 'rules' ? '' : 'none';
+}
+function openStoreInfo_(tab) {
+  renderStoreInfoPanels_();
+  switchStoreInfoTab_(tab || 'info');
+  document.getElementById('storeinfo-overlay').classList.add('open');
+}
+function closeStoreInfo_() { document.getElementById('storeinfo-overlay').classList.remove('open'); }
+// 首頁「揪團訂」：已經在揪團裡就打開揪團畫面；還沒點餐先提醒；點好了直接開團
+function onHomeGroupClick_() {
+  if (groupCtx && groupView && !isGroupFinished_()) { openGroupPanel(); return; }
+  if (!cart.length) { alert('請先把自己的餐點加入購物車，再按「揪團訂」開團'); return; }
+  openGroupCreate();
 }
 
 // 非阻斷式提示：只在「今天」不可下單時顯示告知，不影響瀏覽/加入購物車/選其他日期下單
@@ -3049,18 +3270,19 @@ function renderGroupBanner_() {
 function refreshGroupCartUi_() {
   const box = document.getElementById('group-cart-box');
   const goCheckout = document.getElementById('go-checkout');
-  const goCreate = document.getElementById('go-group-create');
   const inGroup = !!(groupCtx && groupView) && !isGroupFinished_();
   const voucherEls = [document.getElementById('checkout-voucher-list'), document.getElementById('checkout-total-preview'), document.getElementById('cart-redeem-box')];
-  goCreate.style.display = (GROUP_FEATURE_ON && !inGroup && !groupCheckoutMode) ? 'block' : 'none';
   voucherEls.forEach(el => el.style.display = '');
+  const agreeRow = document.getElementById('agree-terms-row');
+  const noteBox = document.getElementById('cust-note-box');
+  const pickupRow = document.getElementById('cart-pickup-row');
   if (groupCheckoutMode || !inGroup) {   // 一般點餐，或請客團主結帳(走一般結帳流程：會員驗證/取餐時間/付款)
-    box.style.display = 'none'; goCheckout.style.display = 'block';
+    box.style.display = 'none'; goCheckout.style.display = 'block'; agreeRow.style.display = 'flex'; noteBox.style.display = ''; pickupRow.style.display = 'flex';
     return;
   }
   // 在揪團裡：會員驗證照樣要做(揪團一律要會員)，但不走一般結帳，改成送出到揪團
   const each = isGroupEach_();
-  box.style.display = 'block'; goCheckout.style.display = 'none';
+  box.style.display = 'block'; goCheckout.style.display = 'none'; agreeRow.style.display = 'none'; noteBox.style.display = 'none'; pickupRow.style.display = 'none';
   if (!each) voucherEls.forEach(el => el.style.display = 'none');   // 請客：朋友不付錢，不用選兌換券
   const nameInput = document.getElementById('group-my-name');
   const known = groupCtx.name || '';
@@ -3349,6 +3571,7 @@ loadMenuCmsData().then(() => {
   applyItemAvailability();
 });
 scheduleSettingsReady.then(() => {
+  renderStoreStrip_();
   populatePickupDate();
   populatePickupTime(document.getElementById('pickup-date').value);
   checkOrderWindow();

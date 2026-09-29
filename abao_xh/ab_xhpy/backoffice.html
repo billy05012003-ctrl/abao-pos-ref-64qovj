@@ -175,6 +175,7 @@
     <span class="group-toggle">商家管理 <span class="group-caret" id="merchant-caret">▶</span></span>
   </button>
   <div class="sub-list" id="merchant-sublist">
+    <button class="sub-item" id="mch-sub-btn-storeinfo" onclick="switchMerchantSubview('storeinfo')">店家資訊</button>
     <button class="sub-item" id="mch-sub-btn-schedule" onclick="switchMerchantSubview('schedule')">商店時段設定</button>
     <button class="sub-item" id="mch-sub-btn-payment" onclick="switchMerchantSubview('payment')">付款方式設定</button>
   </div>
@@ -215,6 +216,20 @@
     這裡改了會直接反映到對應的前台畫面，不需要老闆自己再跑去POS功能操作。
   </p>
   <div id="availability-list"><div class="empty-hint">載入中...</div></div>
+</div>
+<div id="view-storeinfo" class="view" style="display:none;">
+  <p style="font-size:0.8rem;color:var(--muted);">點餐頁「店家資訊」與「自取規則」的內容，存了立刻生效。營業時間會照「商店時段設定」自動顯示，不用在這裡填。</p>
+  <div id="storeinfo-form" style="max-width:560px;">
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">顯示店名</label>
+    <input type="text" id="si-f-name" maxlength="30" style="width:100%;padding:8px;box-sizing:border-box;">
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">地址</label>
+    <input type="text" id="si-f-address" maxlength="80" style="width:100%;padding:8px;box-sizing:border-box;">
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">電話</label>
+    <input type="text" id="si-f-phone" maxlength="20" style="width:100%;padding:8px;box-sizing:border-box;">
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">自取規則（一行一條，客人結帳前要勾選同意）</label>
+    <textarea id="si-f-rules" rows="6" maxlength="500" style="width:100%;padding:8px;box-sizing:border-box;font-family:inherit;"></textarea>
+    <button type="button" class="mc-add-btn" style="width:auto;padding:8px 20px;margin-top:10px;" onclick="saveStoreInfo()">儲存店家資訊</button>
+  </div>
 </div>
 <div id="view-schedule" class="view" style="display:none;">
   <p style="font-size:0.8rem;color:var(--muted);">
@@ -856,6 +871,7 @@ function switchBackofficeTab(name) {
   document.getElementById('view-group').style.display = name === 'group' ? 'block' : 'none';
   if (name === 'group' && !groupListLoaded) { groupListLoaded = true; loadGroupList(); }
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
+  document.getElementById('view-storeinfo').style.display = (name === 'merchant' && currentMerchantSubview === 'storeinfo') ? 'block' : 'none';
   document.getElementById('view-schedule').style.display = (name === 'merchant' && currentMerchantSubview === 'schedule') ? 'block' : 'none';
   document.getElementById('view-payment').style.display = (name === 'merchant' && currentMerchantSubview === 'payment') ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
@@ -880,6 +896,7 @@ function switchBackofficeTab(name) {
       loadPosStaffList();
     }
   }
+  document.getElementById('mch-sub-btn-storeinfo').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'storeinfo');
   document.getElementById('mch-sub-btn-schedule').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'schedule');
   document.getElementById('mch-sub-btn-payment').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'payment');
   if (name === 'merchant') {
@@ -889,6 +906,7 @@ function switchBackofficeTab(name) {
       schedLoaded = true;
       loadScheduleData();
     }
+    if (currentMerchantSubview === 'storeinfo') loadStoreInfo();
     if (currentMerchantSubview === 'payment' && !paymentMethodLoaded) {
       paymentMethodLoaded = true;
       loadPaymentMethodSettings();
@@ -933,6 +951,29 @@ function switchBackofficeTab(name) {
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ---- 店家資訊（2026-09-30新增）：點餐頁地址列與「訂餐資訊」頁內容，跟商店時段設定同一支讀取 API 回來 ----
+function loadStoreInfo() {
+  apiGet({ action: 'storeScheduleSettings', storeId: SCHED_STORE_ID }).then(data => {
+    const si = (data && data.storeInfo) || {};
+    document.getElementById('si-f-name').value = si.name || '';
+    document.getElementById('si-f-address').value = si.address || '';
+    document.getElementById('si-f-phone').value = si.phone || '';
+    document.getElementById('si-f-rules').value = si.pickupRules || '';
+  }).catch(() => alert('讀取店家資訊失敗，請重新整理'));
+}
+function saveStoreInfo() {
+  apiPost({
+    action: 'updateStoreInfo', storeId: SCHED_STORE_ID,
+    name: document.getElementById('si-f-name').value,
+    address: document.getElementById('si-f-address').value,
+    phone: document.getElementById('si-f-phone').value,
+    pickupRules: document.getElementById('si-f-rules').value
+  }).then(data => {
+    if (data.status === 'ok') alert('已儲存');
+    else alert('儲存失敗：' + (data.message || ''));
+  });
 }
 
 // ---- 商店時段設定（2026-09-16新增）----

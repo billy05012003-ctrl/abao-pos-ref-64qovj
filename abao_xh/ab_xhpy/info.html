@@ -63,7 +63,7 @@
     <tr><th>營業登記名稱</th><td>美寶美食館</td></tr>
     <tr><th>統一編號</th><td>82416619</td></tr>
     <tr><th>營業地址</th><td>彰化縣溪湖鎮東寮里培英路16號1樓</td></tr>
-    <tr><th>營業時間</th><td>每日 05:20～13:00（無公休日）</td></tr>
+    <tr><th>營業時間</th><td class="biz-hours">每日 05:20～13:00（無公休日）</td></tr>
     <tr><th>客服電話</th><td><a href="tel:0909504662">0909-504662</a></td></tr>
     <tr><th>店內電話</th><td><a href="tel:048852662">04-885-2662</a></td></tr>
     <tr><th>客服信箱</th><td><a href="mailto:billy05012003@gmail.com">billy05012003@gmail.com</a></td></tr>
@@ -161,7 +161,7 @@
     <tr><th>店內電話</th><td><a href="tel:048852662">04-885-2662</a></td></tr>
     <tr><th>客服信箱</th><td><a href="mailto:billy05012003@gmail.com">billy05012003@gmail.com</a></td></tr>
     <tr><th>營業地址</th><td>彰化縣溪湖鎮東寮里培英路16號1樓</td></tr>
-    <tr><th>營業時間</th><td>每日 05:20～13:00（無公休日）</td></tr>
+    <tr><th>營業時間</th><td class="biz-hours">每日 05:20～13:00（無公休日）</td></tr>
   </table>
 </section>
 
@@ -189,6 +189,25 @@
     if (it.price_set) return '單點 $' + it.price + ' / 套餐 $' + it.price_set;
     return '$' + it.price;
   }
+
+  // 營業時間照 POS 後台「商店時段設定」自動顯示(2026-09-30)；讀不到就保留頁面上原本的文字
+  function hoursLines(list) {
+    const names = ['日', '一', '二', '三', '四', '五', '六'], order = [1, 2, 3, 4, 5, 6, 0], byDay = {};
+    (list || []).forEach(r => { (byDay[r.weekday] = byDay[r.weekday] || []).push(r); });
+    const keys = order.map(d => (byDay[d] || []).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)))
+      .map(r => r.start + '～' + r.end).join('、') || '公休');
+    if (keys.every(k => k === keys[0])) return [keys[0] === '公休' ? '公休' : '每日 ' + keys[0] + '（無公休日）'];
+    const lines = [];
+    for (let i = 0; i < 7;) { let j = i; while (j + 1 < 7 && keys[j + 1] === keys[i]) j++; lines.push((i === j ? '週' + names[order[i]] : '週' + names[order[i]] + '～週' + names[order[j]]) + ' ' + keys[i]); i = j + 1; }
+    return lines;
+  }
+  fetch(BACKEND + '?' + new URLSearchParams({ action: 'storeScheduleSettings', storeId: 'meibao', appKey: APP_KEY, _: Date.now() }).toString(), { cache: 'no-store' })
+    .then(r => r.json())
+    .then(d => {
+      if (!d || d.status !== 'ok' || !d.businessHours || !d.businessHours.length) return;
+      const html = hoursLines(d.businessHours).map(esc).join('<br>');
+      document.querySelectorAll('.biz-hours').forEach(td => { td.innerHTML = html; });
+    }).catch(() => {});
 
   const qs = new URLSearchParams({ action: 'menuCmsData', appKey: APP_KEY, _: Date.now() }).toString();
   fetch(BACKEND + '?' + qs, { cache: 'no-store' })
