@@ -462,7 +462,7 @@ function apiPost_(payload) {
 const LIFF_ID = '2011773510-WG4YyKFL';
 // 正式上線時改 true(同時後端 LINE_LOGIN_REQUIRED_ 改 true、LINE Login 頻道要先 Publish)；
 // 上線前只有測試頁 line_test.html(或網址加 ?linetest=1)走 LINE 登入
-const LINE_LOGIN_OPEN = false;
+const LINE_LOGIN_OPEN = true;
 const LINE_LOGIN_ON = LINE_LOGIN_OPEN || /\/line_test\.html$/.test(location.pathname) || new URLSearchParams(location.search).get('linetest') === '1';
 var lineSession_ = '';   // var：apiGet_/apiPost_ 可能在這行之前就被呼叫
 var lineExpiredShown_ = false;
