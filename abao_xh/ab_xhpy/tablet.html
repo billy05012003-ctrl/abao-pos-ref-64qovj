@@ -1202,7 +1202,7 @@ function lookupMember() {
 
 // 2026-09-29 LINE 登入(設計見 LINE登入設計_2026-09-28.md)：老闆定案門市不再用手機直接建會員，改請客人掃 QR 用 LINE 註冊。
 // 正式上線(點餐頁 LINE_LOGIN_OPEN、後端 LINE_LOGIN_REQUIRED_ 一起)時改 true；之前照舊用手機建會員
-const LINE_MEMBER_REGISTER = false;
+const LINE_MEMBER_REGISTER = true;
 const LINE_REGISTER_URL = 'https://liff.line.me/2011773510-WG4YyKFL';
 function showLineRegisterQr_() {
   const draw = () => {
