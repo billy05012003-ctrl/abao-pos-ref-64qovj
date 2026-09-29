@@ -445,8 +445,12 @@ const APP_KEY = 'abao-meibao-2026';
 // 還是讀到舊資料，過去交接記錄裡好幾次寫的「Google暫時性404/延遲」很可能有一部分其實是這個快取問題。
 // 補上_=時間戳記防快取參數，確保每次都真的打到最新資料
 function apiGet(params) {
-  const qs = new URLSearchParams({ ...params, appKey: APP_KEY, _: Date.now() }).toString();
-  return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json());
+  // 2026-09-29 讀資料 API 收緊：讀取也帶平板通行證(今日訂單/營收/查會員等要有效通行證才回)
+  const qs = new URLSearchParams({ ...params, posDevice: posDeviceToken_(), appKey: APP_KEY, _: Date.now() }).toString();
+  return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json()).then(d => {
+    if (d && d.code === 'pos_device') { setPosDeviceToken_(''); showPosDeviceBanner_(true); }
+    return d;
+  });
 }
 // 平板啟用(2026-09-29，待辦 C 8-1)：appKey 是公開的，後端要求 POS 前台動作帶「平板通行證」才收；
 // 通行證由店長/老闆在這台平板輸入一次 PIN 取得(一年有效)，存在這台平板。後端回 pos_device＝失效，清掉並顯示啟用提示
