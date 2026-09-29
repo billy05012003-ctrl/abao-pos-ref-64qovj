@@ -491,7 +491,18 @@ function lineStatusHtml_(html) {
 function lineLoginRedirect_() {
   liff.login({ redirectUri: location.href });
 }
+// 沒登入時頁面最上方固定顯示登入列(2026-09-29 老闆測揪團發現：朋友點連結先點餐，送出時才被要求登入，
+// 登入跳轉回來剛填的名字和餐點就不見了)，不用打開購物車才看到
+function showLineLoginBar_() {
+  if (document.getElementById('line-login-bar')) return;
+  document.body.insertAdjacentHTML('afterbegin', `
+    <div id="line-login-bar" style="position:sticky;top:0;z-index:50;background:#06C755;color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;font-size:0.9rem;">
+      <span style="flex:1;">線上點餐請先用 LINE 登入，登入後自動帶入會員資料</span>
+      <button type="button" onclick="lineLoginRedirect_()" style="flex:none;background:#fff;color:#06C755;border:none;border-radius:6px;padding:6px 12px;font-weight:700;">用 LINE 登入</button>
+    </div>`);
+}
 function renderLineLoginButton_(msg) {
+  showLineLoginBar_();
   lineStatusHtml_(`
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;">
       <div style="color:var(--muted);margin-bottom:8px;">${msg || '線上點餐需要 LINE 登入，登入後自動帶入會員資料'}</div>
@@ -512,7 +523,22 @@ async function initLineLogin_() {
     lineStatusHtml_(`<div style="color:#a30000;">LINE 登入元件載入失敗，請重新整理頁面，或從 LINE 官方帳號「A-Bao溪湖直營」的選單打開。</div>`);
     return;
   }
-  if (!liff.isLoggedIn()) { renderLineLoginButton_(); return; }
+  if (!liff.isLoggedIn()) {
+    // 一打開就先登入，登入完才開始點餐(不然點到一半跳去登入，回來填的東西會不見)。
+    // 同一個分頁只自動跳一次：客人按取消或登入失敗回來，就改顯示最上方的登入列，不會一直跳
+    // 記號存 localStorage＋時間(LINE 登入跳轉有時會換分頁，sessionStorage 會不見)，2 分鐘內跳過就不再自動跳
+    let autoTried = false;
+    try { autoTried = Date.now() - Number(localStorage.getItem('abao_line_autologin') || 0) < 120000; } catch (e) {}
+    if (!autoTried) {
+      try { localStorage.setItem('abao_line_autologin', String(Date.now())); } catch (e) {}
+      lineStatusHtml_('<div style="color:var(--muted);">前往 LINE 登入...</div>');
+      lineLoginRedirect_();
+      return;
+    }
+    renderLineLoginButton_();
+    return;
+  }
+  try { localStorage.removeItem('abao_line_autologin'); } catch (e) {}
   const idToken = liff.getIDToken();
   if (!idToken) { renderLineLoginButton_('請重新用 LINE 登入'); return; }
   let data;
