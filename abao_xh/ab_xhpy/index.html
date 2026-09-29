@@ -470,14 +470,13 @@
       <h2 style="margin:0;">揪朋友一起點</h2>
       <button type="button" onclick="closeGroupCreate()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
     </div>
-    <p style="font-size:0.85rem;color:var(--muted);margin:4px 0 10px;line-height:1.6;">開團後會產生一個連結，分享給朋友；朋友完成會員驗證、填名字就能把自己的餐點加進來。出單時每個人的餐點會分開印上名字。</p>
+    <p style="font-size:0.85rem;color:var(--muted);margin:4px 0 10px;line-height:1.6;">開團後把連結傳給朋友，大家各自點餐；你的餐點之後再點。</p>
     <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">誰付錢？</label>
-    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.9rem;margin:4px 0;cursor:pointer;"><input type="radio" name="group-paymode" value="host" checked onchange="onGroupPayModeChange_()"><span><b>我請客</b>：截止後由我一次付清，點數都歸我</span></label>
-    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.9rem;margin:4px 0;cursor:pointer;"><input type="radio" name="group-paymode" value="each" onchange="onGroupPayModeChange_()"><span><b>各付各的</b>：每個人送出時付自己那份、各自拿點數（我也付我自己的）</span></label>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.9rem;margin:4px 0;cursor:pointer;"><input type="radio" name="group-paymode" value="host" checked onchange="onGroupPayModeChange_()"><span><b>我請客</b>：結單後我一次付清（點數歸我）</span></label>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:0.9rem;margin:4px 0;cursor:pointer;"><input type="radio" name="group-paymode" value="each" onchange="onGroupPayModeChange_()"><span><b>各付各的</b>：每個人送出時付自己那份</span></label>
     <div id="group-pickup-box" style="display:none;">
-      <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">取餐日期（各付各的要先定好，大家付款時才知道何時取餐）</label>
-      <select id="group-pickup-date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;"></select>
       <label style="display:block;font-size:0.85rem;margin:10px 0 4px;color:var(--muted)">取餐時間</label>
+      <select id="group-pickup-date" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;"></select>
       <input type="hidden" id="group-pickup-time">
       <div id="group-pickup-time-grid"></div>
     </div>
@@ -489,7 +488,7 @@
       <option value="30">30 分鐘後</option><option value="45">45 分鐘後</option><option value="60">1 小時後</option>
       <option value="90">1.5 小時後</option><option value="120">2 小時後</option><option value="180">3 小時後</option>
     </select>
-    <div id="group-create-note" style="font-size:0.8rem;color:var(--muted);margin-top:8px;">你目前購物車裡的餐點會算成你自己的份。截止後 2 小時內沒有完成付款，揪團會自動作廢。</div>
+    <div id="group-create-note" style="font-size:0.8rem;color:var(--muted);margin-top:8px;"></div>
     <button class="btn-primary" id="group-create-btn" onclick="createGroup()">開團並產生分享連結</button>
   </div>
 </div>
@@ -1512,11 +1511,13 @@ function otherNeedsOptions_() {
     && !itemAvailabilityMap[ADDON_STATUS_PREFIX + a.name] && (!a.drinkOnly || hasDrink));
 }
 function otherNeedsChosen_() {
+  if (groupCheckoutMode) return [];   // 請客團主結帳：購物車是全團餐點，每個人的其他需求已經在裡面(2026-09-30)
   return otherNeedsOptions_().filter(a => otherNeedsSel.includes(a.name));
 }
 function otherNeedsSum_() { return otherNeedsChosen_().reduce((s, a) => s + a.amount, 0); }
 // 還沒選(也沒勾無須)就擋下並捲到那一塊；一般結帳、開團、送出揪團餐點共用
 function otherNeedsReady_() {
+  if (groupCheckoutMode) return true;
   if (!otherNeedsOptions_().length || otherNeedsNone || otherNeedsChosen_().length) return true;
   alert('請選擇「其他需求」，不需要的話請勾「無須加價購」');
   const box = document.getElementById('otherneeds-box');
@@ -1532,7 +1533,7 @@ function renderOtherNeeds_() {
   const el = document.getElementById('cart-otherneeds');
   if (!el) return;
   const opts = otherNeedsOptions_();
-  if (!opts.length || !cart.length) { el.innerHTML = ''; return; }
+  if (!opts.length || !cart.length || groupCheckoutMode) { el.innerHTML = ''; return; }
   const chosen = opts.filter(a => otherNeedsSel.includes(a.name));
   const blocked = a => chosen.some(c => c.name !== a.name && (c.excludes.includes(a.name) || a.excludes.includes(c.name)));
   const row = (checked, disabled, label, price, onchange) => `
@@ -3144,10 +3145,9 @@ function openStoreInfo_(tab) {
   document.getElementById('storeinfo-overlay').classList.add('open');
 }
 function closeStoreInfo_() { document.getElementById('storeinfo-overlay').classList.remove('open'); }
-// 首頁「揪團訂」：已經在揪團裡就打開揪團畫面；還沒點餐先提醒；點好了直接開團
+// 首頁「揪團」：已經在揪團裡就打開揪團畫面；否則直接開團(不用先點餐，2026-09-30)
 function onHomeGroupClick_() {
   if (groupCtx && groupView && !isGroupFinished_()) { openGroupPanel(); return; }
-  if (!cart.length) { alert('請先把自己的餐點加入購物車，再按「揪團訂」開團'); return; }
   openGroupCreate();
 }
 
@@ -3297,7 +3297,9 @@ function refreshGroupCartUi_() {
     ? (paid ? `你已經${me.payState === '付款中' ? '送出付款' : '付款'}，不能再修改餐點。` : `揪團目前「${groupView.groupStatus}」，已不能再修改餐點。`)
     : each
       ? `${who}請先在上方完成會員驗證，再送出並付款你自己那份（取餐時間：${groupPickupText_()}）。`
-      : `${who}請先在上方完成會員驗證，再把餐點送進「${groupView.hostName} 的揪團」（${groupView.hostName} 請客，不用付款）。`;
+      : isGroupHost_()
+        ? `${who}把你的餐點送進揪團，結單後由你一次付清。`
+        : `${who}請先在上方完成會員驗證，再把餐點送進「${groupView.hostName} 的揪團」（${groupView.hostName} 請客，不用付款）。`;
   document.getElementById('group-agree-row').style.display = open && each ? 'flex' : 'none';
   const btn = document.getElementById('group-submit-btn');
   btn.style.display = open ? 'block' : 'none';
@@ -3309,14 +3311,12 @@ function onGroupPayModeChange_() {
   const each = document.querySelector('input[name="group-paymode"]:checked').value === 'each';
   document.getElementById('group-pickup-box').style.display = each ? 'block' : 'none';
   document.getElementById('group-create-note').textContent = each
-    ? '你目前購物車裡的餐點會算成你自己的份，開團後請記得付款你自己那份。每個人付款後訂單就各自成立，照上面的取餐時間出餐。'
-    : '你目前購物車裡的餐點會算成你自己的份。截止後 2 小時內沒有完成付款，揪團會自動作廢。';
+    ? '每個人付款後訂單就各自成立，照上面的取餐時間出餐。'
+    : '截止後 2 小時內沒有完成付款，揪團會自動作廢。';
   if (each) { populatePickupDate(GROUP_PICKUP_IDS_); populatePickupTime(document.getElementById(GROUP_PICKUP_IDS_.date).value, GROUP_PICKUP_IDS_); }
 }
 function openGroupCreate() {
-  if (!cart.length) { alert('請先把你自己要吃的餐點加入購物車，再開團'); return; }
   if (!groupVerifiedPhone_()) { alert(LINE_LOGIN_ON ? '揪團需要會員，請先在下方用 LINE 登入並完成會員註冊' : '揪團需要會員，請先在下方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
-  if (!otherNeedsReady_()) return;   // 團主自己的其他需求
   closeCart();
   const nm = document.getElementById('group-host-name');
   if (!nm.value && verifiedMember && verifiedMember.name) nm.value = String(verifiedMember.name).slice(0, 12);
@@ -3330,7 +3330,7 @@ function createGroup() {
   const phone = groupVerifiedPhone_();
   if (!phone) { alert('會員驗證資料有異動，請回購物車重新驗證'); return; }
   const payMode = document.querySelector('input[name="group-paymode"]:checked').value;
-  const payload = { action: 'groupCreate', storeId: 'meibao', hostName: name, memberPhone: phone, payMode, deadlineMin: Number(document.getElementById('group-deadline').value), items: groupItemsFromCart_() };
+  const payload = { action: 'groupCreate', storeId: 'meibao', hostName: name, memberPhone: phone, payMode, deadlineMin: Number(document.getElementById('group-deadline').value), items: [] };   // 2026-09-30：開團不帶餐點，團主之後跟朋友一樣自己送出
   if (payMode === 'each') {
     const t = document.getElementById(GROUP_PICKUP_IDS_.time).value;
     if (!t) { alert('請選擇取餐時間'); return; }
@@ -3343,8 +3343,7 @@ function createGroup() {
     if (data.status !== 'ok') throw new Error(data.message || '開團失敗');
     groupCtx = { groupId: data.groupId, hostToken: data.hostToken, memberToken: data.memberToken, name };
     saveGroupCtx_();
-    cart = []; saveCartSession(); updateCartBar();   // 你的餐點已經存進揪團
-    otherNeedsSel = []; otherNeedsNone = false;
+    // 購物車裡已經點的餐保留，團主確認好再從「我的訂單」送出到揪團(老闆 09-30 定案)
     // 網址換成揪團連結(保留其他參數)，重新整理也回得來
     const u = new URL(location.href); u.searchParams.set('g', data.groupId); u.searchParams.delete('h'); history.replaceState(null, '', u.toString());
     closeGroupCreate();
@@ -3405,7 +3404,7 @@ function payMyGroupShare_(myCart, phone, name, myNeeds) {
 // 修改自己的餐點：把自己送出過的餐點放回購物車，改完再送出一次(會取代舊的)
 function editMyGroupItems() {
   const me = groupMe_();
-  if (me) {
+  if (me && me.items.length) {
     // 其他需求不放回購物車當餐點，還原成「其他需求」那一塊的勾選(當初沒選任何一項＝勾了無須)
     cart = me.items.filter(it => !it.x2).map(it => Object.assign({}, it));
     otherNeedsSel = me.items.filter(it => it.x2).map(it => it.name);
@@ -3413,7 +3412,7 @@ function editMyGroupItems() {
     saveCartSession(); updateCartBar();
   }
   closeGroupPanel();
-  openCart();
+  if (cart.length) openCart();   // 還沒點任何東西(剛開團的團主)：關掉揪團畫面直接看菜單點餐
 }
 function leaveGroup() {
   if (!confirm('確定要退出這個揪團？你送出的餐點會被刪除。')) return;
@@ -3472,7 +3471,7 @@ function renderGroupPanel_() {
     // 各付各的：每個人管自己那份(團主也一樣)
     const mePay = me ? me.payState : '';
     const canEditMine = me && mePay === '未付款' && (st === '收單中' || st === '已結單');
-    if (canEditMine) h += `<button type="button" class="btn-primary" onclick="editMyGroupItems()">修改／付款我的餐點（$${me.subtotal}）</button>`;
+    if (canEditMine) h += `<button type="button" class="btn-primary" onclick="editMyGroupItems()">${me.items.length ? `修改／付款我的餐點（$${me.subtotal}）` : '開始點我的餐'}</button>`;
     if (me && mePay === '付款中') h += `<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">你那份已送出付款（訂單 ${escapeHtml_(me.orderId)}），還沒完成。</div><button type="button" class="btn-primary" onclick="resumeGroupPayment()">繼續付款</button>`;
     if (me && mePay === '已付款') h += `<div style="font-size:0.9rem;margin-top:8px;">✅ 你那份已付款，訂單編號 <b>${escapeHtml_(me.orderId)}</b>，請於 ${escapeHtml_(groupPickupText_())} 取餐。</div>`;
     if (canEditMine && !host) h += `<button type="button" class="btn-secondary" style="color:#a30000;border-color:#e0a0a0;" onclick="leaveGroup()">退出揪團</button>`;
@@ -3481,7 +3480,7 @@ function renderGroupPanel_() {
     if (host && st === '已結單' && left > 0) h += `<button type="button" class="btn-secondary" onclick="lockGroup(false)">重新開放朋友加入</button>`;
     if (st === '已截止') h += `<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">揪團已截止。已付款的人訂單都已成立，沒付款的人這次沒有成立。</div>`;
   } else {
-    if (st === '收單中' && g.myMemberId) h += `<button type="button" class="btn-secondary" onclick="editMyGroupItems()">修改我的餐點</button>` + (host ? '' : `<button type="button" class="btn-secondary" style="color:#a30000;border-color:#e0a0a0;" onclick="leaveGroup()">退出揪團</button>`);
+    if (st === '收單中' && g.myMemberId) h += `<button type="button" class="btn-secondary" onclick="editMyGroupItems()">${me && me.items.length ? '修改我的餐點' : '開始點我的餐'}</button>` + (host ? '' : `<button type="button" class="btn-secondary" style="color:#a30000;border-color:#e0a0a0;" onclick="leaveGroup()">退出揪團</button>`);
     if (st === '收單中' && !g.myMemberId && !host) h += `<button type="button" class="btn-primary" onclick="closeGroupPanel()">開始點餐</button>`;
     if (host) {
       if (st === '收單中' || st === '已截止') h += `<button type="button" class="btn-primary" onclick="lockGroup(true)">結單（鎖住，朋友不能再改）</button>`;
