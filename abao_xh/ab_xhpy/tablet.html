@@ -163,6 +163,7 @@
     style="width:260px;height:110px;border:2px solid rgba(255,255,255,0.4);border-radius:8px;background:#fff;flex:none"
     title="印單模組"></iframe>
 </header>
+<div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
   <div class="pos-col pos-col-items">
@@ -447,8 +448,16 @@ function apiGet(params) {
   const qs = new URLSearchParams({ ...params, appKey: APP_KEY, _: Date.now() }).toString();
   return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json());
 }
+// 平板啟用(2026-09-29，待辦 C 8-1)：appKey 是公開的，後端要求 POS 前台動作帶「平板通行證」才收；
+// 通行證由店長/老闆在這台平板輸入一次 PIN 取得(一年有效)，存在這台平板。後端回 pos_device＝失效，清掉並顯示啟用提示
+const POS_DEVICE_KEY_ = 'abao_pos_device_' + STORE_ID;
+function posDeviceToken_() { try { return localStorage.getItem(POS_DEVICE_KEY_) || ''; } catch (e) { return ''; } }
+function setPosDeviceToken_(t) { try { if (t) localStorage.setItem(POS_DEVICE_KEY_, t); else localStorage.removeItem(POS_DEVICE_KEY_); } catch (e) {} }
 function apiPost(payload) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ via: 'pos', ...payload, appKey: APP_KEY }) }).then(r => r.json());
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ via: 'pos', posDevice: posDeviceToken_(), ...payload, appKey: APP_KEY }) }).then(r => r.json()).then(d => {
+    if (d && d.code === 'pos_device') { setPosDeviceToken_(''); showPosDeviceBanner_(true); }
+    return d;
+  });
 }
 
 // ---- POS權限設定(2026-09-25)：每個功能的最低角色由POS後台「POS管理→權限設定」決定 ----
@@ -478,6 +487,28 @@ function withPosPerm_(code, label, fn, onCancel) {
       fn(name, pin);
     }).catch(() => { alert('網路異常，請稍後再試'); if (onCancel) onCancel(); });
   }, role, onCancel);
+}
+
+function showPosDeviceBanner_(show) { const b = document.getElementById('pos-device-banner'); if (b) b.style.display = show ? '' : 'none'; }
+let posDeviceActivating_ = false;
+function activatePosDevice_() {
+  if (posDeviceActivating_) return;
+  posDeviceActivating_ = true;
+  openPosStaffPinPrompt_('啟用這台平板（需要店長或老闆 PIN）', (name, pin) => {
+    posDeviceActivating_ = false;
+    if (!name) { alert('尚未設定POS夥伴，請先到POS後台「POS管理」建立店長／老闆'); return; }
+    apiPost({ action: 'posDeviceActivate', storeId: STORE_ID, staffName: name, staffPin: pin }).then(d => {
+      if (d.status !== 'ok') { alert(d.message || '啟用失敗'); return; }
+      setPosDeviceToken_(d.token);
+      showPosDeviceBanner_(false);
+      alert('這台平板已啟用（' + d.by + '），一年內不用再輸入');
+    }).catch(() => alert('網路異常，請稍後再試'));
+  }, '店長', () => { posDeviceActivating_ = false; });
+}
+// 打開時確認：沒有通行證→顯示啟用提示；有的話問後端還有沒有效(失效由 apiPost 統一處理)
+function checkPosDevice_() {
+  if (!posDeviceToken_()) { showPosDeviceBanner_(true); return; }
+  apiPost({ action: 'posDeviceCheck', storeId: STORE_ID }).catch(() => {});
 }
 
 let currentStoreStatus = { busy: false, paused: false, items: {} };
@@ -1031,6 +1062,7 @@ function loadPromoSettings() {
 }
 const promoSettingsReady = loadPromoSettings();
 const posPermissionsReady = loadPosPermissions();   // POS權限設定(2026-09-25)
+checkPosDevice_();   // 平板啟用(2026-09-29)
 
 // 飲品升級規則(2026-09-13新增)：來源分類→目標品項＋加價金額，取代原本店員自己輸入加價金額、
 // 品項不會真的換成目標飲品的舊做法(見applyDrinkUpgrade)
