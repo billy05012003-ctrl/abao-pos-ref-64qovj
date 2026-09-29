@@ -2539,24 +2539,20 @@ function confirmAddToPosCart() {
   }
   const note = document.getElementById('pos-item-modal-note').value.trim();
   const unit = calcPosModalUnitPrice();
-  // 2026-09-29 老闆定案出單配料順序：餐點選項 → 飲料(冰塊甜度併進同一段) → 其他(同線上點餐 comboOptionParts_)
-  const optionParts = [];
+  // 2026-09-29 老闆定案出單配料順序(同線上點餐 comboOptionParts_)：餐點選項 → 飲料(冰塊甜度併進同一段) → 嚴選限定/豪華升級
   const posDrinkKey = currentPosModal.activeDrinkGroupKey;
   const posDrinkExtras = currentPosModal.comboDrinkExtraGroups || [];
+  const POS_EXCLUSIVE_GROUPS = ['deluxe_upgrade', 'dine_set_addon'];
   const posHas = gk => currentPosModal.groups[gk] && currentPosModal.groups[gk].length;
-  Object.keys(currentPosModal.groups).forEach(gKey => {
-    if (!posHas(gKey) || gKey === posDrinkKey || (posDrinkKey && posDrinkExtras.includes(gKey))) return;
-    if (gKey === 'combo_drink' && currentPosModal.comboDrinkSize) {
-      optionParts.push(currentPosModal.groups[gKey][0] + ' ' + currentPosModal.comboDrinkSize.toUpperCase());
-    } else {
-      optionParts.push(currentPosModal.groups[gKey].join('/'));
-    }
-  });
+  const posPlain = gk => (gk === 'combo_drink' && currentPosModal.comboDrinkSize) ? currentPosModal.groups[gk][0] + ' ' + currentPosModal.comboDrinkSize.toUpperCase() : currentPosModal.groups[gk].join('/');
+  const posKeys = Object.keys(currentPosModal.groups).filter(gk => posHas(gk) && gk !== posDrinkKey && !(posDrinkKey && posDrinkExtras.includes(gk)));
+  const optionParts = posKeys.filter(gk => !POS_EXCLUSIVE_GROUPS.includes(gk)).map(posPlain);
   if (posDrinkKey && posHas(posDrinkKey)) {
     const drink = currentPosModal.groups[posDrinkKey][0] + (posDrinkKey === 'combo_drink' && currentPosModal.comboDrinkSize ? ' ' + currentPosModal.comboDrinkSize.toUpperCase() : '');
     const ex = posDrinkExtras.filter(posHas).map(gk => currentPosModal.groups[gk].join('/'));
     optionParts.push('飲料：' + drink + (ex.length ? '（' + ex.join('、') + '）' : ''));
   }
+  optionParts.push(...posKeys.filter(gk => POS_EXCLUSIVE_GROUPS.includes(gk)).map(posPlain));
   const lineKey = currentPosModal.key + (currentPosModal.size || '') + '|' + optionParts.join(',') + '|' + note;
   const displayName = currentPosModal.item.name + (optionParts.length ? '（' + optionParts.join('、') + '）' : '');
 

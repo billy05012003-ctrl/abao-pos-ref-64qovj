@@ -2325,24 +2325,23 @@ function closeItemModal() {
   return wasEditing;
 }
 
-// 品名後面括號的選項順序＝出單的配料順序(2026-09-29 老闆定案)：餐點選項 → 飲料(冰塊甜度等併進同一段) → 加購。
-// 原本照點選順序，套餐飲料會夾在餐點選項中間、冰塊甜度跟飲料分開。飲料段內用「、」，出單解析只拆最外層的「、」
+// 品名後面括號的選項順序＝出單的配料順序(2026-09-29 老闆定案，跟套餐流程的頁面順序一致)：
+// 飲料之前的頁(餐點特製、升級套餐的點心) → 飲料(冰塊甜度等併進同一段「飲料：中杯紅茶（正常冰、正常糖）」) →
+// 飲料之後的頁(嚴選限定/豪華升級；加價購、醬料由 confirmAddToCart 接在最後)。出單依「飲料：」分三層縮排，只拆最外層的「、」
 function comboOptionParts_(m) {
   const drinkKey = m.activeDrinkGroupKey;
   const extras = m.comboDrinkExtraGroups || [];
   const has = gk => m.groups[gk] && m.groups[gk].length;
-  const parts = [];
-  Object.keys(m.groups).forEach(gKey => {
-    if (!has(gKey) || gKey === drinkKey || (drinkKey && extras.includes(gKey))) return;
-    if (gKey === 'combo_drink' && m.comboDrinkSize) parts.push(m.groups[gKey][0] + ' ' + m.comboDrinkSize.toUpperCase());
-    else parts.push(m.groups[gKey].join('/'));
-  });
+  const isDrinkPart = gk => gk === drinkKey || (drinkKey && extras.includes(gk));
+  const plain = gk => (gk === 'combo_drink' && m.comboDrinkSize) ? m.groups[gk][0] + ' ' + m.comboDrinkSize.toUpperCase() : m.groups[gk].join('/');
+  const keys = Object.keys(m.groups).filter(gk => has(gk) && !isDrinkPart(gk));
+  const parts = keys.filter(gk => !WIZ_EXCLUSIVE_GROUPS.includes(gk)).map(plain);
   if (drinkKey && has(drinkKey)) {
     const drink = m.groups[drinkKey][0] + (drinkKey === 'combo_drink' && m.comboDrinkSize ? ' ' + m.comboDrinkSize.toUpperCase() : '');
     const ex = extras.filter(has).map(gk => m.groups[gk].join('/'));
     parts.push('飲料：' + drink + (ex.length ? '（' + ex.join('、') + '）' : ''));
   }
-  return parts;
+  return parts.concat(keys.filter(gk => WIZ_EXCLUSIVE_GROUPS.includes(gk)).map(plain));
 }
 
 function confirmAddToCart() {
