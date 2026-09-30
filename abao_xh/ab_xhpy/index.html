@@ -631,7 +631,7 @@ const LINE_LOGIN_ON = LINE_LOGIN_OPEN || /\/line_test\.html$/.test(location.path
 var lineSession_ = '';   // var：apiGet_/apiPost_ 可能在這行之前就被呼叫
 // 底部三分頁「新品推薦／會員好康／線上點餐」(2026-09-30 第一波)：正式開放前只有網址加 ?tabstest=1 看得到，
 // 老闆測過沒問題再把 HOME_TABS_OPEN 改成 true。var：會員列/購物車等函式可能在後面宣告前就被叫到
-var HOME_TABS_OPEN = false;
+var HOME_TABS_OPEN = true;   // 09-30 老闆說「打開開關」，所有客人都看到底部三分頁
 var HOME_TABS_ON = HOME_TABS_OPEN || new URLSearchParams(location.search).get('tabstest') === '1';
 var lineExpiredShown_ = false;
 function lineSessionCheck_(data) {
