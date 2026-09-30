@@ -1260,8 +1260,60 @@ function goToVoucherCat_(cat) {
   const idx = Object.keys(CATALOG).indexOf(cat);
   if (idx >= 0) setTimeout(() => goToCategory(idx), 0);
 }
-function recalcVoucherDiscounts_() {
+// 活動券自動套用(2026-09-30 老闆定案「有定食就自動送，客人不用按券」)：
+// 週四雞塊(適用品項＋需搭配分類)＝取餐日對、購物車有定食，就自動加一份「贈品」雞塊並用券折成 $0；定食拿掉贈品也拿掉；
+// 週二茶拿鐵(適用分類)＝取餐日對、同分類兩杯以上就自動折。客人手動把贈品刪掉就記住不再自動加(可在兌換券視窗加回)
+var declinedGifts_ = new Set();
+function giftKey_(voucherId) { return 'gift|' + voucherId; }
+function actVouchersForPickup_() {
   const pick = currentPickupISO_();
+  return checkoutMemberVouchers.filter(v => v.actDate && v.actDate === pick && VOUCHER_BEHAVIOR[v.type]);
+}
+function catalogItemByName_(name) {
+  for (const k of Object.keys(CATALOG)) { const it = (CATALOG[k] || []).find(x => x.name === name); if (it) return it; }
+  return null;
+}
+// 贈品狀態：ok / needCat(還沒點要搭配的分類) / soldout / missing(菜單沒有) / declined(客人刪掉了)
+function actGiftState_(v) {
+  const b = VOUCHER_BEHAVIOR[v.type] || {};
+  if (declinedGifts_.has(v.voucherId)) return 'declined';
+  if (b.requireCat && !cartHasCat_(b.requireCat)) return 'needCat';
+  if (!catalogItemByName_(b.targetItem)) return 'missing';
+  if (itemAvailabilityMap[b.targetItem]) return 'soldout';
+  return 'ok';
+}
+function syncActGifts_() {
+  if (groupCtx || groupCheckoutMode) return false;   // 揪團不送(後端也只認自己的單)
+  let changed = false;
+  const want = new Set();
+  actVouchersForPickup_().forEach(v => {
+    const b = VOUCHER_BEHAVIOR[v.type];
+    if (!b || b.targetCat || !b.targetItem || !b.requireCat) return;   // 只處理「需搭配＋送品項」這種(週四雞塊)
+    if (actGiftState_(v) !== 'ok') return;
+    want.add(giftKey_(v.voucherId));
+    if (cart.some(c => c.lineKey === giftKey_(v.voucherId))) return;
+    const it = catalogItemByName_(b.targetItem);
+    const price = Number(it.price) || Number(it.price_m) || 0;
+    cart.push({ lineKey: giftKey_(v.voucherId), name: b.targetItem, baseName: b.targetItem, size: '', price, basePrice: price, qty: 1, note: '活動贈品', gift: { voucherId: v.voucherId, type: v.type } });
+    changed = true;
+  });
+  const before = cart.length;
+  cart = cart.filter(c => !c.gift || want.has(c.lineKey));
+  if (cart.length !== before) changed = true;
+  if (changed) saveCartSession();
+  return changed;
+}
+function recalcVoucherDiscounts_() {
+  syncActGifts_();
+  const pick = currentPickupISO_();
+  // 活動券一律自動：贈品券綁到贈品那一列；任兩件的券自動加入(下面算完是 $0 就拿掉，免得付款時白白核銷)
+  actVouchersForPickup_().forEach(v => {
+    if (checkoutSelectedVouchers.some(x => x.voucherId === v.voucherId)) return;
+    const b = VOUCHER_BEHAVIOR[v.type];
+    if (b.targetCat) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: null, pair: true, auto: true });
+    else if (cart.some(c => c.lineKey === giftKey_(v.voucherId))) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: giftKey_(v.voucherId), auto: true });
+  });
+  checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => !v.auto || !v.targetLineKey || cart.some(c => c.lineKey === v.targetLineKey));
   // 活動券：取餐日不是活動日、或要搭配的分類不見了，就自動取消
   checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => {
     const mv = memberAllVouchers_.find(x => x.voucherId === v.voucherId);
@@ -1304,6 +1356,7 @@ function recalcVoucherDiscounts_() {
     }
     v.discountAmount = amount;
   });
+  checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => !(v.auto && v.pair && !v.discountAmount));
 }
 function voucherDiscountTotal_() {
   recalcVoucherDiscounts_();
@@ -1601,28 +1654,13 @@ function renderCheckoutVoucherList() {
   }
   const selectedIds = new Set(checkoutSelectedVouchers.map(v => v.voucherId));
   const pick = currentPickupISO_();
+  recalcVoucherDiscounts_();   // 自動套用的活動券先算好，狀態文字才對
   listEl.innerHTML = checkoutMemberVouchers.map(v => {
     const behavior = VOUCHER_BEHAVIOR[v.type];
-    if (!behavior) return '';
-    // 活動券(2026-09-30 第二波)：只能用在活動日取餐的訂單；要搭配的分類還沒點就提示先去點
-    if (v.actDate) {
-      const title = `${escapeHtml_(v.type)}<br><span style="color:var(--muted);font-size:0.74rem;">限 ${homeMd_(v.actDate)}（${homeWd_(v.actDate)}）取餐使用</span>`;
-      if (v.actDate !== pick) {
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.6;"><span>${title}</span><span style="color:var(--muted);font-size:0.74rem;text-align:right;">取餐日改成<br>${homeMd_(v.actDate)} 才能用</span></div>`;
-      }
-      if (behavior.requireCat && !cartHasCat_(behavior.requireCat)) {
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;"><span>${title}</span><button type="button" class="btn-secondary" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" onclick="goToVoucherCat_('${behavior.requireCat.replace(/'/g, "\\'")}')">先點${escapeHtml_(shortCatName(behavior.requireCat))}</button></div>`;
-      }
-      if (behavior.targetCat) {
-        const on = selectedIds.has(v.voucherId);
-        const sel = checkoutSelectedVouchers.find(x => x.voucherId === v.voucherId);
-        const hint = on ? (sel && sel.discountAmount ? `已折 $${sel.discountAmount}` : `再點一杯${escapeHtml_(shortCatName(behavior.targetCat))}就折`) : `${escapeHtml_(shortCatName(behavior.targetCat))}任選兩杯，較便宜那杯${behavior.effect === 'discount60' ? '6折' : '半價'}`;
-        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;">
-          <span>${escapeHtml_(v.type)}<br><span style="color:var(--muted);font-size:0.74rem;">限 ${homeMd_(v.actDate)} 取餐・${hint}</span></span>
-          <button type="button" class="btn-${on ? 'primary' : 'secondary'}" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" onclick="toggleCheckoutVoucher('${v.voucherId}','${v.type}')">${on ? '取消套用' : '套用'}</button>
-        </div>`;
-      }
-    }
+    // 線上不能用的券(自訂折數、POS 專用、已停用的舊券)也列出來，會員卡上的張數才對得上(2026-09-30)
+    if (!behavior) return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.55;"><span>${escapeHtml_(v.type)}</span><span style="color:var(--muted);font-size:0.74rem;">限門市使用</span></div>`;
+    // 活動券(2026-09-30 老闆定案：自動套用，客人不用按)：只顯示目前狀態
+    if (v.actDate) return actVoucherRow_(v, behavior, pick);
     if (behavior.mode === 'item' && !findCartLineForVoucher(v.type)) {
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;${(voucherTargetText_(v.type) || v.type === '美式狂想乙套兌換券') ? '' : 'opacity:0.5;'}">
         <span>${v.type}${voucherTargetText_(v.type) ? `<br><span style="color:var(--muted);font-size:0.74rem;">${escapeHtml_(voucherTargetText_(v.type))}</span>` : ''}</span>${(voucherTargetText_(v.type) || v.type === '美式狂想乙套兌換券')
@@ -1638,6 +1676,32 @@ function renderCheckoutVoucherList() {
   }).join('');
 }
 
+function actVoucherRow_(v, b, pick) {
+  const dateTxt = `${homeMd_(v.actDate)}（${homeWd_(v.actDate)}）`;
+  const btn = (label, js) => `<button type="button" class="btn-secondary" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;flex:none;" onclick="${js}">${label}</button>`;
+  let status = '', action = '', on = false;
+  if (v.actDate !== pick) {
+    status = `限 ${dateTxt} 取餐使用，取餐日改成 ${homeMd_(v.actDate)} 就會自動套用`;
+    action = btn('改取餐日', 'closeWallet_();openPickupPicker_()');
+  } else if (b.targetCat) {
+    const sel = checkoutSelectedVouchers.find(x => x.voucherId === v.voucherId);
+    const n = cart.filter(c => !c.x2 && catOfLine_(c) === b.targetCat).reduce((t, c) => t + c.qty, 0);
+    on = !!(sel && sel.discountAmount);
+    status = on ? `已自動套用，折 $${sel.discountAmount}` : `${escapeHtml_(shortCatName(b.targetCat))}任選兩杯自動${b.effect === 'discount60' ? '6折' : '半價'}（目前 ${n} 杯）`;
+    if (!on) action = btn('去點' + escapeHtml_(shortCatName(b.targetCat)), `goToVoucherCat_('${b.targetCat.replace(/'/g, "\\'")}')`);
+  } else {
+    const st = actGiftState_(v);
+    on = st === 'ok' && cart.some(c => c.lineKey === giftKey_(v.voucherId));
+    if (on) status = `已自動套用：送 ${escapeHtml_(b.targetItem)}`;
+    else if (st === 'needCat') { status = `點任一份「${escapeHtml_(shortCatName(b.requireCat))}」，${escapeHtml_(b.targetItem)}自動送`; action = btn('去點' + escapeHtml_(shortCatName(b.requireCat)), `goToVoucherCat_('${b.requireCat.replace(/'/g, "\\'")}')`); }
+    else if (st === 'soldout') status = `${escapeHtml_(b.targetItem)}今日售完，這次無法贈送`;
+    else if (st === 'missing') status = `${escapeHtml_(b.targetItem)}目前沒有供應，請洽門市`;
+    else if (st === 'declined') { status = '你已移除這份贈品'; action = btn('加回贈品', `declinedGifts_.delete('${v.voucherId}');updateCartBar();renderCheckoutVoucherList();if(document.getElementById('cart-overlay').classList.contains('open'))renderCart();`); }
+  }
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0;font-size:0.82rem;">
+      <span>${on ? '✅ ' : ''}${escapeHtml_(v.type)}<br><span style="color:${on ? '#1e7b34' : 'var(--muted)'};font-size:0.74rem;">${status}</span></span>${action}
+    </div>`;
+}
 function toggleCheckoutVoucher(voucherId, type) {
   const idx = checkoutSelectedVouchers.findIndex(v => v.voucherId === voucherId);
   if (idx !== -1) {
@@ -2849,6 +2913,7 @@ function editCartLine(lineKey) {
 }
 
 function updateCartBar() {
+  syncActGifts_();   // 活動贈品(週四雞塊)跟著購物車自動加/拿掉
   const count = cart.reduce((s, c) => s + c.qty, 0);
   document.getElementById('cart-count').textContent = count;
   document.getElementById('cart-total-bar').textContent = '$' + cartDue_().due;   // 已扣兌換券/會員權益
@@ -2856,6 +2921,7 @@ function updateCartBar() {
 }
 
 function renderCart() {
+  syncActGifts_();
   const linesEl = document.getElementById('cart-lines');
   linesEl.innerHTML = '';
   if (cart.length === 0) {
@@ -2865,7 +2931,9 @@ function renderCart() {
     const div = document.createElement('div');
     div.className = 'cart-line';
     div.innerHTML = `
-      <div class="cart-line-name" style="cursor:${c.edit && !groupCheckoutMode ? 'pointer' : 'default'};">${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.x2 ? '其他需求：' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
+      <div class="cart-line-name" style="cursor:${c.edit && !groupCheckoutMode ? 'pointer' : 'default'};">${c.who ? '<span class="cart-who">' + escapeHtml_(c.who) + '</span>' : ''}${c.x2 ? '其他需求：' : ''}${c.name}${c.size ? ' ('+c.size+')' : ''}${c.gift
+        ? `<br><span style="color:#1e7b34;font-size:0.78rem;font-weight:700;">🎁 活動贈品（${escapeHtml_(c.gift.type)}）</span><br><span style="color:var(--muted);font-size:0.8rem">$0<span style="text-decoration:line-through;margin-left:4px;">$${c.price}</span></span>`
+        : `${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span>`}</div>
       <div style="display:flex;align-items:center;gap:8px;flex:none;">
         <button class="qty-btn" data-act="dec">-</button>
         <span>${c.qty}</span>
@@ -2881,6 +2949,7 @@ function renderCart() {
     div.querySelector('[data-act="inc"]').onclick = () => changeQty(c.lineKey, 1);
     // 揪團結帳：品項是全團的餐點(後端以揪團明細為準)，這裡不能加減，要改請回揪團
     if (groupCheckoutMode) div.querySelectorAll('.qty-btn').forEach(b => b.style.visibility = 'hidden');
+    if (c.gift) { div.querySelector('[data-act="inc"]').style.visibility = 'hidden'; div.querySelector('[data-act="dec"]').textContent = '✕'; }
     linesEl.appendChild(div);
   });
   const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
@@ -2894,6 +2963,12 @@ function renderCart() {
 function changeQty(lineKey, delta) {
   const idx = cart.findIndex(c => c.lineKey === lineKey);
   if (idx === -1) return;
+  // 活動贈品：只能拿掉(客人不要)，記住不再自動加，兌換券視窗可以加回來
+  if (cart[idx].gift) {
+    if (delta > 0 || !confirm('確定不要這份活動贈品嗎？（之後可以在「🎟 券」加回來）')) return;
+    declinedGifts_.add(cart[idx].gift.voucherId);
+    checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => v.voucherId !== cart[idx].gift.voucherId);
+  }
   cart[idx].qty += delta;
   if (cart[idx].qty <= 0) cart.splice(idx, 1);
   pruneStaleVoucherSelections_();
@@ -4007,16 +4082,44 @@ function homeActClaimBtn_(a, date) {
   if (!verifiedMember) return `<button type="button" class="hp-btn" onclick="onHomeMemberLogin_()">登入領券</button>`;
   const mine = memberAllVouchers_.find(v => v.actId === a.id && v.actDate === date);
   if (mine) return `<span class="hp-btn g">${mine.statusText === '已使用' ? '已使用' : '已領取'}</span>`;
-  return `<button type="button" class="hp-btn" onclick="claimHomeAct_(this, '${a.id}', '${date}')">領券</button>`;
+  return `<button type="button" class="hp-btn" onclick="event.stopPropagation();claimHomeAct_(this, '${a.id}', '${date}')">領券</button>`;
+}
+// 活動介紹(2026-09-30 老闆要求卡片要點得進去)：圖、完整說明、接下來的活動日、對象通路、能領就有領券鈕
+function openHomeActDetail_(id) {
+  const a = HOME_ACTS.find(x => x.id === id);
+  if (!a) return;
+  const t = todayYmd_(), tm = homeAddDays_(t, 1);
+  const dates = (a.dates || []).filter(d => d >= t);
+  const grad = HOME_ACT_GRADS_[a.color] || HOME_ACT_GRADS_['橘'];
+  const chip = d => `<span style="display:inline-block;background:${d === t ? 'var(--brand)' : '#fff1ea'};color:${d === t ? '#fff' : 'var(--brand-dark)'};border-radius:999px;padding:2px 10px;font-size:0.8rem;margin:2px 4px 2px 0;">${d === t ? '今天 ' : d === tm ? '明天 ' : ''}${homeMd_(d)}（${homeWd_(d)}）</span>`;
+  const claimDate = dates.find(d => d === t || d === tm);
+  const claim = claimDate ? homeActClaimBtn_(a, claimDate) : '';
+  document.getElementById('home-detail-body').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h2 style="margin:0;font-size:1.1rem;">${escapeHtml_(a.icon || '🎁')} ${escapeHtml_(a.title)}</h2>
+      <button type="button" onclick="document.getElementById('home-detail-overlay').classList.remove('open')" style="border:none;background:none;font-size:1.4rem;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
+    </div>
+    <div style="height:140px;border-radius:14px;${a.photoUrl ? 'background:' + homeCssUrl_(a.photoUrl) + ' center/cover;' : `background:linear-gradient(135deg,${grad[0]},${grad[1]});`}display:flex;align-items:center;justify-content:center;font-size:4rem;">${a.photoUrl ? '' : escapeHtml_(a.icon || '🎁')}</div>
+    <p style="font-size:0.95rem;line-height:1.6;margin:12px 0 6px;font-weight:600;">${escapeHtml_(a.desc)}</p>
+    <div style="font-size:0.82rem;color:var(--muted);margin-bottom:10px;">${escapeHtml_(homeActSub_(a))}${a.endDate ? '・活動到 ' + homeMd_(a.endDate) : ''}</div>
+    <div style="font-size:0.85rem;font-weight:700;margin-bottom:4px;">接下來的活動日</div>
+    <div>${dates.length ? dates.slice(0, 8).map(chip).join('') : '<span style="font-size:0.82rem;color:var(--muted);">日期公布中</span>'}</div>
+    ${homeActClaimable_(a) ? `<div style="font-size:0.78rem;color:var(--muted);margin-top:10px;line-height:1.5;">活動前一天起可以領券，每人每個活動日 1 張，只能用在活動日取餐的訂單；符合條件結帳時會自動套用。</div>` : ''}
+    <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;">
+      ${claim}
+      <button type="button" class="hp-btn" style="background:#fff;color:var(--brand);border:1px solid var(--brand);" onclick="document.getElementById('home-detail-overlay').classList.remove('open');switchHomeTab_('order')">去點餐</button>
+    </div>`;
+  document.getElementById('home-detail-overlay').classList.add('open');
 }
 function claimHomeAct_(btn, actId, date) {
   btn.disabled = true; btn.textContent = '領取中…';
   apiPost_({ action: 'claimActVoucher', storeId: 'meibao', actId, date }).then(data => {
     if (data.status !== 'ok' && data.code !== 'claimed') { alert(data.message || '領券失敗，請稍後再試'); btn.disabled = false; btn.textContent = '領券'; return; }
     alert(data.status === 'ok'
-      ? `已領取「${data.type}」！\n只能用在 ${homeMd_(date)}（${homeWd_(date)}）取餐的訂單，結帳時在「兌換券」按套用。`
+      ? `已領取「${data.type}」！\n只能用在 ${homeMd_(date)}（${homeWd_(date)}）取餐的訂單，符合條件結帳時會自動套用。`
       : '這個活動日已經領過了');
     loadCheckoutVouchers();
+    document.getElementById('home-detail-overlay').classList.remove('open');
   }).catch(() => { alert('領券失敗，請確認網路連線後再試'); btn.disabled = false; btn.textContent = '領券'; });
 }
 function renderHomePerkPane_() {
@@ -4042,14 +4145,14 @@ function renderHomePerkPane_() {
     while (dates.indexOf(homeAddDays_(end, 1)) !== -1) end = homeAddDays_(end, 1);
     const multi = end !== t || (a.ruleType === '指定日期' && (a.rule || '').indexOf('~') !== -1);
     const ribbon = end === t ? (multi ? '今天最後一天' : '今天限定') : '進行到 ' + homeMd_(end);
-    return `<div class="hp-bn">
+    return `<div class="hp-bn" style="cursor:pointer;" onclick="openHomeActDetail_('${a.id}')">
         <div class="img" style="${bg(a)}"><span class="hp-ribbon">${ribbon}</span>${a.photoUrl ? '' : `<span class="emoji">${escapeHtml_(a.icon || '🎁')}</span>`}<div class="over"><b>${escapeHtml_(a.title)}</b></div></div>
         <div class="foot"><div><div class="d">${escapeHtml_(a.desc)}</div><div class="w">${escapeHtml_(homeActSub_(a))}</div></div>
-          ${homeActClaimBtn_(a, t) || `<button type="button" class="hp-btn" onclick="switchHomeTab_('order')">去點餐</button>`}</div>
+          ${homeActClaimBtn_(a, t) || `<button type="button" class="hp-btn" onclick="event.stopPropagation();switchHomeTab_('order')">去點餐</button>`}</div>
       </div>`;
   }).join('');
   const smHtml = soon.map(({ a, next }) => `
-      <div class="hp-sm">
+      <div class="hp-sm" style="cursor:pointer;" onclick="openHomeActDetail_('${a.id}')">
         <div class="th" style="${bg(a)}">${a.photoUrl ? '' : escapeHtml_(a.icon || '🎁')}</div>
         <div class="tx"><b>${escapeHtml_(a.title)}</b>${escapeHtml_(a.desc)}<div>${escapeHtml_(homeActSub_(a))}</div></div>
         ${next === homeAddDays_(t, 1) && homeActClaimBtn_(a, next) ? `<div style="text-align:center;flex:none;"><div style="font-size:0.68rem;color:var(--muted);margin-bottom:2px;">${escapeHtml_(homeActWhen_(a, next, t))}</div>${homeActClaimBtn_(a, next)}</div>` : `<span class="hp-btn g">${escapeHtml_(homeActWhen_(a, next, t))}</span>`}
