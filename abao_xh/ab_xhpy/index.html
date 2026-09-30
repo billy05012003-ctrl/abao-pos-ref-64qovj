@@ -223,7 +223,7 @@
   /* 新品上市：滿版大圖輪播 */
   .hp-hero-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .hp-hero-track::-webkit-scrollbar { display: none; }
-  .hp-hero { flex: 0 0 100%; scroll-snap-align: center; height: 190px; border-radius: 18px; position: relative; overflow: hidden; background: linear-gradient(135deg, #ffcf8a, #e8632c) center/cover; cursor: pointer; }
+  .hp-hero { flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 16 / 9; max-height: 340px; border-radius: 18px; position: relative; overflow: hidden; background: linear-gradient(135deg, #ffcf8a, #e8632c) center/cover; cursor: pointer; }
   .hp-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,0.5), rgba(0,0,0,0) 65%); }
   .hp-hero .tx { position: absolute; left: 14px; right: 14px; bottom: 12px; color: #fff; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
   .hp-hero .tx small { background: #fff; color: var(--brand); border-radius: 6px; padding: 1px 6px; font-weight: 800; font-size: 0.7rem; text-shadow: none; }
@@ -235,10 +235,11 @@
   .hp-dots b { color: var(--brand); }
   .hp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .hp-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; cursor: pointer; position: relative; }
-  .hp-card .img { height: 104px; background: #f3ebe1 center/cover; }
+  .hp-card .img { aspect-ratio: 4 / 3; background: #f3ebe1 center/cover; }   /* 照卡片寬度等比例，寬螢幕不會把照片裁掉一大半(09-30) */
   .hp-card .body { padding: 8px 10px 10px; }
   .hp-card .n { font-size: 0.86rem; font-weight: 700; line-height: 1.3; }
   .hp-card .p { font-size: 0.8rem; color: var(--brand); margin-top: 3px; }
+  .hp-card .ds { font-size: 0.74rem; color: var(--muted); margin-top: 2px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }   /* 店長推薦小卡的說明(09-30 老闆要求)，最多兩行 */
   .hp-card .tag { position: absolute; left: 8px; top: 8px; font-size: 0.66rem; background: var(--brand); color: #fff; border-radius: 6px; padding: 1px 6px; font-weight: 700; }
   .hp-card .off { position: absolute; right: 8px; top: 8px; font-size: 0.7rem; border-radius: 6px; padding: 1px 6px; font-weight: 700; }
   .hp-card.soldout, .hp-hero.soldout { cursor: default; }
@@ -3786,7 +3787,7 @@ function renderHomeNewPane_() {
     return `<div class="hp-card${st.off ? ' soldout' : ''}" onclick="onHomeCardClick_('${c.id}')">
         <div class="img" style="${photo ? 'background-image:' + homeCssUrl_(photo) : ''}"></div>
         ${c.tag ? `<span class="tag">${escapeHtml_(c.tag)}</span>` : ''}${st.off ? `<span class="off">${escapeHtml_(st.off)}</span>` : ''}
-        <div class="body"><div class="n">${escapeHtml_(c.title)}</div>${price ? `<div class="p">${escapeHtml_(price)}</div>` : ''}${c.linkType === '只展示' && c.saleDate && c.saleDate > t ? `<div class="p" style="color:var(--muted);">${homeMd_(c.saleDate)} 開賣</div>` : ''}</div>
+        <div class="body"><div class="n">${escapeHtml_(c.title)}</div>${c.desc ? `<div class="ds">${escapeHtml_(c.desc)}</div>` : ''}${price ? `<div class="p">${escapeHtml_(price)}</div>` : ''}${c.linkType === '只展示' && c.saleDate && c.saleDate > t ? `<div class="p" style="color:var(--muted);">${homeMd_(c.saleDate)} 開賣</div>` : ''}</div>
       </div>`;
   }).join('');
   el.innerHTML = `
@@ -3891,7 +3892,8 @@ function renderHomePerkPane_() {
   renderHomePerkMember_();
   if (!homeDataReady_) { document.getElementById('home-acts').innerHTML = '<div class="hp-empty" style="margin-top:14px;">活動載入中…</div>'; return; }
   const t = todayYmd_();
-  const acts = HOME_ACTS.filter(a => a.status !== '停用' && homeInPeriod_(a, t)).map(a => {
+  // 活動開始/結束已經算進後端給的 dates(期間外不算活動日)，還沒開始的活動 60 天內有日子就先出現在「即將到來」
+  const acts = HOME_ACTS.filter(a => a.status !== '停用').map(a => {
     const dates = (a.dates || []).filter(d => d >= t);
     return { a, dates, today: dates[0] === t, next: dates[0] };
   }).filter(x => x.next);

@@ -3193,7 +3193,7 @@ function renderHbActEditor_(el) {
       <div class="mc-tags" style="margin:4px 0;">${tokensHtml(d.exTokens, 'exTokens')}</div>
       <button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="openHbCal('exTokens')">📅 選排除日期</button>
     </div>
-    <div class="mc-field">接下來 60 天的活動日（核對用）
+    <div class="mc-field">接下來 60 天的活動日（核對用，已扣排除日期、只算活動期間內）
       <div id="hb-preview" style="margin-top:4px;"><span style="font-size:0.78rem;color:var(--muted);">計算中…</span></div>
     </div>
     <div class="mc-field">對象與通路
@@ -3204,9 +3204,10 @@ function renderHbActEditor_(el) {
       </div>
     </div>
     <div class="mc-field-row">
-      <label class="mc-field" style="max-width:180px;">看板顯示開始（選填）<input type="date" value="${escapeHtml(d.startDate || '')}" onchange="hbDraft.startDate=this.value"></label>
-      <label class="mc-field" style="max-width:180px;">看板顯示結束（選填）<input type="date" value="${escapeHtml(d.endDate || '')}" onchange="hbDraft.endDate=this.value"></label>
+      <label class="mc-field" style="max-width:180px;">活動開始（選填）<input type="date" value="${escapeHtml(d.startDate || '')}" onchange="hbDraft.startDate=this.value;hbSchedulePreview_();"></label>
+      <label class="mc-field" style="max-width:180px;">活動結束（選填）<input type="date" value="${escapeHtml(d.endDate || '')}" onchange="hbDraft.endDate=this.value;hbSchedulePreview_();"></label>
     </div>
+    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">空白＝一直辦下去。期間外的日子不算活動日，看板也不顯示（例如週二ㄋㄟㄋㄟ日只辦到 12/31，結束填 12/31）。</div>
     <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;background:#fff8e1;border-radius:6px;padding:6px 8px;">優惠內容（綁優惠券、當天領券／自動折、限量）第二、三波才開放，現在看板只顯示活動資訊。</div>
     ${hbStatusLockHtml_(d)}
     ${hbButtonsHtml_(isNew, 'saveHbAct(this)', 'deleteHbAct()', 'moveHbItem(-1)', 'moveHbItem(1)')}`;
@@ -3221,9 +3222,9 @@ function hbSchedulePreview_(immediate) {
     const d = hbDraft, rule = hbActRuleValue_(d);
     if (!rule) { el.innerHTML = `<span style="font-size:0.78rem;color:var(--muted);">${d.ruleType === '指定日期' ? '還沒選日期' : '還沒選規則'}</span>`; return; }
     el.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">計算中…</span>';
-    const req = { ruleType: d.ruleType, rule, excludes: d.exTokens.join('、') };
+    const req = { ruleType: d.ruleType, rule, excludes: d.exTokens.join('、'), startDate: d.startDate || '', endDate: d.endDate || '' };
     apiGet(Object.assign({ action: 'homeActPreview' }, req)).then(r => {
-      if (!document.getElementById('hb-preview') || hbActRuleValue_(hbDraft) !== rule) return;   // 已經又改了，等下一次
+      if (!document.getElementById('hb-preview') || hbActRuleValue_(hbDraft) !== rule || (hbDraft.startDate || '') !== req.startDate || (hbDraft.endDate || '') !== req.endDate) return;   // 已經又改了，等下一次
       if (r.status !== 'ok') { el.innerHTML = `<span style="font-size:0.78rem;color:#c0392b;">${escapeHtml(r.message || '計算失敗')}</span>`; return; }
       el.innerHTML = r.dates.length ? r.dates.map(x => `<span class="hb-date-chip${x === r.today ? ' today' : ''}">${x === r.today ? '今天 ' : ''}${hbMd_(x)}</span>`).join('') : '<span style="font-size:0.78rem;color:var(--muted);">60 天內沒有活動日</span>';
     }).catch(() => { el.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">暫時無法預覽(網路問題)</span>'; });
@@ -3235,7 +3236,7 @@ function saveHbAct(btn) {
   const rule = hbActRuleValue_(d);
   if (d.ruleType !== '指定日期' && !rule) { alert(d.ruleType === '每週' ? '請至少勾一個星期幾' : '請至少勾一個農曆日'); return; }
   if (!d.channels.length) { alert('通路至少要選一個'); return; }
-  if (d.startDate && d.endDate && d.startDate > d.endDate) { alert('看板顯示開始不能晚於顯示結束'); return; }
+  if (d.startDate && d.endDate && d.startDate > d.endDate) { alert('活動開始不能晚於活動結束'); return; }
   const act = { id: hbCurrentId || undefined, storeId: MC_STORE_ID, version: MC_STATUS, title: d.title.trim(), desc: d.desc.trim(), icon: d.icon.trim(), color: d.color, photoUrl: d.photoUrl || '',
     ruleType: d.ruleType, rule, excludes: d.exTokens.slice().sort().join('、'), memberOnly: !!d.memberOnly, channels: d.channels,
     startDate: d.startDate, endDate: d.endDate, status: d.status, locked: !!d.locked };
