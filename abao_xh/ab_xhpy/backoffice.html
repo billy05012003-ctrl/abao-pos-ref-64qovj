@@ -2746,7 +2746,7 @@ function renderPublishDiff_(els, changes, errorMsg) {
   els.forEach(el => { el.innerHTML = html; });
 }
 const ADDON_DIFF_FIELDS_ = ['type', 'amount', 'photoUrl', 'sauceGroups', 'sets', 'drinkOnly', 'excludes', 'startDate', 'endDate', 'order', 'status', 'locked'];
-const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'targetSize', 'locked', 'order', 'startDate', 'endDate'];
+const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'targetSize', 'targetCat', 'requireCat', 'locked', 'order', 'startDate', 'endDate'];
 function refreshPromoPublishDiff_() {
   const els = [...document.querySelectorAll('.promo-publish-diff')];
   if (!els.length || MC_STORE_ID === '__brand__') return Promise.resolve();
@@ -2929,7 +2929,7 @@ function renderHbList() {
   el.innerHTML = hbActs.map(a => {
     const next = (a.dates || [])[0];
     const when = next ? (next === today ? '今天' : '下次 ' + hbMd_(next)) : (a.ruleType === '指定日期' && !a.rule ? '⚠還沒排日期' : '60天內沒有活動日');
-    const tags = [hbRuleSummary_(a), when, a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
+    const tags = [hbRuleSummary_(a), when, a.promo ? (a.method === '自動折' ? '自動折：' : '🎟領券：') + a.promo : null, a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
     return `<div class="mc-item-row${a.id === hbCurrentId ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="hbEditAct('${hbJs_(a.id)}')">
         <span>${escapeHtml(a.icon || '🎁')} ${escapeHtml(a.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span>
       </div>`;
@@ -3124,7 +3124,7 @@ function moveHbItem(dir) {
 // ---------- 會員好康活動編輯 ----------
 function hbNewAct() {
   hbCurrentId = null;
-  hbDraft = { kind: 'act', title: '', desc: '', icon: '🎁', color: '橘', photoUrl: '', ruleType: '每週', weekdays: [], lunarDays: [], skipFirst: false, dateTokens: [], exTokens: [],
+  hbDraft = { kind: 'act', title: '', desc: '', icon: '🎁', color: '橘', photoUrl: '', ruleType: '每週', weekdays: [], lunarDays: [], skipFirst: false, dateTokens: [], exTokens: [], promo: '', method: '領券',
     memberOnly: false, channels: ['線上', '門市'], startDate: '', endDate: '', status: '啟用', locked: false };
   renderHbList(); renderHbEditor();
 }
@@ -3208,7 +3208,24 @@ function renderHbActEditor_(el) {
       <label class="mc-field" style="max-width:180px;">活動結束（選填）<input type="date" value="${escapeHtml(d.endDate || '')}" onchange="hbDraft.endDate=this.value;hbSchedulePreview_();"></label>
     </div>
     <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">空白＝一直辦下去。期間外的日子不算活動日，看板也不顯示（例如週二ㄋㄟㄋㄟ日只辦到 12/31，結束填 12/31）。</div>
-    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;background:#fff8e1;border-radius:6px;padding:6px 8px;">優惠內容（綁優惠券、當天領券／自動折、限量）第二、三波才開放，現在看板只顯示活動資訊。</div>
+    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">優惠內容
+      <div class="mc-field-row" style="margin-top:6px;">
+        <label class="mc-field" style="max-width:200px;">方式
+          <select onchange="hbDraft.method=this.value;renderHbEditor();">
+            <option value="領券" ${d.method !== '自動折' ? 'selected' : ''}>領券（客人自己領）</option>
+            <option value="自動折" ${d.method === '自動折' ? 'selected' : ''}>自動折（第三波才開放）</option>
+          </select>
+        </label>
+        <label class="mc-field">綁哪一張優惠券
+          <select onchange="hbDraft.promo=this.value">
+            <option value="">不綁（只在看板顯示）</option>
+            ${pmPromos.filter(p => p.mode === 'item').map(p => `<option value="${escapeHtml(p.name)}" ${d.promo === p.name ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
+            ${d.promo && !pmPromos.some(p => p.name === d.promo) ? `<option value="${escapeHtml(d.promo)}" selected>${escapeHtml(d.promo)}（優惠券已不存在）</option>` : ''}
+          </select>
+        </label>
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted);">領券：活動前一天起，LINE 會員在看板按「領券」，每人每個活動日 1 張，只能用在活動日取餐的訂單。優惠券效果在「優惠券」那頁設定（週二選打5折＋適用分類茶拿鐵；週四選全額免費＋適用品項雞塊＋需搭配分類定食）。限量第三波才做。</div>
+    </div>
     ${hbStatusLockHtml_(d)}
     ${hbButtonsHtml_(isNew, 'saveHbAct(this)', 'deleteHbAct()', 'moveHbItem(-1)', 'moveHbItem(1)')}`;
   hbSchedulePreview_(true);
@@ -3239,6 +3256,7 @@ function saveHbAct(btn) {
   if (d.startDate && d.endDate && d.startDate > d.endDate) { alert('活動開始不能晚於活動結束'); return; }
   const act = { id: hbCurrentId || undefined, storeId: MC_STORE_ID, version: MC_STATUS, title: d.title.trim(), desc: d.desc.trim(), icon: d.icon.trim(), color: d.color, photoUrl: d.photoUrl || '',
     ruleType: d.ruleType, rule, excludes: d.exTokens.slice().sort().join('、'), memberOnly: !!d.memberOnly, channels: d.channels,
+    promo: d.promo || '', method: d.method === '自動折' ? '自動折' : '領券',
     startDate: d.startDate, endDate: d.endDate, status: d.status, locked: !!d.locked };
   hbSave_(btn, { action: 'upsertHomeAct', act });
 }
@@ -3511,10 +3529,23 @@ function renderPmEditor() {
           <option value="L" ${p.targetSize === 'L' ? 'selected' : ''}>L</option>
         </select>
       </label>
+      <label class="mc-field">適用分類(任選，線上活動券用)
+        <select id="pm-f-target-cat">
+          <option value="">不指定</option>
+          ${pmCatOptions_(p.targetCat)}
+        </select>
+      </label>
+      <label class="mc-field">需搭配分類(選填)
+        <select id="pm-f-require-cat">
+          <option value="">不需要</option>
+          ${pmCatOptions_(p.requireCat)}
+        </select>
+      </label>
     </div>
     <div id="pm-tierperk-hint" style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;display:${mode === 'item' ? 'block' : 'none'};">
       等級優惠（例如「金寶限定：本月檸檬紅茶買一送一」）：勾「顯示為優惠券按鈕」、不勾「可手動贈送」、選「最低適用等級」＋「適用品項」→ 達到等級的會員結帳自動套用，每張單一次（POS與線上點餐都會自動折，不會變成POS手動按鈕）。每月換飲品時改名稱與適用品項即可。
-    <br>兌換券（例如「中杯紅茶兌換券」）：選「適用品項」＋「適用份量」→ 購物車裡品名、份量都一樣的那一杯才能用這張券（沒選適用品項的兌換券線上不能用）。</div>
+    <br>兌換券（例如「中杯紅茶兌換券」）：選「適用品項」＋「適用份量」→ 購物車裡品名、份量都一樣的那一杯才能用這張券（沒選適用品項的兌換券線上不能用）。
+    <br>線上活動券（會員好康「領券」，2026-09-30）：「適用分類」＝這個分類任選兩件、每 2 件一組較便宜那件打折（例如週二茶拿鐵第二杯半價：打5折＋適用分類選茶拿鐵）；「需搭配分類」＝購物車要有這個分類的餐點才能用（例如週四雞塊免費：適用品項選雞塊＋需搭配分類選定食）。</div>
     <div class="mc-field-row" id="pm-pct-fields" style="display:${(mode === 'order' || (mode === 'item' && p.effect === 'pct')) ? 'flex' : 'none'};">
       <label class="mc-field">折數(填85=打85折，9折請填90)<input id="pm-f-pct" type="number" min="10" max="99" value="${(mode === 'order' || p.effect === 'pct') ? (p.amount ?? '') : ''}"></label>
       <div style="font-size:0.78rem;color:var(--muted);align-self:center;">只折基準價(單點/套餐整組價)，加起司、飲料升級等加價不折；整張打折用原價計算，不受其他折抵影響</div>
@@ -3556,6 +3587,12 @@ function renderPmEditor() {
   `;
 }
 
+// 菜單分類下拉(適用分類/需搭配分類，2026-09-30 第二波)：存完整分類名稱，畫面顯示短名稱
+function pmCatOptions_(selected) {
+  const cats = Object.keys(Object.keys(mcCatalog).length ? mcCatalog : (adCatalog_ || {}));
+  return cats.map(c => `<option value="${escapeHtml(c)}" ${c === selected ? 'selected' : ''}>${escapeHtml(mcShortCatName(c))}</option>`).join('')
+    + (selected && cats.indexOf(selected) === -1 ? `<option value="${escapeHtml(selected)}" selected>${escapeHtml(mcShortCatName(selected))}（菜單已沒有）</option>` : '');
+}
 function savePromo() {
   const name = document.getElementById('pm-f-name').value.trim();
   if (!name) { alert('請輸入名稱'); return; }
@@ -3596,6 +3633,8 @@ function savePromo() {
     autoAddItem: mode === 'item' ? document.getElementById('pm-f-autoadd').value : '',
     targetItem: mode === 'item' ? document.getElementById('pm-f-target').value : '',
     targetSize: mode === 'item' ? document.getElementById('pm-f-target-size').value : '',
+    targetCat: mode === 'item' ? document.getElementById('pm-f-target-cat').value : '',
+    requireCat: mode === 'item' ? document.getElementById('pm-f-require-cat').value : '',
     showAsButton: document.getElementById('pm-f-showbtn').checked,
     manualGrantable: document.getElementById('pm-f-grantable').checked,
     status: document.getElementById('pm-f-status').value,

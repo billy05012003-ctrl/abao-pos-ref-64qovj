@@ -1292,7 +1292,14 @@ function renderMemberVoucherPanel() {
   const appliedIds = new Set(appliedVouchers.map(v => v.voucherId));
   const usable = memberVouchers.filter(v => v.usable && !appliedIds.has(v.voucherId));
   const usableHtml = usable.length
-    ? usable.map(v => `
+    ? usable.map(v => /^活動領券｜/.test(v.source || '')
+      // 會員好康線上活動券(2026-09-30 第二波)：第四波門市才會認，現在門市請用當天的活動按鈕，避免店員誤套
+      ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.8rem;opacity:0.6;">
+          <span>${v.type}<span style="color:var(--muted);font-size:0.72rem;">（線上活動券${v.actDate ? '・限 ' + v.actDate.slice(5).replace('-', '/') + ' 取餐' : ''}）</span></span>
+          <span style="font-size:0.72rem;color:var(--muted);text-align:right;">線上限定<br>門市請用活動按鈕</span>
+        </div>`
+      : `
         <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;font-size:0.8rem;">
           <span>${v.type}<span style="color:var(--muted);font-size:0.72rem;">（${v.source}）</span></span>
           <button class="btn" style="padding:3px 8px;font-size:0.76rem;" onclick="selectVoucherToApply('${v.voucherId}','${v.type}')">使用</button>
