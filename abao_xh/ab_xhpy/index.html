@@ -198,6 +198,82 @@
   }
   /* 首頁上方：取餐時間列＋地址＋揪團/自取規則(2026-09-30 老闆參考大麥定案，頁面少文字、說明集中到「訂餐資訊」) */
   #store-strip { background: #fff; border-bottom: 1px solid var(--border); padding: 10px 12px; }
+  /* 底部三分頁(2026-09-30 第一波，HOME_TABS_ON 才加 body.home-tabs)：新品推薦／會員好康／線上點餐 */
+  #home-tabbar, .home-pane { display: none; }
+  body.home-tabs { padding-bottom: 140px; }
+  body.home-tabs #home-tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: #fff; border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); }
+  #home-tabbar button { flex: 1; border: none; background: none; padding: 7px 0 8px; font-size: 0.72rem; color: var(--muted); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; position: relative; font-family: inherit; }
+  #home-tabbar button .ht-ic { font-size: 1.25rem; line-height: 1.2; }
+  #home-tabbar button.on { color: var(--brand); font-weight: 700; }
+  #home-tabbar .ht-badge { position: absolute; top: 3px; left: calc(50% + 8px); background: var(--brand); color: #fff; border-radius: 999px; font-size: 0.65rem; min-width: 16px; padding: 0 4px; line-height: 16px; display: none; }
+  body.home-tabs #cart-bar { bottom: calc(56px + env(safe-area-inset-bottom)); }
+  body.home-tabs.tab-new #home-pane-new, body.home-tabs.tab-perk #home-pane-perk { display: block; }
+  body.home-tabs:not(.tab-order) #store-strip, body.home-tabs:not(.tab-order) #closed-notice, body.home-tabs:not(.tab-order) #store-status-notice,
+  body.home-tabs:not(.tab-order) #group-banner, body.home-tabs:not(.tab-order) nav#tabs, body.home-tabs:not(.tab-order) main#menu,
+  body.home-tabs:not(.tab-order) #cart-bar { display: none !important; }
+  /* 點餐頁上方改簡版(老闆 09-30 照小介面 v3 定案)：會員等級、點數搬到會員好康的會員卡；三格改兩格 */
+  body.home-tabs #ms-tier, body.home-tabs #ms-points-pill, body.home-tabs #home-tier-btn { display: none !important; }
+  body.home-tabs #store-actions { display: flex; }
+  body.home-tabs #store-actions button { flex: 1; }
+  .home-pane { max-width: 640px; margin: 0 auto; padding: 12px; }
+  .hp-sec { font-weight: 800; font-size: 0.98rem; margin: 16px 2px 8px; display: flex; align-items: center; gap: 8px; }
+  #home-pane-new > .hp-sec:first-child { margin-top: 4px; }
+  .hp-live { font-size: 0.7rem; color: #fff; background: #e23b3b; border-radius: 999px; padding: 1px 8px; font-weight: 700; }
+  .hp-empty { text-align: center; color: var(--muted); font-size: 0.85rem; padding: 18px 10px; background: #fff; border-radius: 14px; }
+  /* 新品上市：滿版大圖輪播 */
+  .hp-hero-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .hp-hero-track::-webkit-scrollbar { display: none; }
+  .hp-hero { flex: 0 0 100%; scroll-snap-align: center; height: 190px; border-radius: 18px; position: relative; overflow: hidden; background: linear-gradient(135deg, #ffcf8a, #e8632c) center/cover; cursor: pointer; }
+  .hp-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,0.5), rgba(0,0,0,0) 65%); }
+  .hp-hero .tx { position: absolute; left: 14px; right: 14px; bottom: 12px; color: #fff; z-index: 1; text-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+  .hp-hero .tx small { background: #fff; color: var(--brand); border-radius: 6px; padding: 1px 6px; font-weight: 800; font-size: 0.7rem; text-shadow: none; }
+  .hp-hero .tx b { display: block; font-size: 1.2rem; margin-top: 4px; }
+  .hp-hero .tx span { font-size: 0.8rem; }
+  .hp-hero .go { position: absolute; right: 12px; top: 12px; z-index: 1; border: none; background: #fff; color: var(--brand); border-radius: 999px; padding: 6px 12px; font-weight: 700; font-size: 0.8rem; }
+  .hp-hero .go.off, .hp-card .off { background: #eee; color: #999; }
+  .hp-dots { text-align: center; margin: 6px 0 2px; font-size: 0.6rem; color: #d8c7b5; letter-spacing: 4px; }
+  .hp-dots b { color: var(--brand); }
+  .hp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hp-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; cursor: pointer; position: relative; }
+  .hp-card .img { height: 104px; background: #f3ebe1 center/cover; }
+  .hp-card .body { padding: 8px 10px 10px; }
+  .hp-card .n { font-size: 0.86rem; font-weight: 700; line-height: 1.3; }
+  .hp-card .p { font-size: 0.8rem; color: var(--brand); margin-top: 3px; }
+  .hp-card .tag { position: absolute; left: 8px; top: 8px; font-size: 0.66rem; background: var(--brand); color: #fff; border-radius: 6px; padding: 1px 6px; font-weight: 700; }
+  .hp-card .off { position: absolute; right: 8px; top: 8px; font-size: 0.7rem; border-radius: 6px; padding: 1px 6px; font-weight: 700; }
+  .hp-card.soldout, .hp-hero.soldout { cursor: default; }
+  .hp-card.soldout .img { filter: grayscale(0.8); opacity: 0.6; }
+  /* 會員好康：會員卡＋活動看板(版本一 大圖票券) */
+  .hp-mcard { border-radius: 18px; padding: 14px; box-shadow: 0 6px 16px rgba(160,110,20,0.2); position: relative; overflow: hidden; color: #4a3410; background: linear-gradient(145deg, #f6e3b4, #e2b95c); }
+  .hp-mcard.t0 { background: linear-gradient(145deg, #f3ece3, #d9cbb8); color: #4a3f33; }
+  .hp-mcard.t1 { background: linear-gradient(145deg, #f3d3b8, #c98a5a); color: #4a2a12; }
+  .hp-mcard.t2 { background: linear-gradient(145deg, #eef1f5, #b8c1cc); color: #2f3844; }
+  .hp-mcard::after { content: ""; position: absolute; right: -40px; top: -40px; width: 140px; height: 140px; border-radius: 50%; background: rgba(255,255,255,0.25); pointer-events: none; }
+  .hp-mcard .top { display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 1; }
+  .hp-mcard .nm { font-size: 1.15rem; font-weight: 800; }
+  .hp-mcard .tr { font-size: 0.8rem; font-weight: 700; margin-top: 2px; background: rgba(255,255,255,0.6); border-radius: 999px; padding: 2px 10px; border: none; color: inherit; cursor: pointer; font-family: inherit; }
+  .hp-mcard .prog { margin-top: 8px; font-size: 0.74rem; position: relative; z-index: 1; line-height: 1.5; }
+  .hp-mcard .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; position: relative; z-index: 1; }
+  .hp-mcard .stats button { background: rgba(255,255,255,0.7); border: none; border-radius: 10px; padding: 7px 2px; text-align: center; font-size: 0.72rem; color: inherit; cursor: pointer; font-family: inherit; }
+  .hp-mcard .stats b { display: block; font-size: 1.1rem; }
+  .hp-mcard .login { position: relative; z-index: 1; margin-top: 10px; font-size: 0.82rem; }
+  .hp-mcard .login button { margin-top: 8px; border: none; background: #06C755; color: #fff; border-radius: 8px; padding: 8px 14px; font-weight: 700; font-family: inherit; }
+  .hp-bn { background: #fff; border-radius: 16px; overflow: hidden; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .hp-bn .img { height: 118px; position: relative; display: flex; align-items: center; justify-content: flex-end; padding-right: 18px; background-size: cover; background-position: center; }
+  .hp-bn .emoji { font-size: 4rem; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.2)); }
+  .hp-bn .over { position: absolute; left: 14px; bottom: 12px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.35); }
+  .hp-bn .over b { font-size: 1.2rem; }
+  .hp-ribbon { position: absolute; left: 0; top: 12px; background: #e23b3b; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 3px 10px 3px 12px; border-radius: 0 999px 999px 0; }
+  .hp-bn .foot { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+  .hp-bn .foot > div { flex: 1; min-width: 0; }
+  .hp-bn .d { font-size: 0.85rem; font-weight: 700; }
+  .hp-bn .w { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+  .hp-btn { flex: none; border: none; background: var(--brand); color: #fff; border-radius: 999px; padding: 7px 14px; font-weight: 700; font-size: 0.82rem; cursor: pointer; font-family: inherit; }
+  .hp-btn.g { background: #f1ebe4; color: #8a7d6f; cursor: default; font-size: 0.76rem; padding: 6px 10px; }
+  .hp-sm { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 14px; padding: 8px; margin-bottom: 8px; }
+  .hp-sm .th { flex: none; width: 54px; height: 54px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; background-size: cover; background-position: center; }
+  .hp-sm .tx { flex: 1; min-width: 0; font-size: 0.74rem; color: var(--muted); }
+  .hp-sm .tx b { display: block; font-size: 0.88rem; color: var(--text); }
   #pickup-bar { width: 100%; display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; color: var(--text); cursor: pointer; text-align: left; }
   #pickup-bar .pb-mode { font-weight: 700; padding-right: 8px; border-right: 1px solid #ccc; }
   #pickup-bar .pb-time { flex: 1; }
@@ -261,10 +337,12 @@
     <p>線上預訂・到店自取</p>
   </div>
 </header>
+<div id="home-pane-new" class="home-pane"></div>
+<div id="home-pane-perk" class="home-pane"></div>
 <!-- 2026-09-30：原本這裡寫死的「營業時間＋信用卡付款」說明拿掉，營業時間改由後台設定自動產生，說明文字集中到「訂餐資訊」頁 -->
 <div id="store-strip">
   <div id="member-strip">
-    <span class="ms-who" onclick="openTierOverlay()">👋 <b id="ms-name"></b> <span class="ms-tier" id="ms-tier"></span></span>
+    <span class="ms-who" onclick="onMemberWhoClick_()">👋 <b id="ms-name"></b> <span class="ms-tier" id="ms-tier"></span></span>
     <button type="button" class="ms-pill" id="ms-voucher-pill" onclick="openWallet_('voucher')">🎟 券 0</button>
     <button type="button" class="ms-pill" id="ms-points-pill" onclick="openWallet_('points')">⭐ 0 點</button>
   </div>
@@ -272,7 +350,7 @@
   <div id="store-actions">
     <button type="button" id="home-group-btn" style="display:none;" onclick="onHomeGroupClick_()"><span class="sa-ic">👥</span><span>揪團</span><small>我請／你訂</small></button>
     <button type="button" onclick="openStoreInfo_('info')"><span class="sa-ic">🏪</span><span>店家資訊</span><small>自取規則</small></button>
-    <button type="button" onclick="openTierOverlay()"><span class="sa-ic">👑</span><span>會員等級</span><small>專屬好禮</small></button>
+    <button type="button" id="home-tier-btn" onclick="openTierOverlay()"><span class="sa-ic">👑</span><span>會員等級</span><small>專屬好禮</small></button>
   </div>
 </div>
 <div class="notice" id="closed-notice" style="display:none; background:#ffe0e0; border-color:#ffb3b3; color:#a30000;"></div>
@@ -355,6 +433,15 @@
   <div><span style="white-space:nowrap;">A-Bao溪湖培英店（美寶美食館</span>　<span style="white-space:nowrap;">統一編號 82416619）</span></div>
   <div><span style="white-space:nowrap;">彰化縣溪湖鎮東寮里培英路16號1樓</span>　<span style="white-space:nowrap;">客服電話 0909-504662</span></div>
 </footer>
+
+<nav id="home-tabbar">
+  <button type="button" id="home-tab-new" onclick="switchHomeTab_('new')"><span class="ht-ic">✨</span>新品推薦</button>
+  <button type="button" id="home-tab-perk" onclick="switchHomeTab_('perk')"><span class="ht-ic">🎁</span>會員好康</button>
+  <button type="button" id="home-tab-order" onclick="switchHomeTab_('order')"><span class="ht-ic">🛒</span>線上點餐<span class="ht-badge" id="home-tab-badge"></span></button>
+</nav>
+<div class="overlay" id="home-detail-overlay" style="z-index:26;" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="sheet" id="home-detail-body"></div>
+</div>
 
 <div id="cart-bar" onclick="openCart()">
   <div><span class="count" id="cart-count">0</span>查看訂單</div>
@@ -541,6 +628,10 @@ const LIFF_ID = '2011773510-WG4YyKFL';
 const LINE_LOGIN_OPEN = true;
 const LINE_LOGIN_ON = LINE_LOGIN_OPEN || /\/line_test\.html$/.test(location.pathname) || new URLSearchParams(location.search).get('linetest') === '1';
 var lineSession_ = '';   // var：apiGet_/apiPost_ 可能在這行之前就被呼叫
+// 底部三分頁「新品推薦／會員好康／線上點餐」(2026-09-30 第一波)：正式開放前只有網址加 ?tabstest=1 看得到，
+// 老闆測過沒問題再把 HOME_TABS_OPEN 改成 true。var：會員列/購物車等函式可能在後面宣告前就被叫到
+var HOME_TABS_OPEN = false;
+var HOME_TABS_ON = HOME_TABS_OPEN || new URLSearchParams(location.search).get('tabstest') === '1';
 var lineExpiredShown_ = false;
 function lineSessionCheck_(data) {
   if (LINE_LOGIN_ON && data && data.code === 'line_session' && !lineExpiredShown_) {
@@ -699,6 +790,8 @@ function applyPromoSettings_(data) {
   VOUCHER_BEHAVIOR = {};
   ALL_PROMOS = data.promos || [];
   SHOP_ADDONS = data.addons || [];
+  HOME_CARDS = data.homeCards || [];   // 區塊配置(2026-09-30)：新品推薦卡片
+  HOME_ACTS = data.homeActs || [];     // 會員好康活動(含後端算好的接下來活動日 dates)
   // 自訂折數(整張訂單打折mode:'order'／單品effect:'pct'，2026-09-25新增)老闆定案先只在POS用，線上不列出
   // (客人名下若有這種券，線上結帳清單會自動略過，要到門市POS使用)
   ALL_PROMOS.filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton) && p.mode !== 'order' && p.effect !== 'pct').forEach(p => {
@@ -1202,6 +1295,7 @@ function redeemPointsInCart_(btn, idx) {
 }
 
 function renderMemberStrip_(member) {
+  if (HOME_TABS_ON) setTimeout(renderHomePerkMember_, 0);   // 會員好康的會員卡跟著更新
   const el = document.getElementById('member-strip');
   if (!el) return;
   if (!member) { el.style.display = 'none'; return; }
@@ -1212,6 +1306,7 @@ function renderMemberStrip_(member) {
 }
 // 會員列兩顆按鈕：可用兌換券張數(有套用就顯示已套用幾張)、目前點數
 function updateWalletPills_() {
+  if (HOME_TABS_ON) setTimeout(renderHomePerkMember_, 0);
   const vp = document.getElementById('ms-voucher-pill'), pp = document.getElementById('ms-points-pill');
   if (!vp || !pp) return;
   const used = checkoutSelectedVouchers.length;
@@ -2639,6 +2734,7 @@ function updateCartBar() {
   const count = cart.reduce((s, c) => s + c.qty, 0);
   document.getElementById('cart-count').textContent = count;
   document.getElementById('cart-total-bar').textContent = '$' + cartDue_().due;   // 已扣兌換券/會員權益
+  if (HOME_TABS_ON) updateHomeTabBadge_(count);
 }
 
 function renderCart() {
@@ -3596,6 +3692,239 @@ function resumeGroupPayment() {
   startMpgPayment(orderId, total);
 }
 
+// ---------------------------------------------------------------
+// 底部三分頁「新品推薦／會員好康／線上點餐」(2026-09-30 第一波，設計見 會員好康與區塊配置設計_2026-09-30.md)。
+// 內容由後台「會員相關 → 區塊配置」設定，跟優惠券一起發布，跟著 promoSettings 讀回來(homeCards/homeActs)。
+// 第一波只做顯示：新品卡片(點了開品項/跳分類/只展示)、會員卡、活動看板；領券與自動折抵第二、三波才做
+// ---------------------------------------------------------------
+var HOME_CARDS = [], HOME_ACTS = [];   // var：applyPromoSettings_ 在前面
+var homeTab_ = 'order';
+var homeDataReady_ = false;   // promoSettings 回來前顯示「載入中」，不要先顯示「沒有活動」
+const HOME_WEEKDAYS_ = '日一二三四五六';
+const HOME_ACT_GRADS_ = { 橘: ['#ffcf8a', '#e8632c'], 黃: ['#ffe08a', '#f0a020'], 藍: ['#bcd7ff', '#4a7fd6'], 粉: ['#ffc8dc', '#e0588c'], 紫: ['#d9c8ff', '#7c5cd6'], 綠: ['#c6ecc0', '#3f9a4a'] };
+
+function initHomeTabs_() {
+  document.body.classList.add('home-tabs');
+  // 揪團連結、付款返回一律停在線上點餐；LINE 圖文選單之後可以用 ?tab=perk 直接開會員好康
+  const want = URL_PARAMS_.get('tab');
+  const busy = URL_PARAMS_.get('g') || URL_PARAMS_.get('mpgreturn');
+  switchHomeTab_(!busy && (want === 'new' || want === 'perk') ? want : 'order', true);
+  promoSettingsReady.then(() => { homeDataReady_ = true; renderHomeNewPane_(); renderHomePerkPane_(); });
+}
+function switchHomeTab_(tab, noScroll) {
+  homeTab_ = tab;
+  document.body.classList.remove('tab-new', 'tab-perk', 'tab-order');
+  document.body.classList.add('tab-' + tab);
+  ['new', 'perk', 'order'].forEach(t => document.getElementById('home-tab-' + t).classList.toggle('on', t === tab));
+  if (tab === 'perk') renderHomePerkPane_();   // 跨過午夜、剛驗證完會員都重算一次
+  if (!noScroll) window.scrollTo(0, 0);
+}
+function updateHomeTabBadge_(count) {
+  const b = document.getElementById('home-tab-badge');
+  if (!b) return;
+  b.textContent = count;
+  b.style.display = count > 0 ? 'block' : 'none';
+}
+function onMemberWhoClick_() {
+  if (HOME_TABS_ON) switchHomeTab_('perk');
+  else openTierOverlay();
+}
+function homeInPeriod_(x, t) { return !((x.startDate && t < x.startDate) || (x.endDate && t > x.endDate)); }
+function homeMd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return m + '/' + d; }
+function homeWd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return HOME_WEEKDAYS_[new Date(y, m - 1, d).getDay()]; }
+function homeAddDays_(ymd, n) { const [y, m, d] = ymd.split('-').map(Number); const x = new Date(y, m - 1, d + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
+function homeCssUrl_(u) { return "url('" + String(u).replace(/['"\\()]/g, encodeURIComponent) + "')"; }
+
+// ---------- 新品推薦 ----------
+function menuPriceLabel_(item) {
+  if (item.price_m && item.price_l) return `M $${item.price_m} / L $${item.price_l}`;
+  if (item.price_m) return `限M $${item.price_m}`;
+  if (item.price_l) return `限L $${item.price_l}`;
+  if (item.price_alt) return `$${item.price} / $${item.price_alt}`;
+  if (item.price_set) return `單點 $${item.price} / 套餐 $${item.price_set}`;
+  return `$${item.price}`;
+}
+// 卡片目前的狀態：可以點(ok)、售完/下架(off)、菜單還沒載入(wait)
+function homeCardState_(c) {
+  if (c.linkType === '只展示') return { ok: true };
+  if (!Object.keys(CATALOG).length) return { wait: true };
+  if (c.linkType === '分類') return CATALOG[c.linkCat] ? { ok: true } : { off: '暫停供應' };
+  const item = (CATALOG[c.linkCat] || []).find(it => it.name === c.linkItem);
+  if (!item) return { off: '暫停供應' };
+  const st = itemAvailabilityMap[c.linkItem];
+  if (st) return { off: st === '永久下架' ? '暫停供應' : '今日售完', item };
+  return { ok: true, item };
+}
+function homeCardPhoto_(c, item) {
+  if (c.photoUrl) return c.photoUrl;
+  // 連分類沒上傳圖片：用那個分類第一個有照片的品項
+  if (c.linkType === '分類') { const it = (CATALOG[c.linkCat] || []).find(x => x.photoUrl); return it ? it.photoUrl : ''; }
+  if (item) return item.photoUrl || (IMG_BASE + encodeURIComponent(shortCatName(c.linkCat)) + '/' + encodeURIComponent(imgSafeName(item.name)) + '.jpg');
+  return '';
+}
+function homeCardPrice_(c, item) {
+  if (c.linkType === '只展示') return c.price !== '' && c.price != null ? '$' + c.price : '';
+  return item ? menuPriceLabel_(item) : '';
+}
+function renderHomeNewPane_() {
+  const el = document.getElementById('home-pane-new');
+  if (!el) return;
+  if (!homeDataReady_) { el.innerHTML = '<div class="hp-empty" style="margin-top:8px;">載入中…</div>'; return; }
+  const t = todayYmd_();
+  const live = HOME_CARDS.filter(c => c.status !== '停用' && homeInPeriod_(c, t));
+  const heroes = live.filter(c => c.block === '新品上市'), picks = live.filter(c => c.block === '店長推薦');
+  const btnText = (c, st) => st.off ? st.off : st.wait ? '載入中' : c.linkType === '只展示' ? (c.saleDate && c.saleDate > t ? homeMd_(c.saleDate) + ' 開賣' : '看介紹') : c.linkType === '分類' ? '去看看' : '立即點餐';
+  const heroHtml = heroes.map(c => {
+    const st = homeCardState_(c), photo = homeCardPhoto_(c, st.item), price = homeCardPrice_(c, st.item);
+    return `<div class="hp-hero${st.off ? ' soldout' : ''}" style="${photo ? 'background-image:' + homeCssUrl_(photo) + ';' : ''}" onclick="onHomeCardClick_('${c.id}')">
+        <button type="button" class="go${st.off ? ' off' : ''}">${escapeHtml_(btnText(c, st))}</button>
+        <div class="tx">${c.tag ? `<small>${escapeHtml_(c.tag)}</small>` : ''}<b>${escapeHtml_(c.title)}</b><span>${escapeHtml_([c.desc, price].filter(Boolean).join('・'))}</span></div>
+      </div>`;
+  }).join('');
+  const pickHtml = picks.map(c => {
+    const st = homeCardState_(c), photo = homeCardPhoto_(c, st.item), price = homeCardPrice_(c, st.item);
+    return `<div class="hp-card${st.off ? ' soldout' : ''}" onclick="onHomeCardClick_('${c.id}')">
+        <div class="img" style="${photo ? 'background-image:' + homeCssUrl_(photo) : ''}"></div>
+        ${c.tag ? `<span class="tag">${escapeHtml_(c.tag)}</span>` : ''}${st.off ? `<span class="off">${escapeHtml_(st.off)}</span>` : ''}
+        <div class="body"><div class="n">${escapeHtml_(c.title)}</div>${price ? `<div class="p">${escapeHtml_(price)}</div>` : ''}${c.linkType === '只展示' && c.saleDate && c.saleDate > t ? `<div class="p" style="color:var(--muted);">${homeMd_(c.saleDate)} 開賣</div>` : ''}</div>
+      </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="hp-sec">🆕 新品上市</div>
+    ${heroes.length ? `<div class="hp-hero-track" id="home-hero-track" onscroll="updateHomeHeroDots_()">${heroHtml}</div>${heroes.length > 1 ? `<div class="hp-dots" id="home-hero-dots"></div>` : ''}` : '<div class="hp-empty">新品即將推出，敬請期待</div>'}
+    <div class="hp-sec">👍 店長推薦</div>
+    ${picks.length ? `<div class="hp-grid">${pickHtml}</div>` : '<div class="hp-empty">店長推薦整理中</div>'}`;
+  updateHomeHeroDots_();
+}
+function updateHomeHeroDots_() {
+  const track = document.getElementById('home-hero-track'), dots = document.getElementById('home-hero-dots');
+  if (!track || !dots) return;
+  const n = track.children.length, i = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+  dots.innerHTML = Array.from({ length: n }, (_, k) => k === i ? '<b>●</b>' : '●').join('');
+}
+function onHomeCardClick_(id) {
+  const c = HOME_CARDS.find(x => x.id === id);
+  if (!c) return;
+  const st = homeCardState_(c);
+  if (st.off || st.wait) return;
+  if (c.linkType === '只展示') { openHomeDetail_(c); return; }
+  switchHomeTab_('order', true);
+  const idx = Object.keys(CATALOG).indexOf(c.linkCat);
+  if (c.linkType === '分類') { setTimeout(() => goToCategory(idx), 0); return; }
+  // 同一個品名可能出現在不同分類，只在卡片指定的分類裡找
+  const sec = document.getElementById('cat-' + idx);
+  const card = sec && [...sec.querySelectorAll('.item')].find(el => el.dataset.itemName === c.linkItem);
+  const btn = card && card.querySelector('.add');
+  if (!btn || btn.disabled) { alert(`「${c.linkItem}」目前無法點選`); return; }
+  card.scrollIntoView({ block: 'center' });
+  btn.click();
+}
+function openHomeDetail_(c) {
+  const t = todayYmd_(), photo = homeCardPhoto_(c, null), price = homeCardPrice_(c, null);
+  document.getElementById('home-detail-body').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h2 style="margin:0;font-size:1.1rem;">${c.tag ? `<span style="font-size:0.7rem;background:var(--brand);color:#fff;border-radius:6px;padding:1px 6px;vertical-align:middle;">${escapeHtml_(c.tag)}</span> ` : ''}${escapeHtml_(c.title)}</h2>
+      <button type="button" onclick="document.getElementById('home-detail-overlay').classList.remove('open')" style="border:none;background:none;font-size:1.4rem;cursor:pointer;padding:0 4px;line-height:1;">✕</button>
+    </div>
+    ${photo ? `<img src="${escapeHtml_(photo)}" alt="" style="width:100%;border-radius:12px;display:block;">` : ''}
+    ${c.desc ? `<p style="font-size:0.92rem;line-height:1.6;margin:12px 0 4px;">${escapeHtml_(c.desc)}</p>` : ''}
+    <div style="display:flex;gap:10px;align-items:baseline;margin-top:8px;">
+      ${price ? `<b style="color:var(--brand);font-size:1.05rem;">${escapeHtml_(price)}</b>` : ''}
+      ${c.saleDate ? `<span style="font-size:0.85rem;color:var(--muted);">${c.saleDate > t ? homeMd_(c.saleDate) + '（' + homeWd_(c.saleDate) + '）開賣，敬請期待' : '已開賣'}</span>` : ''}
+    </div>
+    <button type="button" class="btn-primary" onclick="document.getElementById('home-detail-overlay').classList.remove('open')">知道了</button>`;
+  document.getElementById('home-detail-overlay').classList.add('open');
+}
+
+// ---------- 會員好康：會員卡 ----------
+function renderHomePerkMember_() {
+  const el = document.getElementById('home-mcard');
+  if (!el) return;
+  const m = verifiedMember;
+  if (!m) {
+    el.className = 'hp-mcard';
+    el.innerHTML = `<div class="top"><div><div class="nm">A-Bao 會員</div></div></div>
+      <div class="login">登入 LINE 會員後，這裡會顯示你的點數、兌換券和會員等級。
+        <br><button type="button" onclick="onHomeMemberLogin_()">用 LINE 登入／加入會員</button></div>`;
+    return;
+  }
+  const tiers = SHOP_MEMBER_TIERS.slice().sort((a, b) => a.order - b.order);
+  const idx = Math.max(0, tiers.findIndex(t => t.name === m.tier));
+  el.className = 'hp-mcard' + (idx < 3 ? ' t' + idx : '');
+  const tierName = m.tier ? (m.tier.endsWith('會員') ? m.tier : m.tier + '會員') : '';
+  const progress = tierProgressText_(m);
+  el.innerHTML = `
+    <div class="top">
+      <div><div class="nm">${escapeHtml_(m.name || '')}</div></div>
+      <button type="button" class="tr" onclick="openTierOverlay()">👑 ${escapeHtml_(tierName)} ›</button>
+    </div>
+    ${progress ? `<div class="prog">${progress}</div>` : ''}
+    <div class="stats">
+      <button type="button" onclick="openWallet_('points')"><b>${Number(m.points) || 0}</b>⭐ 點數</button>
+      <button type="button" onclick="openWallet_('voucher')"><b>${checkoutMemberVouchers.length}</b>🎟 我的兌換券</button>
+      <button type="button" onclick="openTierOverlay()"><b>›</b>👑 等級好禮</button>
+    </div>`;
+}
+function onHomeMemberLogin_() {
+  // 已登入 LINE 但還沒建會員：註冊表單在「我的訂單」裡；還沒登入 LINE 就直接去登入
+  if (LINE_LOGIN_ON && window.liff && typeof liff.isLoggedIn === 'function' && !liff.isLoggedIn()) { lineLoginRedirect_(); return; }
+  switchHomeTab_('order', true);
+  openCart();
+}
+
+// ---------- 會員好康：活動看板(今天的大圖卡＋即將到來小卡) ----------
+function homeActWhen_(a, next, t) {
+  if (next === homeAddDays_(t, 1)) return '明天 ' + homeMd_(next);
+  const diff = Math.round((new Date(next + 'T00:00:00') - new Date(t + 'T00:00:00')) / 86400000);
+  if (diff < 7) return '週' + homeWd_(next) + ' ' + homeMd_(next);
+  return homeMd_(next) + '（' + homeWd_(next) + '）';
+}
+function homeActSub_(a) {
+  return [a.memberOnly ? '會員限定' : '會員、非會員都可以', a.channels.indexOf('線上') === -1 ? '限門市' : a.channels.indexOf('門市') === -1 ? '限線上點餐' : null].filter(Boolean).join('・');
+}
+function renderHomePerkPane_() {
+  const el = document.getElementById('home-pane-perk');
+  if (!el) return;
+  if (!document.getElementById('home-mcard')) {
+    el.innerHTML = '<div class="hp-mcard" id="home-mcard"></div><div id="home-acts"></div>';
+  }
+  renderHomePerkMember_();
+  if (!homeDataReady_) { document.getElementById('home-acts').innerHTML = '<div class="hp-empty" style="margin-top:14px;">活動載入中…</div>'; return; }
+  const t = todayYmd_();
+  const acts = HOME_ACTS.filter(a => a.status !== '停用' && homeInPeriod_(a, t)).map(a => {
+    const dates = (a.dates || []).filter(d => d >= t);
+    return { a, dates, today: dates[0] === t, next: dates[0] };
+  }).filter(x => x.next);
+  const todays = acts.filter(x => x.today);
+  const soon = acts.filter(x => !x.today).sort((x, y) => x.next < y.next ? -1 : 1);
+  const bg = a => a.photoUrl ? 'background-image:' + homeCssUrl_(a.photoUrl) : `background-image:linear-gradient(135deg,${(HOME_ACT_GRADS_[a.color] || HOME_ACT_GRADS_['橘']).join(',')})`;
+  const bigHtml = todays.map(({ a, dates }) => {
+    // 連續的活動日(例如節氣 7 天)：算到哪天結束，最後一天掛「今天最後一天」
+    let end = t;
+    while (dates.indexOf(homeAddDays_(end, 1)) !== -1) end = homeAddDays_(end, 1);
+    const multi = end !== t || (a.ruleType === '指定日期' && (a.rule || '').indexOf('~') !== -1);
+    const ribbon = end === t ? (multi ? '今天最後一天' : '今天限定') : '進行到 ' + homeMd_(end);
+    return `<div class="hp-bn">
+        <div class="img" style="${bg(a)}"><span class="hp-ribbon">${ribbon}</span>${a.photoUrl ? '' : `<span class="emoji">${escapeHtml_(a.icon || '🎁')}</span>`}<div class="over"><b>${escapeHtml_(a.title)}</b></div></div>
+        <div class="foot"><div><div class="d">${escapeHtml_(a.desc)}</div><div class="w">${escapeHtml_(homeActSub_(a))}</div></div>
+          <button type="button" class="hp-btn" onclick="switchHomeTab_('order')">去點餐</button></div>
+      </div>`;
+  }).join('');
+  const smHtml = soon.map(({ a, next }) => `
+      <div class="hp-sm">
+        <div class="th" style="${bg(a)}">${a.photoUrl ? '' : escapeHtml_(a.icon || '🎁')}</div>
+        <div class="tx"><b>${escapeHtml_(a.title)}</b>${escapeHtml_(a.desc)}<div>${escapeHtml_(homeActSub_(a))}</div></div>
+        <span class="hp-btn g">${escapeHtml_(homeActWhen_(a, next, t))}</span>
+      </div>`).join('');
+  document.getElementById('home-acts').innerHTML = `
+    <div class="hp-sec">今天 ${homeMd_(t)}（${homeWd_(t)}）${todays.length ? `<span class="hp-live">● 進行中 ${todays.length}</span>` : ''}</div>
+    ${bigHtml || '<div class="hp-empty">今天沒有活動，看看下面即將到來的好康</div>'}
+    <div class="hp-sec">即將到來</div>
+    ${smHtml || '<div class="hp-empty">更多活動即將公布</div>'}`;
+}
+
+if (HOME_TABS_ON) initHomeTabs_();
+
 // 菜單CMS化Phase 1（2026-09-06）：renderMenu()/applyItemAvailability()都要用到CATALOG/OPTION_GROUPS，
 // 改成雲端讀取後這兩個call要等loadMenuCmsData()完成才能執行；其餘跟菜單內容無關的初始化維持原本同步呼叫，
 // 不用跟著等待，避免整個開場被網路速度拖慢
@@ -3603,6 +3932,7 @@ loadMenuCmsData().then(() => {
   document.getElementById('menu').innerHTML = ''; // 清掉「菜單載入中…」提示，renderMenu()本身只會附加不會清空
   renderMenu();
   applyItemAvailability();
+  if (HOME_TABS_ON) renderHomeNewPane_();
 });
 scheduleSettingsReady.then(() => {
   renderStoreStrip_();
@@ -3654,6 +3984,7 @@ function applyItemAvailability() {
       }
       div.style.opacity = '0.5';
     });
+    if (HOME_TABS_ON) renderHomeNewPane_();   // 新品卡片標「今日售完」
   }).catch(err => console.warn('讀取品項上下架狀態失敗（不影響點餐，全部視為供應中）', err));
 }
 </script>
