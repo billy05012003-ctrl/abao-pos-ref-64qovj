@@ -2897,6 +2897,20 @@ function switchHbTab(tab, keepSelection) {
   document.getElementById('hb-editor-title').textContent = tab === 'cards' ? '編輯卡片' : '編輯活動';
 }
 function hbCatalog_() { return Object.keys(mcCatalog).length ? mcCatalog : (adCatalog_ || {}); }
+// 線上點餐頁會濾掉這三個店員用的分類(跟點餐頁 STAFF_ONLY_CATEGORIES 同一份，改一邊要改另一邊)：
+// 卡片/活動連結不列出來，已經選了的標「線上看不到」(10-01 農曆初一連到單點，顧客按了找不到)
+const HB_STAFF_ONLY_CATS_ = ['單點', '三明治', '其他'];
+function hbIsStaffCat_(c) { return !!c && HB_STAFF_ONLY_CATS_.indexOf(mcShortCatName(c)) !== -1; }
+function hbLinkCatOptions_(sel) {
+  const cat = hbCatalog_();
+  return `<option value="">請選分類</option>` + Object.keys(cat).filter(c => !hbIsStaffCat_(c)).map(c => `<option value="${escapeHtml(c)}" ${c === sel ? 'selected' : ''}>${escapeHtml(mcShortCatName(c))}</option>`).join('')
+    + (sel && hbIsStaffCat_(sel) ? `<option value="${escapeHtml(sel)}" selected>${escapeHtml(mcShortCatName(sel))}（線上看不到）</option>` : '')
+    + (sel && !cat[sel] ? `<option value="${escapeHtml(sel)}" selected>${escapeHtml(mcShortCatName(sel))}（菜單已沒有）</option>` : '');
+}
+function hbStaffCatWarnHtml_(d) {
+  if ((d.linkType !== '品項' && d.linkType !== '分類') || !hbIsStaffCat_(d.linkCat)) return '';
+  return `<div style="font-size:0.78rem;background:#fff6d6;border:1px solid #f0c040;color:#7a5a00;border-radius:6px;padding:6px 8px;margin-top:6px;">⚠ 「${escapeHtml(mcShortCatName(d.linkCat))}」是店員用的分類，線上點餐看不到，客人按了會找不到。請把品項移到線上看得到的分類，或改選其他分類。</div>`;
+}
 function hbPeriodTag_(x) { return pmPeriodTag_(x); }
 
 function renderHbList() {
@@ -2906,7 +2920,8 @@ function renderHbList() {
     const row = c => {
       let link = c.linkType === '品項' ? '品項「' + c.linkItem + '」' : c.linkType === '分類' ? '分類「' + mcShortCatName(c.linkCat) + '」' : '只展示' + (c.saleDate ? '・' + hbMd_(c.saleDate) + ' 開賣' : '');
       const missing = (c.linkType === '品項' && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem)) || (c.linkType === '分類' && !cat[c.linkCat]);
-      const tags = [link, missing && Object.keys(cat).length ? '⚠菜單已沒有' : null, hbPeriodTag_(c), c.status === '停用' ? '停用' : null].filter(Boolean).join('・');
+      const staff = (c.linkType === '品項' || c.linkType === '分類') && hbIsStaffCat_(c.linkCat);
+      const tags = [link, missing && Object.keys(cat).length ? '⚠菜單已沒有' : null, staff ? '⚠線上看不到' : null, hbPeriodTag_(c), c.status === '停用' ? '停用' : null].filter(Boolean).join('・');
       return `<div class="mc-item-row${c.id === hbCurrentId ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="hbEditCard('${hbJs_(c.id)}')">
           <span>${c.tag ? `<b style="color:var(--brand);font-size:0.72rem;">${escapeHtml(c.tag)}</b> ` : ''}${escapeHtml(c.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span>
         </div>`;
@@ -2977,8 +2992,7 @@ function renderHbCardEditor_(el) {
   const d = hbDraft, isNew = !hbCurrentId;
   const cat = hbCatalog_();
   const cats = Object.keys(cat);
-  const catOpts = sel => `<option value="">請選分類</option>` + cats.map(c => `<option value="${escapeHtml(c)}" ${c === sel ? 'selected' : ''}>${escapeHtml(mcShortCatName(c))}</option>`).join('')
-    + (sel && !cat[sel] ? `<option value="${escapeHtml(sel)}" selected>${escapeHtml(mcShortCatName(sel))}（菜單已沒有）</option>` : '');
+  const catOpts = hbLinkCatOptions_;
   const items = cat[d.linkCat] || [];
   const itemOpts = `<option value="">請選品項</option>` + items.map(it => `<option value="${escapeHtml(it.name)}" ${it.name === d.linkItem ? 'selected' : ''}>${escapeHtml(it.name)}</option>`).join('')
     + (d.linkItem && !items.some(it => it.name === d.linkItem) ? `<option value="${escapeHtml(d.linkItem)}" selected>${escapeHtml(d.linkItem)}（菜單已沒有）</option>` : '');
@@ -3002,7 +3016,8 @@ function renderHbCardEditor_(el) {
       <label class="mc-field">分類<select onchange="hbSetCardCat_(this.value)">${catOpts(d.linkCat)}</select></label>
       ${d.linkType === '品項' ? `<label class="mc-field">品項<select onchange="hbSetCardItem_(this.value)">${itemOpts}</select></label>` : ''}
     </div>
-    ${!cats.length ? '<div style="font-size:0.78rem;color:#c0392b;margin:-4px 0 8px;">菜單資料讀取失敗，請重新整理頁面</div>' : ''}` : `
+    ${!cats.length ? '<div style="font-size:0.78rem;color:#c0392b;margin:-4px 0 8px;">菜單資料讀取失敗，請重新整理頁面</div>' : ''}
+    ${hbStaffCatWarnHtml_(d)}` : `
     <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">客人點了只會放大看圖跟說明，沒有點餐按鈕。<b>開賣那天回來把這張改成「連單一品項」再發布</b>（忘了改也不會出錯，只是一直停在展示）。</div>
     <div class="mc-field-row">
       <label class="mc-field" style="max-width:160px;">價格（選填）<input type="number" min="0" step="1" value="${d.price === '' ? '' : d.price}" oninput="hbDraft.price=this.value"></label>
@@ -3250,8 +3265,9 @@ function hbSchedulePreview_(immediate) {
 }
 // ---------- 活動「去點餐」連結(10-01，跟新品卡片同三種)：綁券時自動帶券的分類/品項，跟券對不上就黃色提醒(不擋) ----------
 function hbActLinkSummary_(a) {
-  if (a.linkType === '品項') return '去點餐→' + a.linkItem;
-  if (a.linkType === '分類') return '去點餐→' + mcShortCatName(a.linkCat);
+  const staff = hbIsStaffCat_(a.linkCat) ? '（⚠線上看不到）' : '';
+  if (a.linkType === '品項') return '去點餐→' + a.linkItem + staff;
+  if (a.linkType === '分類') return '去點餐→' + mcShortCatName(a.linkCat) + staff;
   if (a.linkType === '只展示') return '只展示';
   return null;
 }
@@ -3263,7 +3279,8 @@ function hbActLinkFromPromo_(name) {
   if (p.targetCat) return { linkType: '分類', linkCat: p.targetCat, linkItem: '' };
   if (p.targetItem) {
     const cat = hbCatalog_();
-    const c = Object.keys(cat).find(k => (cat[k] || []).some(it => it.name === p.targetItem));
+    const has = k => (cat[k] || []).some(it => it.name === p.targetItem);
+    const c = Object.keys(cat).find(k => !hbIsStaffCat_(k) && has(k)) || Object.keys(cat).find(has);   // 優先找線上看得到的分類
     if (c) return { linkType: '品項', linkCat: c, linkItem: p.targetItem };
   }
   return null;
@@ -3285,8 +3302,7 @@ function hbActLinkMismatch_(d) {
 function hbActLinkHtml_(d) {
   const cat = hbCatalog_();
   const cats = Object.keys(cat);
-  const catOpts = sel => `<option value="">請選分類</option>` + cats.map(c => `<option value="${escapeHtml(c)}" ${c === sel ? 'selected' : ''}>${escapeHtml(mcShortCatName(c))}</option>`).join('')
-    + (sel && !cat[sel] ? `<option value="${escapeHtml(sel)}" selected>${escapeHtml(mcShortCatName(sel))}（菜單已沒有）</option>` : '');
+  const catOpts = hbLinkCatOptions_;
   const items = cat[d.linkCat] || [];
   const itemOpts = `<option value="">請選品項</option>` + items.map(it => `<option value="${escapeHtml(it.name)}" ${it.name === d.linkItem ? 'selected' : ''}>${escapeHtml(it.name)}</option>`).join('')
     + (d.linkItem && !items.some(it => it.name === d.linkItem) ? `<option value="${escapeHtml(d.linkItem)}" selected>${escapeHtml(d.linkItem)}（菜單已沒有）</option>` : '');
@@ -3302,7 +3318,8 @@ function hbActLinkHtml_(d) {
         ${d.linkType === '品項' ? `<label class="mc-field">品項<select onchange="hbDraft.linkItem=this.value;renderHbEditor();">${itemOpts}</select></label>` : ''}
       </div>
       ${!cats.length ? '<div style="font-size:0.78rem;color:#c0392b;">菜單資料讀取失敗，請重新整理頁面</div>' : ''}
-      <div style="font-size:0.72rem;color:var(--muted);">連的品項本日售完或停用時，會改跳到它的分類。</div>` : ''}
+      <div style="font-size:0.72rem;color:var(--muted);">連的品項本日售完或停用時，會改跳到它的分類。</div>
+      ${hbStaffCatWarnHtml_(d)}` : ''}
       ${warn ? `<div style="font-size:0.78rem;background:#fff6d6;border:1px solid #f0c040;color:#7a5a00;border-radius:6px;padding:6px 8px;margin-top:6px;">⚠ ${escapeHtml(warn)}</div>` : ''}
     </div>`;
 }
