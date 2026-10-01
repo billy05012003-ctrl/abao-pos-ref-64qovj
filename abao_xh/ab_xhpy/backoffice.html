@@ -2862,7 +2862,7 @@ const HB_SKIP_FIRST_ = '不含正月';
 // 底色跟點餐頁活動卡的漸層一致
 const HB_COLORS_ = { 橘: ['#ffcf8a', '#e8632c'], 黃: ['#ffe08a', '#f0a020'], 藍: ['#bcd7ff', '#4a7fd6'], 粉: ['#ffc8dc', '#e0588c'], 紫: ['#d9c8ff', '#7c5cd6'], 綠: ['#c6ecc0', '#3f9a4a'] };
 const HB_CARD_DIFF_FIELDS_ = ['block', 'title', 'desc', 'linkType', 'linkCat', 'linkItem', 'price', 'saleDate', 'tag', 'photoUrl', 'startDate', 'endDate', 'order', 'status', 'locked'];
-const HB_ACT_DIFF_FIELDS_ = ['title', 'desc', 'icon', 'color', 'photoUrl', 'ruleType', 'rule', 'excludes', 'promo', 'method', 'voucherDays', 'perPerson', 'limit', 'memberOnly', 'channels', 'startDate', 'endDate', 'order', 'status', 'locked'];
+const HB_ACT_DIFF_FIELDS_ = ['title', 'desc', 'icon', 'color', 'photoUrl', 'ruleType', 'rule', 'excludes', 'promo', 'method', 'voucherDays', 'perPerson', 'limit', 'memberOnly', 'channels', 'startDate', 'endDate', 'order', 'status', 'locked', 'linkType', 'linkCat', 'linkItem'];
 function hbCardDiffMap_(list) { return Object.fromEntries((list || []).map(c => [c.id, HB_CARD_DIFF_FIELDS_.map(f => JSON.stringify(c[f] === undefined ? '' : c[f]))])); }
 function hbActDiffMap_(list) { return Object.fromEntries((list || []).map(a => [a.id, HB_ACT_DIFF_FIELDS_.map(f => JSON.stringify(a[f] === undefined ? '' : a[f]))])); }
 function hbTitleOf_(a, b, id) { const x = (a || []).concat(b || []).find(y => y.id === id); return x ? x.title : id; }
@@ -2929,7 +2929,7 @@ function renderHbList() {
   el.innerHTML = hbActs.map(a => {
     const next = (a.dates || [])[0];
     const when = next ? (next === today ? '今天' : '下次 ' + hbMd_(next)) : (a.ruleType === '指定日期' && !a.rule ? '⚠還沒排日期' : '60天內沒有活動日');
-    const tags = [hbRuleSummary_(a), when, a.promo ? (a.method === '自動折' ? '自動折：' : '🎟領券：') + a.promo : null, a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
+    const tags = [hbRuleSummary_(a), when, a.promo ? (a.method === '自動折' ? '自動折：' : '🎟領券：') + a.promo : null, hbActLinkSummary_(a), a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
     return `<div class="mc-item-row${a.id === hbCurrentId ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="hbEditAct('${hbJs_(a.id)}')">
         <span>${escapeHtml(a.icon || '🎁')} ${escapeHtml(a.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span>
       </div>`;
@@ -3125,7 +3125,7 @@ function moveHbItem(dir) {
 function hbNewAct() {
   hbCurrentId = null;
   hbDraft = { kind: 'act', title: '', desc: '', icon: '🎁', color: '橘', photoUrl: '', ruleType: '每週', weekdays: [], lunarDays: [], skipFirst: false, dateTokens: [], exTokens: [], promo: '', method: '領券',
-    memberOnly: false, channels: ['線上', '門市'], startDate: '', endDate: '', status: '啟用', locked: false };
+    memberOnly: false, channels: ['線上', '門市'], startDate: '', endDate: '', status: '啟用', locked: false, linkType: '', linkCat: '', linkItem: '' };
   renderHbList(); renderHbEditor();
 }
 function hbEditAct(id) {
@@ -3217,7 +3217,7 @@ function renderHbActEditor_(el) {
           </select>
         </label>
         <label class="mc-field">綁哪一張優惠券
-          <select onchange="hbDraft.promo=this.value">
+          <select onchange="hbSetActPromo_(this.value)">
             <option value="">不綁（只在看板顯示）</option>
             ${pmPromos.filter(p => p.mode === 'item').map(p => `<option value="${escapeHtml(p.name)}" ${d.promo === p.name ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
             ${d.promo && !pmPromos.some(p => p.name === d.promo) ? `<option value="${escapeHtml(d.promo)}" selected>${escapeHtml(d.promo)}（優惠券已不存在）</option>` : ''}
@@ -3226,6 +3226,7 @@ function renderHbActEditor_(el) {
       </div>
       <div style="font-size:0.72rem;color:var(--muted);">領券：活動前一天起，LINE 會員在看板按「領券」，每人每個活動日 1 張，只能用在活動日取餐的訂單。優惠券效果在「優惠券」那頁設定（週二選打5折＋適用分類茶拿鐵；週四選全額免費＋適用品項雞塊＋需搭配分類定食）。限量第三波才做。</div>
     </div>
+    ${hbActLinkHtml_(d)}
     ${hbStatusLockHtml_(d)}
     ${hbButtonsHtml_(isNew, 'saveHbAct(this)', 'deleteHbAct()', 'moveHbItem(-1)', 'moveHbItem(1)')}`;
   hbSchedulePreview_(true);
@@ -3247,9 +3248,69 @@ function hbSchedulePreview_(immediate) {
     }).catch(() => { el.innerHTML = '<span style="font-size:0.78rem;color:var(--muted);">暫時無法預覽(網路問題)</span>'; });
   }, immediate ? 0 : 400);
 }
+// ---------- 活動「去點餐」連結(10-01，跟新品卡片同三種)：綁券時自動帶券的分類/品項，跟券對不上就黃色提醒(不擋) ----------
+function hbActLinkSummary_(a) {
+  if (a.linkType === '品項') return '去點餐→' + a.linkItem;
+  if (a.linkType === '分類') return '去點餐→' + mcShortCatName(a.linkCat);
+  if (a.linkType === '只展示') return '只展示';
+  return null;
+}
+// 券「需搭配分類」優先(週四要先點定食)，其次「適用分類」(週二茶拿鐵)，再來「適用品項」(找它在哪個分類)
+function hbActLinkFromPromo_(name) {
+  const p = name && pmPromos.find(x => x.name === name);
+  if (!p) return null;
+  if (p.requireCat) return { linkType: '分類', linkCat: p.requireCat, linkItem: '' };
+  if (p.targetCat) return { linkType: '分類', linkCat: p.targetCat, linkItem: '' };
+  if (p.targetItem) {
+    const cat = hbCatalog_();
+    const c = Object.keys(cat).find(k => (cat[k] || []).some(it => it.name === p.targetItem));
+    if (c) return { linkType: '品項', linkCat: c, linkItem: p.targetItem };
+  }
+  return null;
+}
+function hbSetActPromo_(name) {
+  hbDraft.promo = name;
+  const s = hbActLinkFromPromo_(name);
+  if (s) Object.assign(hbDraft, s);
+  renderHbEditor();
+}
+function hbActLinkMismatch_(d) {
+  if (d.linkType !== '品項' && d.linkType !== '分類') return '';
+  const e = hbActLinkFromPromo_(d.promo);
+  if (!e) return '';
+  const ok = d.linkCat === e.linkCat && (d.linkType !== '品項' || e.linkType !== '品項' || d.linkItem === e.linkItem);
+  if (ok) return '';
+  return `綁的優惠券「${d.promo}」要${e.linkType === '品項' ? '點「' + e.linkItem + '」' : '點「' + mcShortCatName(e.linkCat) + '」的餐點'}才有優惠，但「去點餐」會跳到${d.linkType === '品項' ? '「' + d.linkItem + '」' : '「' + mcShortCatName(d.linkCat) + '」'}。確定要這樣也可以直接儲存。`;
+}
+function hbActLinkHtml_(d) {
+  const cat = hbCatalog_();
+  const cats = Object.keys(cat);
+  const catOpts = sel => `<option value="">請選分類</option>` + cats.map(c => `<option value="${escapeHtml(c)}" ${c === sel ? 'selected' : ''}>${escapeHtml(mcShortCatName(c))}</option>`).join('')
+    + (sel && !cat[sel] ? `<option value="${escapeHtml(sel)}" selected>${escapeHtml(mcShortCatName(sel))}（菜單已沒有）</option>` : '');
+  const items = cat[d.linkCat] || [];
+  const itemOpts = `<option value="">請選品項</option>` + items.map(it => `<option value="${escapeHtml(it.name)}" ${it.name === d.linkItem ? 'selected' : ''}>${escapeHtml(it.name)}</option>`).join('')
+    + (d.linkItem && !items.some(it => it.name === d.linkItem) ? `<option value="${escapeHtml(d.linkItem)}" selected>${escapeHtml(d.linkItem)}（菜單已沒有）</option>` : '');
+  const warn = hbActLinkMismatch_(d);
+  return `<div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">客人按「去點餐」要做什麼
+      <div class="hb-chk" style="margin-top:4px;">
+        ${['品項', '分類', '只展示'].map(t => `<label><input type="radio" name="hb-act-linktype" ${d.linkType === t ? 'checked' : ''} onchange="hbDraft.linkType='${t}';renderHbEditor();"> ${t === '品項' ? '連單一品項（直接開那道餐）' : t === '分類' ? '連整個分類（跳到那個分類）' : '只展示（不顯示「去點餐」按鈕）'}</label>`).join('')}
+      </div>
+      ${!d.linkType ? '<div style="font-size:0.72rem;color:var(--muted);">還沒設定：「去點餐」回到線上點餐最上面。綁優惠券時會自動帶入券的分類或品項。</div>' : ''}
+      ${d.linkType === '品項' || d.linkType === '分類' ? `
+      <div class="mc-field-row" style="margin-top:6px;">
+        <label class="mc-field">分類<select onchange="hbDraft.linkCat=this.value;if(hbDraft.linkType==='品項')hbDraft.linkItem='';renderHbEditor();">${catOpts(d.linkCat)}</select></label>
+        ${d.linkType === '品項' ? `<label class="mc-field">品項<select onchange="hbDraft.linkItem=this.value;renderHbEditor();">${itemOpts}</select></label>` : ''}
+      </div>
+      ${!cats.length ? '<div style="font-size:0.78rem;color:#c0392b;">菜單資料讀取失敗，請重新整理頁面</div>' : ''}
+      <div style="font-size:0.72rem;color:var(--muted);">連的品項本日售完或停用時，會改跳到它的分類。</div>` : ''}
+      ${warn ? `<div style="font-size:0.78rem;background:#fff6d6;border:1px solid #f0c040;color:#7a5a00;border-radius:6px;padding:6px 8px;margin-top:6px;">⚠ ${escapeHtml(warn)}</div>` : ''}
+    </div>`;
+}
 function saveHbAct(btn) {
   const d = hbDraft;
   if (!d.title.trim()) { alert('請填活動標題'); return; }
+  if (d.linkType === '品項' && (!d.linkCat || !d.linkItem)) { alert('「去點餐」連單一品項：請選分類和品項'); return; }
+  if (d.linkType === '分類' && !d.linkCat) { alert('「去點餐」連整個分類：請選分類'); return; }
   const rule = hbActRuleValue_(d);
   if (d.ruleType !== '指定日期' && !rule) { alert(d.ruleType === '每週' ? '請至少勾一個星期幾' : '請至少勾一個農曆日'); return; }
   if (!d.channels.length) { alert('通路至少要選一個'); return; }
@@ -3257,7 +3318,8 @@ function saveHbAct(btn) {
   const act = { id: hbCurrentId || undefined, storeId: MC_STORE_ID, version: MC_STATUS, title: d.title.trim(), desc: d.desc.trim(), icon: d.icon.trim(), color: d.color, photoUrl: d.photoUrl || '',
     ruleType: d.ruleType, rule, excludes: d.exTokens.slice().sort().join('、'), memberOnly: !!d.memberOnly, channels: d.channels,
     promo: d.promo || '', method: d.method === '自動折' ? '自動折' : '領券',
-    startDate: d.startDate, endDate: d.endDate, status: d.status, locked: !!d.locked };
+    startDate: d.startDate, endDate: d.endDate, status: d.status, locked: !!d.locked,
+    linkType: d.linkType || '', linkCat: d.linkCat || '', linkItem: d.linkItem || '' };
   hbSave_(btn, { action: 'upsertHomeAct', act });
 }
 function deleteHbAct() {

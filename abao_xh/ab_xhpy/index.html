@@ -4001,16 +4001,37 @@ function onHomeCardClick_(id) {
   const st = homeCardState_(c);
   if (st.off || st.wait) return;
   if (c.linkType === '只展示') { openHomeDetail_(c); return; }
-  switchHomeTab_('order', true);
-  const idx = Object.keys(CATALOG).indexOf(c.linkCat);
-  if (c.linkType === '分類') { setTimeout(() => goToCategory(idx), 0); return; }
-  // 同一個品名可能出現在不同分類，只在卡片指定的分類裡找
+  homeJumpTo_(c.linkType, c.linkCat, c.linkItem, false);
+}
+// 切到線上點餐並跳到品項(直接開點餐視窗)或分類；新品卡片和會員好康活動的「去點餐」共用
+// softFail：品項點不了時改跳到它的分類(活動用，活動卡片不像新品卡片會先標「今日售完」)
+// 先回到最上面：好康/新品頁往下滑過再切分頁，瀏覽器會把位置錨到菜單很下面(10-01 實測)，跳分類變成從菜單底部一路往回捲
+function homeJumpTo_(linkType, linkCat, linkItem, softFail) {
+  switchHomeTab_('order');
+  const idx = Object.keys(CATALOG).indexOf(linkCat);
+  if (idx === -1) return;
+  if (linkType === '分類') { setTimeout(() => goToCategory(idx), 0); return; }
+  // 同一個品名可能出現在不同分類，只在指定的分類裡找
   const sec = document.getElementById('cat-' + idx);
-  const card = sec && [...sec.querySelectorAll('.item')].find(el => el.dataset.itemName === c.linkItem);
+  const card = sec && [...sec.querySelectorAll('.item')].find(el => el.dataset.itemName === linkItem);
   const btn = card && card.querySelector('.add');
-  if (!btn || btn.disabled) { alert(`「${c.linkItem}」目前無法點選`); return; }
+  if (!btn || btn.disabled) {
+    if (softFail) { setTimeout(() => goToCategory(idx), 0); return; }
+    alert(`「${linkItem}」目前無法點選`); return;
+  }
   card.scrollIntoView({ block: 'center' });
   btn.click();
+}
+// 會員好康活動的「去點餐」(10-01)：照後台設定的連結跳；沒設定(舊活動)照舊回到線上點餐最上面
+function homeActGo_(id) {
+  const a = HOME_ACTS.find(x => x.id === id);
+  document.getElementById('home-detail-overlay').classList.remove('open');
+  if (a && (a.linkType === '品項' || a.linkType === '分類')) homeJumpTo_(a.linkType, a.linkCat, a.linkItem, true);
+  else switchHomeTab_('order');
+}
+function homeActGoBtn_(a, extraStyle) {
+  if (a.linkType === '只展示') return '';
+  return `<button type="button" class="hp-btn"${extraStyle ? ` style="${extraStyle}"` : ''} onclick="event.stopPropagation();homeActGo_('${a.id}')">去點餐</button>`;
 }
 function openHomeDetail_(c) {
   const t = todayYmd_(), photo = homeCardPhoto_(c, null), price = homeCardPrice_(c, null);
@@ -4107,7 +4128,7 @@ function openHomeActDetail_(id) {
     ${homeActClaimable_(a) ? `<div style="font-size:0.78rem;color:var(--muted);margin-top:10px;line-height:1.5;">活動前一天起可以領券，每人每個活動日 1 張，只能用在活動日取餐的訂單；符合條件結帳時會自動套用。</div>` : ''}
     <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:12px;">
       ${claim}
-      <button type="button" class="hp-btn" style="background:#fff;color:var(--brand);border:1px solid var(--brand);" onclick="document.getElementById('home-detail-overlay').classList.remove('open');switchHomeTab_('order')">去點餐</button>
+      ${homeActGoBtn_(a, 'background:#fff;color:var(--brand);border:1px solid var(--brand);')}
     </div>`;
   document.getElementById('home-detail-overlay').classList.add('open');
 }
@@ -4148,7 +4169,7 @@ function renderHomePerkPane_() {
     return `<div class="hp-bn" style="cursor:pointer;" onclick="openHomeActDetail_('${a.id}')">
         <div class="img" style="${bg(a)}"><span class="hp-ribbon">${ribbon}</span>${a.photoUrl ? '' : `<span class="emoji">${escapeHtml_(a.icon || '🎁')}</span>`}<div class="over"><b>${escapeHtml_(a.title)}</b></div></div>
         <div class="foot"><div><div class="d">${escapeHtml_(a.desc)}</div><div class="w">${escapeHtml_(homeActSub_(a))}</div></div>
-          ${homeActClaimBtn_(a, t) || `<button type="button" class="hp-btn" onclick="event.stopPropagation();switchHomeTab_('order')">去點餐</button>`}</div>
+          ${homeActClaimBtn_(a, t) || homeActGoBtn_(a)}</div>
       </div>`;
   }).join('');
   const smHtml = soon.map(({ a, next }) => `
