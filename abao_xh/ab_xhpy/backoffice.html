@@ -2746,7 +2746,7 @@ function renderPublishDiff_(els, changes, errorMsg) {
   els.forEach(el => { el.innerHTML = html; });
 }
 const ADDON_DIFF_FIELDS_ = ['type', 'amount', 'photoUrl', 'sauceGroups', 'sets', 'drinkOnly', 'excludes', 'startDate', 'endDate', 'order', 'status', 'locked'];
-const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'targetSize', 'targetCat', 'requireCat', 'locked', 'order', 'startDate', 'endDate'];
+const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'targetSize', 'targetCat', 'requireCat', 'locked', 'order', 'startDate', 'endDate', 'targetItem2', 'requireItem', 'pairMode', 'requireOpts', 'exclusive'];
 function refreshPromoPublishDiff_() {
   const els = [...document.querySelectorAll('.promo-publish-diff')];
   if (!els.length || MC_STORE_ID === '__brand__') return Promise.resolve();
@@ -2944,7 +2944,7 @@ function renderHbList() {
   el.innerHTML = hbActs.map(a => {
     const next = (a.dates || [])[0];
     const when = next ? (next === today ? '今天' : '下次 ' + hbMd_(next)) : (a.ruleType === '指定日期' && !a.rule ? '⚠還沒排日期' : '60天內沒有活動日');
-    const tags = [hbRuleSummary_(a), when, a.promo ? (a.method === '自動折' ? '自動折：' : '🎟領券：') + a.promo : null, hbActLinkSummary_(a), a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
+    const tags = [hbRuleSummary_(a), when, a.promo ? '🎟' + a.promo + (Number(a.perPerson) > 1 ? '・每人' + a.perPerson + '組' : '') + (Number(a.limit) > 0 ? '・限量' + a.limit : '') : null, hbActLinkSummary_(a), a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
     return `<div class="mc-item-row${a.id === hbCurrentId ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="hbEditAct('${hbJs_(a.id)}')">
         <span>${escapeHtml(a.icon || '🎁')} ${escapeHtml(a.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span>
       </div>`;
@@ -3225,12 +3225,8 @@ function renderHbActEditor_(el) {
     <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">空白＝一直辦下去。期間外的日子不算活動日，看板也不顯示（例如週二ㄋㄟㄋㄟ日只辦到 12/31，結束填 12/31）。</div>
     <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">優惠內容
       <div class="mc-field-row" style="margin-top:6px;">
-        <label class="mc-field" style="max-width:200px;">方式
-          <select onchange="hbDraft.method=this.value;renderHbEditor();">
-            <option value="領券" ${d.method !== '自動折' ? 'selected' : ''}>領券（客人自己領）</option>
-            <option value="自動折" ${d.method === '自動折' ? 'selected' : ''}>自動折（第三波才開放）</option>
-          </select>
-        </label>
+        <label class="mc-field" style="max-width:130px;">每人限領(組)<input type="number" min="1" max="99" step="1" value="${d.perPerson === '' || d.perPerson == null ? '' : d.perPerson}" placeholder="1" oninput="hbDraft.perPerson=this.value"></label>
+        <label class="mc-field" style="max-width:150px;">每天限量(組，本店)<input type="number" min="1" max="9999" step="1" value="${d.limit === '' || d.limit == null ? '' : d.limit}" placeholder="不限" oninput="hbDraft.limit=this.value"></label>
         <label class="mc-field">綁哪一張優惠券
           <select onchange="hbSetActPromo_(this.value)">
             <option value="">不綁（只在看板顯示）</option>
@@ -3239,7 +3235,7 @@ function renderHbActEditor_(el) {
           </select>
         </label>
       </div>
-      <div style="font-size:0.72rem;color:var(--muted);">領券：活動前一天起，LINE 會員在看板按「領券」，每人每個活動日 1 張，只能用在活動日取餐的訂單。優惠券效果在「優惠券」那頁設定（週二選打5折＋適用分類茶拿鐵；週四選全額免費＋適用品項雞塊＋需搭配分類定食）。限量第三波才做。</div>
+      <div style="font-size:0.72rem;color:var(--muted);">線上（10-02 第三波）：活動日取餐的訂單，會員點了符合的餐點，系統自動發券並套用，客人不用按「領券」；只能用在活動日取餐的訂單。每人限領＝每人每個活動日最多幾組（空白＝1；雞塊日一張券就是點幾份送幾份）。每天限量＝算已付款的組數，退款會還名額，空白＝不限。優惠券效果在「優惠券」那頁設定（週二：打5折＋適用分類茶拿鐵；週四：全額免費＋適用品項雞塊＋需搭配分類定食；買一送一／六折／加一元多一件／雞塊日看那頁的「配對方式」）。沒綁券＝只在看板顯示。</div>
     </div>
     ${hbActLinkHtml_(d)}
     ${hbStatusLockHtml_(d)}
@@ -3336,7 +3332,8 @@ function saveHbAct(btn) {
     ruleType: d.ruleType, rule, excludes: d.exTokens.slice().sort().join('、'), memberOnly: !!d.memberOnly, channels: d.channels,
     promo: d.promo || '', method: d.method === '自動折' ? '自動折' : '領券',
     startDate: d.startDate, endDate: d.endDate, status: d.status, locked: !!d.locked,
-    linkType: d.linkType || '', linkCat: d.linkCat || '', linkItem: d.linkItem || '' };
+    linkType: d.linkType || '', linkCat: d.linkCat || '', linkItem: d.linkItem || '',
+    perPerson: d.perPerson == null ? '' : String(d.perPerson).trim(), limit: d.limit == null ? '' : String(d.limit).trim() };
   hbSave_(btn, { action: 'upsertHomeAct', act });
 }
 function deleteHbAct() {
@@ -3541,6 +3538,7 @@ function pmModeChanged() {
   const mode = document.getElementById('pm-f-mode').value;
   document.getElementById('pm-fixed-fields').style.display = mode === 'fixed' ? 'flex' : 'none';
   document.getElementById('pm-item-fields').style.display = mode === 'item' ? 'flex' : 'none';
+  document.getElementById('pm-w3-fields').style.display = mode === 'item' ? 'flex' : 'none';
   document.getElementById('pm-tierperk-hint').style.display = mode === 'item' ? 'block' : 'none';
   pmEffectChanged();
 }
@@ -3621,6 +3619,40 @@ function renderPmEditor() {
         </select>
       </label>
     </div>
+    <div class="mc-field-row" id="pm-w3-fields" style="display:${mode === 'item' ? 'flex' : 'none'};flex-wrap:wrap;background:#faf6f2;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
+      <div style="width:100%;font-size:0.8rem;font-weight:700;color:var(--muted);">線上活動券（會員好康第三波）</div>
+      <label class="mc-field">配對方式
+        <select id="pm-f-pairmode">
+          <option value="" ${!p.pairMode ? 'selected' : ''}>不配對（原本的單件／分類任兩件）</option>
+          <option value="同款" ${p.pairMode === '同款' ? 'selected' : ''}>同款兩件一組（客製化可不同，例：第二套六折）</option>
+          <option value="同款同客製化" ${p.pairMode === '同款同客製化' ? 'selected' : ''}>同款同客製化兩件一組（例：買一送一、加一元多一件）</option>
+          <option value="每份送一份" ${p.pairMode === '每份送一份' ? 'selected' : ''}>每份送一份（例：雞塊日點幾份送幾份）</option>
+        </select>
+      </label>
+      <label class="mc-field">適用品項2(選填)
+        <select id="pm-f-target2">
+          <option value="">不指定</option>
+          ${pmAutoAddItemOptions_(p.targetItem2)}
+        </select>
+      </label>
+      <label class="mc-field">需搭配品項(每份送一份用)
+        <select id="pm-f-require-item">
+          <option value="">不需要</option>
+          ${pmAutoAddItemOptions_(p.requireItem)}
+        </select>
+      </label>
+      <label class="mc-field">限定選項(選填，用「、」分隔)
+        <input id="pm-f-require-opts" value="${escapeHtml(p.requireOpts || '')}" placeholder="例：正常冰、少冰、微冰、小碎冰">
+        <button type="button" class="mc-delete-btn" style="padding:3px 8px;margin-top:4px;color:var(--text);border-color:var(--border);width:auto;" onclick="document.getElementById('pm-f-require-opts').value='正常冰、少冰、微冰、小碎冰'">填入「限冰飲」</button>
+      </label>
+      <div style="width:100%;font-size:0.74rem;color:var(--muted);line-height:1.5;">
+        一張券＝一組（每份送一份不限份數）；每人幾張在「區塊配置 → 會員好康」的活動設定。<br>
+        同款：適用品項(1、2)或適用分類裡的同一款，兩件一組折第二件基本價（加料照收）。同款同客製化：品名、客製化、份量都一樣才算一組。<br>
+        加一元多一件：效果選「加一元多一件」＋配對方式選「同款同客製化」，線上會自動多加一份、第二份基本價只收 $1。<br>
+        每份送一份：適用品項＝送什麼（例：雞塊），需搭配品項＝點什麼（例：當月指定品項）；生效日～到期日設當月，沒改到下個月就不會送。<br>
+        限定選項：客製化要含其中一個才算（例：限冰飲，熱的、溫的不算）。
+      </div>
+    </div>
     <div id="pm-tierperk-hint" style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;display:${mode === 'item' ? 'block' : 'none'};">
       等級優惠（例如「金寶限定：本月檸檬紅茶買一送一」）：勾「顯示為優惠券按鈕」、不勾「可手動贈送」、選「最低適用等級」＋「適用品項」→ 達到等級的會員結帳自動套用，每張單一次（POS與線上點餐都會自動折，不會變成POS手動按鈕）。每月換飲品時改名稱與適用品項即可。
     <br>兌換券（例如「中杯紅茶兌換券」）：選「適用品項」＋「適用份量」→ 購物車裡品名、份量都一樣的那一杯才能用這張券（沒選適用品項的兌換券線上不能用）。
@@ -3632,6 +3664,7 @@ function renderPmEditor() {
     <div class="mc-field-row">
       <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-showbtn" type="checkbox" ${p.showAsButton ? 'checked' : ''}> 顯示為優惠券按鈕(POS功能可直接點)</label>
       <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-grantable" type="checkbox" ${p.manualGrantable ? 'checked' : ''}> 可手動贈送給會員</label>
+      <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-exclusive" type="checkbox" ${p.exclusive ? 'checked' : ''}> 不併用（線上：同一張單不能再用其他券，會員等級權益照常）</label>
     </div>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="pm-f-status">
@@ -3697,6 +3730,10 @@ function savePromo() {
   }
   const pStart = document.getElementById('pm-f-start').value, pEnd = document.getElementById('pm-f-end').value;
   if (pStart && pEnd && pStart > pEnd) { alert('生效日不能晚於到期日'); return; }
+  const pairMode = mode === 'item' ? document.getElementById('pm-f-pairmode').value : '';
+  if (pairMode === '每份送一份' && (!document.getElementById('pm-f-target').value || !document.getElementById('pm-f-require-item').value)) { alert('「每份送一份」要選「適用品項」(送什麼)和「需搭配品項」(點什麼)'); return; }
+  if ((pairMode === '同款' || pairMode === '同款同客製化') && !document.getElementById('pm-f-target').value && !document.getElementById('pm-f-target2').value && !document.getElementById('pm-f-target-cat').value) { alert('「同款」要選適用品項或適用分類'); return; }
+  if (effect === 'addOne' && pairMode && pairMode !== '同款同客製化') { alert('加一元多一件的配對方式請選「同款同客製化」(第二份要跟第一份一樣)'); return; }
   if (usesPct) {
     const pct = Number(document.getElementById('pm-f-pct').value);
     if (!Number.isInteger(pct) || pct < 10 || pct > 99) { alert('折數請填10～99的整數(例如85=打85折，9折請填90)'); return; }
@@ -3714,6 +3751,11 @@ function savePromo() {
     targetSize: mode === 'item' ? document.getElementById('pm-f-target-size').value : '',
     targetCat: mode === 'item' ? document.getElementById('pm-f-target-cat').value : '',
     requireCat: mode === 'item' ? document.getElementById('pm-f-require-cat').value : '',
+    targetItem2: mode === 'item' ? document.getElementById('pm-f-target2').value : '',
+    requireItem: mode === 'item' ? document.getElementById('pm-f-require-item').value : '',
+    pairMode: pairMode,
+    requireOpts: mode === 'item' ? document.getElementById('pm-f-require-opts').value : '',
+    exclusive: document.getElementById('pm-f-exclusive').checked,
     showAsButton: document.getElementById('pm-f-showbtn').checked,
     manualGrantable: document.getElementById('pm-f-grantable').checked,
     status: document.getElementById('pm-f-status').value,
