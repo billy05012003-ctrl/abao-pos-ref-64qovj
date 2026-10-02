@@ -83,6 +83,25 @@
   .mc-field { display:flex; flex-direction:column; gap:3px; font-size:0.78rem; color:var(--muted); margin-bottom:10px; flex:1; }
   .mc-field input, .mc-field textarea, .mc-field select { padding:7px 8px; border:1px solid var(--border); border-radius:6px; font-size:0.88rem; color:#222; font-family:inherit; }
   .mc-field-row { display:flex; gap:10px; flex-wrap:wrap; }
+  /* 優惠券編輯(10-02 整理)：兩欄排列、線上活動券區塊、說明收合 */
+  .pm-grid2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:0 12px; }
+  .pm-grid3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:0 12px; }
+  @media (max-width:700px) { .pm-grid3 { grid-template-columns:1fr; } }
+  .pm-grid2 .mc-field, .pm-grid3 .mc-field { min-width:0; }
+  .pm-grid2 .mc-field select, .pm-grid2 .mc-field input:not([type=checkbox]), .pm-grid3 .mc-field select, .pm-grid3 .mc-field input { width:100%; min-width:0; box-sizing:border-box; }
+  @media (max-width:700px) { .pm-grid2 { grid-template-columns:1fr; } }
+  .pm-tip { font-size:0.72rem; color:var(--muted); }
+  .pm-box { background:#faf6f2; border-radius:8px; padding:10px 12px 2px; margin-bottom:10px; }
+  .pm-box-title { font-size:0.82rem; font-weight:700; color:#222; margin-bottom:8px; }
+  .pm-mini-btn { flex:none; padding:0 10px; border:1px solid var(--border); border-radius:6px; background:#fff; font-size:0.8rem; cursor:pointer; color:#222; }
+  .pm-help { margin:0 0 10px; font-size:0.78rem; color:#444; }
+  .pm-help summary { cursor:pointer; color:var(--muted); font-size:0.8rem; padding:4px 0; }
+  .pm-help table { border-collapse:collapse; width:100%; margin-top:6px; }
+  .pm-help th { text-align:left; white-space:nowrap; vertical-align:top; padding:4px 10px 4px 0; color:#222; font-weight:600; }
+  .pm-help td { padding:4px 0; line-height:1.5; border-bottom:1px solid #eee; }
+  .pm-help tr:last-child td { border-bottom:none; }
+  .pm-checks { display:flex; flex-wrap:wrap; gap:8px 22px; font-size:0.85rem; color:#222; margin:4px 0 12px; }
+  .pm-checks label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   .mc-save-btn, .mc-delete-btn { padding:9px 16px; border-radius:7px; border:none; font-size:0.85rem; cursor:pointer; margin-right:8px; }
   .mc-save-btn { background:var(--brand); color:#fff; }
   .sched-tab-btn { padding:8px 14px; border-radius:7px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:0.82rem; cursor:pointer; }
@@ -3537,8 +3556,8 @@ function pmAutoAddItemOptions_(selected) {
 function pmModeChanged() {
   const mode = document.getElementById('pm-f-mode').value;
   document.getElementById('pm-fixed-fields').style.display = mode === 'fixed' ? 'flex' : 'none';
-  document.getElementById('pm-item-fields').style.display = mode === 'item' ? 'flex' : 'none';
-  document.getElementById('pm-w3-fields').style.display = mode === 'item' ? 'flex' : 'none';
+  document.getElementById('pm-item-fields').style.display = mode === 'item' ? 'grid' : 'none';
+  document.getElementById('pm-w3-fields').style.display = mode === 'item' ? 'block' : 'none';
   document.getElementById('pm-tierperk-hint').style.display = mode === 'item' ? 'block' : 'none';
   pmEffectChanged();
 }
@@ -3576,7 +3595,7 @@ function renderPmEditor() {
     <div class="mc-field-row" id="pm-fixed-fields" style="display:${mode === 'fixed' ? 'flex' : 'none'};">
       <label class="mc-field">折抵金額<input id="pm-f-amount" type="number" value="${mode === 'fixed' ? (p.amount ?? '') : ''}"></label>
     </div>
-    <div class="mc-field-row" id="pm-item-fields" style="display:${mode === 'item' ? 'flex' : 'none'};">
+    <div class="pm-grid2" id="pm-item-fields" style="display:${mode === 'item' ? 'grid' : 'none'};">
       <label class="mc-field">效果類型
         <select id="pm-f-effect" onchange="pmEffectChanged()">
           <option value="free" ${p.effect === 'free' ? 'selected' : ''}>全額免費</option>
@@ -3587,13 +3606,7 @@ function renderPmEditor() {
         </select>
       </label>
       <label class="mc-field">最低購買件數<input id="pm-f-minqty" type="number" value="${p.minQty ?? 1}"></label>
-      <label class="mc-field">自動加購品項(選填)
-        <select id="pm-f-autoadd">
-          <option value="">不自動加購</option>
-          ${pmAutoAddItemOptions_(p.autoAddItem)}
-        </select>
-      </label>
-      <label class="mc-field">適用品項(等級優惠、兌換券用)
+      <label class="mc-field">適用品項
         <select id="pm-f-target">
           <option value="">不指定</option>
           ${pmAutoAddItemOptions_(p.targetItem)}
@@ -3606,92 +3619,107 @@ function renderPmEditor() {
           <option value="L" ${p.targetSize === 'L' ? 'selected' : ''}>L</option>
         </select>
       </label>
-      <label class="mc-field">適用分類(任選，線上活動券用)
+      <label class="mc-field">適用分類
         <select id="pm-f-target-cat">
           <option value="">不指定</option>
           ${pmCatOptions_(p.targetCat)}
         </select>
       </label>
-      <label class="mc-field">需搭配分類(選填)
+      <label class="mc-field">需搭配分類
         <select id="pm-f-require-cat">
           <option value="">不需要</option>
           ${pmCatOptions_(p.requireCat)}
         </select>
       </label>
+      <label class="mc-field">自動加購品項(POS 用)
+        <select id="pm-f-autoadd">
+          <option value="">不自動加購</option>
+          ${pmAutoAddItemOptions_(p.autoAddItem)}
+        </select>
+      </label>
     </div>
-    <div class="mc-field-row" id="pm-w3-fields" style="display:${mode === 'item' ? 'flex' : 'none'};flex-wrap:wrap;background:#faf6f2;border-radius:8px;padding:8px 10px;margin-bottom:8px;">
-      <div style="width:100%;font-size:0.8rem;font-weight:700;color:var(--muted);">線上活動券（會員好康第三波）</div>
-      <label class="mc-field">配對方式
-        <select id="pm-f-pairmode">
-          <option value="" ${!p.pairMode ? 'selected' : ''}>不配對（原本的單件／分類任兩件）</option>
-          <option value="同款" ${p.pairMode === '同款' ? 'selected' : ''}>同款兩件一組（客製化可不同，例：第二套六折）</option>
-          <option value="同款同客製化" ${p.pairMode === '同款同客製化' ? 'selected' : ''}>同款同客製化兩件一組（例：買一送一、加一元多一件）</option>
-          <option value="每份送一份" ${p.pairMode === '每份送一份' ? 'selected' : ''}>每份送一份（例：雞塊日點幾份送幾份）</option>
-        </select>
-      </label>
-      <label class="mc-field">適用品項2(選填)
-        <select id="pm-f-target2">
-          <option value="">不指定</option>
-          ${pmAutoAddItemOptions_(p.targetItem2)}
-        </select>
-      </label>
-      <label class="mc-field">需搭配品項(每份送一份用)
-        <select id="pm-f-require-item">
-          <option value="">不需要</option>
-          ${pmAutoAddItemOptions_(p.requireItem)}
-        </select>
-      </label>
-      <label class="mc-field">限定選項(選填，用「、」分隔)
-        <input id="pm-f-require-opts" value="${escapeHtml(p.requireOpts || '')}" placeholder="例：正常冰、少冰、微冰、小碎冰">
-        <button type="button" class="mc-delete-btn" style="padding:3px 8px;margin-top:4px;color:var(--text);border-color:var(--border);width:auto;" onclick="document.getElementById('pm-f-require-opts').value='正常冰、少冰、微冰、小碎冰'">填入「限冰飲」</button>
-      </label>
-      <div style="width:100%;font-size:0.74rem;color:var(--muted);line-height:1.5;">
-        一張券＝一組（每份送一份不限份數）；每人幾張在「區塊配置 → 會員好康」的活動設定。<br>
-        同款：適用品項(1、2)或適用分類裡的同一款，兩件一組折第二件基本價（加料照收）。同款同客製化：品名、客製化、份量都一樣才算一組。<br>
-        加一元多一件：效果選「加一元多一件」＋配對方式選「同款同客製化」，線上會自動多加一份、第二份基本價只收 $1。<br>
-        每份送一份：適用品項＝送什麼（例：雞塊），需搭配品項＝點什麼（例：當月指定品項）；生效日～到期日設當月，沒改到下個月就不會送。<br>
-        限定選項：客製化要含其中一個才算（例：限冰飲，熱的、溫的不算）。
+    <div class="pm-box" id="pm-w3-fields" style="display:${mode === 'item' ? 'block' : 'none'};">
+      <div class="pm-box-title">線上活動券（綁在會員好康活動才會用到）</div>
+      <div class="pm-grid2">
+        <label class="mc-field">配對方式
+          <select id="pm-f-pairmode">
+            <option value="" ${!p.pairMode ? 'selected' : ''}>不配對</option>
+            <option value="同款" ${p.pairMode === '同款' ? 'selected' : ''}>同款（客製化可不同）</option>
+            <option value="同款同客製化" ${p.pairMode === '同款同客製化' ? 'selected' : ''}>同款同客製化</option>
+            <option value="每份送一份" ${p.pairMode === '每份送一份' ? 'selected' : ''}>每份送一份</option>
+          </select>
+          <span class="pm-tip">一張券＝一組；每份送一份不限份數</span>
+        </label>
+        <label class="mc-field">適用品項2
+          <select id="pm-f-target2">
+            <option value="">不指定</option>
+            ${pmAutoAddItemOptions_(p.targetItem2)}
+          </select>
+          <span class="pm-tip">第二個適用品項（例：小農拿鐵）</span>
+        </label>
+        <label class="mc-field">需搭配品項
+          <select id="pm-f-require-item">
+            <option value="">不需要</option>
+            ${pmAutoAddItemOptions_(p.requireItem)}
+          </select>
+          <span class="pm-tip">每份送一份用：點哪一樣才送</span>
+        </label>
+        <label class="mc-field">限定選項
+          <span style="display:flex;gap:6px;">
+            <input id="pm-f-require-opts" style="flex:1;min-width:0;" value="${escapeHtml(p.requireOpts || '')}" placeholder="正常冰、少冰…">
+            <button type="button" class="pm-mini-btn" onclick="document.getElementById('pm-f-require-opts').value='正常冰、少冰、微冰、小碎冰'">限冰飲</button>
+          </span>
+          <span class="pm-tip">客製化要含其中一個，用「、」分隔</span>
+        </label>
       </div>
     </div>
-    <div id="pm-tierperk-hint" style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;display:${mode === 'item' ? 'block' : 'none'};">
-      等級優惠（例如「金寶限定：本月檸檬紅茶買一送一」）：勾「顯示為優惠券按鈕」、不勾「可手動贈送」、選「最低適用等級」＋「適用品項」→ 達到等級的會員結帳自動套用，每張單一次（POS與線上點餐都會自動折，不會變成POS手動按鈕）。每月換飲品時改名稱與適用品項即可。
-    <br>兌換券（例如「中杯紅茶兌換券」）：選「適用品項」＋「適用份量」→ 購物車裡品名、份量都一樣的那一杯才能用這張券（沒選適用品項的兌換券線上不能用）。
-    <br>線上活動券（會員好康「領券」，2026-09-30）：「適用分類」＝這個分類任選兩件、每 2 件一組較便宜那件打折（例如週二茶拿鐵第二杯半價：打5折＋適用分類選茶拿鐵）；「需搭配分類」＝購物車要有這個分類的餐點才能用（例如週四雞塊免費：適用品項選雞塊＋需搭配分類選定食）。</div>
+    <details class="pm-help" id="pm-tierperk-hint" style="display:${mode === 'item' ? 'block' : 'none'};">
+      <summary>📖 這些欄位怎麼填？</summary>
+      <table>
+        <tr><th>兌換券</th><td>選「適用品項」＋「適用份量」，購物車品名、份量都一樣才能用（沒選適用品項的線上不能用）</td></tr>
+        <tr><th>等級優惠</th><td>勾「POS 按鈕」、不勾「可手動贈送」、選「最低適用等級」＋「適用品項」→ 達等級的會員每張單自動套用一次；每月換品項時改名稱與適用品項</td></tr>
+        <tr><th>分類任兩件</th><td>例：週二茶拿鐵第二杯半價｜打5折＋適用分類，不配對</td></tr>
+        <tr><th>搭配送</th><td>例：週四定食送雞塊｜全額免費＋適用品項（送什麼）＋需搭配分類</td></tr>
+        <tr><th>同款</th><td>例：節氣第二件折扣｜適用品項或適用分類＋配對「同款」：同一款兩件一組，客製化可不同，折第二件基本價（加料照收）</td></tr>
+        <tr><th>同款同客製化</th><td>例：買一送一、加一元多一件｜品名、客製化、份量都一樣才算一組；加一元多一件線上會自動多加一份、第二份基本價 $1</td></tr>
+        <tr><th>每份送一份</th><td>例：雞塊日｜適用品項＝送什麼、需搭配品項＝點什麼；生效日～到期日設當期，沒改到下一期就不會送</td></tr>
+        <tr><th>不併用</th><td>線上同一張單不能再用其他券（會員等級權益照常）</td></tr>
+      </table>
+    </details>
     <div class="mc-field-row" id="pm-pct-fields" style="display:${(mode === 'order' || (mode === 'item' && p.effect === 'pct')) ? 'flex' : 'none'};">
       <label class="mc-field">折數(填85=打85折，9折請填90)<input id="pm-f-pct" type="number" min="10" max="99" value="${(mode === 'order' || p.effect === 'pct') ? (p.amount ?? '') : ''}"></label>
       <div style="font-size:0.78rem;color:var(--muted);align-self:center;">只折基準價(單點/套餐整組價)，加起司、飲料升級等加價不折；整張打折用原價計算，不受其他折抵影響</div>
     </div>
-    <div class="mc-field-row">
-      <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-showbtn" type="checkbox" ${p.showAsButton ? 'checked' : ''}> 顯示為優惠券按鈕(POS功能可直接點)</label>
-      <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-grantable" type="checkbox" ${p.manualGrantable ? 'checked' : ''}> 可手動贈送給會員</label>
-      <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="pm-f-exclusive" type="checkbox" ${p.exclusive ? 'checked' : ''}> 不併用（線上：同一張單不能再用其他券，會員等級權益照常）</label>
+    <div class="pm-checks">
+      <label><input id="pm-f-showbtn" type="checkbox" ${p.showAsButton ? 'checked' : ''}> 顯示為 POS 按鈕</label>
+      <label><input id="pm-f-grantable" type="checkbox" ${p.manualGrantable ? 'checked' : ''}> 可手動贈送給會員</label>
+      <label><input id="pm-f-exclusive" type="checkbox" ${p.exclusive ? 'checked' : ''}> 不併用（線上）</label>
     </div>
-    <label class="mc-field" style="max-width:160px;">狀態
-      <select id="pm-f-status">
-        <option value="啟用" ${(p.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
-        <option value="停用" ${p.status === '停用' ? 'selected' : ''}>停用</option>
-      </select>
-    </label>
-    <div class="mc-field-row">
-      <label class="mc-field" style="max-width:180px;">生效日(選填)<input id="pm-f-start" type="date" value="${escapeHtml(p.startDate || '')}"></label>
-      <label class="mc-field" style="max-width:180px;">到期日(選填)<input id="pm-f-end" type="date" value="${escapeHtml(p.endDate || '')}"></label>
+    <div class="pm-grid3">
+      <label class="mc-field">狀態
+        <select id="pm-f-status">
+          <option value="啟用" ${(p.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
+          <option value="停用" ${p.status === '停用' ? 'selected' : ''}>停用</option>
+        </select>
+      </label>
+      <label class="mc-field">生效日(選填)<input id="pm-f-start" type="date" value="${escapeHtml(p.startDate || '')}"></label>
+      <label class="mc-field">到期日(選填)<input id="pm-f-end" type="date" value="${escapeHtml(p.endDate || '')}"></label>
     </div>
-    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">期間外視同停用(不顯示POS按鈕、等級優惠不自動套用、不能再贈送或用點數兌換)；客人手上已經拿到的兌換券照常可用。不填＝永久。金寶限定每月換飲品時，名稱、適用品項、期間一起改。</div>
-    <div class="mc-field-row">
-      <label class="mc-field" style="max-width:220px;">最低適用等級(限定發券/兌換用，不影響POS店內即時折扣按鈕)
+    <div class="pm-tip" style="margin:-6px 0 10px;">期間外不顯示 POS 按鈕、不自動套用、不能贈送或兌換；客人已拿到的券照常可用。不填＝永久</div>
+    <div class="pm-grid2">
+      <label class="mc-field">最低適用等級
         <select id="pm-f-mintier" onchange="pmMinTierChanged()">
           <option value="" ${!p.minTier ? 'selected' : ''}>不限</option>
           ${mtTiers.map(t => `<option value="${escapeHtml(t.name)}" ${p.minTier === t.name ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
         </select>
+        <span class="pm-tip">限定發券／兌換用，不影響 POS 按鈕</span>
       </label>
-      <label class="mc-field" id="pm-f-allownonmember-wrap" style="flex-direction:row;align-items:center;gap:6px;display:${p.minTier ? 'flex' : 'none'};">
+      <label class="mc-field" id="pm-f-allownonmember-wrap" style="flex-direction:row;align-items:center;gap:6px;color:#222;font-size:0.85rem;display:${p.minTier ? 'flex' : 'none'};">
         <input id="pm-f-allownonmember" type="checkbox" ${p.allowNonMember !== false ? 'checked' : ''}> 未加入會員也能用
       </label>
     </div>
     ${MC_STORE_ID !== '__brand__' ? `
-    <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
-      <input id="pm-f-locked" type="checkbox" ${p.locked ? 'checked' : ''}> 鎖定，不被品牌同步覆蓋
-    </label>` : ''}
+    <div class="pm-checks"><label><input id="pm-f-locked" type="checkbox" ${p.locked ? 'checked' : ''}> 鎖定，不被品牌同步覆蓋</label></div>` : ''}
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="savePromo()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePromo()">刪除</button>' : ''}
