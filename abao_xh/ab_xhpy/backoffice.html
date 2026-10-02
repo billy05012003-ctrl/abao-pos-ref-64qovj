@@ -70,6 +70,11 @@
   .mc-cat-row, .mt-row { display:flex; align-items:stretch; gap:2px; background:#fff; }
   .mc-cat-row.mc-cat-dragging, .mt-row.mt-dragging { opacity:0.5; }
   .mc-cat-handle, .mt-handle { flex:0 0 auto; display:flex; align-items:center; padding:0 6px; color:var(--muted); cursor:grab; touch-action:none; user-select:none; font-size:0.95rem; }
+  /* 清單拖曳排序(10-02)：品項、優惠券、加價購、新品卡片、會員好康活動 */
+  .sort-row { flex-direction:row !important; align-items:center; gap:2px !important; }
+  .sort-row > .mc-cat-handle { align-self:stretch; margin-left:-4px; }
+  .sort-row > .sort-body { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .sort-row.sort-dragging { opacity:0.5; }
   .mt-row.locked .mt-handle { visibility:hidden; }
   .mt-row-label { display:block; flex:1; min-width:0; text-align:left; border:none; background:none; padding:8px 6px; font-size:0.85rem; cursor:pointer; border-radius:6px; color:#222; }
   .mt-row-label.active { background:#FFF0E8; color:var(--brand); font-weight:600; }
@@ -1749,11 +1754,20 @@ function renderMcCatList() {
       }
       items.forEach(item => {
         const itemRow = document.createElement('div');
-        itemRow.className = 'mc-item-row';
+        itemRow.className = 'mc-item-row sort-row';
+        itemRow.dataset.key = item.name;
         const priceLabel = item.price != null ? ('$' + item.price)
           : (item.price_m != null || item.price_l != null) ? [item.price_m != null ? 'M$'+item.price_m : '', item.price_l != null ? 'L$'+item.price_l : ''].filter(Boolean).join(' ')
           : '';
-        itemRow.innerHTML = `<span>${item.locked ? '🔒 ' : ''}${escapeHtml(item.name)}</span><span class="mc-item-price">${escapeHtml(priceLabel)}</span>`;
+        itemRow.innerHTML = `<span class="mc-cat-handle" title="拖曳調整順序">⠿</span><span style="flex:1;min-width:0;">${item.locked ? '🔒 ' : ''}${escapeHtml(item.name)}</span><span class="mc-item-price">${escapeHtml(priceLabel)}</span>`;
+        // 品項拖曳排序(10-02)：只在這個分類裡換位置，存的是草稿(要發布才會到點餐頁/平板)
+        const itemHandle = itemRow.querySelector('.mc-cat-handle');
+        itemHandle.addEventListener('click', ev => ev.stopPropagation());
+        itemHandle.addEventListener('pointerdown', ev => startListDrag(ev, itemRow, keys =>
+          apiPost({ action: 'reorderMenuItems', category: cat, order: keys, storeId: MC_STORE_ID, status: MC_STATUS }).then(d => {
+            if (d.status === 'ok') mcCatalog[cat] = keys.map(n => (mcCatalog[cat] || []).find(x => x.name === n)).filter(Boolean);
+            return d;
+          }), () => renderMcCatList()));
         itemRow.onclick = () => { mcCurrentItem = { category: cat, name: item.name }; openMcItemModal(); };
         body.appendChild(itemRow);
       });
@@ -1811,6 +1825,47 @@ function startCatDrag(e, row) {
 
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
+}
+
+// 清單拖曳排序(2026-10-02 老闆要求：品項、優惠券、加價購、新品卡片、會員好康活動都跟分類一樣用拖曳，拿掉「往前/往後」)：
+// 抓左邊「⠿」拖，只在同一個容器裡跟同組的列(.sort-row)換位置；放開後把各列 data-key 的新順序交給 save(回傳 Promise)，
+// 順序沒變就不送；送失敗跳 alert 並 revert() 重畫回原本順序(樂觀更新＋失敗還原，同分類拖曳)
+function startListDrag(e, row, save, revert) {
+  e.preventDefault();
+  e.stopPropagation();
+  const container = row.parentElement;
+  const rowsOf = () => Array.from(container.children).filter(el => el.classList.contains('sort-row'));
+  const before = rowsOf().map(el => el.dataset.key).join('\n');
+  row.classList.add('sort-dragging');
+  const pointerId = e.pointerId;
+  try { row.setPointerCapture(pointerId); } catch (err) {}
+  function onMove(ev) {
+    const sibs = rowsOf().filter(el => el !== row);
+    const target = sibs.find(s => { const r = s.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+    if (target) container.insertBefore(row, target);
+    else if (sibs.length) sibs[sibs.length - 1].after(row);
+  }
+  function onUp() {
+    row.classList.remove('sort-dragging');
+    try { row.releasePointerCapture(pointerId); } catch (err) {}
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    // 放開時瀏覽器會補一個 click 到這一列，會被當成「點這一列打開編輯」，這次吃掉
+    const swallow = ev => { ev.stopPropagation(); ev.preventDefault(); };
+    window.addEventListener('click', swallow, true);
+    setTimeout(() => window.removeEventListener('click', swallow, true), 0);
+    const keys = rowsOf().map(el => el.dataset.key);
+    if (keys.join('\n') === before) return;
+    Promise.resolve().then(() => save(keys)).then(d => {
+      if (d && d.status && d.status !== 'ok') throw new Error(d.message || '儲存失敗');
+    }).catch(err => { alert('順序儲存失敗，已還原：' + err.message); revert(); });
+  }
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+}
+// 字串列表(innerHTML 組出來的)用的拖曳把手
+function sortHandleHtml_(onDown) {
+  return `<span class="mc-cat-handle" title="拖曳調整順序" onpointerdown="${onDown}" onclick="event.stopPropagation()">⠿</span>`;
 }
 
 // 品項編輯用彈出視窗(modal)：開啟時渲染renderMcItemEditor()，關閉時清掉mcCurrentItem
@@ -2941,14 +2996,14 @@ function renderHbList() {
       const missing = (c.linkType === '品項' && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem)) || (c.linkType === '分類' && !cat[c.linkCat]);
       const staff = (c.linkType === '品項' || c.linkType === '分類') && hbIsStaffCat_(c.linkCat);
       const tags = [link, missing && Object.keys(cat).length ? '⚠菜單已沒有' : null, staff ? '⚠線上看不到' : null, hbPeriodTag_(c), c.status === '停用' ? '停用' : null].filter(Boolean).join('・');
-      return `<div class="mc-item-row${c.id === hbCurrentId ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="hbEditCard('${hbJs_(c.id)}')">
-          <span>${c.tag ? `<b style="color:var(--brand);font-size:0.72rem;">${escapeHtml(c.tag)}</b> ` : ''}${escapeHtml(c.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span>
+      return `<div class="mc-item-row sort-row${c.id === hbCurrentId ? ' active' : ''}" data-key="${escapeHtml(c.id)}" onclick="hbEditCard('${hbJs_(c.id)}')">
+          ${sortHandleHtml_('hbDragStart_(event, this)')}<div class="sort-body"><span>${c.tag ? `<b style="color:var(--brand);font-size:0.72rem;">${escapeHtml(c.tag)}</b> ` : ''}${escapeHtml(c.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span></div>
         </div>`;
     };
     el.innerHTML = ['新品上市', '店長推薦'].map(b => {
       const list = hbCards.filter(c => c.block === b);
       return `<div style="font-size:0.8rem;font-weight:700;color:var(--muted);margin:8px 6px 4px;">${b === '新品上市' ? '🆕 新品上市（大圖輪播）' : '👍 店長推薦（兩欄卡片）'}（${list.length}）</div>`
-        + (list.map(row).join('') || '<div class="empty-hint" style="padding:6px;">目前沒有</div>')
+        + `<div>${list.map(row).join('') || '<div class="empty-hint" style="padding:6px;">目前沒有</div>'}</div>`
         + `<button type="button" class="mc-add-btn" style="margin:4px 0 8px;" onclick="hbNewCard('${b}')">+ 新增${b}卡片</button>`;
     }).join('');
     return;
@@ -2960,14 +3015,14 @@ function renderHbList() {
     return;
   }
   const today = hbToday_();
-  el.innerHTML = hbActs.map(a => {
+  el.innerHTML = '<div>' + hbActs.map(a => {
     const next = (a.dates || [])[0];
     const when = next ? (next === today ? '今天' : '下次 ' + hbMd_(next)) : (a.ruleType === '指定日期' && !a.rule ? '⚠還沒排日期' : '60天內沒有活動日');
     const tags = [hbRuleSummary_(a), when, a.promo ? '🎟' + a.promo + (Number(a.perPerson) > 1 ? '・每人' + a.perPerson + '組' : '') + (Number(a.limit) > 0 ? '・限量' + a.limit : '') : null, hbActLinkSummary_(a), a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
-    return `<div class="mc-item-row${a.id === hbCurrentId ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="hbEditAct('${hbJs_(a.id)}')">
-        <span>${escapeHtml(a.icon || '🎁')} ${escapeHtml(a.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span>
+    return `<div class="mc-item-row sort-row${a.id === hbCurrentId ? ' active' : ''}" data-key="${escapeHtml(a.id)}" onclick="hbEditAct('${hbJs_(a.id)}')">
+        ${sortHandleHtml_('hbDragStart_(event, this)')}<div class="sort-body"><span>${escapeHtml(a.icon || '🎁')} ${escapeHtml(a.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span></div>
       </div>`;
-  }).join('') + '<button type="button" class="mc-add-btn" style="margin-top:6px;" onclick="hbNewAct()">+ 新增活動</button>';
+  }).join('') + '</div><button type="button" class="mc-add-btn" style="margin-top:6px;" onclick="hbNewAct()">+ 新增活動</button>';
 }
 function hbRuleSummary_(a) {
   if (a.ruleType === '每週') return '每週' + hbSplit_(a.rule).join('、');
@@ -3061,7 +3116,7 @@ function renderHbCardEditor_(el) {
     </div>
     <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">空白＝一直顯示。連結的品項本日售完或停用時，卡片會自動標「今日售完」而且點不了。</div>
     ${hbStatusLockHtml_(d)}
-    ${hbButtonsHtml_(isNew, 'saveHbCard(this)', 'deleteHbCard()', 'moveHbItem(-1)', 'moveHbItem(1)')}`;
+    ${hbButtonsHtml_(isNew, 'saveHbCard(this)', 'deleteHbCard()')}`;
 }
 function hbStatusLockHtml_(d) {
   return `<label class="mc-field" style="max-width:160px;">狀態
@@ -3072,14 +3127,26 @@ function hbStatusLockHtml_(d) {
     </label>
     ${MC_STORE_ID !== '__brand__' ? `<label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input type="checkbox" ${d.locked ? 'checked' : ''} onchange="hbDraft.locked=this.checked"> 鎖定，不被品牌同步覆蓋</label>` : ''}`;
 }
-function hbButtonsHtml_(isNew, save, del, up, down) {
+function hbButtonsHtml_(isNew, save, del) {
   return `<div style="margin:14px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button type="button" class="mc-save-btn" onclick="${save}">儲存</button>
       ${!isNew ? `<button type="button" class="mc-delete-btn" onclick="${del}">刪除</button>
-        <span style="font-size:0.78rem;color:var(--muted);margin-left:8px;">順序</span>
-        <button type="button" class="mc-delete-btn" style="color:var(--text);border-color:var(--border);" onclick="${up}">↑ 往前</button>
-        <button type="button" class="mc-delete-btn" style="color:var(--text);border-color:var(--border);" onclick="${down}">↓ 往後</button>` : ''}
+        <span style="font-size:0.75rem;color:var(--muted);margin-left:8px;">要調順序：在左邊清單拖 ⠿</span>` : ''}
     </div>`;
+}
+// 新品卡片/會員好康活動拖曳排序(10-02，取代往前/往後)：卡片只在同一個區塊(新品上市/店長推薦)裡換位置
+function hbDragStart_(e, handle) {
+  const isCard = hbTab === 'cards';
+  startListDrag(e, handle.closest('.sort-row'), keys =>
+    apiPost({ action: isCard ? 'reorderHomeCards' : 'reorderHomeActs', order: keys, storeId: MC_STORE_ID, version: MC_STATUS }).then(d => {
+      if (d.status === 'ok') {
+        (isCard ? hbCards : hbActs).forEach(x => { const i = keys.indexOf(x.id); if (i !== -1) x.order = i + 1; });
+        if (isCard) hbCards.sort((a, b) => (a.block === b.block ? a.order - b.order : (a.block === '新品上市' ? -1 : 1)));
+        else hbActs.sort((a, b) => a.order - b.order);
+        refreshPromoPublishDiff_();
+      }
+      return d;
+    }), () => renderHbList());
 }
 
 function renderHbEditor() {
@@ -3258,7 +3325,7 @@ function renderHbActEditor_(el) {
     </div>
     ${hbActLinkHtml_(d)}
     ${hbStatusLockHtml_(d)}
-    ${hbButtonsHtml_(isNew, 'saveHbAct(this)', 'deleteHbAct()', 'moveHbItem(-1)', 'moveHbItem(1)')}`;
+    ${hbButtonsHtml_(isNew, 'saveHbAct(this)', 'deleteHbAct()')}`;
   hbSchedulePreview_(true);
 }
 // 規則一改就問後端算接下來的活動日(農曆換算只在後端一份，不在前端重寫一次)
@@ -3510,9 +3577,24 @@ function pmRowHtml_(p) {
     p.status === '停用' ? '停用' : null
   ]).filter(Boolean).join('・');
   // 標籤放名稱下一行(09-27：並排時標籤一長名稱會被擠成一字一行)；組名已經說明是按鈕/兌換券，列上不再重複標「按鈕」
-  return `<div class="mc-item-row${pmEditorMode === 'promo' && p.name === pmCurrentName ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="pmEditorMode='promo';pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
-      <span>${escapeHtml(p.name)}</span>${tags ? `<span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span>` : ''}
+  return `<div class="mc-item-row sort-row${pmEditorMode === 'promo' && p.name === pmCurrentName ? ' active' : ''}" data-key="${escapeHtml(p.name)}" onclick="pmEditorMode='promo';pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
+      ${sortHandleHtml_('pmDragStart_(event, this)')}<div class="sort-body"><span>${escapeHtml(p.name)}</span>${tags ? `<span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span>` : ''}</div>
     </div>`;
+}
+// 優惠券拖曳排序(10-02)：只在同一組(POS按鈕/等級優惠/兌換券)裡換位置；送出全部券的新順序(三組依畫面順序接起來)，
+// 存的是草稿，發布後平板的 POS 按鈕照這個順序排
+function pmDragStart_(e, handle) {
+  startListDrag(e, handle.closest('.sort-row'), () => {
+    const all = Array.from(document.querySelectorAll('#pm-list .pm-sort-group')).flatMap(g => Array.from(g.children).filter(c => c.classList.contains('sort-row')).map(c => c.dataset.key));
+    return apiPost({ action: 'reorderPromos', order: all, storeId: MC_STORE_ID, version: MC_STATUS }).then(d => {
+      if (d.status === 'ok') {
+        pmPromos.forEach(p => { const i = all.indexOf(p.name); if (i !== -1) p.order = i + 1; });
+        pmPromos.sort((a, b) => (a.order || 0) - (b.order || 0));
+        refreshPromoPublishDiff_();
+      }
+      return d;
+    });
+  }, () => renderPmList());
 }
 function renderPmList() {
   const el = document.getElementById('pm-list');
@@ -3534,7 +3616,7 @@ function renderPmList() {
         ${title}（${count}）${warn ? `<span style="color:#c0392b;font-size:0.78rem;">・⚠ ${warn} 張快到期或已過期</span>` : ''}
         <div style="font-weight:normal;font-size:0.72rem;color:var(--muted);margin-top:2px;">${hint}</div>
       </summary>
-      ${rows || '<div class="empty-hint" style="padding:6px;">目前沒有</div>'}
+      <div class="pm-sort-group">${rows || '<div class="empty-hint" style="padding:6px;">目前沒有</div>'}</div>
     </details>`;
   }).join('') + adGroupHtml_();
 }
@@ -3599,7 +3681,7 @@ function renderPmEditor() {
       <label class="mc-field">效果類型
         <select id="pm-f-effect" onchange="pmEffectChanged()">
           <option value="free" ${p.effect === 'free' ? 'selected' : ''}>全額免費</option>
-          <option value="discount60" ${p.effect === 'discount60' ? 'selected' : ''}>打6折(第二件六折用)</option>
+          <option value="discount60" ${p.effect === 'discount60' ? 'selected' : ''}>打6折</option>
           <option value="discount50" ${p.effect === 'discount50' ? 'selected' : ''}>打5折</option>
           <option value="addOne" ${p.effect === 'addOne' ? 'selected' : ''}>加一元多一件</option>
           <option value="pct" ${p.effect === 'pct' ? 'selected' : ''}>自訂折數(限POS)</option>
@@ -3852,8 +3934,8 @@ function adRowHtml_(a) {
     pmPeriodTag_(a), a.status === '停用' ? '停用' : null
   ].filter(Boolean).join('・');
   const active = pmEditorMode === 'addon' && a.name === adCurrentName;
-  return `<div class="mc-item-row${active ? ' active' : ''}" style="flex-direction:column;gap:2px;" onclick="pmEditorMode='addon';adCurrentName='${adJsStr_(a.name)}';adPendingPhotoUrl=undefined;renderPmList();renderPmEditor();">
-      <span>${escapeHtml(a.name)}</span><span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span>
+  return `<div class="mc-item-row sort-row${active ? ' active' : ''}" data-key="${escapeHtml(a.name)}" onclick="pmEditorMode='addon';adCurrentName='${adJsStr_(a.name)}';adPendingPhotoUrl=undefined;renderPmList();renderPmEditor();">
+      ${sortHandleHtml_('adDragStart_(event, this)')}<div class="sort-body"><span>${escapeHtml(a.name)}</span><span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span></div>
     </div>`;
 }
 function adGroupHtml_() {
@@ -3862,7 +3944,7 @@ function adGroupHtml_() {
   const sub = (type, title) => {
     const list = pmAddons.filter(a => a.type === type);
     return `<div style="font-size:0.78rem;font-weight:600;color:var(--muted);margin:8px 6px 4px;">${title}（${list.length}）</div>`
-      + (list.map(adRowHtml_).join('') || '<div class="empty-hint" style="padding:6px;">目前沒有</div>')
+      + `<div class="ad-sort-group">${list.map(adRowHtml_).join('') || '<div class="empty-hint" style="padding:6px;">目前沒有</div>'}</div>`
       + `<button type="button" class="mc-add-btn" style="margin:4px 0 6px;" onclick="pmEditorMode='addon';adCurrentName=null;adNewType='${type}';adPendingPhotoUrl=undefined;renderPmList();renderPmEditor();">+ 新增${type === 'x1' ? '加購價商品' : '其他需求'}</button>`;
   };
   return `<details ${open ? 'open' : ''} ontoggle="pmGroupOpen_['addon'] = this.open" style="margin-bottom:6px;">
@@ -3955,7 +4037,7 @@ function renderAdEditor() {
     <div style="margin:14px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <button type="button" class="mc-save-btn" onclick="saveAddon(this)">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteAddon()">刪除</button>' : ''}
-      ${!isNew ? '<span style="font-size:0.78rem;color:var(--muted);margin-left:8px;">順序</span><button type="button" class="mc-delete-btn" style="color:var(--text);border-color:var(--border);" onclick="moveAddon(-1)">↑ 往前</button><button type="button" class="mc-delete-btn" style="color:var(--text);border-color:var(--border);" onclick="moveAddon(1)">↓ 往後</button>' : ''}
+      ${!isNew ? '<span style="font-size:0.75rem;color:var(--muted);margin-left:8px;">要調順序：在左邊清單拖 ⠿</span>' : ''}
     </div>`;
 }
 
@@ -4058,6 +4140,18 @@ function deleteAddon() {
   }).catch(err => alert('刪除失敗：' + err.message));
 }
 
+// 加價購拖曳排序(10-02，取代原本編輯區的往前/往後)：×1、×2 各自一組
+function adDragStart_(e, handle) {
+  startListDrag(e, handle.closest('.sort-row'), keys =>
+    apiPost({ action: 'reorderAddons', order: keys, storeId: MC_STORE_ID, version: MC_STATUS }).then(d => {
+      if (d.status === 'ok') {
+        pmAddons.forEach(a => { const i = keys.indexOf(a.name); if (i !== -1) a.order = i + 1; });
+        pmAddons.sort((a, b) => (a.type === b.type ? (a.order || 0) - (b.order || 0) : (a.type < b.type ? -1 : 1)));
+        refreshPromoPublishDiff_();
+      }
+      return d;
+    }), () => renderPmList());
+}
 function moveAddon(dir) {
   const cur = adCurrent_();
   if (!cur) return;
