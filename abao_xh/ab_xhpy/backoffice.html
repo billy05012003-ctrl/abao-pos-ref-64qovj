@@ -478,7 +478,7 @@
       <div class="mc-col" style="max-height:none;">
         <h4>優惠券清單</h4>
         <div id="pm-list"><div class="empty-hint">載入中...</div></div>
-        <button type="button" class="mc-add-btn" onclick="pmEditorMode='promo';pmCurrentName=null;renderPmList();renderPmEditor();">+ 新增優惠券</button>
+        <button type="button" class="mc-add-btn" onclick="pmEditorMode='promo';pmCurrentName=null;renderPmList();renderPmEditor();pmScrollEditor_();">+ 新增優惠券</button>
       </div>
       <div class="mc-col mc-col-wide" style="max-height:none;">
         <h4>編輯優惠券</h4>
@@ -1863,6 +1863,12 @@ function startListDrag(e, row, save, revert) {
   document.addEventListener('pointermove', onMove);
   document.addEventListener('pointerup', onUp);
 }
+// 點清單打開編輯(10-02)：清單很長、往下捲過時，右邊表單其實從最上面開始，畫面卻停在下面只看得到「儲存」→ 捲上去
+function scrollEditorIntoView_(id) {
+  const el = document.getElementById(id);
+  if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' });
+}
+function pmScrollEditor_() { scrollEditorIntoView_('pm-editor'); }
 // 字串列表(innerHTML 組出來的)用的拖曳把手
 function sortHandleHtml_(onDown) {
   return `<span class="mc-cat-handle" title="拖曳調整順序" onpointerdown="${onDown}" onclick="event.stopPropagation()">⠿</span>`;
@@ -2892,19 +2898,27 @@ function togglePromoSnapshotPanel(btn) {
 function loadPromoSnapshotPanel(panel) {
   const listEl = panel.querySelector('.promo-snapshot-list');
   listEl.innerHTML = '<div class="empty-hint">載入中...</div>';
-  apiGet({ action: 'listPromoSnapshots', storeId: MC_STORE_ID, version: MC_STATUS }).then(data => {
-    if (data.status !== 'ok') throw new Error(data.message || '讀取失敗');
-    if (!data.snapshots.length) { listEl.innerHTML = '<div class="empty-hint">目前沒有快照紀錄</div>'; return; }
-    listEl.innerHTML = data.snapshots.map(s => `
-      <div class="mc-item-row" style="cursor:default;">
-        <span>${new Date(s.createdAt).toLocaleString('zh-TW')}${s.actionLabel ? '・' + escapeHtml(s.actionLabel) : ''}</span>
-        <button type="button" class="mc-save-btn" style="padding:2px 10px;font-size:0.78rem;" onclick="restorePromoSnapshot_('${s.snapshotId}')">復原這份</button>
+  // 10-02 修：原本只列目前編輯層(草稿)的快照，「發布到正式版」前存的正式版快照看不到；改成跟菜單一樣草稿＋正式上線都列
+  Promise.all([
+    apiGet({ action: 'listPromoSnapshots', storeId: MC_STORE_ID, version: 'draft' }),
+    apiGet({ action: 'listPromoSnapshots', storeId: MC_STORE_ID, version: 'live' })
+  ]).then(([d1, d2]) => {
+    if (d1.status !== 'ok' || d2.status !== 'ok') throw new Error(d1.message || d2.message || '讀取失敗');
+    const all = [].concat(d1.snapshots || [], d2.snapshots || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (!all.length) { listEl.innerHTML = '<div class="empty-hint">目前沒有快照紀錄</div>'; return; }
+    listEl.innerHTML = all.map(s => `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
+        <div>
+          <div>${new Date(s.createdAt).toLocaleString('zh-TW')}　【${s.version === 'draft' ? '草稿' : '正式上線'}】</div>
+          <div style="color:var(--muted);">${escapeHtml(s.actionLabel || '')}</div>
+        </div>
+        <button type="button" class="mc-save-btn" style="white-space:nowrap;" onclick="restorePromoSnapshot_('${s.snapshotId}','${s.version}')">回復到這個版本</button>
       </div>`).join('');
   }).catch(err => { listEl.innerHTML = '<div class="empty-hint">讀取失敗</div>'; console.warn('版本回溯讀取失敗', err); });
 }
 
-function restorePromoSnapshot_(snapshotId) {
-  const statusLabel = MC_STATUS === 'live' ? '正式上線' : '草稿';
+function restorePromoSnapshot_(snapshotId, version) {
+  const statusLabel = (version || MC_STATUS) === 'live' ? '正式上線' : '草稿';
   if (!confirm('確定要把「' + MC_STORE_ID + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
   apiPost({ action: 'restorePromoSnapshot', snapshotId }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '復原失敗');
@@ -2912,6 +2926,8 @@ function restorePromoSnapshot_(snapshotId) {
     if (currentMemberSubview === 'points') loadPointGifts();
     else if (currentMemberSubview === 'promo') loadPromos();
     else if (currentMemberSubview === 'blocks') loadHomeBlocks();
+    refreshPromoPublishDiff_();   // 復原正式版後「草稿還沒發布」的提示要跟著變
+    document.querySelectorAll('.promo-snapshot-list').forEach(el => { const p = el.parentElement; if (p && p.offsetParent) loadPromoSnapshotPanel(p); });
   }).catch(err => alert('復原失敗：' + err.message));
 }
 
@@ -3035,14 +3051,15 @@ function hbRuleSummary_(a) {
 function hbNewCard(block) {
   hbCurrentId = null;
   hbDraft = { kind: 'card', block, title: '', desc: '', linkType: '品項', linkCat: '', linkItem: '', price: '', saleDate: '', tag: block === '新品上市' ? 'NEW' : '', photoUrl: '', startDate: '', endDate: '', status: '啟用', locked: false };
-  renderHbList(); renderHbEditor();
+  renderHbList(); renderHbEditor(); scrollEditorIntoView_('hb-editor');
 }
-function hbEditCard(id) {
+function hbEditCard(id, noScroll) {
   const c = hbCards.find(x => x.id === id);
   if (!c) return;
   hbCurrentId = id;
   hbDraft = Object.assign({ kind: 'card' }, JSON.parse(JSON.stringify(c)));
   renderHbList(); renderHbEditor();
+  if (!noScroll) scrollEditorIntoView_('hb-editor');
 }
 function hbSetCardLink_(type) { hbDraft.linkType = type; renderHbEditor(); }
 function hbSetCardCat_(cat) {
@@ -3194,7 +3211,7 @@ function hbSave_(btn, payload) {
     hbDraft = null;
     return loadHomeBlocks().then(() => {
       const list = hbTab === 'cards' ? hbCards : hbActs;
-      if (list.some(x => x.id === data.id)) (hbTab === 'cards' ? hbEditCard : hbEditAct)(data.id);
+      if (list.some(x => x.id === data.id)) (hbTab === 'cards' ? hbEditCard : hbEditAct)(data.id, true);   // 存完留在原位，不捲動
     });
   }).catch(err => { alert('儲存失敗：' + err.message); btn.disabled = false; btn.textContent = '儲存'; });
 }
@@ -3227,9 +3244,9 @@ function hbNewAct() {
   hbCurrentId = null;
   hbDraft = { kind: 'act', title: '', desc: '', icon: '🎁', color: '橘', photoUrl: '', ruleType: '每週', weekdays: [], lunarDays: [], skipFirst: false, dateTokens: [], exTokens: [], promo: '', method: '領券',
     memberOnly: false, channels: ['線上', '門市'], startDate: '', endDate: '', status: '啟用', locked: false, linkType: '', linkCat: '', linkItem: '' };
-  renderHbList(); renderHbEditor();
+  renderHbList(); renderHbEditor(); scrollEditorIntoView_('hb-editor');
 }
-function hbEditAct(id) {
+function hbEditAct(id, noScroll) {
   const a = hbActs.find(x => x.id === id);
   if (!a) return;
   hbCurrentId = id;
@@ -3242,6 +3259,7 @@ function hbEditAct(id) {
     exTokens: hbSplit_(a.excludes)
   });
   renderHbList(); renderHbEditor();
+  if (!noScroll) scrollEditorIntoView_('hb-editor');
 }
 function hbActRuleValue_(d) {
   if (d.ruleType === '每週') return HB_WEEKDAYS_.split('').filter(w => d.weekdays.indexOf(w) !== -1).join('、');
@@ -3357,14 +3375,19 @@ function hbActLinkSummary_(a) {
 function hbActLinkFromPromo_(name) {
   const p = name && pmPromos.find(x => x.name === name);
   if (!p) return null;
+  const cat = hbCatalog_();
+  const itemLink = n => {
+    const has = k => (cat[k] || []).some(it => it.name === n);
+    const c = Object.keys(cat).find(k => !hbIsStaffCat_(k) && has(k)) || Object.keys(cat).find(has);   // 優先找線上看得到的分類
+    return c ? { linkType: '品項', linkCat: c, linkItem: n } : null;
+  };
+  // 每份送一份(雞塊日，10-02 修)：客人要點的是「需搭配品項」(定10)，送的雞塊不用點
+  if (p.pairMode === '每份送一份' && p.requireItem) return itemLink(p.requireItem);
   if (p.requireCat) return { linkType: '分類', linkCat: p.requireCat, linkItem: '' };
   if (p.targetCat) return { linkType: '分類', linkCat: p.targetCat, linkItem: '' };
-  if (p.targetItem) {
-    const cat = hbCatalog_();
-    const has = k => (cat[k] || []).some(it => it.name === p.targetItem);
-    const c = Object.keys(cat).find(k => !hbIsStaffCat_(k) && has(k)) || Object.keys(cat).find(has);   // 優先找線上看得到的分類
-    if (c) return { linkType: '品項', linkCat: c, linkItem: p.targetItem };
-  }
+  // 有兩個適用品項(買一送一：義式咖啡、小農拿鐵)：連整個分類，兩樣都找得到
+  if (p.targetItem && p.targetItem2) { const l = itemLink(p.targetItem); return l ? { linkType: '分類', linkCat: l.linkCat, linkItem: '' } : null; }
+  if (p.targetItem) return itemLink(p.targetItem);
   return null;
 }
 function hbSetActPromo_(name) {
@@ -3536,9 +3559,9 @@ function loadPromos() {
 }
 
 // 「飲品升級」規則設定實際上是獨立的資料表(來源分類→目標品項的多筆對照，不是單一名稱+固定效果的優惠券)，
-// 沒有真的併進pmPromos這份資料；老闆希望在畫面上跟POS功能「優惠券」分類的按鈕順序對齊(...公關費之後緊接著
-// 就是活動飲品升級)，所以在清單裡插入一個可點擊的捷徑列導到「飲品升級」子分頁，資料本身仍各自獨立管理
-const PM_DRINK_UPGRADE_SHORTCUT_AFTER = '公關費';
+// 沒有真的併進pmPromos這份資料；老闆希望在畫面上跟POS功能「優惠券」分類的按鈕順序對齊，所以在清單裡插入一個
+// 可點擊的捷徑列導到「飲品升級」子分頁，資料本身仍各自獨立管理。平板「活動飲品升級」固定排在所有按鈕最後
+// (DISCOUNT_CATEGORY_ITEMS)，10-02 起捷徑列也固定放在 POS 按鈕組最後(原本黏在公關費後面，拖曳排序會跳位)
 // 折數顯示用：90→「9折」、85→「85折」
 function pmPctLabel_(pct) {
   return (pct % 10 === 0 ? pct / 10 : pct) + '折';
@@ -3577,7 +3600,7 @@ function pmRowHtml_(p) {
     p.status === '停用' ? '停用' : null
   ]).filter(Boolean).join('・');
   // 標籤放名稱下一行(09-27：並排時標籤一長名稱會被擠成一字一行)；組名已經說明是按鈕/兌換券，列上不再重複標「按鈕」
-  return `<div class="mc-item-row sort-row${pmEditorMode === 'promo' && p.name === pmCurrentName ? ' active' : ''}" data-key="${escapeHtml(p.name)}" onclick="pmEditorMode='promo';pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();">
+  return `<div class="mc-item-row sort-row${pmEditorMode === 'promo' && p.name === pmCurrentName ? ' active' : ''}" data-key="${escapeHtml(p.name)}" onclick="pmEditorMode='promo';pmCurrentName='${escapeHtml(p.name).replace(/'/g, "\\'")}';renderPmList();renderPmEditor();pmScrollEditor_();">
       ${sortHandleHtml_('pmDragStart_(event, this)')}<div class="sort-body"><span>${escapeHtml(p.name)}</span>${tags ? `<span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span>` : ''}</div>
     </div>`;
 }
@@ -3605,9 +3628,9 @@ function renderPmList() {
   const cur = pmEditorMode === 'promo' ? pmPromos.find(p => p.name === pmCurrentName) : null;
   el.innerHTML = GROUPS.map(([key, title, hint]) => {
     const list = pmPromos.filter(p => pmGroupOf_(p) === key);
-    let rows = list.map(p => pmRowHtml_(p) + (p.name === PM_DRINK_UPGRADE_SHORTCUT_AFTER ? shortcutRow : '')).join('');
+    let rows = list.map(p => pmRowHtml_(p)).join('');   // 10-02：飲品升級捷徑固定放在 POS 按鈕組最後(原本黏在公關費後面，拖曳時會把後面的券擠到它下面)
     let count = list.length;
-    if (key === 'button' && !list.some(p => p.name === PM_DRINK_UPGRADE_SHORTCUT_AFTER)) { rows += shortcutRow; }
+    if (key === 'button') rows += shortcutRow;
     if (key === 'button') count += 1;   // 飲品升級
     const warn = list.filter(p => /⚠/.test(pmPeriodTag_(p) || '')).length;
     const open = pmGroupOpen_[key] != null ? pmGroupOpen_[key] : !!(cur && pmGroupOf_(cur) === key);
@@ -3934,7 +3957,7 @@ function adRowHtml_(a) {
     pmPeriodTag_(a), a.status === '停用' ? '停用' : null
   ].filter(Boolean).join('・');
   const active = pmEditorMode === 'addon' && a.name === adCurrentName;
-  return `<div class="mc-item-row sort-row${active ? ' active' : ''}" data-key="${escapeHtml(a.name)}" onclick="pmEditorMode='addon';adCurrentName='${adJsStr_(a.name)}';adPendingPhotoUrl=undefined;renderPmList();renderPmEditor();">
+  return `<div class="mc-item-row sort-row${active ? ' active' : ''}" data-key="${escapeHtml(a.name)}" onclick="pmEditorMode='addon';adCurrentName='${adJsStr_(a.name)}';adPendingPhotoUrl=undefined;renderPmList();renderPmEditor();pmScrollEditor_();">
       ${sortHandleHtml_('adDragStart_(event, this)')}<div class="sort-body"><span>${escapeHtml(a.name)}</span><span class="mc-item-price" style="font-size:0.75rem;">${escapeHtml(tags)}</span></div>
     </div>`;
 }
@@ -3945,7 +3968,7 @@ function adGroupHtml_() {
     const list = pmAddons.filter(a => a.type === type);
     return `<div style="font-size:0.78rem;font-weight:600;color:var(--muted);margin:8px 6px 4px;">${title}（${list.length}）</div>`
       + `<div class="ad-sort-group">${list.map(adRowHtml_).join('') || '<div class="empty-hint" style="padding:6px;">目前沒有</div>'}</div>`
-      + `<button type="button" class="mc-add-btn" style="margin:4px 0 6px;" onclick="pmEditorMode='addon';adCurrentName=null;adNewType='${type}';adPendingPhotoUrl=undefined;renderPmList();renderPmEditor();">+ 新增${type === 'x1' ? '加購價商品' : '其他需求'}</button>`;
+      + `<button type="button" class="mc-add-btn" style="margin:4px 0 6px;" onclick="pmEditorMode='addon';adCurrentName=null;adNewType='${type}';adPendingPhotoUrl=undefined;renderPmList();renderPmEditor();pmScrollEditor_();">+ 新增${type === 'x1' ? '加購價商品' : '其他需求'}</button>`;
   };
   return `<details ${open ? 'open' : ''} ontoggle="pmGroupOpen_['addon'] = this.open" style="margin-bottom:6px;">
       <summary style="cursor:pointer;font-weight:600;font-size:0.88rem;padding:8px 6px;border-radius:6px;background:#faf6f2;">
