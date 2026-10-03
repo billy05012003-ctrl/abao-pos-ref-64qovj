@@ -30,6 +30,14 @@
   .sidebar .sub-item::before { content:''; position:absolute; left:20px; top:0; bottom:0; width:1px; background:var(--border); }
   .sidebar .sub-item.active { color:var(--brand); background:#FFF7F3; font-weight:700; border-left-color:var(--brand); }
   .main-content { flex:1; min-width:0; }
+  #month-remind { margin:12px 16px 0; background:#fff8e1; border:1px solid #f0c36d; border-radius:10px; font-size:0.85rem; }
+  #month-remind .mr-head { display:flex; align-items:center; gap:8px; padding:9px 12px; cursor:pointer; font-weight:600; color:#7a5300; }
+  #month-remind .mr-head .mr-caret { margin-left:auto; font-weight:normal; color:var(--muted); font-size:0.78rem; }
+  #month-remind ul { margin:0; padding:0 12px 4px 30px; }
+  #month-remind li { margin:0 0 6px; line-height:1.5; }
+  #month-remind li.mr-red { color:#a32d2d; }
+  #month-remind .mr-go { margin-left:6px; background:none; border:1px solid currentColor; border-radius:6px; padding:1px 8px; font-size:0.78rem; color:inherit; cursor:pointer; }
+  #month-remind .mr-foot { padding:0 12px 9px; font-size:0.75rem; color:var(--muted); }
   @media (max-width: 640px) {
     .app-shell { flex-direction:column; }
     .sidebar { flex-direction:row; width:100%; flex:none; border-right:none; border-bottom:1px solid #eee; overflow-x:auto; position:static; }
@@ -250,6 +258,7 @@
   </div>
 </nav>
 <main class="main-content">
+<div id="month-remind" style="display:none;"></div>
 <div id="view-availability" class="view">
   <p style="font-size:0.8rem;color:var(--muted);">
     每個品項有兩個獨立開關：<b>線上點餐</b>(共用同一份狀態) 跟 <b>POS功能</b>(獨立狀態，互不影響)。
@@ -1553,7 +1562,91 @@ function buildStatusSelect(current, onChange) {
   return select;
 }
 
+// ---- 本月待更新提醒(2026-10-03 老闆要求「每月1日提醒」雞塊日／金寶限定／八大節氣) ----
+// 讀正式版優惠券＋會員好康活動，有該改沒改的才在後台最上方出現黃框，改好發布後自動消失(只讀、不改資料)：
+// ①活動有綁券：今天～下個月底的活動日，券的生效日～到期日沒包含到(後端 actClaimCheck_ 這幾天就不發券)
+// ②有最低適用等級的券(金寶限定每月換飲品)：已過期／還沒開始；每月 MR_TIER_REMIND_DAY_ 日起、月底前到期就提醒換下個月
+const MR_TIER_REMIND_DAY_ = 25;
+let mrOpen = true;
+function mrYmd_(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function mrAddDays_(ymd, n) { const [y, m, d] = ymd.split('-').map(Number); return mrYmd_(new Date(y, m - 1, d + n)); }
+function mrMd_(ymd) { return ymd.slice(5).replace(/^0/, '').replace('-0', '/').replace('-', '/'); }
+// 連續的日期併成一段：11/23～11/25、12/1
+function mrDatesLabel_(dates) {
+  const out = [];
+  dates.forEach(d => {
+    const last = out[out.length - 1];
+    if (last && mrAddDays_(last[1], 1) === d) last[1] = d; else out.push([d, d]);
+  });
+  return out.map(([a, b]) => a === b ? mrMd_(a) : mrMd_(a) + '～' + mrMd_(b)).join('、');
+}
+function mrPeriodLabel_(p) {
+  if (p.startDate && p.endDate) return mrMd_(p.startDate) + '～' + mrMd_(p.endDate);
+  return p.startDate ? mrMd_(p.startDate) + '起' : '到' + mrMd_(p.endDate);
+}
+function mrGo_(sub) {
+  document.getElementById('member-sublist').classList.add('open');
+  document.getElementById('member-caret').classList.add('open');
+  switchMemberSubview(sub);
+}
+function refreshMonthReminder_() {
+  return apiGet({ action: 'promoSettings', storeId: 'meibao', version: 'live' }).then(data => {
+    if (data.status !== 'ok') return;
+    renderMonthReminder_(monthReminderItems_(data.today || mrYmd_(new Date()), data.promos || [], data.homeActs || []));
+  }).catch(err => console.warn('本月待更新提醒讀取失敗', err));
+}
+function monthReminderItems_(today, promos, acts) {
+  const [y, m] = today.split('-').map(Number);
+  const monthEnd = mrYmd_(new Date(y, m, 0)), nextMonthEnd = mrYmd_(new Date(y, m + 1, 0));
+  const soon = mrAddDays_(today, 3);
+  const byName = Object.fromEntries(promos.map(p => [p.name, p]));
+  const items = [];
+  acts.forEach(a => {
+    if (a.status === '停用' || !a.promo) return;
+    const dates = (a.dates || []).filter(d => d >= today && d <= nextMonthEnd);
+    if (!dates.length) return;
+    const p = byName[a.promo];
+    if (!p || p.status === '停用') {
+      items.push({ red: true, go: 'blocks', text: `「${a.title}」${mrDatesLabel_(dates)}：綁的券「${a.promo}」${p ? '已停用' : '找不到'}，這幾天線上不會套用優惠` });
+      return;
+    }
+    // 雞塊日一張券每月改：券還沒用完(到期日≥今天)時，到期日之後的活動日是「下一輪」，現在改會把這輪蓋掉，等過了到期日再提醒
+    const miss = dates.filter(d => (p.startDate && d < p.startDate) || (p.endDate && d > p.endDate && p.endDate < today));
+    if (!miss.length) return;
+    const need = p.requireItem ? `，需搭配品項目前是「${p.requireItem}」，記得一起換` : '';
+    items.push({ red: miss[0] <= soon, go: 'promo', text: `「${a.title}」${mrDatesLabel_(miss)}：綁的券「${p.name}」期間是 ${mrPeriodLabel_(p)}，沒包含這幾天，線上不會發券。請改券的生效日／到期日${need}` });
+  });
+  promos.forEach(p => {
+    if (!p.minTier || p.status === '停用' || !p.showAsButton) return;
+    if (p.endDate && p.endDate < today) {
+      items.push({ red: true, go: 'promo', text: `「${p.name}」${mrMd_(p.endDate)} 已到期，${p.minTier}會員現在沒有等級優惠。請換本月飲品（改名稱、適用品項、生效日／到期日）` });
+    } else if (p.startDate && p.startDate > today) {
+      items.push({ red: false, go: 'promo', text: `「${p.name}」${mrMd_(p.startDate)} 才開始，在那之前${p.minTier}會員沒有等級優惠` });
+    } else if (p.endDate && p.endDate <= monthEnd && Number(today.slice(8)) >= MR_TIER_REMIND_DAY_) {
+      items.push({ red: false, go: 'promo', text: `「${p.name}」${mrMd_(p.endDate)} 到期，下個月要換飲品（改名稱、適用品項、生效日／到期日）` });
+    }
+  });
+  return items;
+}
+let mrItems = [];
+function renderMonthReminder_(items) {
+  mrItems = items;
+  const box = document.getElementById('month-remind');
+  if (!items.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const goLabel = { promo: '去優惠券', blocks: '去區塊配置' };
+  box.innerHTML = `
+    <div class="mr-head" onclick="mrOpen=!mrOpen;renderMonthReminder_(mrItems);">
+      🔔 待更新的活動優惠（${items.length}）<span class="mr-caret">${mrOpen ? '收起' : '展開'}</span>
+    </div>
+    <div class="mr-body" style="${mrOpen ? '' : 'display:none;'}">
+      <ul>${items.map(it => `<li class="${it.red ? 'mr-red' : ''}">${it.red ? '⚠ ' : ''}${escapeHtml(it.text)}<button type="button" class="mr-go" onclick="mrGo_('${it.go}')">${goLabel[it.go]}</button></li>`).join('')}</ul>
+      <div class="mr-foot">改好後按「發布到正式版」，這則提醒會自動消失</div>
+    </div>`;
+  box.style.display = 'block';
+}
+
 loadAvailability();
+refreshMonthReminder_();
 // POS後台登入(2026-09-25)：沒登入就跳登入畫面；付款方式設定是動態載入的，內容一變就重新套用「店長唯讀」
 renderBoUser_();
 if (!boSession) showBoLogin_();
@@ -2871,6 +2964,7 @@ function publishPromoDomain(btn) {
     if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
     alert('已發布到正式版');
     refreshPromoPublishDiff_();
+    refreshMonthReminder_();
   }).catch(err => alert('發布失敗：' + err.message))
     .finally(() => { btn.disabled = false; btn.textContent = '發布到正式版'; });
 }
