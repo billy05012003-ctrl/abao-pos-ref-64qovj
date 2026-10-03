@@ -596,7 +596,31 @@
 // 雲端資料是POS功能的完整版本(含「單點/三明治/其他」等只給店員現場用、不對外賣的分類)，
 // 顧客點餐頁載入後要濾掉這幾個分類，維持跟原本一樣只顯示可線上點的品項(見STAFF_ONLY_CATEGORIES)
 let CATALOG = {};
+let CATALOG_ALL = {};   // 雲端完整菜單(含線上不顯示的分類)；CATALOG＝線上看得到的部分(rebuildOnlineCatalog_)
+// 線上點餐顯示開關(2026-10-03，規格見 線上點餐勾選設計_2026-10-03.md)：後台「品項上下架」每個分類可設顯示/不顯示，
+// 存在品項上下架狀態表「分類｜分類key」。沒設定過：這三個店員分類預設不顯示、其他預設顯示(後端 ONLINE_HIDDEN_DEFAULT_CATS_ 同一份)
 const STAFF_ONLY_CATEGORIES = ['單點', '三明治', '其他'];
+const ONLINE_CAT_STATUS_PREFIX = '分類｜';
+function onlineCatVisible_(cat) {
+  const st = itemAvailabilityMap[ONLINE_CAT_STATUS_PREFIX + cat];
+  if (st === '不顯示') return false;
+  if (st === '顯示') return true;
+  return !STAFF_ONLY_CATEGORIES.includes(cat);
+}
+// 照目前的上下架狀態重算線上菜單：分類不顯示整個拿掉、品項永久下架拿掉(本日售完照舊顯示灰色)；回傳有沒有變
+function rebuildOnlineCatalog_() {
+  const out = {};
+  Object.keys(CATALOG_ALL).forEach(cat => {
+    if (!onlineCatVisible_(cat)) return;
+    const items = (CATALOG_ALL[cat] || []).filter(it => itemAvailabilityMap[it.name] !== '永久下架');
+    if (items.length) out[cat] = items;
+  });
+  const sig = c => JSON.stringify(Object.keys(c).map(k => [k, c[k].map(it => it.name)]));
+  const changed = sig(out) !== sig(CATALOG);
+  CATALOG = out;
+  return changed;
+}
+function onlineItemNameOk_(name) { return Object.keys(CATALOG).some(cat => CATALOG[cat].some(it => it.name === name)); }
 
 const STORE_NAME = "美寶美食館（A-Bao溪湖培英店）";
 // 付款預設走藍新正式站；內部驗證時網址加 ?mpgtest=1 改走藍新驗證環境(後端有安全開關，關著時會拒絕)
@@ -1074,11 +1098,8 @@ function rebuildDrinkComboDerivedData_() {
 }
 
 function applyMenuCmsData_(data) {
-  const filteredCatalog = {};
-  Object.keys(data.catalog).forEach(cat => {
-    if (!STAFF_ONLY_CATEGORIES.includes(cat)) filteredCatalog[cat] = data.catalog[cat];
-  });
-  CATALOG = filteredCatalog;
+  CATALOG_ALL = data.catalog;
+  rebuildOnlineCatalog_();
   OPTION_GROUPS = data.optionGroups;
   ITEM_GROUPS_MAP = data.itemGroups;
   ITEM_COMBO_GROUPS_MAP = data.itemComboGroups || {};
@@ -1204,7 +1225,7 @@ function useVoucherToOrder_(voucherId, type) {
   }
   const card = [...document.querySelectorAll('#menu .item')].find(el => el.dataset.itemName === b.targetItem);
   const btn = card && card.querySelector('.add');
-  if (!btn) { pendingVoucherUse_ = null; alert(`菜單上找不到「${b.targetItem}」，請洽門市`); return; }
+  if (!btn) { pendingVoucherUse_ = null; alert(`「${b.targetItem}」目前線上不提供，請到門市使用這張券`); return; }
   if (btn.disabled) { pendingVoucherUse_ = null; alert(`「${b.targetItem}」今天已售完`); return; }
   btn.click();
   // 份量固定成券上的份量(中杯券只能選 M)
@@ -1806,6 +1827,10 @@ function renderCheckoutVoucherList() {
     if (!behavior) return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.55;"><span>${escapeHtml_(v.type)}</span><span style="color:var(--muted);font-size:0.74rem;">限門市使用</span></div>`;
     // 活動券(2026-09-30 老闆定案：自動套用，客人不用按)：只顯示目前狀態
     if (v.actDate) return actVoucherRow_(v, behavior, pick);
+    // 適用品項線上看不到(線上點餐顯示開關，10-03)：不出「用券點餐」，改標線上暫不提供
+    if (behavior.mode === 'item' && behavior.targetItem && !findCartLineForVoucher(v.type) && !onlineItemNameOk_(behavior.targetItem)) {
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.55;"><span>${escapeHtml_(v.type)}</span><span style="color:var(--muted);font-size:0.74rem;">線上暫不提供</span></div>`;
+    }
     if (behavior.mode === 'item' && !findCartLineForVoucher(v.type)) {
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;${(voucherTargetText_(v.type) || v.type === '美式狂想乙套兌換券') ? '' : 'opacity:0.5;'}">
         <span>${v.type}${voucherTargetText_(v.type) ? `<br><span style="color:var(--muted);font-size:0.74rem;">${escapeHtml_(voucherTargetText_(v.type))}</span>` : ''}</span>${(voucherTargetText_(v.type) || v.type === '美式狂想乙套兌換券')
@@ -4379,10 +4404,14 @@ if (HOME_TABS_ON) initHomeTabs_();
 // 菜單CMS化Phase 1（2026-09-06）：renderMenu()/applyItemAvailability()都要用到CATALOG/OPTION_GROUPS，
 // 改成雲端讀取後這兩個call要等loadMenuCmsData()完成才能執行；其餘跟菜單內容無關的初始化維持原本同步呼叫，
 // 不用跟著等待，避免整個開場被網路速度拖慢
-loadMenuCmsData().then(() => {
+// 線上點餐顯示開關(10-03)：上下架狀態跟菜單一起抓，等兩個都回來才畫菜單(不然不顯示的分類會先閃一下)；
+// 狀態 4 秒還沒回來就先畫，晚到的時候 applyItemAvailability 發現有變再重畫
+const storeStatusReady = apiGet_({ action: 'storeStatus', storeId: 'meibao' }).catch(err => { console.warn('讀取品項上下架狀態失敗（不影響點餐，全部視為供應中）', err); return null; });
+Promise.all([loadMenuCmsData(), Promise.race([storeStatusReady, new Promise(r => setTimeout(() => r(null), 4000))])]).then(([, st]) => {
+  if (st && st.status === 'ok' && st.items) { itemAvailabilityMap = st.items; rebuildOnlineCatalog_(); }
   document.getElementById('menu').innerHTML = ''; // 清掉「菜單載入中…」提示，renderMenu()本身只會附加不會清空
   renderMenu();
-  applyItemAvailability();
+  applyItemAvailability(storeStatusReady);
   if (HOME_TABS_ON) renderHomeNewPane_();
 });
 scheduleSettingsReady.then(() => {
@@ -4405,12 +4434,33 @@ else {
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 initGroupFromUrl_();
 
+function rerenderMenu_() {
+  ['tabs', 'menu', 'category-list'].forEach(id => { document.getElementById(id).innerHTML = ''; });
+  renderMenu();
+}
+// 購物車裡線上已經看不到的品項(剛被永久下架/分類設不顯示)自動拿掉並告訴客人；揪團朋友的、其他需求不動(送出時後端會擋並說是哪一項)
+function purgeOfflineCartLines_() {
+  const gone = [];
+  cart = cart.filter(l => {
+    if (l.who || l.x2) return true;
+    const name = l.baseName || String(l.name || '').split('（')[0].trim();
+    if (!name || onlineItemNameOk_(name)) return true;
+    if (gone.indexOf(name) === -1) gone.push(name);
+    return false;
+  });
+  if (!gone.length) return;
+  pruneStaleVoucherSelections_();
+  saveCartSession();
+  if (document.getElementById('cart-overlay').classList.contains('open')) renderCart();
+  updateCartBar();
+  alert(`「${gone.join('」「')}」目前線上不提供，已從購物車移除`);
+}
 // 讀取雲端平板設定的品項上下架狀態，同步反映到點餐頁（本日售完/永久下架→擋掉加入按鈕）；
 // 順便讀暫停接單/設為忙碌狀態，顯示非阻斷式提示（真正擋單是送出訂單時後端做，這裡只是提早讓客人知道）
 // 失敗就當作全部品項供應中、正常接單，不擋顧客點餐
-function applyItemAvailability() {
-  apiGet_({ action: 'storeStatus', storeId: 'meibao' }).then(data => {
-    if (data.status !== 'ok') return;
+function applyItemAvailability(ready) {
+  (ready || apiGet_({ action: 'storeStatus', storeId: 'meibao' })).then(data => {
+    if (!data || data.status !== 'ok') return;
     const storeEl = document.getElementById('store-status-notice');
     if (data.paused) {
       storeEl.textContent = '⛔ 門市目前暫停接單中，暫時無法送出訂單，請稍後再回來下單。';
@@ -4423,6 +4473,8 @@ function applyItemAvailability() {
     }
     if (!data.items) return;
     itemAvailabilityMap = data.items;
+    if (rebuildOnlineCatalog_()) rerenderMenu_();   // 狀態比菜單晚到、而且線上看得到的分類/品項有變
+    purgeOfflineCartLines_();
     Object.keys(data.items).forEach(name => {
       const div = document.querySelector(`.item[data-item-name="${CSS.escape(name)}"]`);
       if (!div) return;

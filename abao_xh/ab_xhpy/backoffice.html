@@ -264,6 +264,9 @@
     每個品項有兩個獨立開關：<b>線上點餐</b>(共用同一份狀態) 跟 <b>POS功能</b>(獨立狀態，互不影響)。
     這裡改了會直接反映到對應的前台畫面，不需要老闆自己再跑去POS功能操作。
   </p>
+  <p style="font-size:0.8rem;color:var(--muted);">
+    <b>只在門市賣、線上不要出現</b>：分類右邊的「線上」選<b>不顯示</b>＝整個分類線上看不到；單一品項的線上點餐選<b>永久下架</b>＝線上看不到(本日售完則照舊灰色顯示)。都是立刻生效、不用發布，門市POS不受影響。
+  </p>
   <div id="availability-list"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-storeinfo" class="view" style="display:none;">
@@ -1388,7 +1391,17 @@ const MC_DRINK_CATEGORIES = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGA
   'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
   'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
 
-let tabletStatusMap = {};   // 雲端平板/線上點餐共用狀態，key=品項名稱
+let tabletStatusMap = {};   // 雲端平板/線上點餐共用狀態，key=品項名稱；分類的線上顯示開關 key=「分類｜分類key」(10-03)
+// 線上點餐顯示開關(2026-10-03，規格見 線上點餐勾選設計_2026-10-03.md)：沒設定過的分類，單點/三明治/其他預設不顯示、其他預設顯示
+// (點餐頁 onlineCatVisible_、後端 ONLINE_HIDDEN_DEFAULT_CATS_ 同一份預設，改一邊要改另一邊)
+const ONLINE_CAT_STATUS_PREFIX = '分類｜';
+const HB_STAFF_ONLY_CATS_ = ['單點', '三明治', '其他'];
+function boOnlineCatVisible_(cat) {
+  const st = tabletStatusMap[ONLINE_CAT_STATUS_PREFIX + cat];
+  if (st === '不顯示') return false;
+  if (st === '顯示') return true;
+  return HB_STAFF_ONLY_CATS_.indexOf(mcShortCatName(cat)) === -1;
+}
 let posStatusMap = {};      // POS功能獨立狀態，key=分類||品項名稱
 
 // mcCatalog等「菜單管理」用的變數提早宣告到這裡(原本在後面的Phase 2區塊)：
@@ -1482,12 +1495,40 @@ function renderAvailabilityList() {
     const toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
     toggleBtn.className = 'mc-accordion-toggle';
-    toggleBtn.innerHTML = `<span class="mc-accordion-caret">${expanded ? '▼' : '▶'}</span><span>${escapeHtml(mcShortCatName(cat))}</span><span class="mc-item-price">(${items.length})</span>`;
+    const catHidden = cat !== ADDON_STATUS_CATEGORY && !boOnlineCatVisible_(cat);
+    toggleBtn.innerHTML = `<span class="mc-accordion-caret">${expanded ? '▼' : '▶'}</span><span>${escapeHtml(mcShortCatName(cat))}</span><span class="mc-item-price">(${items.length})</span>${catHidden ? '<span style="font-size:0.74rem;font-weight:normal;color:#a32d2d;">線上看不到</span>' : ''}`;
     toggleBtn.onclick = () => {
       if (expanded) availabilityExpandedCats.delete(cat); else availabilityExpandedCats.add(cat);
       renderAvailabilityList();
     };
     header.appendChild(toggleBtn);
+    // 分類的線上顯示開關(10-03)：加購品項/配料選擇不是菜單分類，不放
+    if (cat !== ADDON_STATUS_CATEGORY) {
+      const catGroup = document.createElement('div');
+      catGroup.className = 'control-group';
+      catGroup.innerHTML = '<span class="label">線上</span>';
+      const catSel = document.createElement('select');
+      ['顯示', '不顯示'].forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; if ((catHidden ? '不顯示' : '顯示') === v) o.selected = true; catSel.appendChild(o); });
+      catSel.onchange = () => {
+        const key = ONLINE_CAT_STATUS_PREFIX + cat, previous = tabletStatusMap[key], val = catSel.value;
+        if (val === '不顯示' && !confirm(`確定讓「${mcShortCatName(cat)}」整個分類在線上點餐看不到嗎？
+
+・立刻生效，門市POS照常可以賣
+・顧客購物車裡已經有的會被自動拿掉`)) { catSel.value = catHidden ? '不顯示' : '顯示'; return; }
+        tabletStatusMap[key] = val;
+        renderAvailabilityList();
+        apiPost({ action: 'setItemStatus', name: key, status: val })
+          .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+          .catch(err => {
+            console.warn('分類線上顯示同步失敗', err);
+            if (previous === undefined) delete tabletStatusMap[key]; else tabletStatusMap[key] = previous;
+            renderAvailabilityList();
+            alert(`「${mcShortCatName(cat)}」線上顯示設定失敗：${err.message}(畫面已還原)`);
+          });
+      };
+      catGroup.appendChild(catSel);
+      header.appendChild(catGroup);
+    }
     row.appendChild(header);
 
     if (expanded) {
@@ -3083,8 +3124,8 @@ function switchHbTab(tab, keepSelection) {
 function hbCatalog_() { return Object.keys(mcCatalog).length ? mcCatalog : (adCatalog_ || {}); }
 // 線上點餐頁會濾掉這三個店員用的分類(跟點餐頁 STAFF_ONLY_CATEGORIES 同一份，改一邊要改另一邊)：
 // 卡片/活動連結不列出來，已經選了的標「線上看不到」(10-01 農曆初一連到單點，顧客按了找不到)
-const HB_STAFF_ONLY_CATS_ = ['單點', '三明治', '其他'];
-function hbIsStaffCat_(c) { return !!c && HB_STAFF_ONLY_CATS_.indexOf(mcShortCatName(c)) !== -1; }
+// 「線上看不到」的分類(10-03 起照品項上下架的分類線上顯示開關，原本只看寫死的三個店員分類)
+function hbIsStaffCat_(c) { return !!c && !boOnlineCatVisible_(c); }
 function hbLinkCatOptions_(sel) {
   const cat = hbCatalog_();
   return `<option value="">請選分類</option>` + Object.keys(cat).filter(c => !hbIsStaffCat_(c)).map(c => `<option value="${escapeHtml(c)}" ${c === sel ? 'selected' : ''}>${escapeHtml(mcShortCatName(c))}</option>`).join('')
