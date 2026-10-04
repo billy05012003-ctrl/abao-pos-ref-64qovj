@@ -1631,12 +1631,17 @@ function mrGo_(sub) {
   switchMemberSubview(sub);
 }
 function refreshMonthReminder_() {
-  return apiGet({ action: 'promoSettings', storeId: 'meibao', version: 'live' }).then(data => {
+  return Promise.all([
+    apiGet({ action: 'promoSettings', storeId: 'meibao', version: 'live' }),
+    apiGet({ action: 'menuCmsData', storeId: 'meibao', status: 'live' }).catch(() => null),
+    apiGet({ action: 'storeStatus', storeId: 'meibao' }).catch(() => null)
+  ]).then(([data, menu, st]) => {
     if (data.status !== 'ok') return;
-    renderMonthReminder_(monthReminderItems_(data.today || mrYmd_(new Date()), data.promos || [], data.homeActs || [], data.homeCards || []));
+    const ctx = { catalog: menu && menu.status === 'ok' ? menu.catalog : null, statuses: st && st.status === 'ok' ? (st.items || {}) : null };
+    renderMonthReminder_(monthReminderItems_(data.today || mrYmd_(new Date()), data.promos || [], data.homeActs || [], data.homeCards || [], ctx));
   }).catch(err => console.warn('本月待更新提醒讀取失敗', err));
 }
-function monthReminderItems_(today, promos, acts, cards) {
+function monthReminderItems_(today, promos, acts, cards, ctx) {
   const [y, m] = today.split('-').map(Number);
   const monthEnd = mrYmd_(new Date(y, m, 0)), nextMonthEnd = mrYmd_(new Date(y, m + 1, 0));
   const soon = mrAddDays_(today, 3);
@@ -1675,6 +1680,15 @@ function monthReminderItems_(today, promos, acts, cards) {
     } else if (c.saleDate === mrAddDays_(today, 1)) {
       items.push({ red: false, go: 'blocks', text: `新品「${c.title}」明天(${mrMd_(c.saleDate)})開賣：今天收店後把品項加進菜單並發布，再把卡片改成「連單一品項」發布，門市平板重新整理` });
     }
+  });
+  // ④新品卡片連單一品項，但那道餐線上看不到(10-04：美18 先設永久下架等 10/6 開賣、或菜單還沒發布)→客人看到暫停供應
+  const cat = ctx && ctx.catalog, sts = ctx && ctx.statuses;
+  (cards || []).forEach(c => {
+    if (c.status === '停用' || c.linkType !== '品項' || !c.linkItem || (c.endDate && c.endDate < today) || (c.startDate && c.startDate > today)) return;
+    let why = '';
+    if (cat && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem)) why = '還沒發布到正式菜單（到「菜單管理」按發布）';
+    else if (sts && sts[c.linkItem] === '永久下架') why = '線上設成永久下架（開賣了就到「品項上下架」改回供應中，POS 也要一起改）';
+    if (why) items.push({ red: true, go: 'blocks', text: `新品「${c.title}」卡片連到的「${c.linkItem}」${why}，客人現在看到「暫停供應」` });
   });
   return items;
 }
@@ -1817,6 +1831,10 @@ function restoreMcSnapshot(snapshotId, status) {
 // 這裡多一層是讓畫面上就看得出「正在處理」，不用猜)
 function publishMcStore() {
   if (MC_STORE_ID === '__brand__') { alert('品牌範本本身不能發布，請用下方「同步到分店」'); return; }
+  // 發布前檢查(10-04)：這份菜單發布後，正式版的新品卡片/活動/優惠券連到的品項或分類還在不在
+  checkPublishRefs_('menu').then(goOn => { if (goOn) publishMcStoreGo_(); });
+}
+function publishMcStoreGo_() {
   if (!confirm('確定要把「' + MC_STORE_ID + '」的草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新菜單\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   const btn = document.getElementById('mc-publish-btn');
   btn.disabled = true; btn.textContent = '發布中…（請勿重複點擊，處理中請耐心等候)';
@@ -1826,6 +1844,46 @@ function publishMcStore() {
     refreshMenuPublishDiff_();
   }).catch(err => alert('發布失敗：' + err.message))
     .finally(() => { btn.disabled = false; btn.textContent = '發布到正式版'; });
+}
+
+// ---- 發布前檢查兩組設定連得起來(2026-10-04)：菜單(品項/分類)跟會員相關(新品卡片/活動/優惠券)是兩個各自發布的單位，
+// 實際發生：新品卡片改連「美18」先發布，美18 還在菜單草稿→線上卡片顯示暫停供應。發布任一邊前，拿「發布後會變成的那一份」跟
+// 另一邊的正式版比對，有連不到的就列出來讓老闆決定(不擋，按確定照樣發布)；讀不到資料就不檢查，不影響發布 ----
+function promoMenuRefIssues_(promoData, catalog, today) {
+  const names = new Set();
+  Object.keys(catalog).forEach(c => (catalog[c] || []).forEach(it => names.add(it.name)));
+  const hasItem = (cat, item) => cat ? (catalog[cat] || []).some(it => it.name === item) : names.has(item);
+  const sc = c => mcShortCatName(c);
+  const live = x => x.status !== '停用' && !(x.endDate && x.endDate < today);
+  const out = [];
+  const checkLink = (label, x) => {
+    if (x.linkType === '品項' && x.linkItem && !hasItem(x.linkCat, x.linkItem)) out.push(`${label}連到的品項「${x.linkItem}」`);
+    if (x.linkType === '分類' && x.linkCat && !catalog[x.linkCat]) out.push(`${label}連到的分類「${sc(x.linkCat)}」`);
+  };
+  (promoData.homeCards || []).filter(live).forEach(c => checkLink(`新品卡片「${c.title}」`, c));
+  (promoData.homeActs || []).filter(live).forEach(a => checkLink(`活動「${a.title}」`, a));
+  (promoData.promos || []).filter(live).forEach(p => {
+    ['targetItem', 'targetItem2', 'requireItem'].forEach(k => { if (p[k] && !names.has(p[k])) out.push(`優惠券「${p.name}」的品項「${p[k]}」`); });
+    ['targetCat', 'requireCat'].forEach(k => { if (p[k] && !catalog[p[k]]) out.push(`優惠券「${p.name}」的分類「${sc(p[k])}」`); });
+  });
+  return [...new Set(out)];
+}
+function checkPublishRefs_(which) {
+  const promoVer = which === 'promo' ? 'draft' : 'live', menuVer = which === 'menu' ? 'draft' : 'live';
+  return Promise.all([
+    apiGet({ action: 'promoSettings', storeId: MC_STORE_ID, version: promoVer }),
+    apiGet({ action: 'menuCmsData', storeId: MC_STORE_ID, status: menuVer })
+  ]).then(([p, m]) => (p.status === 'ok' && m.status === 'ok') ? promoMenuRefIssues_(p, m.catalog || {}, p.today || mrYmd_(new Date())) : [])
+    .catch(() => []).then(issues => {
+      if (!issues.length) return true;
+      const head = which === 'promo'
+        ? '⚠ 以下設定連到的品項／分類，正式菜單上還沒有（菜單草稿可能還沒發布）：'
+        : '⚠ 這份菜單發布後，以下正式上線的設定會連不到品項／分類：';
+      const tail = which === 'promo'
+        ? '發布後線上會顯示「暫停供應」或優惠用不到。建議先到「菜單管理」發布菜單。'
+        : '發布後線上會顯示「暫停供應」或優惠用不到。建議先到「會員相關」改好這些設定。';
+      return confirm(head + '\n' + issues.map(x => '・' + x).join('\n') + '\n\n' + tail + '\n\n按「確定」仍然發布，按「取消」先不發布。');
+    });
 }
 
 // 「同步（且發布）」：品牌端主動把範本推送到勾選的分店草稿，可選是否連同發布成該店的正式版本
@@ -3008,6 +3066,10 @@ function refreshMenuPublishDiff_() {
 
 function publishPromoDomain(btn) {
   if (MC_STORE_ID === '__brand__') { alert('品牌範本本身不能發布，請用下方「同步到分店」'); return; }
+  // 發布前檢查(10-04)：草稿的新品卡片/活動/優惠券連到的品項或分類，正式菜單上有沒有(菜單草稿還沒發布會顯示暫停供應)
+  checkPublishRefs_('promo').then(goOn => { if (goOn) publishPromoDomainGo_(btn); });
+}
+function publishPromoDomainGo_(btn) {
   if (!confirm('確定要把「' + MC_STORE_ID + '」的集點禮/優惠券/加價購/區塊配置草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   btn.disabled = true; btn.textContent = '發布中...';
   apiPost({ action: 'publishStorePromos', storeId: MC_STORE_ID }).then(data => {
