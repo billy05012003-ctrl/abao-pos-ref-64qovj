@@ -1518,7 +1518,7 @@ function renderAvailabilityList() {
         tabletStatusMap[key] = val;
         renderAvailabilityList();
         apiPost({ action: 'setItemStatus', name: key, status: val })
-          .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+          .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); refreshMonthReminder_(); })
           .catch(err => {
             console.warn('分類線上顯示同步失敗', err);
             if (previous === undefined) delete tabletStatusMap[key]; else tabletStatusMap[key] = previous;
@@ -1552,7 +1552,7 @@ function renderAvailabilityList() {
           const previous = tabletCurrent;
           tabletStatusMap[it.name] = val === '供應中' ? undefined : val;
           apiPost({ action: 'setItemStatus', name: it.name, status: val })
-            .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
+            .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); refreshMonthReminder_(); })
             .catch(err => {
               console.warn('雲端平板狀態同步失敗', err);
               tabletStatusMap[it.name] = previous === '供應中' ? undefined : previous;
@@ -1842,6 +1842,7 @@ function publishMcStoreGo_() {
     if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
     alert('已發布成正式上線版本');
     refreshMenuPublishDiff_();
+    refreshMonthReminder_();   // 黃框的「新品卡片連到的品項還沒發布到正式菜單」跟著重算
   }).catch(err => alert('發布失敗：' + err.message))
     .finally(() => { btn.disabled = false; btn.textContent = '發布到正式版'; });
 }
