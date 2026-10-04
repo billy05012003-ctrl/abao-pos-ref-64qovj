@@ -1685,6 +1685,12 @@ function monthReminderItems_(today, promos, acts, cards, ctx) {
   const cat = ctx && ctx.catalog, sts = ctx && ctx.statuses;
   (cards || []).forEach(c => {
     if (c.status === '停用' || c.linkType !== '品項' || !c.linkItem || (c.endDate && c.endDate < today) || (c.startDate && c.startDate > today)) return;
+    const notOnMenu = cat && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem), offline = sts && sts[c.linkItem] === '永久下架';
+    // 有開賣日、還沒到：開賣前品項看不到是正常的(卡片顯示 X/X 開賣)；前一天提醒當晚把品項準備好
+    if (c.saleDate && c.saleDate > today) {
+      if (c.saleDate === mrAddDays_(today, 1) && (notOnMenu || offline)) items.push({ red: false, go: 'blocks', text: `新品「${c.title}」明天(${mrMd_(c.saleDate)})開賣：今天收店後把「${c.linkItem}」${notOnMenu ? '加進菜單並發布' : '在「品項上下架」改回供應中(線上＋POS)'}` });
+      return;
+    }
     let why = '';
     if (cat && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem)) why = '還沒發布到正式菜單（到「菜單管理」按發布）';
     else if (sts && sts[c.linkItem] === '永久下架') why = '線上設成永久下架（開賣了就到「品項上下架」改回供應中，POS 也要一起改）';
@@ -3215,7 +3221,7 @@ function renderHbList() {
   if (hbTab === 'cards') {
     const cat = hbCatalog_();
     const row = c => {
-      let link = c.linkType === '品項' ? '品項「' + c.linkItem + '」' : c.linkType === '分類' ? '分類「' + mcShortCatName(c.linkCat) + '」' : '只展示' + (c.saleDate ? '・' + hbMd_(c.saleDate) + ' 開賣' : '');
+      let link = c.linkType === '品項' ? '品項「' + c.linkItem + '」' + (c.saleDate ? '・' + hbMd_(c.saleDate) + ' 開賣' : '') : c.linkType === '分類' ? '分類「' + mcShortCatName(c.linkCat) + '」' : '只展示' + (c.saleDate ? '・' + hbMd_(c.saleDate) + ' 開賣' : '');
       const missing = (c.linkType === '品項' && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem)) || (c.linkType === '分類' && !cat[c.linkCat]);
       const staff = (c.linkType === '品項' || c.linkType === '分類') && hbIsStaffCat_(c.linkCat);
       const tags = [link, missing && Object.keys(cat).length ? '⚠菜單已沒有' : null, staff ? '⚠線上看不到' : null, hbPeriodTag_(c), c.status === '停用' ? '停用' : null].filter(Boolean).join('・');
@@ -3315,7 +3321,11 @@ function renderHbCardEditor_(el) {
       ${d.linkType === '品項' ? `<label class="mc-field">品項<select onchange="hbSetCardItem_(this.value)">${itemOpts}</select></label>` : ''}
     </div>
     ${!cats.length ? '<div style="font-size:0.78rem;color:#c0392b;margin:-4px 0 8px;">菜單資料讀取失敗，請重新整理頁面</div>' : ''}
-    ${hbStaffCatWarnHtml_(d)}` : `
+    ${hbStaffCatWarnHtml_(d)}
+    ${d.linkType === '品項' ? `<div class="mc-field-row">
+      <label class="mc-field" style="max-width:180px;">開賣日（選填）<input type="date" value="${escapeHtml(d.saleDate || '')}" onchange="hbDraft.saleDate=this.value"></label>
+      <div style="flex:1;font-size:0.75rem;color:var(--muted);align-self:center;">還沒開賣的新品可以先連品項、填開賣日：開賣前卡片顯示「X/X 開賣」只看介紹，到了開賣日自動變成「立即點餐」。品項開賣前先在「品項上下架」設永久下架(線上＋POS)，開賣日改回供應中。</div>
+    </div>` : ''}` : `
     <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">客人點了只會放大看圖跟說明，沒有點餐按鈕。<b>開賣那天回來把這張改成「連單一品項」再發布</b>（忘了改也不會出錯，只是一直停在展示）。</div>
     <div class="mc-field-row">
       <label class="mc-field" style="max-width:160px;">價格（選填）<input type="number" min="0" step="1" value="${d.price === '' ? '' : d.price}" oninput="hbDraft.price=this.value"></label>

@@ -2213,7 +2213,7 @@ function renderMenu() {
 function refreshNewBadges_() {
   document.querySelectorAll('.new-item-badge').forEach(el => el.remove());
   const t = todayYmd_(), cats = Object.keys(CATALOG);
-  HOME_CARDS.filter(c => c.block === '新品上市' && c.status !== '停用' && c.linkType === '品項' && homeInPeriod_(c, t)).forEach(c => {
+  HOME_CARDS.filter(c => c.block === '新品上市' && c.status !== '停用' && c.linkType === '品項' && homeInPeriod_(c, t) && !(c.saleDate && c.saleDate > t)).forEach(c => {
     const sec = document.getElementById('cat-' + cats.indexOf(c.linkCat));
     const card = sec && [...sec.querySelectorAll('.item')].find(el => el.dataset.itemName === c.linkItem);
     const nameEl = card && card.querySelector('.name');
@@ -4170,6 +4170,8 @@ function menuPriceLabel_(item) {
 // 卡片目前的狀態：可以點(ok)、售完/下架(off)、菜單還沒載入(wait)
 function homeCardState_(c) {
   if (c.linkType === '只展示') return { ok: true };
+  // 連單一品項＋開賣日還沒到(10-04)：顯示「X/X 開賣」、點了只看介紹(品項開賣前通常先設永久下架，不然會變成暫停供應)
+  if (c.linkType === '品項' && c.saleDate && c.saleDate > todayYmd_()) return { ok: true, presale: true, item: (CATALOG_ALL[c.linkCat] || []).find(it => it.name === c.linkItem) };
   if (!Object.keys(CATALOG).length) return { wait: true };
   if (c.linkType === '分類') return CATALOG[c.linkCat] ? { ok: true } : { off: '暫停供應' };
   const item = (CATALOG[c.linkCat] || []).find(it => it.name === c.linkItem);
@@ -4196,7 +4198,7 @@ function renderHomeNewPane_() {
   const t = todayYmd_();
   const live = HOME_CARDS.filter(c => c.status !== '停用' && homeInPeriod_(c, t));
   const heroes = live.filter(c => c.block === '新品上市'), picks = live.filter(c => c.block === '店長推薦');
-  const btnText = (c, st) => st.off ? st.off : st.wait ? '載入中' : c.linkType === '只展示' ? (c.saleDate && c.saleDate > t ? homeMd_(c.saleDate) + ' 開賣' : '看介紹') : c.linkType === '分類' ? '去看看' : '立即點餐';
+  const btnText = (c, st) => st.off ? st.off : st.wait ? '載入中' : st.presale ? homeMd_(c.saleDate) + ' 開賣' : c.linkType === '只展示' ? (c.saleDate && c.saleDate > t ? homeMd_(c.saleDate) + ' 開賣' : '看介紹') : c.linkType === '分類' ? '去看看' : '立即點餐';
   const heroHtml = heroes.map(c => {
     const st = homeCardState_(c), photo = homeCardPhoto_(c, st.item), price = homeCardPrice_(c, st.item);
     return `<div class="hp-hero${st.off ? ' soldout' : ''}" style="${photo ? 'background-image:' + homeCssUrl_(photo) + ';' : ''}" onclick="onHomeCardClick_('${c.id}')">
@@ -4230,7 +4232,7 @@ function onHomeCardClick_(id) {
   if (!c) return;
   const st = homeCardState_(c);
   if (st.off || st.wait) return;
-  if (c.linkType === '只展示') { openHomeDetail_(c); return; }
+  if (c.linkType === '只展示' || st.presale) { openHomeDetail_(c, st.item); return; }
   homeJumpTo_(c.linkType, c.linkCat, c.linkItem, false);
 }
 // 切到線上點餐並跳到品項(直接開點餐視窗)或分類；新品卡片和會員好康活動的「去點餐」共用
@@ -4263,8 +4265,8 @@ function homeActGoBtn_(a, extraStyle) {
   if (a.linkType === '只展示') return '';
   return `<button type="button" class="hp-btn"${extraStyle ? ` style="${extraStyle}"` : ''} onclick="event.stopPropagation();homeActGo_('${a.id}')">去點餐</button>`;
 }
-function openHomeDetail_(c) {
-  const t = todayYmd_(), photo = homeCardPhoto_(c, null), price = homeCardPrice_(c, null);
+function openHomeDetail_(c, item) {
+  const t = todayYmd_(), photo = homeCardPhoto_(c, item || null), price = homeCardPrice_(c, item || null);
   document.getElementById('home-detail-body').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
       <h2 style="margin:0;font-size:1.1rem;">${c.tag ? `<span style="font-size:0.7rem;background:var(--brand);color:#fff;border-radius:6px;padding:1px 6px;vertical-align:middle;">${escapeHtml_(c.tag)}</span> ` : ''}${escapeHtml_(c.title)}</h2>
