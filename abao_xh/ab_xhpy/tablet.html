@@ -163,6 +163,8 @@
     style="width:260px;height:110px;border:2px solid rgba(255,255,255,0.4);border-radius:8px;background:#fff;flex:none"
     title="印單模組"></iframe>
 </header>
+<div id="cfg-update-banner" class="status-banner" style="display:none;cursor:pointer;background:#fff3cd;color:#7a5300" onclick="applyCfgUpdateNow_()">📢 菜單／優惠有更新：這筆結完會自動更新（或按這裡立即更新）</div>
+<div id="cfg-update-toast" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:60;background:#2e7d32;color:#fff;padding:8px 14px;border-radius:8px;font-size:0.9rem;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.2)">✅ 菜單／優惠已更新</div>
 <div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
@@ -2966,6 +2968,55 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     btn.textContent = btnOriginalText;
   });
 }
+// ---------------------------------------------------------------
+// 門市平板自動更新(2026-10-04，規格見 平板自動更新設計_2026-10-04.md)：後台發布到正式版(菜單/會員相關)、版本回溯回復正式上線、
+// 飲品升級存檔後，後端換「設定版本號」。這裡每 60 秒查一次，有新版就在閒置時背景重讀菜單/優惠/飲品升級/POS上下架並重畫菜單；
+// 不重開整頁(出單模組 iframe 不動：重開會中斷印單、提示音要再點畫面才會響)。不是閒置就出黃色提示，等閒置再自動做
+// ---------------------------------------------------------------
+const CFG_POLL_MS = 60000, CFG_IDLE_MS = 30000;
+let cfgBaseVer = null, cfgPendingVer = null, cfgRefreshing = false, cfgLastTouch = Date.now();
+['pointerdown', 'keydown'].forEach(ev => document.addEventListener(ev, () => { cfgLastTouch = Date.now(); }, true));
+// 閒置＝目前訂單是空的、沒開任何視窗(客製化/結帳/PIN/上下架管理…)、30 秒沒人碰畫面
+function posIsIdle_() {
+  if (posCart.length || currentPosModal || document.querySelector('.pos-overlay.open')) return false;
+  const shown = id => { const el = document.getElementById(id); return !!el && el.style.display !== 'none' && el.offsetParent !== null; };
+  if (shown('pos-checkout-panel') || shown('pos-confirm-panel')) return false;
+  return Date.now() - cfgLastTouch >= CFG_IDLE_MS;
+}
+function softRefreshPosConfig_() {
+  cfgRefreshing = true;
+  const ver = cfgPendingVer;
+  return Promise.all([loadMenuCmsData(), loadPromoSettings(), loadDrinkUpgradeRules()]).then(() => loadPosItemStatus()).then(() => {
+    document.getElementById('pos-col-categories').innerHTML = '';
+    renderPosMenu();
+    cfgBaseVer = ver;
+    if (cfgPendingVer === ver) { cfgPendingVer = null; document.getElementById('cfg-update-banner').style.display = 'none'; }   // 更新途中又發布了新版：留著待更新，下一輪再做
+    const toast = document.getElementById('cfg-update-toast');
+    toast.style.display = 'block';
+    setTimeout(() => { toast.style.display = 'none'; }, 5000);
+  }).catch(err => console.warn('背景更新菜單/優惠失敗，下次再試', err)).finally(() => { cfgRefreshing = false; });
+}
+function applyCfgUpdateNow_() {
+  if (!cfgPendingVer || cfgRefreshing) return;
+  if ((posCart.length || currentPosModal) && !confirm('現在更新菜單／優惠？\n\n・目前訂單裡的品項會保留\n・正在設定的品項(還沒加入訂單)要重選')) return;
+  softRefreshPosConfig_();
+}
+function checkCfgVersion_() {
+  apiGet({ action: 'cfgVersion', storeId: STORE_ID }).then(d => {
+    if (!d || d.status !== 'ok') return;
+    if (cfgBaseVer === null) { cfgBaseVer = d.ver; return; }   // 開機後第一次查：當作目前版本
+    if (d.ver !== cfgBaseVer) cfgPendingVer = d.ver;
+  }).catch(() => {}).finally(tryApplyCfgUpdate_);
+}
+function tryApplyCfgUpdate_() {
+  if (!cfgPendingVer || cfgRefreshing) return;
+  if (posIsIdle_()) softRefreshPosConfig_();
+  else document.getElementById('cfg-update-banner').style.display = 'block';
+}
+// 開機時跟菜單一起抓的版本號當基準；之後每 60 秒查新版，有待更新時每 10 秒看一次是不是閒置了
+Promise.all([menuCmsDataReady, promoSettingsReady, drinkUpgradeRulesReady]).then(checkCfgVersion_);
+setInterval(checkCfgVersion_, CFG_POLL_MS);
+setInterval(tryApplyCfgUpdate_, 10000);
 </script>
 </body>
 </html>
