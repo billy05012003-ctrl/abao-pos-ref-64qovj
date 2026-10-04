@@ -1292,6 +1292,81 @@ function goToVoucherCat_(cat) {
 // 週二茶拿鐵(適用分類)＝取餐日對、同分類兩杯以上就自動折。客人手動把贈品刪掉就記住不再自動加(可在兌換券視窗加回)
 var declinedGifts_ = new Set();
 function giftKey_(voucherId) { return 'gift|' + voucherId; }
+// 節氣升級加碼(10-04，老闆定案)：每份送一份＋有「適用品項2」＝贈品二選一。當月美X加豪華經濟升級餐，每份送一份，
+// 客人自己選(飲料照一般流程選冰塊甜度，份量固定)；每選一份另外一行「節氣贈品」，用券折成 $0(出單另印一行，老闆選 3b)
+function isPickGift_(b) { return !!(b && b.pairMode === '每份送一份' && b.targetItem2); }
+function giftPicksOf_(voucherId) { return cart.filter(c => c.gift && c.gift.pick && c.gift.voucherId === voucherId); }
+var giftPickPending_ = null;   // syncActGifts_ 算出還有幾份沒選 {voucherId, type, left}
+var pendingGiftPick_ = null;   // 客人在二選一點了某一樣、正在客製化畫面 {voucherId, type, item}
+var giftPickPromptKey_ = '';   // 同一個狀態只自動跳一次(客人關掉就不一直跳，購物車/券視窗可以再選)
+function scheduleGiftPickPrompt_() {
+  const p = giftPickPending_;
+  if (!p) return;
+  const key = p.voucherId + '|' + p.left + '|' + cart.length;
+  if (key === giftPickPromptKey_) return;
+  giftPickPromptKey_ = key;
+  setTimeout(() => {
+    const busy = ['item-overlay', 'giftpick-overlay'].some(id => { const el = document.getElementById(id); return el && el.classList.contains('open'); });
+    if (!busy && giftPickPending_ && giftPickPending_.voucherId === p.voucherId) openGiftPick_(p.voucherId);
+  }, 400);
+}
+function openGiftPick_(voucherId) {
+  const v = checkoutMemberVouchers.find(x => x.voucherId === voucherId);
+  const b = v && VOUCHER_BEHAVIOR[v.type];
+  if (!isPickGift_(b)) return;
+  const left = perUnitGiftQty_(b) - giftPicksOf_(voucherId).length;
+  if (left <= 0) return;
+  let ov = document.getElementById('giftpick-overlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.className = 'overlay'; ov.id = 'giftpick-overlay';
+    ov.innerHTML = '<div class="sheet" id="giftpick-sheet"></div>';
+    document.body.appendChild(ov);
+  }
+  const opt = name => {
+    const it = catalogItemByName_(name);
+    const off = !it || itemAvailabilityMap[name];
+    const size = it && (it.price_m || it.price_l) && b.targetSize ? '（' + (b.targetSize === 'M' ? '中杯' : b.targetSize === 'L' ? '大杯' : b.targetSize) + '）' : '';
+    return `<button type="button" class="btn-secondary" ${off ? 'disabled' : ''} style="margin-top:8px;padding:12px;font-size:1rem;" onclick="chooseGiftPick_('${voucherId}', '${name.replace(/'/g, "\\'")}')">${escapeHtml_(name + size)}${off ? '（今日售完）' : ''}</button>`;
+  };
+  document.getElementById('giftpick-sheet').innerHTML = `
+    <h3 style="margin:0 0 6px;">🎁 節氣贈品（二選一）</h3>
+    <div style="font-size:0.85rem;color:var(--muted);">${escapeHtml_(v.type)}：每份「${escapeHtml_(b.requireItem)}」加點豪華經濟升級餐，送一份贈品。還有 <b>${left}</b> 份可以選。</div>
+    ${opt(b.targetItem)}${opt(b.targetItem2)}
+    <button type="button" style="width:100%;margin-top:10px;background:none;border:none;color:var(--muted);font-size:0.82rem;text-decoration:underline;cursor:pointer;" onclick="document.getElementById('giftpick-overlay').classList.remove('open')">等一下再選（購物車裡可以再選）</button>
+    <button type="button" style="width:100%;margin-top:2px;background:none;border:none;color:#a30000;font-size:0.8rem;cursor:pointer;" onclick="declineGiftPick_('${voucherId}')">這次不要贈品</button>`;
+  ov.classList.add('open');
+}
+function declineGiftPick_(voucherId) {
+  document.getElementById('giftpick-overlay').classList.remove('open');
+  declinedGifts_.add(voucherId);
+  updateCartBar();
+  if (document.getElementById('cart-overlay').classList.contains('open')) renderCart();
+}
+// 選了某一樣：打開那個品項的客製化畫面(份量固定、二折雞翅這類固定第一種份量)，加入購物車時變成一行贈品(見 confirmAddToCart)
+function chooseGiftPick_(voucherId, name) {
+  const v = checkoutMemberVouchers.find(x => x.voucherId === voucherId);
+  const b = v && VOUCHER_BEHAVIOR[v.type];
+  document.getElementById('giftpick-overlay').classList.remove('open');
+  if (!b) return;
+  const card = [...document.querySelectorAll('#menu .item')].find(el => el.dataset.itemName === name);
+  const btn = card && card.querySelector('.add');
+  if (!btn) { alert(`「${name}」目前線上不提供，請改選另一樣`); return; }
+  if (btn.disabled) { alert(`「${name}」今天已售完，請改選另一樣`); return; }
+  closeWallet_();
+  document.getElementById('cart-overlay').classList.remove('open');
+  pendingGiftPick_ = { voucherId, type: v.type, item: name };
+  btn.click();
+  const sizes = document.querySelectorAll('#item-modal-size input[name="size"]');
+  if (b.targetSize && sizes.length) sizes.forEach(r => {
+    if (r.value === b.targetSize) { if (!r.checked) { r.checked = true; r.dispatchEvent(new Event('change')); } }
+    else r.disabled = true;
+  });
+  document.querySelectorAll('#item-modal-size input[name="qty"]').forEach(r => {   // 3入/7入 這種：贈品固定第一種
+    if (r.value === 'a') { if (!r.checked) { r.checked = true; r.dispatchEvent(new Event('change')); } }
+    else r.disabled = true;
+  });
+}
 function actVouchersForPickup_() {
   const pick = currentPickupISO_();
   return checkoutMemberVouchers.filter(v => v.actDate && v.actDate === pick && VOUCHER_BEHAVIOR[v.type] && !actFullBlocked_.has(v.voucherId));
@@ -1363,6 +1438,7 @@ function actCartMatch_(b) {
 // 雞塊日(每份送一份)：贈品份數＝購物車裡需搭配品項的份數
 function perUnitGiftQty_(b) { return cart.filter(c => !c.x2 && !c.gift && c.baseName === b.requireItem && promoOptsOk_(b, c.name)).reduce((t, c) => t + c.qty, 0); }
 function syncActGifts_() {
+  giftPickPending_ = null;
   if ((groupCtx || groupCheckoutMode) && !inGroupOwnShare_()) return false;   // 揪團只在點自己那份時送(團主結帳時贈品已經在各人的餐點裡)
   let changed = false;
   const want = new Set();
@@ -1384,6 +1460,13 @@ function syncActGifts_() {
       changed = true;
       return;
     }
+    // 節氣贈品二選一：客人選好的贈品留到可以送的份數(套餐刪掉/改份數就拿掉多的)，還沒選完的記起來請客人選
+    if (isPickGift_(b)) {
+      const n = perUnitGiftQty_(b), picks = giftPicksOf_(v.voucherId);
+      picks.slice(0, n).forEach(c => want.add(c.lineKey));
+      if (picks.length < n && !giftPickPending_) giftPickPending_ = { voucherId: v.voucherId, type: v.type, left: n - picks.length };
+      return;
+    }
     if (isSamePair_(b) || b.targetCat || !b.targetItem) return;
     // 雞塊日(每份送一份)：點幾份送幾份；週四(需搭配分類)：送 1 份
     const perUnit = b.pairMode === '每份送一份';
@@ -1402,6 +1485,7 @@ function syncActGifts_() {
   cart = cart.filter(c => !c.gift || want.has(c.lineKey));
   if (cart.length !== before) changed = true;
   if (changed) saveCartSession();
+  if (giftPickPending_) scheduleGiftPickPrompt_();   // 節氣贈品還沒選：跳出二選一
   return changed;
 }
 // 自動領券(第三波，老闆定案 Y：線上全部用券但客人不用按)：取餐日是今天/明天的活動日、購物車有用得到的品項、
@@ -1437,6 +1521,7 @@ function recalcVoucherDiscounts_() {
     // 同款兩件一組(買一送一/第二套六折/加一元多一件)：先選上，下面算完是 $0 就拿掉
     if (isSamePair_(b)) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: null, samePair: true, auto: true });
     else if (b.targetCat) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: null, pair: true, auto: true });
+    else if (isPickGift_(b)) { if (giftPicksOf_(v.voucherId).length) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: null, giftPick: true, auto: true }); }
     else if (cart.some(c => c.lineKey === giftKey_(v.voucherId))) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: giftKey_(v.voucherId), auto: true });
   });
   checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => !actFullBlocked_.has(v.voucherId) && (!v.auto || !v.targetLineKey || cart.some(c => c.lineKey === v.targetLineKey)));
@@ -1455,6 +1540,18 @@ function recalcVoucherDiscounts_() {
   checkoutSelectedVouchers.forEach(v => {
     const b = VOUCHER_BEHAVIOR[v.type] || {};
     if (b.mode === 'fixed') { v.discountAmount = b.amount; return; }
+    if (v.giftPick) {
+      // 節氣贈品：客人選的每一份折基本價(加料照收；份量已固定，後端同一套)
+      let amt = 0;
+      giftPicksOf_(v.voucherId).forEach(c => {
+        if ((used[c.lineKey] || 0) >= c.qty) return;
+        used[c.lineKey] = (used[c.lineKey] || 0) + 1;
+        const base = c.basePrice != null ? c.basePrice : c.price;
+        amt += b.effect && b.effect !== 'free' ? tierPromoUnitDiscount_(b.effect, base) : base;
+      });
+      v.discountAmount = amt;
+      return;
+    }
     if (b.targetCat || isSamePair_(b)) return;
     const line = v.targetLineKey ? cart.find(c => c.lineKey === v.targetLineKey) : null;
     if (!line) return;   // 美式狂想乙套等特例維持原本算好的金額
@@ -1501,7 +1598,7 @@ function recalcVoucherDiscounts_() {
     }
     v.discountAmount = amount;
   });
-  checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => !(v.auto && (v.pair || v.samePair) && !v.discountAmount));
+  checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => !(v.auto && (v.pair || v.samePair || v.giftPick) && !v.discountAmount));
   // 不併用(第三波)：有勾不併用的券就只能單獨用——比一比「只用它」和「用其他券」哪個折比較多，留划算的
   exclusiveNote_ = '';
   const exc = checkoutSelectedVouchers.filter(v => (VOUCHER_BEHAVIOR[v.type] || {}).exclusive);
@@ -1974,6 +2071,14 @@ function actVoucherRow_(v, b, pick) {
     if (on) status = `已自動套用，折 $${sel.discountAmount}`;
     else if (isAddOne_(b) && declinedGifts_.has(v.voucherId)) { status = '你已移除第二份'; action = addBack; }
     else { status = escapeHtml_(actPairHint_(b)); action = goBtn(actTargetCat_(b)); }
+  } else if (isPickGift_(b)) {
+    // 節氣升級加碼(10-04)：每份美X加豪華經濟升級餐送一份，贈品二選一
+    const picks = giftPicksOf_(v.voucherId), n = perUnitGiftQty_(b);
+    on = picks.length > 0;
+    if (declinedGifts_.has(v.voucherId)) { status = '你已選擇這次不要贈品'; action = btn('加回來', `declinedGifts_.delete('${v.voucherId}');giftPickPromptKey_='';updateCartBar();renderCheckoutVoucherList();if(document.getElementById('cart-overlay').classList.contains('open'))renderCart();`); }
+    else if (!n) { status = `每份「${escapeHtml_(b.requireItem)}」加點豪華經濟升級餐，送一份${escapeHtml_(b.targetItem)}或${escapeHtml_(b.targetItem2)}（二選一）`; action = goBtn(catOfItemName_(b.requireItem)); }
+    else if (picks.length < n) { status = (picks.length ? `已選：${escapeHtml_(picks.map(c => c.baseName).join('、'))}，` : '') + `還有 ${n - picks.length} 份贈品可以選`; action = btn('選贈品', `closeWallet_();openGiftPick_('${v.voucherId}')`); }
+    else status = `已自動套用：${escapeHtml_(picks.map(c => c.baseName).join('、'))}`;
   } else if (b.pairMode === '每份送一份') {
     // 第三波：雞塊日點幾份送幾份
     const st = actGiftState_(v), line = cart.find(c => c.lineKey === giftKey_(v.voucherId));
@@ -2202,6 +2307,11 @@ function updateCheckoutTotalDisplay() {
   const d = cartDue_();
   renderCartTotals_(d);
   refreshTierPerkBadges_();
+  // 節氣贈品還沒選完(10-04)：購物車放一顆按鈕，二選一視窗關掉了也找得到
+  let gn = document.getElementById('giftpick-notice');
+  if (!gn) { gn = document.createElement('div'); gn.id = 'giftpick-notice'; el.parentNode.insertBefore(gn, el); }
+  const gpp = giftPickPending_;
+  gn.innerHTML = gpp ? `<button type="button" class="btn-secondary" style="margin:6px 0;border-color:#e8632c;color:#e8632c;" onclick="openGiftPick_('${gpp.voucherId}')">🎁 還有 ${gpp.left} 份節氣贈品可以選（二選一）</button>` : '';
   if (inGroupOwnShare_()) refreshGroupCartUi_();   // 揪團點自己那份：「送出並付款（$X）」按鈕／活動優惠提示跟著券更新
   if (!d.discount && !d.perks.total && !d.needs && !d.groupAct) { el.textContent = ''; return; }
   const parts = [];
@@ -3076,6 +3186,7 @@ function wizAfterRestore_() {
 
 function closeItemModal() {
   const wasEditing = !!(currentModal && currentModal.editingLineKey);
+  pendingGiftPick_ = null;   // 節氣贈品選了又關掉：不要讓之後一般加的同品項變成贈品(加入時已在 confirmAddToCart 用掉)
   document.body.classList.remove('wiz-hide-price');
   document.getElementById('item-overlay').classList.remove('open');
   const btn = document.querySelector('#item-overlay button.btn-primary[onclick="confirmAddToCart()"]');
@@ -3182,8 +3293,17 @@ function confirmAddToCart() {
     comboDrinkExtraGroups: (currentModal.comboDrinkExtraGroups || []).slice(), activeDrinkGroupKey: currentModal.activeDrinkGroupKey,
     x1: x1Addon ? x1Addon.name : null, x1Sauces: Object.fromEntries(x1SauceGroups.map(g => [g.name, g.picks.slice()]))
   };
-  const existing = cart.find(c => c.lineKey === lineKey);
-  if (existing) { existing.qty += currentModal.qty; existing.edit = editSnap; }
+  // 節氣贈品(10-04)：從二選一點進來的這一份另外一行贈品(不合併、不能變更，券折成 $0)；多點的份數照一般品項加
+  const gp = pendingGiftPick_;
+  if (gp && !editingKey && gp.item === currentModal.item.name) {
+    pendingGiftPick_ = null;
+    cart.push({ lineKey: giftKey_(gp.voucherId) + '|' + Date.now().toString(36), name: displayName, baseName: currentModal.item.name, size: currentModal.size, price: unit, basePrice: currentModal.basePrice,
+      qty: 1, note: '節氣贈品' + (note ? '，' + note : ''), gift: { voucherId: gp.voucherId, type: gp.type, pick: true } });
+    currentModal.qty -= 1;
+  }
+  const existing = currentModal.qty > 0 ? cart.find(c => c.lineKey === lineKey) : null;
+  if (currentModal.qty <= 0) { /* 只加了贈品 */ }
+  else if (existing) { existing.qty += currentModal.qty; existing.edit = editSnap; }
   // baseName/basePrice供顧客自助套用兌換券折抵用：只免基準價(客製化加購仍要收錢)，見結帳頁兌換券流程
   else {
     const newLine = {lineKey, name: displayName, baseName: currentModal.item.name, size: currentModal.size, price: unit, basePrice: currentModal.basePrice, qty: currentModal.qty, note, edit: editSnap,

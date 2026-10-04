@@ -3862,6 +3862,12 @@ function renderPmList() {
 }
 
 // 自動加購品項下拉選單(2026-09-17改版，原本是自由輸入文字，打錯字會悄悄失效)：從真實菜單資料長出來，不用手打
+// 節氣升級加碼(10-04)：限定選項一鍵填「豪華經濟升級餐」的選項(照菜單的客製化選項，菜單還沒載入用目前的三款)
+function pmFillDeluxeOpts_() {
+  const g = (typeof mcOptionGroups !== 'undefined' && mcOptionGroups && mcOptionGroups.deluxe_upgrade) || null;
+  const names = g && (g.options || []).length ? g.options.map(o => o.name) : ['美式狂想 x 雙人脆薯', '美式狂想 x 九塊雞塊', '美式狂想 x 十粒鍋貼'];
+  document.getElementById('pm-f-require-opts').value = names.join('、');
+}
 function pmAutoAddItemOptions_(selected) {
   const items = [];
   Object.keys(mcCatalog).forEach(cat => {
@@ -3990,6 +3996,7 @@ function renderPmEditor() {
           <span style="display:flex;gap:6px;">
             <input id="pm-f-require-opts" style="flex:1;min-width:0;" value="${escapeHtml(p.requireOpts || '')}" placeholder="正常冰、少冰…">
             <button type="button" class="pm-mini-btn" onclick="document.getElementById('pm-f-require-opts').value='正常冰、少冰、微冰、小碎冰'">限冰飲</button>
+            <button type="button" class="pm-mini-btn" onclick="pmFillDeluxeOpts_()">豪華升級</button>
           </span>
           <span class="pm-tip">客製化要含其中一個，用「、」分隔</span>
         </label>
@@ -4005,6 +4012,7 @@ function renderPmEditor() {
         <tr><th>同款</th><td>例：節氣第二件折扣｜適用品項或適用分類＋配對「同款」：同一款兩件一組，客製化可不同，折第二件基本價（加料照收）</td></tr>
         <tr><th>同款同客製化</th><td>例：買一送一、加一元多一件｜品名、客製化、份量都一樣才算一組；加一元多一件線上會自動多加一份、第二份基本價 $1</td></tr>
         <tr><th>每份送一份</th><td>例：雞塊日｜適用品項＝送什麼、需搭配品項＝點什麼；生效日～到期日設當期，沒改到下一期就不會送</td></tr>
+        <tr><th>節氣升級加碼</th><td>例：立春｜全額免費＋配對「每份送一份」＋需搭配品項＝當月美X＋限定選項按「豪華升級」＋適用品項、適用品項2＝贈品二選一（飲料選適用份量 M）；線上客人自己選、另印一行節氣贈品。門市照舊用 POS 按鈕手動</td></tr>
         <tr><th>不併用</th><td>線上同一張單不能再用其他券（會員等級權益照常）</td></tr>
       </table>
     </details>
