@@ -763,6 +763,7 @@ function applyLineMember_(member) {
   updatePickupBar_();
   renderMemberVerified_(member);
   loadCheckoutVouchers();
+  if (GIFT_TOKEN_FROM_URL) openGiftClaim_();
 }
 function renderLineRegister_(lineName) {
   lineStatusHtml_(`
@@ -1813,11 +1814,100 @@ function loadCheckoutVouchers() {
   });
 }
 
+// ---------------------------------------------------------------
+// 兌換券贈送(2026-10-04，規格見 兌換券贈送設計_2026-10-04.md)：集點兌換來的券可以「送給朋友」→ 一次性連結(7 天)用 LINE 傳；
+// 朋友點連結(?gift=亂碼)、LINE 登入(非會員先註冊)後跳出領取視窗。送出後券變「贈送中」(自己不能用，朋友領取前可收回)；
+// 朋友領到的券不能再送。後端 giftVoucherCreate/Cancel/Claim 一律認 LINE 登入的本人，giftVoucherInfo 憑連結亂碼看誰送的
+// ---------------------------------------------------------------
+const GIFT_TOKEN_FROM_URL = (() => { const t = new URLSearchParams(location.search).get('gift') || ''; return /^[0-9a-f]{32}$/.test(t) ? t : ''; })();
+let giftClaimShown_ = false;
+function giftDaysLeft_(iso) { const ms = new Date(iso).getTime() - Date.now(); return ms > 0 ? Math.ceil(ms / 86400000) : 0; }
+function giftBlockHtml_() {
+  const giftable = memberAllVouchers_.filter(v => v.giftable);
+  const pending = memberAllVouchers_.filter(v => v.statusText === '贈送中');
+  if (!giftable.length && !pending.length) return '';
+  const row = (name, right) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;font-size:0.82rem;"><span>${escapeHtml_(name)}</span>${right}</div>`;
+  const btn = (label, onclick) => `<button type="button" class="btn-secondary" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;flex:none;" onclick="${onclick}">${label}</button>`;
+  return `<div style="border-top:1px dashed var(--border);margin-top:10px;padding-top:8px;">
+    <div style="font-weight:700;font-size:0.85rem;">🎁 送給朋友</div>
+    <div style="font-size:0.74rem;color:var(--muted);margin-bottom:4px;">集點兌換的券可以送朋友，朋友點連結就能領（7 天沒人領自動退回）</div>
+    ${pending.map(v => row(v.type, `<span style="display:flex;align-items:center;gap:6px;"><span style="font-size:0.74rem;color:var(--muted);">等待朋友領取${v.giftExpiresAt ? '（剩 ' + giftDaysLeft_(v.giftExpiresAt) + ' 天）' : ''}</span>${btn('收回', `giftVoucherCancel_('${v.voucherId}')`)}</span>`)).join('')}
+    ${giftable.map(v => row(v.type, btn('送給朋友', `giftVoucherSend_('${v.voucherId}')`))).join('')}
+  </div>`;
+}
+function giftVoucherSend_(voucherId) {
+  const v = memberAllVouchers_.find(x => x.voucherId === voucherId);
+  if (!v) return;
+  if (!confirm(`把「${v.type}」送給朋友？\n\n・會產生一個連結，用 LINE 傳給朋友\n・朋友點連結、用 LINE 登入就能領（還不是會員可以當場註冊）\n・7 天沒人領會自動退回給你\n・朋友領取前，你可以在這裡收回`)) return;
+  apiPost_({ action: 'giftVoucherCreate', voucherId }).then(d => {
+    if (d.status !== 'ok') throw new Error(d.message || '送出失敗');
+    loadCheckoutVouchers();
+    const url = location.origin + location.pathname + '?gift=' + d.token;
+    const who = verifiedMember && verifiedMember.name ? verifiedMember.name : '朋友';
+    const text = `${who} 送你一張 A-Bao「${d.type}」🎁 7 天內點連結領取 👉 ${url}`;
+    if (confirm('連結已產生！\n\n按「確定」用 LINE 傳給朋友\n按「取消」複製連結（自己貼給朋友）')) {
+      window.open('https://line.me/R/msg/text/?' + encodeURIComponent(text), '_blank');
+    } else {
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => alert('已複製，貼給朋友就可以了')).catch(() => prompt('請長按複製，貼給朋友：', text));
+    }
+  }).catch(err => alert(err.message));
+}
+function giftVoucherCancel_(voucherId) {
+  if (!confirm('確定收回這張券？收回後朋友點連結就領不到了')) return;
+  apiPost_({ action: 'giftVoucherCancel', voucherId }).then(d => {
+    if (d.status !== 'ok') throw new Error(d.message || '收回失敗');
+    alert('已收回，券回到你的帳號');
+    loadCheckoutVouchers();
+  }).catch(err => { alert(err.message); loadCheckoutVouchers(); });
+}
+// 領取：處理完(領到／自己的／已失效)就把網址上的 gift 拿掉，重新整理不會再跳
+function giftClearUrl_() {
+  const u = new URL(location.href); u.searchParams.delete('gift'); history.replaceState(null, '', u.toString());
+}
+function openGiftClaim_() {
+  if (giftClaimShown_) return;
+  giftClaimShown_ = true;
+  const body = document.getElementById('home-detail-body');
+  const close = `document.getElementById('home-detail-overlay').classList.remove('open')`;
+  const show = html => { body.innerHTML = html; document.getElementById('home-detail-overlay').classList.add('open'); };
+  show('<div style="padding:20px 0;text-align:center;color:var(--muted);">讀取贈送的券…</div>');
+  apiGet_({ action: 'giftVoucherInfo', token: GIFT_TOKEN_FROM_URL }).then(d => {
+    if (d.status !== 'ok' || d.state !== '待領取') {
+      giftClearUrl_();
+      const msg = d.status !== 'ok' || !d.state ? (d.message || '找不到這張贈送的券，連結可能不完整') : d.state === '已領取' ? '這張券已經被領取了' : d.state === '已收回' ? '送的人已經把這張券收回了' : d.state === '已過期' ? '這張券超過 7 天沒人領，已退回給送的人' : '這張券已經失效';
+      show(`<h2 style="margin:0 0 10px;font-size:1.05rem;">🎁 贈送的兌換券</h2><p style="font-size:0.92rem;">${escapeHtml_(msg)}</p><button type="button" class="btn-primary" onclick="${close}">知道了</button>`);
+      return;
+    }
+    show(`<h2 style="margin:0 0 10px;font-size:1.05rem;">🎁 ${escapeHtml_(d.fromName)} 送你一張兌換券</h2>
+      <div style="font-size:1.05rem;font-weight:700;color:var(--brand);margin:6px 0;">${escapeHtml_(d.type)}</div>
+      <div style="font-size:0.82rem;color:var(--muted);">${giftDaysLeft_(d.expiresAt)} 天內領取，領到後線上點餐、門市都能用</div>
+      <div id="gift-claim-msg" style="color:#a30000;font-size:0.84rem;margin-top:8px;"></div>
+      <button type="button" class="btn-primary" id="gift-claim-btn" onclick="claimGiftVoucher_()">領取</button>`);
+  }).catch(() => show(`<p>讀取失敗，請確認網路連線後重新整理頁面</p><button type="button" class="btn-primary" onclick="${close}">知道了</button>`));
+}
+function claimGiftVoucher_() {
+  const btn = document.getElementById('gift-claim-btn'), msg = document.getElementById('gift-claim-msg');
+  btn.disabled = true; msg.textContent = '';
+  apiPost_({ action: 'giftVoucherClaim', token: GIFT_TOKEN_FROM_URL }).then(d => {
+    if (d.status !== 'ok') {
+      if (d.code === 'gift_self' || d.code === 'gift_done' || d.code === 'gift_invalid') giftClearUrl_();
+      msg.textContent = d.message || '領取失敗'; btn.disabled = d.code === 'gift_self' || d.code === 'gift_done' || d.code === 'gift_invalid';
+      return;
+    }
+    giftClearUrl_();
+    document.getElementById('home-detail-overlay').classList.remove('open');
+    alert(`已領取「${d.type}」！\n可以在「🎟 兌換券」用券點餐，門市也能用`);
+    loadCheckoutVouchers();
+    setTimeout(() => openWallet_('voucher'), 800);
+  }).catch(() => { msg.textContent = '領取失敗，請確認網路連線後再試'; btn.disabled = false; });
+}
+
 function renderCheckoutVoucherList() {
   const listEl = document.getElementById('checkout-voucher-list');
   updateWalletPills_();
+  const giftHtml = giftBlockHtml_();
   if (checkoutMemberVouchers.length === 0) {
-    listEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:6px 0;">目前沒有可用兌換券</div>';
+    listEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:6px 0;">目前沒有可用兌換券</div>' + giftHtml;
     return;
   }
   const selectedIds = new Set(checkoutSelectedVouchers.map(v => v.voucherId));
@@ -1845,7 +1935,7 @@ function renderCheckoutVoucherList() {
       <span>${v.type}</span>
       <button type="button" class="btn-${isSelected ? 'primary' : 'secondary'}" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" onclick="toggleCheckoutVoucher('${v.voucherId}','${v.type}')">${isSelected ? '取消套用' : '套用'}</button>
     </div>`;
-  }).join('') + (exclusiveNote_ ? `<div style="font-size:0.76rem;color:#7a5a00;background:#fff6d6;border-radius:6px;padding:5px 8px;margin-top:6px;">${escapeHtml_(exclusiveNote_)}</div>` : '');
+  }).join('') + (exclusiveNote_ ? `<div style="font-size:0.76rem;color:#7a5a00;background:#fff6d6;border-radius:6px;padding:5px 8px;margin-top:6px;">${escapeHtml_(exclusiveNote_)}</div>` : '') + giftHtml;
 }
 
 function catOfItemName_(name) { return Object.keys(CATALOG).find(k => (CATALOG[k] || []).some(it => it.name === name)) || ''; }
