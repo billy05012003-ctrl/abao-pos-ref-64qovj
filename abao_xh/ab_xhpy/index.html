@@ -1269,7 +1269,8 @@ function findCartLineForVoucher(type) {
 var memberAllVouchers_ = [];     // 會員名下全部兌換券(含已使用/已過期)，看板判斷「已領取」
 var voucherUsedUnits_ = {};      // lineKey → 被品項兌換券用掉的件數(等級優惠算剩下的)
 function currentPickupISO_() {
-  if (inGroupEachShare_() && groupView.pickupDate) return groupView.pickupDate;   // 各付各的：取餐日是開團時定好的
+  const gp = inGroupOwnShare_() || groupFixedPickup_() ? groupView : null;   // 揪團：取餐日是開團時定好的
+  if (gp && gp.pickupDate) return gp.pickupDate;
   const el = document.getElementById('pickup-date');
   return el && el.value !== '' ? getPickupDateISO(Number(el.value)) : todayYmd_();
 }
@@ -1362,7 +1363,7 @@ function actCartMatch_(b) {
 // 雞塊日(每份送一份)：贈品份數＝購物車裡需搭配品項的份數
 function perUnitGiftQty_(b) { return cart.filter(c => !c.x2 && !c.gift && c.baseName === b.requireItem && promoOptsOk_(b, c.name)).reduce((t, c) => t + c.qty, 0); }
 function syncActGifts_() {
-  if ((groupCtx || groupCheckoutMode) && !inGroupEachShare_()) return false;   // 請客不送(只有各付各的自己付自己那份才送)
+  if ((groupCtx || groupCheckoutMode) && !inGroupOwnShare_()) return false;   // 揪團只在點自己那份時送(團主結帳時贈品已經在各人的餐點裡)
   let changed = false;
   const want = new Set();
   const companionUse = {};   // 加一元多一件：每一列已經配了幾份第二件
@@ -1409,7 +1410,7 @@ var autoClaimTried_ = new Set(), autoClaimTimer_ = null;
 function maybeAutoClaim_() {
   clearTimeout(autoClaimTimer_);
   autoClaimTimer_ = setTimeout(() => {
-    if (!verifiedMember || !lineSession_ || ((groupCtx || groupCheckoutMode) && !inGroupEachShare_())) return;
+    if (!verifiedMember || !lineSession_ || ((groupCtx || groupCheckoutMode) && !inGroupOwnShare_())) return;
     const pick = currentPickupISO_(), t = todayYmd_();
     if (pick !== t && pick !== homeAddDays_(t, 1)) return;
     const ids = HOME_ACTS.filter(a => {
@@ -1447,7 +1448,10 @@ function recalcVoucherDiscounts_() {
     if (b.requireCat && !cartHasCat_(b.requireCat)) return false;
     return true;
   });
+  // 請客團主結帳(10-04)：每個人自己的活動券已經折掉的件數(後端算好)先標起來，團主的券/等級優惠只算剩下的(後端同順序)
   const used = {};
+  if (groupCheckoutMode) cart.forEach(c => { if (c.groupActUsed > 0) used[c.lineKey] = c.groupActUsed; });
+  checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => checkoutMemberVouchers.some(x => x.voucherId === v.voucherId));
   checkoutSelectedVouchers.forEach(v => {
     const b = VOUCHER_BEHAVIOR[v.type] || {};
     if (b.mode === 'fixed') { v.discountAmount = b.amount; return; }
@@ -1803,7 +1807,7 @@ function loadCheckoutVouchers() {
   listEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;">查詢中...</div>';
   apiGet_({ action: 'getMemberVouchers', phone }).then(data => {
     memberAllVouchers_ = (data.status === 'ok') ? data.vouchers : [];
-    checkoutMemberVouchers = memberAllVouchers_.filter(v => v.usable);
+    checkoutMemberVouchers = memberAllVouchers_.filter(v => v.usable && groupVoucherAllowed_(v));   // 請客：見 groupVoucherAllowed_
     // 重新查詢(例如剛領完券)：還能用的已選券留著，其他的清掉避免對到舊資料
     const still = new Set(checkoutMemberVouchers.map(v => v.voucherId));
     checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => still.has(v.voucherId));
@@ -2171,12 +2175,15 @@ function toggleOtherNeedNone_(checked) {
 }
 
 // 購物車應付金額(原價−兌換券−會員等級權益＋其他需求)；購物車總計/下方購物車列/結帳預覽共用
+// 請客團主結帳(10-04)：大家送出餐點時用自己的活動券折的總額(後端算好、跟著揪團存著)
+function groupActDiscount_() { return groupCheckoutMode && groupView ? (Number(groupView.actDiscountTotal) || 0) : 0; }
 function cartDue_() {
   const raw = cart.reduce((s, c) => s + c.qty * c.price, 0);
   const discount = voucherDiscountTotal_();   // 先分配兌換券(同一件只被一種優惠折)，再算等級優惠
   const perks = myTierPerks_(cart);
   const needs = otherNeedsSum_();
-  return { raw, perks, discount, needs, due: Math.max(0, Math.max(0, raw - discount - perks.total) + needs) };
+  const groupAct = groupActDiscount_();
+  return { raw, perks, discount, needs, groupAct, due: Math.max(0, Math.max(0, raw - discount - groupAct - perks.total) + needs) };
 }
 // 購物車總計(2026-09-25老闆要求)：有折扣時顯示「原價(劃掉) → 應付」，避免總計跟應付金額對不起來；
 // 其他需求有加錢時(應付比原價多)直接顯示應付金額
@@ -2195,9 +2202,10 @@ function updateCheckoutTotalDisplay() {
   const d = cartDue_();
   renderCartTotals_(d);
   refreshTierPerkBadges_();
-  if (inGroupEachShare_()) refreshGroupCartUi_();   // 各付各的：「送出並付款（$X）」按鈕跟著券/權益更新(原本券讀回來後按鈕金額沒更新)
-  if (!d.discount && !d.perks.total && !d.needs) { el.textContent = ''; return; }
+  if (inGroupOwnShare_()) refreshGroupCartUi_();   // 揪團點自己那份：「送出並付款（$X）」按鈕／活動優惠提示跟著券更新
+  if (!d.discount && !d.perks.total && !d.needs && !d.groupAct) { el.textContent = ''; return; }
   const parts = [];
+  if (d.groupAct) parts.push(`揪團活動優惠 -$${d.groupAct}`);
   if (d.perks.total) parts.push(`會員權益（${verifiedMember.tier}）${tierPerkText_(d.perks)}`);
   if (d.discount) parts.push(`兌換券折抵 -$${d.discount}`);
   if (d.needs) parts.push(`其他需求 ${otherNeedPriceText_(d.needs)}`);
@@ -3317,12 +3325,15 @@ function goToPayment_() {
   if (!otherNeedsReady_()) return;
   if (!document.getElementById('agree-terms').checked) { alert('請先勾選同意自取規則、退款政策、服務條款及隱私權政策'); return; }
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
-  // 頁面開很久時，原本選的時段可能已經過了：重新整理一次，時間被改掉就停下來請客人確認，不能讓客人付了錢才發現時間不對
-  const prevD = document.getElementById('pickup-date').value, prevT = document.getElementById('pickup-time').value;
-  restoreCheckoutPickup_();
-  const nowD = document.getElementById('pickup-date').value, nowT = document.getElementById('pickup-time').value;
-  if (!nowT) { alert('請選擇取餐時間'); openPickupPicker_(); return; }
-  if (prevT && (nowD !== prevD || nowT !== prevT)) { alert('原本選的取餐時間已經不能選，已改成「' + document.getElementById('cart-pickup-text').textContent + '」，請確認後再按一次「前往付款」'); return; }
+  // 請客團主結帳(10-04)：取餐時間用開團時定的(後端也以揪團為準)，要改請回揪團畫面
+  if (!groupFixedPickup_()) {
+    // 頁面開很久時，原本選的時段可能已經過了：重新整理一次，時間被改掉就停下來請客人確認，不能讓客人付了錢才發現時間不對
+    const prevD = document.getElementById('pickup-date').value, prevT = document.getElementById('pickup-time').value;
+    restoreCheckoutPickup_();
+    const nowD = document.getElementById('pickup-date').value, nowT = document.getElementById('pickup-time').value;
+    if (!nowT) { alert('請選擇取餐時間'); openPickupPicker_(); return; }
+    if (prevT && (nowD !== prevD || nowT !== prevT)) { alert('原本選的取餐時間已經不能選，已改成「' + document.getElementById('cart-pickup-text').textContent + '」，請確認後再按一次「前往付款」'); return; }
+  }
   if (!document.getElementById('cust-name').value.trim()) { alert('請填寫取餐人姓名'); openPickupPicker_(); return; }
   submitOrder({ preventDefault() {} });
 }
@@ -3345,7 +3356,8 @@ let pendingOrderContext = null;
 function submitOrder(e) {
   e.preventDefault();
   const dateValue = document.getElementById('pickup-date').value;
-  if (Number(dateValue) === 0 && !isOrderingOpen()) {
+  const gp = groupFixedPickup_();   // 請客團主結帳：取餐時間用揪團定好的
+  if (!gp && Number(dateValue) === 0 && !isOrderingOpen()) {
     // 表單開著跨過接單截止時間的邊界情況，擋下並改成只能選其他日期
     alert('已超過今日接單時間，今天的取餐時段暫不開放，請改選其他日期。');
     checkOrderWindow();
@@ -3354,7 +3366,7 @@ function submitOrder(e) {
     return false;
   }
   // 取餐時間改成按鈕格子後不再是<form>裡的原生欄位，required不會擋，改用JS檢查(2026-09-18)
-  if (!document.getElementById('pickup-time').value) { alert('請選擇取餐時間'); return false; }
+  if (!gp && !document.getElementById('pickup-time').value) { alert('請選擇取餐時間'); return false; }
   const name = document.getElementById('cust-name').value.trim();
   if (!name) { alert('請填寫取餐人姓名'); openPickupPicker_(); return false; }
   const phone = document.getElementById('cust-phone').value.trim();
@@ -3363,15 +3375,15 @@ function submitOrder(e) {
   if (!phone) { alert('請輸入手機號碼'); backToCart(); document.getElementById('cust-phone').focus(); return false; }
   // 2026-09-16：保險檢查，防止驗證成功後又手動改了手機號碼欄位(showCheckout()已經擋過一次，這裡是雙重防呆)
   if (!verifiedMember || verifiedMember.phone !== phone) { alert('會員驗證資料有異動，請重新驗證'); backToCart(); return false; }
-  const dateLabel = formatDateLabel(Number(dateValue));
-  const time = `${dateLabel} ${document.getElementById('pickup-time').value}`;
+  const time = gp ? groupPickupText_() : `${formatDateLabel(Number(dateValue))} ${document.getElementById('pickup-time').value}`;
   const note = document.getElementById('cust-note').value;
   const rawTotal = cart.reduce((s, c) => s + c.qty * c.price, 0);
   const voucherDiscount = voucherDiscountTotal_();
   const perks = myTierPerks_(cart);   // 會員等級權益(後端會用同一套規則驗證)
   const otherNeeds = otherNeedsChosen_();   // 加價購×2其他需求(不打折，直接加在應付金額上)
   const otherNeedsSum = otherNeeds.reduce((s, a) => s + a.amount, 0);
-  const total = Math.max(0, Math.max(0, rawTotal - voucherDiscount - perks.total) + otherNeedsSum);
+  const groupAct = groupActDiscount_();   // 請客：大家自己的活動券(送出餐點時存好的)
+  const total = Math.max(0, Math.max(0, rawTotal - voucherDiscount - groupAct - perks.total) + otherNeedsSum);
   const appliedVoucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   // 2026-09-19：補送品項備註(note)，出單機廚房單會印在該品項下面；之前只送name/size/qty/price，客人寫的「少蔥」等會遺失
@@ -3382,7 +3394,7 @@ function submitOrder(e) {
   const payAtPickupChosen = PAY_AT_PICKUP_ENABLED && document.getElementById('checkout-payment-method').value === '取餐付款';
 
   const lines = cart.map(c => `- ${c.who ? '['+c.who+'] ' : ''}${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
-  const discountLine = (perks.total ? `會員權益（${verifiedMember.tier}）：${tierPerkText_(perks)}\n` : '') + (voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '')
+  const discountLine = (groupAct ? `揪團活動優惠：-$${groupAct}\n` : '') + (perks.total ? `會員權益（${verifiedMember.tier}）：${tierPerkText_(perks)}\n` : '') + (voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '')
     + (otherNeeds.length ? `其他需求：${otherNeeds.map(a => a.name + (a.amount ? '(' + otherNeedPriceText_(a.amount) + ')' : '')).join('、')}\n` : '');
   const paymentNote = payAtPickupChosen
     ? '（已選擇取餐現場付款，請於取餐時完成付款）'
@@ -3406,8 +3418,8 @@ function submitOrder(e) {
 
   createPendingOrderOnBackend({
     storeId: 'meibao',
-    pickupDate: getPickupDateISO(Number(dateValue)),
-    pickupTime: document.getElementById('pickup-time').value,
+    pickupDate: gp ? gp.pickupDate : getPickupDateISO(Number(dateValue)),
+    pickupTime: gp ? gp.pickupTime : document.getElementById('pickup-time').value,
     items: items,
     totalAmount: total,
     // 2026-09-19：帶上已驗證的會員電話與所選兌換券編號，由後端驗證券、付款成功時核銷券並核發點數(不再靠付款後回到本頁才核銷)
@@ -3840,11 +3852,34 @@ function groupStatusClass_(st) { return st === '收單中' ? 'open' : (st === '�
 function groupMinutesLeft_() { if (!groupView || !groupView.deadline) return null; return Math.ceil((new Date(groupView.deadline).getTime() - Date.now()) / 60000); }
 function isGroupHost_() { return !!(groupCtx && groupCtx.hostToken); }
 function isGroupEach_() { return !!(groupView && groupView.payMode === 'each'); }
-// 揪團「各付各的」自己付自己那份(10-04 第三波第3段)：活動券照一般點餐自動領、自動加贈品、自動套用，取餐日＝開團時定的；
-// 後端驗券/核銷/退款本來就認付錢的本人。請客不在這裡(老闆定案簡單版：只用團主自己的券、只折團主自己點的，第二段再做)。
-// 頁面剛載入時揪團變數可能還沒宣告(let)，用 try 包起來
-function inGroupEachShare_() {
-  try { return !!(groupCtx && groupView && isGroupEach_() && !groupCheckoutMode && !isGroupFinished_()); } catch (e) { return false; }
+// 揪團裡點自己那份(10-04 第三波第3段)：各付各的(自己付)、請客(朋友/團主送出自己的餐點，之後團主一次付)都一樣，
+// 活動券照一般點餐自動領、自動加贈品、自動套用，取餐日＝開團時定的。請客的券跟著餐點存進揪團，團主付款成功才核銷給各自的主人；
+// 只有開團就選了取餐時間的團才算(10-04 之前開的請客團沒有)。頁面剛載入時揪團變數可能還沒宣告(let)，用 try 包起來
+function inGroupOwnShare_() {
+  try { return !!(groupCtx && groupView && groupView.pickupDate && !groupCheckoutMode && !isGroupFinished_()); } catch (e) { return false; }
+}
+// 請客團主結帳中、揪團有定好取餐時間：取餐時間用揪團的，不用再選
+function groupFixedPickup_() {
+  try { return groupCheckoutMode && groupView && groupView.pickupDate ? groupView : null; } catch (e) { return null; }
+}
+// 請客(10-04 老闆定案 1a)：送出自己的餐點時只能用活動券(集點兌換券留到自己點餐時用)；團主結帳時活動券已經在送出餐點時存好，只能再用集點兌換券等
+function groupVoucherAllowed_(v) {
+  if (inGroupOwnShare_() && !isGroupEach_()) return !!v.actDate;
+  if (groupFixedPickup_()) return !v.actDate;
+  return true;
+}
+function isActVoucherId_(id) { const v = memberAllVouchers_.find(x => x.voucherId === id); return !!(v && v.actDate); }
+// 請客送出自己的餐點時套到的活動券(跟著餐點存進揪團)
+function groupMyActVouchers_() {
+  if (!inGroupOwnShare_() || isGroupEach_()) return [];
+  return checkoutSelectedVouchers.filter(v => isActVoucherId_(v.voucherId) && v.discountAmount > 0);
+}
+// 購物車提示：折多少、會用掉今天的活動名額(老闆要求提示)
+function groupActHint_() {
+  const acts = groupMyActVouchers_();
+  if (!acts.length) return '';
+  const sum = acts.reduce((s, v) => s + v.discountAmount, 0);
+  return `　🎁 你的活動優惠：${[...new Set(acts.map(v => v.type))].join('、')} -$${sum}（會用掉你今天的活動名額；${groupView.hostName} 付款後才算用掉，揪團沒成立的話券會留著）`;
 }
 function groupMe_() { return groupView ? groupView.members.find(m => m.isMe) : null; }
 // 揪團一律要會員：購物車裡的會員驗證要完成、且手機欄位沒被改過
@@ -3928,8 +3963,19 @@ function refreshGroupCartUi_() {
   const agreeRow = document.getElementById('agree-terms-row');
   const noteBox = document.getElementById('cust-note-box');
   const pickupRow = document.getElementById('cart-pickup-row');
+  // 請客團主結帳、揪團有定好取餐時間(10-04)：取餐時間不能在這裡改，顯示揪團的時間(要改回揪團畫面)
+  let fixedRow = document.getElementById('group-pickup-fixed');
+  if (!fixedRow) {
+    fixedRow = document.createElement('div');
+    fixedRow.id = 'group-pickup-fixed';
+    fixedRow.style.cssText = 'display:none;font-size:0.9rem;padding:8px 2px;';
+    pickupRow.after(fixedRow);
+  }
+  const gp = groupFixedPickup_();
+  fixedRow.style.display = gp ? 'block' : 'none';
+  if (gp) fixedRow.innerHTML = `取餐 <b>${escapeHtml_(groupPickupText_())}</b><span style="color:var(--muted);font-size:0.8rem;">（揪團設定，要改時間請回揪團畫面）</span>`;
   if (groupCheckoutMode || !inGroup) {   // 一般點餐，或請客團主結帳(走一般結帳流程：會員驗證/取餐時間/付款)
-    box.style.display = 'none'; goCheckout.style.display = 'block'; agreeRow.style.display = 'flex'; noteBox.style.display = ''; pickupRow.style.display = 'flex';
+    box.style.display = 'none'; goCheckout.style.display = 'block'; agreeRow.style.display = 'flex'; noteBox.style.display = ''; pickupRow.style.display = gp ? 'none' : 'flex';
     return;
   }
   // 在揪團裡：會員驗證照樣要做(揪團一律要會員)，但不走一般結帳，改成送出到揪團
@@ -3949,9 +3995,9 @@ function refreshGroupCartUi_() {
     ? (paid ? `你已經${me.payState === '付款中' ? '送出付款' : '付款'}，不能再修改餐點。` : `揪團目前「${groupView.groupStatus}」，已不能再修改餐點。`)
     : each
       ? `${who}請先在上方完成會員驗證，再送出並付款你自己那份（取餐時間：${groupPickupText_()}）。`
-      : isGroupHost_()
+      : (isGroupHost_()
         ? `${who}把你的餐點送進揪團，結單後由你一次付清。`
-        : `${who}請先在上方完成會員驗證，再把餐點送進「${groupView.hostName} 的揪團」（${groupView.hostName} 請客，不用付款）。`;
+        : `${who}請先在上方完成會員驗證，再把餐點送進「${groupView.hostName} 的揪團」（${groupView.hostName} 請客，不用付款）。`) + groupActHint_();
   document.getElementById('group-agree-row').style.display = open && each ? 'flex' : 'none';
   const btn = document.getElementById('group-submit-btn');
   btn.style.display = open ? 'block' : 'none';
@@ -3960,12 +4006,13 @@ function refreshGroupCartUi_() {
 }
 
 function onGroupPayModeChange_() {
+  // 10-04 起請客也開團就選取餐時間(朋友點餐時才知道是不是活動日、能套當天優惠)
   const each = document.querySelector('input[name="group-paymode"]:checked').value === 'each';
-  document.getElementById('group-pickup-box').style.display = each ? 'block' : 'none';
+  document.getElementById('group-pickup-box').style.display = 'block';
   document.getElementById('group-create-note').textContent = each
     ? '每個人付款後訂單就各自成立，照上面的取餐時間出餐。'
-    : '截止後 2 小時內沒有完成付款，揪團會自動作廢。';
-  if (each) { populatePickupDate(GROUP_PICKUP_IDS_); populatePickupTime(document.getElementById(GROUP_PICKUP_IDS_.date).value, GROUP_PICKUP_IDS_); }
+    : '大家點餐時會用自己的會員身分套當天的活動優惠。你付款前可以改取餐時間（日期不能改）；截止後 2 小時內沒有完成付款，揪團會自動作廢。';
+  populatePickupDate(GROUP_PICKUP_IDS_); populatePickupTime(document.getElementById(GROUP_PICKUP_IDS_.date).value, GROUP_PICKUP_IDS_);
 }
 function openGroupCreate() {
   if (!groupVerifiedPhone_()) { alert(LINE_LOGIN_ON ? '揪團需要會員，請先在下方用 LINE 登入並完成會員註冊' : '揪團需要會員，請先在下方輸入手機號碼並完成會員驗證'); document.getElementById('cust-phone').focus(); return; }
@@ -3983,12 +4030,10 @@ function createGroup() {
   if (!phone) { alert('會員驗證資料有異動，請回購物車重新驗證'); return; }
   const payMode = document.querySelector('input[name="group-paymode"]:checked').value;
   const payload = { action: 'groupCreate', storeId: 'meibao', hostName: name, memberPhone: phone, payMode, deadlineMin: Number(document.getElementById('group-deadline').value), items: [] };   // 2026-09-30：開團不帶餐點，團主之後跟朋友一樣自己送出
-  if (payMode === 'each') {
-    const t = document.getElementById(GROUP_PICKUP_IDS_.time).value;
-    if (!t) { alert('請選擇取餐時間'); return; }
-    payload.pickupDate = getPickupDateISO(Number(document.getElementById(GROUP_PICKUP_IDS_.date).value));
-    payload.pickupTime = t;
-  }
+  const t = document.getElementById(GROUP_PICKUP_IDS_.time).value;   // 兩種都要選(請客 10-04 起)
+  if (!t) { alert('請選擇取餐時間'); return; }
+  payload.pickupDate = getPickupDateISO(Number(document.getElementById(GROUP_PICKUP_IDS_.date).value));
+  payload.pickupTime = t;
   const btn = document.getElementById('group-create-btn');
   btn.disabled = true; btn.textContent = '開團中…';
   apiPost_(payload).then(data => {
@@ -4012,19 +4057,23 @@ function submitMyGroupItems() {
   const each = isGroupEach_();
   if (!otherNeedsReady_()) return;   // 自己的其他需求
   if (each && !document.getElementById('group-agree-terms').checked) { alert('請先勾選同意退款政策、服務條款及隱私權政策'); return; }
-  if (each) recalcVoucherDiscounts_();   // 活動券/贈品先算到最新，送進揪團的品項跟付款金額才對得上
+  if (inGroupOwnShare_()) recalcVoucherDiscounts_();   // 活動券/贈品先算到最新，送進揪團的品項跟金額才對得上
   const btn = document.getElementById('group-submit-btn');
   btn.disabled = true; btn.textContent = '送出中…';
   const myCart = cart.slice();
   const myNeeds = otherNeedsAsGroupItems_();
-  apiPost_({ action: 'groupUpsertMember', groupId: groupCtx.groupId, memberToken: groupCtx.memberToken || '', name, memberPhone: phone, items: groupItemsFromCart_() }).then(data => {
+  // 請客(10-04)：自己的活動券跟著餐點存進揪團，團主付款成功才核銷(後端用 LINE 登入的本人重算一次)
+  const myActIds = groupMyActVouchers_().map(v => v.voucherId);
+  apiPost_({ action: 'groupUpsertMember', groupId: groupCtx.groupId, memberToken: groupCtx.memberToken || '', name, memberPhone: phone, items: groupItemsFromCart_(), voucherIds: myActIds.length ? myActIds : undefined }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '送出失敗');
     groupCtx.memberToken = data.memberToken; groupCtx.name = name; saveGroupCtx_();
     otherNeedsSel = []; otherNeedsNone = false;
     if (each) return payMyGroupShare_(myCart, phone, name, myNeeds);
-    cart = []; saveCartSession(); updateCartBar();
+    cart = []; checkoutSelectedVouchers = []; saveCartSession(); updateCartBar();
     closeCart();
-    return fetchGroup_().then(() => { openGroupPanel(); alert(`已送出！等 ${groupView.hostName} 結帳付款後，這團才算成立。`); });
+    const actMsg = data.actDiscount > 0 ? `你的活動優惠 -$${data.actDiscount} 已記在揪團裡。`
+      : myActIds.length ? '（活動優惠這次沒有套用成功，餐點照常送出）' : '';
+    return fetchGroup_().then(() => { openGroupPanel(); alert(`已送出！${actMsg}等 ${groupView.hostName} 結帳付款後，這團才算成立。`); });
   }).catch(err => alert(err.message)).finally(() => { btn.disabled = false; refreshGroupCartUi_(); });
 }
 
@@ -4086,14 +4135,47 @@ function openGroupPanel() {
 }
 function closeGroupPanel() { document.getElementById('group-overlay').classList.remove('open'); clearInterval(groupPollTimer_); }
 
+// 請客團主改取餐時間(10-04 老闆定案：付款前可以改時間、不能改日期)。面板每 20 秒重畫，展開狀態/選到的時間記起來
+const GCT_IDS_ = { date: 'gct-date', grid: 'gct-grid', time: 'gct-time' };
+let groupTimeEditOpen_ = false, groupTimeSel_ = '';
+function onGroupTimeToggle_(open) { groupTimeEditOpen_ = open; if (open) fillGroupTimeGrid_(); }
+function fillGroupTimeGrid_() {
+  if (!groupView || !groupView.pickupDate || !document.getElementById(GCT_IDS_.grid)) return;
+  const [y, m, d] = groupView.pickupDate.split('-').map(Number), [ty, tm, td] = todayYmd_().split('-').map(Number);
+  const offset = String(Math.round((new Date(y, m - 1, d) - new Date(ty, tm - 1, td)) / 86400000));
+  const ds = document.getElementById(GCT_IDS_.date);   // 隱藏的日期選單(額滿檢查會比對它，日期固定只放一個)
+  ds.innerHTML = `<option value="${offset}">${offset}</option>`; ds.value = offset;
+  populatePickupTime(offset, GCT_IDS_);
+  const want = groupTimeSel_ || groupView.pickupTime;
+  const btn = document.querySelector('#' + GCT_IDS_.grid + ' .time-slot-btn[data-value="' + want + '"]');
+  if (btn && !btn.disabled) selectPickupTime_(want, GCT_IDS_);
+}
+function saveGroupPickupTime_() {
+  const t = document.getElementById(GCT_IDS_.time).value;
+  if (!t) { alert('請選擇取餐時間'); return; }
+  apiPost_({ action: 'groupSetPickupTime', groupId: groupCtx.groupId, hostToken: groupCtx.hostToken, pickupTime: t }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '改時間失敗');
+    groupTimeEditOpen_ = false; groupTimeSel_ = '';
+    return fetchGroup_().then(() => { renderGroupPanel_(); alert('取餐時間已改成 ' + groupPickupText_()); });
+  }).catch(err => alert(err.message));
+}
+
 function renderGroupPanel_() {
   const body = document.getElementById('group-body');
   if (!groupView) return;
+  const prevSel = document.getElementById(GCT_IDS_.time);
+  if (prevSel && prevSel.value) groupTimeSel_ = prevSel.value;
   const g = groupView, host = isGroupHost_(), st = g.groupStatus, each = isGroupEach_(), me = groupMe_();
   document.getElementById('group-title').innerHTML = escapeHtml_(g.hostName) + ' 的揪團<span class="group-status ' + groupStatusClass_(st) + '">' + escapeHtml_(st) + '</span>';
   const left = groupMinutesLeft_();
   const editable = st === '收單中' || st === '已截止' || st === '已結單';
-  let h = `<div style="font-size:0.85rem;margin-bottom:6px;">${each ? `💳 各付各的：每個人送出時付自己那份（各自拿點數）・取餐 <b>${escapeHtml_(groupPickupText_())}</b>` : `🎁 ${escapeHtml_(g.hostName)} 請客：${escapeHtml_(g.hostName)} 結單後一次付清`}</div>`;
+  const actTotal = each ? 0 : (Number(g.actDiscountTotal) || 0);   // 請客：大家自己的活動優惠(10-04)
+  let h = `<div style="font-size:0.85rem;margin-bottom:6px;">${each ? `💳 各付各的：每個人送出時付自己那份（各自拿點數）・取餐 <b>${escapeHtml_(groupPickupText_())}</b>` : `🎁 ${escapeHtml_(g.hostName)} 請客：${escapeHtml_(g.hostName)} 結單後一次付清${g.pickupDate ? `・取餐 <b>${escapeHtml_(groupPickupText_())}</b>` : ''}`}</div>`;
+  if (host && !each && g.pickupDate && editable) {
+    h += `<details ${groupTimeEditOpen_ ? 'open' : ''} ontoggle="onGroupTimeToggle_(this.open)" style="margin:0 0 10px;font-size:0.85rem;"><summary style="cursor:pointer;color:#1a6fc4;">改取餐時間（${escapeHtml_(groupView.pickupDate.slice(5).replace('-', '/'))} 這天不能改）</summary>
+      <select id="gct-date" style="display:none;"></select><input type="hidden" id="gct-time"><div id="gct-grid"></div>
+      <button type="button" class="btn-secondary" style="margin-top:6px;padding:8px;" onclick="saveGroupPickupTime_()">確定改時間</button></details>`;
+  }
   if (st === '收單中') h += `<div style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;">${escapeHtml_(g.deadlineText)} 截止收單${left > 0 ? `（剩 ${left} 分鐘）` : ''}。${each ? '付款後你那份就成立。' : '團主付款後這團才算成立。'}需要會員才能參加。</div>`;
   if (host && editable) {
     h += `<div style="background:#f4faff;border:1px solid #b9dcff;border-radius:10px;padding:10px;margin-bottom:10px;">
@@ -4116,11 +4198,13 @@ function renderGroupPanel_() {
     const canRemove = host && !m.isHost && editable && !paid;
     const badge = each ? `<span class="group-status ${m.payState === '已付款' ? 'done' : m.payState === '付款中' ? 'locked' : m.payState === '已退款' ? 'dead' : ''}" style="margin-left:6px;">${escapeHtml_(m.payState)}</span>` : '';
     h += `<div class="group-member${m.isMe ? ' me' : ''}"><div class="gm-head"><span>${escapeHtml_(m.name)}${m.isHost ? '（團主）' : ''}${m.isMe ? '（你）' : ''}${badge}</span><span>$${m.subtotal}</span></div>`;
-    m.items.forEach(it => { h += `<div class="gm-item"><span>${it.x2 ? '其他需求：' : ''}${escapeHtml_(it.name)}${it.size ? ' (' + escapeHtml_(it.size) + ')' : ''}${it.x2 ? '' : ' x' + it.qty}</span><span>${it.x2 && !it.price ? '' : '$' + it.price * it.qty}</span></div>`; });
+    m.items.forEach(it => { h += `<div class="gm-item"><span>${it.x2 ? '其他需求：' : ''}${escapeHtml_(it.name)}${it.size ? ' (' + escapeHtml_(it.size) + ')' : ''}${it.x2 ? '' : ' x' + it.qty}${it.note === '活動贈品' ? '（活動贈品）' : ''}</span><span>${it.x2 && !it.price ? '' : '$' + it.price * it.qty}</span></div>`; });
+    if (!each && m.actDiscount > 0) h += `<div class="gm-item" style="color:#c0392b;"><span>🎁 活動優惠（${escapeHtml_([...new Set(m.actTypes || [])].join('、'))}）</span><span>-$${m.actDiscount}</span></div>`;
     if (canRemove) h += `<div style="text-align:right;"><button type="button" style="border:none;background:none;color:#a30000;font-size:0.8rem;cursor:pointer;" onclick="removeGroupMember('${m.memberId}')">刪除這個人的餐點</button></div>`;
     h += '</div>';
   });
-  h += `<div class="cart-total"><span>合計（${g.members.length} 人）</span><span>$${g.total}</span></div>`;
+  h += `<div class="cart-total"><span>合計（${g.members.length} 人）</span><span>${actTotal ? `<span style="color:var(--muted);font-weight:normal;text-decoration:line-through;font-size:0.9rem;margin-right:6px;">$${g.total}</span>$${g.total - actTotal}` : '$' + g.total}</span></div>`;
+  if (actTotal) h += `<div style="font-size:0.8rem;color:var(--muted);text-align:right;margin-top:-4px;">已扣大家的活動優惠 -$${actTotal}；會員權益、兌換券在團主結帳時再算</div>`;
   if (each) {
     // 各付各的：每個人管自己那份(團主也一樣)
     const mePay = me ? me.payState : '';
@@ -4139,7 +4223,7 @@ function renderGroupPanel_() {
     if (host) {
       if (st === '收單中' || st === '已截止') h += `<button type="button" class="btn-primary" onclick="lockGroup(true)">結單（鎖住，朋友不能再改）</button>`;
       if (st === '已結單') {
-        h += `<button type="button" class="btn-primary" onclick="startGroupCheckout()">前往結帳（$${g.total}）</button>`;
+        h += `<button type="button" class="btn-primary" onclick="startGroupCheckout()">前往結帳（$${g.total - actTotal}）</button>`;
         if (left > 0) h += `<button type="button" class="btn-secondary" onclick="lockGroup(false)">重新開放朋友點餐</button>`;
       }
       if (st === '付款中') h += `<div style="font-size:0.85rem;color:var(--muted);margin-top:8px;">已送出付款（訂單 ${escapeHtml_(g.orderId)}），還沒完成。</div><button type="button" class="btn-primary" onclick="resumeGroupPayment()">繼續付款</button>`;
@@ -4154,6 +4238,7 @@ function renderGroupPanel_() {
     ? `<button type="button" class="btn-primary" onclick="leaveGroupView()">回到一般點餐${GROUP_FEATURE_ON ? '／開新的揪團' : ''}</button>`
     : `<button type="button" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);font-size:0.82rem;text-decoration:underline;cursor:pointer;" onclick="leaveGroupView()">暫時離開，回到一般點餐（揪團資料會保留，點原連結可以回來）</button>`;
   body.innerHTML = h;
+  if (groupTimeEditOpen_) fillGroupTimeGrid_();
 }
 
 function copyGroupLink() {
@@ -4190,8 +4275,11 @@ function startGroupCheckout() {
     if (g.groupStatus !== '已結單') { renderGroupPanel_(); alert('揪團狀態已變更為「' + g.groupStatus + '」，請重新確認'); return; }
     groupCartBackup_ = cart.slice();
     cart = [];
-    g.members.forEach(m => m.items.forEach((it, i) => cart.push(Object.assign({}, it, { lineKey: m.memberId + '|' + i + '|' + it.lineKey, who: m.name }))));
+    // groupActUsed：這一列被那個人自己的活動券折掉的件數(10-04，後端算好)，團主的券/等級優惠不再算這幾件
+    g.members.forEach(m => m.items.forEach((it, i) => cart.push(Object.assign({}, it, { lineKey: m.memberId + '|' + i + '|' + it.lineKey, who: m.name, groupActUsed: Number((m.actUsed || [])[i]) || 0 }))));
     groupCheckoutMode = true;
+    checkoutSelectedVouchers = [];
+    if (verifiedMember) loadCheckoutVouchers();   // 團主結帳只能再用集點兌換券等(活動券已在送出餐點時存好)
     updateCartBar();
     closeGroupPanel();
     openCart();
@@ -4203,6 +4291,7 @@ function exitGroupCheckout_() {
   groupCartBackup_ = null;
   checkoutSelectedVouchers = [];
   saveCartSession();
+  if (verifiedMember) loadCheckoutVouchers();   // 回到自己的購物車：可用的券照一般規則重讀
   updateCartBar();
 }
 // 付款中斷(關掉藍新頁)：用原本那張待付款訂單繼續付款，不重新建單(請客=全團那張；各付各的=自己那張)
