@@ -97,6 +97,7 @@
   }
   .item .info { flex: 1; min-width: 0; }
   .item .name { font-size: 0.92rem; }
+  .new-item-badge { display: inline-block; margin-right: 5px; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.04em; color: #fff; background: var(--brand); border-radius: 4px; padding: 1px 5px; vertical-align: 1px; }
   .item .price { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
   .item .actions { display: flex; gap: 6px; flex-shrink: 0; }
   .item button.add {
@@ -816,6 +817,7 @@ function applyPromoSettings_(data) {
   ALL_PROMOS = data.promos || [];
   SHOP_ADDONS = data.addons || [];
   HOME_CARDS = data.homeCards || [];   // 區塊配置(2026-09-30)：新品推薦卡片
+  refreshNewBadges_();
   HOME_ACTS = data.homeActs || [];     // 會員好康活動(含後端算好的接下來活動日 dates)
   // 自訂折數(整張訂單打折mode:'order'／單品effect:'pct'，2026-09-25新增)老闆定案先只在POS用，線上不列出
   // (客人名下若有這種券，線上結帳清單會自動略過，要到門市POS使用)
@@ -2204,6 +2206,23 @@ function renderMenu() {
     menu.appendChild(section);
   });
   refreshTierPerkBadges_();   // 菜單比會員驗證晚載入時補上等級優惠標示
+  refreshNewBadges_();
+}
+// 菜單 NEW 標籤(2026-10-04 老闆定案：不另建「新品上市」分類，新品放在它原本的分類，靠新品推薦卡片＋菜單 NEW 標籤告訴客人)：
+// 「新品上市」卡片(啟用、期間內、連單一品項)連到的那道餐，菜單品名前貼 NEW；卡片到期/停用/改成只展示就自動消失，不用另外設定
+function refreshNewBadges_() {
+  document.querySelectorAll('.new-item-badge').forEach(el => el.remove());
+  const t = todayYmd_(), cats = Object.keys(CATALOG);
+  HOME_CARDS.filter(c => c.block === '新品上市' && c.status !== '停用' && c.linkType === '品項' && homeInPeriod_(c, t)).forEach(c => {
+    const sec = document.getElementById('cat-' + cats.indexOf(c.linkCat));
+    const card = sec && [...sec.querySelectorAll('.item')].find(el => el.dataset.itemName === c.linkItem);
+    const nameEl = card && card.querySelector('.name');
+    if (!nameEl) return;
+    const b = document.createElement('span');
+    b.className = 'new-item-badge';
+    b.textContent = 'NEW';
+    nameEl.prepend(b);
+  });
 }
 
 function openItemModal(cat, key, item) {

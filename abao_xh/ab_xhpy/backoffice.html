@@ -1633,10 +1633,10 @@ function mrGo_(sub) {
 function refreshMonthReminder_() {
   return apiGet({ action: 'promoSettings', storeId: 'meibao', version: 'live' }).then(data => {
     if (data.status !== 'ok') return;
-    renderMonthReminder_(monthReminderItems_(data.today || mrYmd_(new Date()), data.promos || [], data.homeActs || []));
+    renderMonthReminder_(monthReminderItems_(data.today || mrYmd_(new Date()), data.promos || [], data.homeActs || [], data.homeCards || []));
   }).catch(err => console.warn('本月待更新提醒讀取失敗', err));
 }
-function monthReminderItems_(today, promos, acts) {
+function monthReminderItems_(today, promos, acts, cards) {
   const [y, m] = today.split('-').map(Number);
   const monthEnd = mrYmd_(new Date(y, m, 0)), nextMonthEnd = mrYmd_(new Date(y, m + 1, 0));
   const soon = mrAddDays_(today, 3);
@@ -1667,6 +1667,15 @@ function monthReminderItems_(today, promos, acts) {
       items.push({ red: false, go: 'promo', text: `「${p.name}」${mrMd_(p.endDate)} 到期，下個月要換飲品（改名稱、適用品項、生效日／到期日）` });
     }
   });
+  // ③新品開賣日(10-04 老闆要求)：「只展示」卡片到了開賣日還沒改成連單一品項，客人只能看介紹點不到；前一天先提醒當晚上菜單
+  (cards || []).forEach(c => {
+    if (c.status === '停用' || c.linkType !== '只展示' || !c.saleDate || (c.endDate && c.endDate < today)) return;
+    if (c.saleDate <= today) {
+      items.push({ red: true, go: 'blocks', text: `新品「${c.title}」${mrMd_(c.saleDate)} 開賣，卡片還是「只展示」，客人點不到：品項加進菜單並發布後，把卡片改成「連單一品項」再發布` });
+    } else if (c.saleDate === mrAddDays_(today, 1)) {
+      items.push({ red: false, go: 'blocks', text: `新品「${c.title}」明天(${mrMd_(c.saleDate)})開賣：今天收店後把品項加進菜單並發布，再把卡片改成「連單一品項」發布，門市平板重新整理` });
+    }
+  });
   return items;
 }
 let mrItems = [];
@@ -1677,7 +1686,7 @@ function renderMonthReminder_(items) {
   const goLabel = { promo: '去優惠券', blocks: '去區塊配置' };
   box.innerHTML = `
     <div class="mr-head" onclick="mrOpen=!mrOpen;renderMonthReminder_(mrItems);">
-      🔔 待更新的活動優惠（${items.length}）<span class="mr-caret">${mrOpen ? '收起' : '展開'}</span>
+      🔔 待更新的活動優惠／新品（${items.length}）<span class="mr-caret">${mrOpen ? '收起' : '展開'}</span>
     </div>
     <div class="mr-body" style="${mrOpen ? '' : 'display:none;'}">
       <ul>${items.map(it => `<li class="${it.red ? 'mr-red' : ''}">${it.red ? '⚠ ' : ''}${escapeHtml(it.text)}<button type="button" class="mr-go" onclick="mrGo_('${it.go}')">${goLabel[it.go]}</button></li>`).join('')}</ul>
