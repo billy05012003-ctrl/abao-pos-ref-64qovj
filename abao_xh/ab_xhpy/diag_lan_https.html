@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>測試：公開網站打區網印表機</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; line-height: 1.5; }
+  h1 { font-size: 20px; }
+  input { width: 100%; font-size: 16px; padding: 8px; box-sizing: border-box; }
+  button { font-size: 17px; padding: 12px 16px; margin: 6px 6px 6px 0; }
+  #log { white-space: pre-wrap; background: #111; color: #eee; padding: 12px; border-radius: 8px; min-height: 160px; font-size: 14px; }
+  .ok { color: #7CFC9A; } .ng { color: #FF8A8A; }
+  small { color: #666; }
+</style>
+</head>
+<body>
+<h1>測試：公開網站 → 區網印表機</h1>
+<p><small>這是測試頁，不接任何真實印表機。對象是筆電上模擬的「印表機」。</small></p>
+
+<div id="env"></div>
+
+<p>目標位址（由網址的 ?t=IP 帶入；這次是「公開網站」打「區網」，用來驗證瀏覽器的區網限制）：</p>
+<input id="target" value="">
+
+<button onclick="t1()">測試 1：GET /ping</button>
+<button onclick="t2()">測試 2：送 ePOS-Print XML（模擬出單）</button>
+<button onclick="t3()">測試 3：改打 HTTP（預期被擋）</button>
+<button onclick="document.getElementById('log').textContent=''">清除記錄</button>
+
+<div id="log"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const host = new URLSearchParams(location.search).get('t') || '';
+$('target').value = host ? `https://${host}:8443` : '';
+$('target').placeholder = '網址後面加 ?t=筆電IP，例如 ?t=192.168.0.20';
+$('env').innerHTML =
+  `本頁來源：<b>${location.origin}</b><br>安全環境(isSecureContext)：<b>${window.isSecureContext}</b><br>` +
+  `瀏覽器：<small>${navigator.userAgent}</small>`;
+
+function out(msg, cls) {
+  const s = document.createElement('div');
+  if (cls) s.className = cls;
+  s.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  $('log').appendChild(s);
+}
+
+async function run(name, fn) {
+  out(`▶ ${name}`);
+  try { await fn(); } catch (e) {
+    out(`✗ ${name} 失敗：${e && e.name}：${e && e.message}`, 'ng');
+    out('  （瀏覽器通常不會說明確原因：可能是憑證不被信任、跨來源(CORS)、混合內容、或區網限制。對照筆電視窗有沒有收到請求。）');
+  }
+}
+
+async function t1() {
+  await run('GET /ping', async () => {
+    const r = await fetch($('target').value + '/ping');
+    out(`✓ 狀態 ${r.status}：${await r.text()}`, 'ok');
+  });
+}
+
+async function t2() {
+  await run('POST ePOS-Print XML', async () => {
+    const xml =
+      '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">' +
+      '<text lang="zh-hant">測試單 ABAO\n</text><feed line="3"/><cut type="feed"/></epos-print>';
+    const soap =
+      '<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/">' +
+      '<s:Body>' + xml + '</s:Body></s:Envelope>';
+    const r = await fetch($('target').value + '/cgi-bin/epos/service.cgi?devid=local_printer&timeout=10000', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT',
+        'SOAPAction': '""',
+      },
+      body: soap,
+    });
+    const t = await r.text();
+    out(`✓ 狀態 ${r.status}，回應含 success="true"：${/success="true"/.test(t)}`, 'ok');
+  });
+}
+
+async function t3() {
+  await run('改打 HTTP（8080）', async () => {
+    const r = await fetch(`http://${host}:8080/ping`);
+    out(`⚠ HTTP 也通了（狀態 ${r.status}）：${await r.text()}`, 'ok');
+  });
+}
+</script>
+</body>
+</html>
