@@ -3034,7 +3034,7 @@ function renderPublishDiff_(els, changes, errorMsg) {
   els.forEach(el => { el.innerHTML = html; });
 }
 const ADDON_DIFF_FIELDS_ = ['type', 'amount', 'photoUrl', 'sauceGroups', 'sets', 'drinkOnly', 'excludes', 'startDate', 'endDate', 'order', 'status', 'locked'];
-const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'targetSize', 'targetCat', 'requireCat', 'locked', 'order', 'startDate', 'endDate', 'targetItem2', 'requireItem', 'pairMode', 'requireOpts', 'exclusive'];
+const PROMO_DIFF_FIELDS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'showAsButton', 'manualGrantable', 'status', 'minTier', 'allowNonMember', 'targetItem', 'targetSize', 'targetCat', 'requireCat', 'locked', 'order', 'startDate', 'endDate', 'targetItem2', 'requireItem', 'pairMode', 'requireOpts', 'exclusive', 'spendStep'];
 function refreshPromoPublishDiff_() {
   const els = [...document.querySelectorAll('.promo-publish-diff')];
   if (!els.length || MC_STORE_ID === '__brand__') return Promise.resolve();
@@ -3895,6 +3895,8 @@ function pmEffectChanged() {
   const mode = document.getElementById('pm-f-mode').value;
   const effect = document.getElementById('pm-f-effect').value;
   document.getElementById('pm-pct-fields').style.display = (mode === 'order' || (mode === 'item' && effect === 'pct')) ? 'flex' : 'none';
+  const ao = document.getElementById('pm-amtoff-wrap');   // 折 $N(10-06 冬至)
+  if (ao) ao.style.display = (mode === 'item' && effect === 'amountOff') ? 'flex' : 'none';
 }
 
 // 「不限」時不需要另外決定非會員能不能用(本來就沒有等級限制)，所以只有選了實際等級才顯示這個勾選框
@@ -3931,8 +3933,10 @@ function renderPmEditor() {
           <option value="discount50" ${p.effect === 'discount50' ? 'selected' : ''}>打5折</option>
           <option value="addOne" ${p.effect === 'addOne' ? 'selected' : ''}>加一元多一件</option>
           <option value="pct" ${p.effect === 'pct' ? 'selected' : ''}>自訂折數(限POS)</option>
+          <option value="amountOff" ${p.effect === 'amountOff' ? 'selected' : ''}>折 $N(線上活動券)</option>
         </select>
       </label>
+      <label class="mc-field" id="pm-amtoff-wrap" style="display:${p.effect === 'amountOff' ? 'flex' : 'none'};">每份折多少元<input id="pm-f-amtoff" type="number" min="1" value="${p.effect === 'amountOff' ? (p.amount ?? '') : ''}"></label>
       <label class="mc-field">最低購買件數<input id="pm-f-minqty" type="number" value="${p.minQty ?? 1}"></label>
       <label class="mc-field">適用品項
         <select id="pm-f-target">
@@ -3975,6 +3979,7 @@ function renderPmEditor() {
             <option value="同款" ${p.pairMode === '同款' ? 'selected' : ''}>同款（客製化可不同）</option>
             <option value="同款同客製化" ${p.pairMode === '同款同客製化' ? 'selected' : ''}>同款同客製化</option>
             <option value="每份送一份" ${p.pairMode === '每份送一份' ? 'selected' : ''}>每份送一份</option>
+            <option value="每滿額折一份" ${p.pairMode === '每滿額折一份' ? 'selected' : ''}>每滿額折一份</option>
           </select>
           <span class="pm-tip">一張券＝一組；每份送一份不限份數</span>
         </label>
@@ -4000,6 +4005,10 @@ function renderPmEditor() {
           </span>
           <span class="pm-tip">客製化要含其中一個，用「、」分隔</span>
         </label>
+        <label class="mc-field">每滿多少元
+          <input id="pm-f-spendstep" type="number" min="1" value="${p.spendStep || ''}" placeholder="例：100">
+          <span class="pm-tip">每滿額折一份用：適用品項以外的點餐原價每滿這個金額折一份</span>
+        </label>
       </div>
     </div>
     <details class="pm-help" id="pm-tierperk-hint" style="display:${mode === 'item' ? 'block' : 'none'};">
@@ -4012,6 +4021,7 @@ function renderPmEditor() {
         <tr><th>同款</th><td>例：節氣第二件折扣｜適用品項或適用分類＋配對「同款」：同一款兩件一組，客製化可不同，折第二件基本價（加料照收）</td></tr>
         <tr><th>同款同客製化</th><td>例：買一送一、加一元多一件｜品名、客製化、份量都一樣才算一組；加一元多一件線上會自動多加一份、第二份基本價 $1</td></tr>
         <tr><th>每份送一份</th><td>例：雞塊日｜適用品項＝送什麼、需搭配品項＝點什麼；生效日～到期日設當期，沒改到下一期就不會送</td></tr>
+        <tr><th>每滿額折一份</th><td>例：2026 冬至玉米濃湯｜效果「折 $N」每份折 20＋配對「每滿額折一份」＋每滿 100＋適用品項玉米濃湯：玉米濃湯以外(其他需求不算)的點餐原價每滿 $100 折一杯，不管其他折扣。綁一個自己的活動(不要動八大節氣)；門市用「20元兌換券」按鈕手動</td></tr>
         <tr><th>節氣升級加碼</th><td>例：立春｜全額免費＋配對「每份送一份」＋需搭配品項＝當月美X＋限定選項按「豪華升級」＋適用品項、適用品項2＝贈品二選一（飲料選適用份量 M）；線上客人自己選、另印一行節氣贈品。門市照舊用 POS 按鈕手動</td></tr>
         <tr><th>不併用</th><td>線上同一張單不能再用其他券（會員等級權益照常）</td></tr>
       </table>
@@ -4091,6 +4101,12 @@ function savePromo() {
   const pairMode = mode === 'item' ? document.getElementById('pm-f-pairmode').value : '';
   if (pairMode === '每份送一份' && (!document.getElementById('pm-f-target').value || !document.getElementById('pm-f-require-item').value)) { alert('「每份送一份」要選「適用品項」(送什麼)和「需搭配品項」(點什麼)'); return; }
   if ((pairMode === '同款' || pairMode === '同款同客製化') && !document.getElementById('pm-f-target').value && !document.getElementById('pm-f-target2').value && !document.getElementById('pm-f-target-cat').value) { alert('「同款」要選適用品項或適用分類'); return; }
+  if (pairMode === '每滿額折一份' && (!document.getElementById('pm-f-target').value || !(Number(document.getElementById('pm-f-spendstep').value) > 0))) { alert('「每滿額折一份」要選「適用品項」(折什麼)和填「每滿多少元」'); return; }
+  if (effect === 'amountOff') {
+    const ao = Number(document.getElementById('pm-f-amtoff').value);
+    if (!Number.isInteger(ao) || ao < 1) { alert('「折 $N」請填每份折多少元(整數)'); return; }
+    amount = ao;
+  }
   if (effect === 'addOne' && pairMode && pairMode !== '同款同客製化') { alert('加一元多一件的配對方式請選「同款同客製化」(第二份要跟第一份一樣)'); return; }
   if (usesPct) {
     const pct = Number(document.getElementById('pm-f-pct').value);
@@ -4114,6 +4130,7 @@ function savePromo() {
     pairMode: pairMode,
     requireOpts: mode === 'item' ? document.getElementById('pm-f-require-opts').value : '',
     exclusive: document.getElementById('pm-f-exclusive').checked,
+    spendStep: mode === 'item' ? document.getElementById('pm-f-spendstep').value : '',
     showAsButton: document.getElementById('pm-f-showbtn').checked,
     manualGrantable: document.getElementById('pm-f-grantable').checked,
     status: document.getElementById('pm-f-status').value,

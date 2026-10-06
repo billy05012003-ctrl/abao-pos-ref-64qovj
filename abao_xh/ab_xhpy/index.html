@@ -824,7 +824,8 @@ function applyPromoSettings_(data) {
   // (客人名下若有這種券，線上結帳清單會自動略過，要到門市POS使用)
   // 第三波(10-02)多帶：適用品項2/需搭配品項/配對方式/限定選項/不併用(後端 validateOnlineOrder_ 同一套)
   const itemBehavior_ = p => ({ mode: 'item', effect: p.effect, minQty: p.minQty, targetItem: p.targetItem || '', targetSize: p.targetSize || '', targetCat: p.targetCat || '', requireCat: p.requireCat || '',
-    targetItem2: p.targetItem2 || '', requireItem: p.requireItem || '', pairMode: p.pairMode || '', requireOpts: p.requireOpts || '', exclusive: !!p.exclusive });
+    targetItem2: p.targetItem2 || '', requireItem: p.requireItem || '', pairMode: p.pairMode || '', requireOpts: p.requireOpts || '', exclusive: !!p.exclusive,
+    amount: Number(p.amount) || 0, spendStep: Number(p.spendStep) || 0 });   // 10-06 冬至：每滿額折一份＋折 $N
   ALL_PROMOS.filter(p => p.status !== '停用' && (p.manualGrantable || !p.showAsButton) && p.mode !== 'order' && p.effect !== 'pct').forEach(p => {
     VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed' ? { mode: 'fixed', amount: p.amount, exclusive: !!p.exclusive } : itemBehavior_(p);
   });
@@ -1292,6 +1293,29 @@ function goToVoucherCat_(cat) {
 // 週二茶拿鐵(適用分類)＝取餐日對、同分類兩杯以上就自動折。客人手動把贈品刪掉就記住不再自動加(可在兌換券視窗加回)
 var declinedGifts_ = new Set();
 function giftKey_(voucherId) { return 'gift|' + voucherId; }
+// 冬至(10-06，老闆定案 1a/2b/3a)：每滿額折一份——適用品項本身、其他需求不算，其他品項的點餐原價(含加料)每滿 N 元折一份適用品項，
+// 不管其他折扣；效果「折 $N」最多折到 $0。後端 validateOnlineOrder_ 同一套(改一邊要改另一邊)
+const isSpendStep_ = b => !!(b && b.pairMode === '每滿額折一份' && b.spendStep > 0);
+function spendTargets_(b) { return [b.targetItem, b.targetItem2].filter(x => x); }
+function spendOf_(b) { const t = spendTargets_(b); return cart.filter(c => !c.x2 && !t.includes(c.baseName)).reduce((s, c) => s + c.price * c.qty, 0); }
+function spendTargetLines_(b) { const t = spendTargets_(b); return cart.filter(c => !c.x2 && t.includes(c.baseName) && (!b.targetSize || !c.size || lineSize_(c) === b.targetSize)); }
+function spendUnitDiscount_(b, base) { return b.effect === 'amountOff' ? Math.min(Number(b.amount) || 0, base) : actUnitDiscount_(b.effect || 'free', base); }
+function spendEffText_(b) { return b.effect === 'amountOff' ? '折 $' + b.amount : b.effect === 'free' ? '免費' : '優惠'; }
+// 購物車提示：取餐日是這種活動、點了適用品項但滿額不夠折每一份 →「再 $X 可以多折一份」(還沒滿額時券還沒領，所以看活動設定)
+function spendActHint_() {
+  const pick = currentPickupISO_();
+  for (const a of (HOME_ACTS || [])) {
+    const b = VOUCHER_BEHAVIOR[a.promo];
+    if (!isSpendStep_(b) || a.status === '停用' || (a.channels || []).indexOf('線上') === -1 || (a.dates || []).indexOf(pick) === -1) continue;
+    const want = spendTargetLines_(b).reduce((t, c) => t + c.qty, 0);
+    if (!want) continue;
+    const spend = spendOf_(b), cups = Math.floor(spend / b.spendStep);
+    if (cups >= want) continue;
+    const names = spendTargets_(b).join('或');
+    return `🥣 ${a.title}：${names}以外再點 $${b.spendStep - spend % b.spendStep}，可以多一份${names}${spendEffText_(b)}（每滿 $${b.spendStep} 一份）`;
+  }
+  return '';
+}
 // 節氣升級加碼(10-04，老闆定案)：每份送一份＋有「適用品項2」＝贈品二選一。當月美X加豪華經濟升級餐，每份送一份，
 // 客人自己選(飲料照一般流程選冰塊甜度，份量固定)；每選一份另外一行「節氣贈品」，用券折成 $0(出單另印一行，老闆選 3b)
 function isPickGift_(b) { return !!(b && b.pairMode === '每份送一份' && b.targetItem2); }
@@ -1429,6 +1453,7 @@ function samePairLineOk_(b, c) {
 // 購物車有沒有這張活動券用得到的品項(決定要不要自動領券)
 function actCartMatch_(b) {
   const lines = cart.filter(c => !c.x2 && !c.gift);
+  if (isSpendStep_(b)) return spendTargetLines_(b).length > 0 && spendOf_(b) >= b.spendStep;
   if (b.pairMode === '每份送一份') return lines.some(c => c.baseName === b.requireItem && promoOptsOk_(b, c.name));
   if (isSamePair_(b)) return lines.some(c => samePairLineOk_(b, c));
   if (b.targetCat) return lines.some(c => catOfLine_(c) === b.targetCat);
@@ -1521,6 +1546,7 @@ function recalcVoucherDiscounts_() {
     // 同款兩件一組(買一送一/第二套六折/加一元多一件)：先選上，下面算完是 $0 就拿掉
     if (isSamePair_(b)) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: null, samePair: true, auto: true });
     else if (b.targetCat) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: null, pair: true, auto: true });
+    else if (isSpendStep_(b)) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: null, spendPick: true, auto: true });
     else if (isPickGift_(b)) { if (giftPicksOf_(v.voucherId).length) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: null, giftPick: true, auto: true }); }
     else if (cart.some(c => c.lineKey === giftKey_(v.voucherId))) checkoutSelectedVouchers.push({ voucherId: v.voucherId, type: v.type, discountAmount: 0, targetLineKey: giftKey_(v.voucherId), auto: true });
   });
@@ -1540,6 +1566,16 @@ function recalcVoucherDiscounts_() {
   checkoutSelectedVouchers.forEach(v => {
     const b = VOUCHER_BEHAVIOR[v.type] || {};
     if (b.mode === 'fixed') { v.discountAmount = b.amount; return; }
+    if (v.spendPick) {
+      // 冬至：每滿額折一份，貴的先折(同一件只被一種優惠折)
+      const n = Math.floor(spendOf_(b) / b.spendStep);
+      let amt = 0, k = 0;
+      spendTargetLines_(b).sort((x, y) => lineBase_(y) - lineBase_(x)).forEach(c => {
+        while (k < n && (used[c.lineKey] || 0) < c.qty) { used[c.lineKey] = (used[c.lineKey] || 0) + 1; amt += spendUnitDiscount_(b, lineBase_(c)); k++; }
+      });
+      v.discountAmount = amt;
+      return;
+    }
     if (v.giftPick) {
       // 節氣贈品：客人選的每一份折基本價(加料照收；份量已固定，後端同一套)
       let amt = 0;
@@ -1598,7 +1634,7 @@ function recalcVoucherDiscounts_() {
     }
     v.discountAmount = amount;
   });
-  checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => !(v.auto && (v.pair || v.samePair || v.giftPick) && !v.discountAmount));
+  checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => !(v.auto && (v.pair || v.samePair || v.giftPick || v.spendPick) && !v.discountAmount));
   // 不併用(第三波)：有勾不併用的券就只能單獨用——比一比「只用它」和「用其他券」哪個折比較多，留划算的
   exclusiveNote_ = '';
   const exc = checkoutSelectedVouchers.filter(v => (VOUCHER_BEHAVIOR[v.type] || {}).exclusive);
@@ -2071,6 +2107,13 @@ function actVoucherRow_(v, b, pick) {
     if (on) status = `已自動套用，折 $${sel.discountAmount}`;
     else if (isAddOne_(b) && declinedGifts_.has(v.voucherId)) { status = '你已移除第二份'; action = addBack; }
     else { status = escapeHtml_(actPairHint_(b)); action = goBtn(actTargetCat_(b)); }
+  } else if (isSpendStep_(b)) {
+    // 冬至(10-06)：每滿額折一份
+    const sel = checkoutSelectedVouchers.find(x => x.voucherId === v.voucherId);
+    const names = escapeHtml_(spendTargets_(b).join('或'));
+    on = !!(sel && sel.discountAmount);
+    status = on ? `已自動套用，折 $${sel.discountAmount}` : `${names}以外的餐點每滿 $${b.spendStep}，${names}${spendEffText_(b)}一份`;
+    if (!spendTargetLines_(b).length) action = goBtn(catOfItemName_(b.targetItem));
   } else if (isPickGift_(b)) {
     // 節氣升級加碼(10-04)：每份美X加豪華經濟升級餐送一份，贈品二選一
     const picks = giftPicksOf_(v.voucherId), n = perUnitGiftQty_(b);
@@ -2311,7 +2354,8 @@ function updateCheckoutTotalDisplay() {
   let gn = document.getElementById('giftpick-notice');
   if (!gn) { gn = document.createElement('div'); gn.id = 'giftpick-notice'; el.parentNode.insertBefore(gn, el); }
   const gpp = giftPickPending_;
-  gn.innerHTML = gpp ? `<button type="button" class="btn-secondary" style="margin:6px 0;border-color:#e8632c;color:#e8632c;" onclick="openGiftPick_('${gpp.voucherId}')">🎁 還有 ${gpp.left} 份節氣贈品可以選（二選一）</button>` : '';
+  const sh = spendActHint_();
+  gn.innerHTML = (sh ? `<div style="margin:6px 0;padding:8px 10px;border:1px dashed #e8632c;border-radius:8px;color:#b4501f;font-size:0.85rem;">${escapeHtml_(sh)}</div>` : '') + (gpp ? `<button type="button" class="btn-secondary" style="margin:6px 0;border-color:#e8632c;color:#e8632c;" onclick="openGiftPick_('${gpp.voucherId}')">🎁 還有 ${gpp.left} 份節氣贈品可以選（二選一）</button>` : '');
   if (inGroupOwnShare_()) refreshGroupCartUi_();   // 揪團點自己那份：「送出並付款（$X）」按鈕／活動優惠提示跟著券更新
   if (!d.discount && !d.perks.total && !d.needs && !d.groupAct) { el.textContent = ''; return; }
   const parts = [];
