@@ -1073,7 +1073,7 @@ function comboOnlyGroupsFor(cat, itemName) {
 // combo_drink(套餐飲料)原本用buildComboDrinkOptions()即時算「飲料原價-25」，老闆定案改成雲端維護的固定清單，
 // 讀回來後在rebuildDrinkComboDerivedData_()裡重建COMBO_DRINK_PRICES。
 // 斷網/API異常時退回localStorage上次成功抓到的快取，避免整個點餐頁打不開；兩者都失敗才是真的沒有菜單資料。
-const MENU_CMS_CACHE_KEY = 'abao_order_menu_cms_cache_v1';
+const MENU_CMS_CACHE_KEY = 'abao_order_menu_cms_cache_v2';   // v2(10-07)：{t: 存的時間, d: 菜單}，先秀存的再背景更新
 let ITEM_GROUPS_MAP = {};
 let COMBO_DRINK_PRICES = {}; // name -> {m: delta|null, l: delta|null, single: delta|null}
 let DRINK_ITEM_CATEGORY = {}; // name -> 所屬飲品分類，用於套餐內選定飲料後帶出該分類專屬的冰量/甜度
@@ -1110,25 +1110,47 @@ function applyMenuCmsData_(data) {
   rebuildDrinkComboDerivedData_();
 }
 
+// 菜單先秀手機裡存的(10-07 實測後端讀菜單 4～5 秒、偶爾 30 秒)：3 天內存過就先用存的畫菜單，背景再讀雲端；
+// 雲端的跟存的不一樣就換新、重畫菜單(價格以後端為準，送單時後端會再驗一次)。第一次來/存太久照舊等雲端；
+// 雲端讀不到時用存的(不管多久)，至少還能看菜單
+const MENU_CMS_CACHE_MAX_MS_ = 3 * 86400000;
+var menuFirstRendered_ = false;   // 開場第一次畫好菜單之前，背景更新只換資料(開場那次就會畫新的)，不另外重畫
+var menuFromSaved_ = false;       // 這次開場先用手機裡存的菜單(上下架狀態也先用存的，不等雲端)
 function loadMenuCmsData() {
-  return apiGet_({ action: 'menuCmsData' }).then(resp => {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(MENU_CMS_CACHE_KEY) || 'null'); } catch (e) {}
+  const savedOk = !!(saved && saved.d && saved.d.status === 'ok');
+  const savedStr = savedOk ? JSON.stringify(saved.d) : '';
+  const fresh = apiGet_({ action: 'menuCmsData' }).then(resp => {
     if (!resp || resp.status !== 'ok') throw new Error('menuCmsData回傳格式異常');
-    applyMenuCmsData_(resp);
-    try { localStorage.setItem(MENU_CMS_CACHE_KEY, JSON.stringify(resp)); } catch (e) {}
-    return true;
-  }).catch(err => {
-    console.warn('菜單資料雲端讀取失敗，嘗試改用本地快取', err);
-    try {
-      const cached = JSON.parse(localStorage.getItem(MENU_CMS_CACHE_KEY) || 'null');
-      if (cached && cached.status === 'ok') {
-        applyMenuCmsData_(cached);
-        console.warn('已改用本地快取的菜單資料(可能不是最新版本)');
-        return true;
-      }
-    } catch (e2) {}
-    console.error('菜單資料完全無法取得(雲端+本地快取皆失敗)，點餐頁將無法顯示菜單');
+    const s = JSON.stringify(resp);
+    try { localStorage.setItem(MENU_CMS_CACHE_KEY, JSON.stringify({ t: Date.now(), d: resp })); } catch (e) {}
+    return { resp, same: s === savedStr };
+  });
+  if (savedOk && Date.now() - (Number(saved.t) || 0) < MENU_CMS_CACHE_MAX_MS_) {
+    menuFromSaved_ = true;
+    applyMenuCmsData_(saved.d);
+    fresh.then(({ resp, same }) => {
+      if (same) return;
+      applyMenuCmsData_(resp);
+      if (menuFirstRendered_) menuCmsUpdatedLate_();
+    }).catch(err => console.warn('菜單背景更新失敗，先用手機裡存的菜單(可能不是最新版本)', err));
+    return Promise.resolve(true);
+  }
+  return fresh.then(({ resp }) => { applyMenuCmsData_(resp); return true; }).catch(err => {
+    console.warn('菜單資料雲端讀取失敗，嘗試改用手機裡存的菜單', err);
+    if (savedOk) { applyMenuCmsData_(saved.d); console.warn('已改用手機裡存的菜單(可能不是最新版本)'); return true; }
+    console.error('菜單資料完全無法取得(雲端+手機裡存的皆失敗)，點餐頁將無法顯示菜單');
     return false;
   });
+}
+// 背景讀到的菜單跟先秀的不一樣：重畫菜單/新品頁，購物車裡線上已經沒有的品項拿掉
+function menuCmsUpdatedLate_() {
+  rerenderMenu_();
+  if (HOME_TABS_ON) renderHomeNewPane_();
+  purgeOfflineCartLines_();
+  updateCartBar();
+  if (document.getElementById('cart-overlay').classList.contains('open')) renderCart();
 }
 
 function groupsForCategory(cat, itemName) {
@@ -3575,10 +3597,11 @@ function submitOrder(e) {
   const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓客人重選時段
   // voucherIds/phone先存著，等藍新付款成功那一步才由後端核銷，
   // 避免客人填完折抵資訊卻棄單，兌換券卻已經被扣掉的情況
-  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, cartBackup: cartBackup };
+  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, cartBackup: cartBackup, groupPay: groupCheckoutMode && groupCtx ? 'host' : '' };
   cart = [];
   saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
   document.getElementById('cart-view').style.display = 'none';
+  if (!payAtPickupChosen) showPayBusy_('正在前往付款…');
 
   createPendingOrderOnBackend({
     storeId: 'meibao',
@@ -3608,6 +3631,7 @@ function submitOrder(e) {
     } else {
       // 後端拒絕(例如該時段剛好被別人搶滿) - 還原購物車讓客人重新選時段，不能假裝訂單成立
       // 活動限量額滿(第三波)：這次把有限量的活動券拿掉(不然會自動再套上去、一直送不出去)，客人照原價再送一次
+      hidePayBusy_();
       const full = /名額已經滿了/.test(data.message || '');
       if (full) actVouchersForPickup_().forEach(v => { const a = HOME_ACTS.find(x => x.id === v.actId); if (a && Number(a.limit) > 0) actFullBlocked_.add(v.voucherId); });
       alert((data.message || '送出失敗，請重新選擇取餐時段') + (full ? '\n\n已幫你取消這個活動的優惠，請確認金額後再送出一次。' : ''));
@@ -3619,7 +3643,7 @@ function submitOrder(e) {
   }).catch(err => {
     // 正式版：建單失敗(網路問題)不能讓客人以為訂單成立，還原購物車並提示重試
     console.warn('建立訂單失敗（網路問題）', err);
-    restoreCartAfterFailure_('訂單送出失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。');
+    payFailed_('訂單送出失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。');   // 請客團主：後端慢時單可能其實已建好
   });
 
   return false;
@@ -3666,6 +3690,7 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
 // 付款請求或建單失敗：不能假裝成功。把購物車還原、重新打開訂單畫面，讓客人可以再試一次
 // (後端已建立的「待付款」訂單若沒付款，30分鐘後會自動作廢，不會佔用時段)
 function restoreCartAfterFailure_(message) {
+  hidePayBusy_();
   if (pendingOrderContext && pendingOrderContext.cartBackup) {
     cart = pendingOrderContext.cartBackup;
     saveCartSession();
@@ -3674,6 +3699,49 @@ function restoreCartAfterFailure_(message) {
   alert(message);
   openCart();
   backToCart();
+}
+
+// 前往付款中(10-07 實測：後端有時 20 秒以上才回)：整頁蓋一層「請不要離開」，也擋住連按；失敗時收掉，成功就直接跳藍新
+function showPayBusy_(text) {
+  let el = document.getElementById('pay-busy');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pay-busy';
+    el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.55);display:none;align-items:center;justify-content:center;padding:24px;';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<div style="background:#fff;color:#333;border-radius:14px;padding:22px 20px;max-width:320px;text-align:center;line-height:1.6;">
+      <div style="font-size:1.8rem;">⏳</div>
+      <div style="font-weight:700;font-size:1rem;">${escapeHtml_(text)}</div>
+      <div style="color:#888;font-size:0.82rem;margin-top:4px;">可能需要 10～30 秒，請不要關閉或離開這個畫面</div>
+    </div>`;
+  el.style.display = 'flex';
+}
+function hidePayBusy_() { const el = document.getElementById('pay-busy'); if (el) el.style.display = 'none'; }
+// 從藍新付款頁按「上一頁」回來(瀏覽器還原舊畫面)：把「前往付款中」收掉
+window.addEventListener('pageshow', e => { if (e.persisted) hidePayBusy_(); });
+
+// 前往付款失敗(網路/後端慢、建付款失敗)：揪團單(pendingOrderContext.groupPay)如果訂單其實已經建好(付款中)，
+// 餐點不放回購物車(再按送出會被「你已經送出付款」擋、繞圈)，改打開揪團畫面請客人按「繼續付款」；
+// 訂單沒建起來才照舊放回購物車重送。一般點餐照舊放回購物車(舊的待付款單 30 分鐘自動作廢)
+function payFailed_(message) {
+  const ctx = pendingOrderContext || {};
+  if (!ctx.groupPay || !groupCtx) { restoreCartAfterFailure_(message); return; }
+  fetchGroup_().then(g => {
+    const me = groupMe_();
+    const pending = ctx.groupPay === 'each' ? !!(me && me.payState === '付款中') : g.groupStatus === '付款中';
+    hidePayBusy_();
+    if (!pending) {
+      if (ctx.resume) { alert(message); openGroupPanel(); return; }   // 繼續付款失敗：單已作廢/已付款，回揪團畫面看狀態
+      restoreCartAfterFailure_(message);
+      return;
+    }
+    if (groupCheckoutMode) exitGroupCheckout_();   // 請客團主：購物車換回自己的
+    else { cart = []; saveCartSession(); updateCartBar(); }
+    document.getElementById('cart-overlay').classList.remove('open');
+    alert('付款頁面沒有順利打開（可能是網路比較慢）。\n\n你的訂單已經建立，請在揪團畫面按「繼續付款」。');
+    openGroupPanel();
+  }).catch(() => restoreCartAfterFailure_(message));
 }
 
 // ---- 藍新MPG付款流程（預設走正式站；網址帶?mpgtest=1時走驗證環境，見開頭MPG_SANDBOX說明）----
@@ -3686,7 +3754,7 @@ function startMpgPayment(orderId, amount) {
   const returnUrl = location.origin + location.pathname + '?mpgreturn=1&orderId=' + encodeURIComponent(orderId);
   apiPost_({ action: 'createMpgPayment', orderId, amount, itemDesc: STORE_NAME, returnUrl, sandbox: MPG_SANDBOX }).then(data => {
     if (data.status !== 'ok') {
-      restoreCartAfterFailure_('目前無法建立付款，請稍後再試，或來電洽詢客服 0909-504662。' + (data.message ? '\n（' + data.message + '）' : ''));
+      payFailed_('目前無法建立付款，請稍後再試，或來電洽詢客服 0909-504662。' + (data.message ? '\n（' + data.message + '）' : ''));
       return;
     }
     const form = document.createElement('form');
@@ -3703,7 +3771,7 @@ function startMpgPayment(orderId, amount) {
     form.submit();
   }).catch(err => {
     console.warn('建立藍新付款請求失敗（網路問題）', err);
-    restoreCartAfterFailure_('付款連線失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。');
+    payFailed_('付款連線失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。');
   });
 }
 
@@ -4224,6 +4292,7 @@ function submitMyGroupItems() {
   if (inGroupOwnShare_()) recalcVoucherDiscounts_();   // 活動券/贈品先算到最新，送進揪團的品項跟金額才對得上
   const btn = document.getElementById('group-submit-btn');
   btn.disabled = true; btn.textContent = '送出中…';
+  if (each) showPayBusy_('正在送出並前往付款…');
   const myCart = cart.slice();
   const myNeeds = otherNeedsAsGroupItems_();
   // 請客(10-04)：自己的活動券跟著餐點存進揪團，團主付款成功才核銷(後端用 LINE 登入的本人重算一次)
@@ -4238,7 +4307,7 @@ function submitMyGroupItems() {
     const actMsg = data.actDiscount > 0 ? `你的活動優惠 -$${data.actDiscount} 已記在揪團裡。`
       : myActIds.length ? '（活動優惠這次沒有套用成功，餐點照常送出）' : '';
     return fetchGroup_().then(() => { openGroupPanel(); alert(`已送出！${actMsg}等 ${groupView.hostName} 結帳付款後，這團才算成立。`); });
-  }).catch(err => alert(err.message)).finally(() => { btn.disabled = false; refreshGroupCartUi_(); });
+  }).catch(err => { hidePayBusy_(); alert(err.message); }).finally(() => { btn.disabled = false; refreshGroupCartUi_(); });
 }
 
 // 各付各的：送出後直接建立自己那張訂單並導去藍新付款(品項/取餐時間/會員以後端揪團資料為準)
@@ -4253,7 +4322,7 @@ function payMyGroupShare_(myCart, phone, name, myNeeds) {
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   const lines = allLines.map(c => `- ${c.x2 ? '其他需求：' : ''}${c.name}${c.size ? '(' + c.size + ')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
   const summary = `【${STORE_NAME}】揪團訂單（${groupView.hostName} 的揪團・各付各的）\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${groupPickupText_()}\n---\n${lines}\n---\n${perks.total ? '會員權益（' + verifiedMember.tier + '）：' + tierPerkText_(perks) + '\n' : ''}${voucherDiscount > 0 ? '已套用兌換券折抵：-$' + voucherDiscount + '\n' : ''}總計：$${total}\n（已完成線上信用卡付款，取餐時請出示此訂單編號）`;
-  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds, voucherPhone: phone, payAtPickup: false, cartBackup: myCart };
+  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds, voucherPhone: phone, payAtPickup: false, cartBackup: myCart, groupPay: 'each' };
   cart = []; saveCartSession(); updateCartBar();
   return createPendingOrderOnBackend({
     storeId: 'meibao', groupId: groupCtx.groupId, memberToken: groupCtx.memberToken,
@@ -4264,7 +4333,7 @@ function payMyGroupShare_(myCart, phone, name, myNeeds) {
     if (data.status !== 'ok') { restoreCartAfterFailure_((data.message || '送出失敗') + ''); return; }
     pendingOrderContext.backendOrderId = data.orderId;
     startMpgPayment(data.orderId, total);
-  }).catch(() => restoreCartAfterFailure_('訂單送出失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。'));
+  }).catch(() => payFailed_('訂單送出失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。'));   // 後端慢時單可能其實已建好
 }
 
 // 修改自己的餐點：把自己送出過的餐點放回購物車，改完再送出一次(會取代舊的)
@@ -4426,6 +4495,11 @@ function removeGroupMember(memberId) {
   }).catch(err => alert(err.message));
 }
 function lockGroup(lock) {
+  // 各付各的(10-07 老闆定案)：團主自己也要點餐，餐點還沒送出不能結單(後端 groupLock_ 也擋)；請客團主可以不點
+  if (lock && isGroupEach_()) {
+    const hostM = groupView.members.find(m => m.isHost);
+    if (!hostM || !hostM.items.length) { alert('請先點你自己的餐點再結單（各付各的團主也要點餐）'); return; }
+  }
   if (lock && !confirm(isGroupEach_() ? '結單後就不能再有新朋友加入（已加入的人仍可付款），確定結單？' : '結單後朋友就不能再加點或修改，確定結單？')) return;
   apiPost_({ action: 'groupLock', groupId: groupCtx.groupId, hostToken: groupCtx.hostToken, lock }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '操作失敗');
@@ -4464,7 +4538,8 @@ function resumeGroupPayment() {
   const each = isGroupEach_();
   const orderId = each ? me.orderId : groupView.orderId;
   const total = each ? me.subtotal : groupView.total;
-  pendingOrderContext = { orderNo: orderId, summary: `${groupView.hostName} 的揪團（${groupView.payModeText}）\n${each ? me.name + ' 的餐點' : groupView.members.length + ' 人'}\n合計：$${total}`, total, backendOrderId: orderId, voucherIds: [], payAtPickup: false, cartBackup: [] };
+  pendingOrderContext = { orderNo: orderId, summary: `${groupView.hostName} 的揪團（${groupView.payModeText}）\n${each ? me.name + ' 的餐點' : groupView.members.length + ' 人'}\n合計：$${total}`, total, backendOrderId: orderId, voucherIds: [], payAtPickup: false, cartBackup: [], groupPay: each ? 'each' : 'host', resume: true };
+  showPayBusy_('正在前往付款…');
   startMpgPayment(orderId, total);
 }
 
@@ -4780,11 +4855,20 @@ if (HOME_TABS_ON) initHomeTabs_();
 // 不用跟著等待，避免整個開場被網路速度拖慢
 // 線上點餐顯示開關(10-03)：上下架狀態跟菜單一起抓，等兩個都回來才畫菜單(不然不顯示的分類會先閃一下)；
 // 狀態 4 秒還沒回來就先畫，晚到的時候 applyItemAvailability 發現有變再重畫
-const storeStatusReady = apiGet_({ action: 'storeStatus', storeId: 'meibao' }).catch(err => { console.warn('讀取品項上下架狀態失敗（不影響點餐，全部視為供應中）', err); return null; });
-Promise.all([loadMenuCmsData(), Promise.race([storeStatusReady, new Promise(r => setTimeout(() => r(null), 4000))])]).then(([, st]) => {
+// 10-07：菜單先用手機裡存的時，上下架狀態也先用上次存的立刻畫(不等 3～4 秒)，雲端狀態回來 applyItemAvailability 有變再重畫
+const STORE_STATUS_SAVE_KEY_ = 'abao_order_store_status_v1';
+const storeStatusReady = apiGet_({ action: 'storeStatus', storeId: 'meibao' }).then(d => {
+  if (d && d.status === 'ok') { try { localStorage.setItem(STORE_STATUS_SAVE_KEY_, JSON.stringify(d)); } catch (e) {} }
+  return d;
+}).catch(err => { console.warn('讀取品項上下架狀態失敗（不影響點餐，全部視為供應中）', err); return null; });
+const menuReady_ = loadMenuCmsData();   // 先呼叫：決定 menuFromSaved_
+let savedStoreStatus_ = null;
+if (menuFromSaved_) { try { savedStoreStatus_ = JSON.parse(localStorage.getItem(STORE_STATUS_SAVE_KEY_) || 'null'); } catch (e) {} }
+Promise.all([menuReady_, Promise.race([storeStatusReady, new Promise(r => setTimeout(() => r(savedStoreStatus_), menuFromSaved_ ? 0 : 4000))])]).then(([, st]) => {
   if (st && st.status === 'ok' && st.items) { itemAvailabilityMap = st.items; rebuildOnlineCatalog_(); }
   document.getElementById('menu').innerHTML = ''; // 清掉「菜單載入中…」提示，renderMenu()本身只會附加不會清空
   renderMenu();
+  menuFirstRendered_ = true;
   applyItemAvailability(storeStatusReady);
   if (HOME_TABS_ON) renderHomeNewPane_();
 });
