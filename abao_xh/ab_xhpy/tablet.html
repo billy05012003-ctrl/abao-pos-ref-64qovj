@@ -1015,6 +1015,7 @@ let DISCOUNT_CATEGORY_ITEMS = [];
 let POINT_REDEMPTION_CATALOG = [];
 
 let POS_ALL_PROMOS = [];   // 原始優惠券定義(含最低適用等級/適用品項)，會員等級優惠用
+let POS_HOME_ACTS = [];   // 會員好康活動(後端算好接下來 60 天的活動日 dates)，第四波 4-1 活動鍵只在活動日出現用
 // 加價購(2026-09-27)：POS前台不賣，只拿來在「上下架管理」列出售完開關(見renderMergedItemStatusList)
 let POS_ADDONS = [];
 const ADDON_STATUS_GROUP = '加價購（線上點餐）';
@@ -1025,13 +1026,15 @@ function applyPromoSettings_(data) {
   DIRECT_DISCOUNT_TYPES = [];
   MANUAL_GRANT_VOUCHER_TYPES = [];
   POS_ALL_PROMOS = data.promos || [];
+  POS_HOME_ACTS = data.homeActs || [];
   (data.promos || []).filter(p => p.status !== '停用').forEach(p => {
     // 自訂折數(2026-09-25新增)：mode:'order'=整張訂單打折、effect:'pct'=單品打折，折數(85=打85折)存在amount欄
     VOUCHER_BEHAVIOR[p.name] = p.mode === 'fixed'
-      ? { mode: 'fixed', amount: p.amount }
+      ? { mode: 'fixed', amount: p.amount, exclusive: !!p.exclusive }
       : p.mode === 'order'
-        ? { mode: 'order', pct: p.amount }
-        : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null, pct: p.amount, targetItem: p.targetItem || '', targetSize: p.targetSize || '' };
+        ? { mode: 'order', pct: p.amount, exclusive: !!p.exclusive }
+        : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null, pct: p.amount, targetItem: p.targetItem || '', targetSize: p.targetSize || '',
+            requireCat: p.requireCat || '', requireItem: p.requireItem || '', exclusive: !!p.exclusive };   // 需搭配/不併用：第四波 4-1 按鈕檢查用
     // 等級優惠(2026-09-25)結帳自動套用，不放成手動按鈕(避免店員再按一次重複折)
     if (p.showAsButton && !isTierPerkPromo_(p) && isPromoInPeriod_(p)) DIRECT_DISCOUNT_TYPES.push(p.name);   // 期間外不顯示按鈕
     if (p.manualGrantable && isPromoInPeriod_(p)) MANUAL_GRANT_VOUCHER_TYPES.push(p.name);                     // 期間外不能再贈送
@@ -1234,6 +1237,7 @@ function lookupMember() {
     } else {
       selectedMember = null;
       el.textContent = data.message || '查詢失敗';
+      renderPosCart();   // 第四波 4-1：沒有會員了，會員限定的活動優惠要拿掉
     }
   });
 }
@@ -1594,13 +1598,63 @@ function closeDrinkUpgradePicker() {
   pendingDrinkUpgradeOptions = [];
 }
 
+// ---------------------------------------------------------------
+// 會員好康第四波 4-1(2026-10-06 老闆定案，規格 門市活動鍵設計_第四波4-1_2026-10-06.md)：
+// ①優惠券綁了會員好康活動、活動有勾「門市」的按鈕，今天是那個活動的活動日才出現(非活動日完全不顯示；沒綁活動的照舊)
+// ②活動「會員限定」沒選會員擋下 ③需搭配分類/需搭配品項沒點擋下 ④不併用：讓店員選一個，另一個拿掉
+// 按鈕清單在每次打開「優惠券」分類時才算今天(平板開過夜隔天也對)；後台發布後平板自動重讀活動(10-04 平板自動更新)
+// ---------------------------------------------------------------
+function posStoreActsOf_(type) { return POS_HOME_ACTS.filter(a => a.promo === type && a.status !== '停用' && (a.channels || []).indexOf('門市') !== -1); }
+function posTodayActsOf_(type) { const t = todayYmd_(); return posStoreActsOf_(type).filter(a => (a.dates || []).indexOf(t) !== -1); }
+// 沒綁門市活動＝照舊每天都在；有綁＝今天要是其中一個活動的活動日
+function posActDayOk_(type) { return !posStoreActsOf_(type).length || posTodayActsOf_(type).length > 0; }
+function posMemberOnlyToday_(type) { return posTodayActsOf_(type).some(a => a.memberOnly); }
+function posDiscountTypesNow_() {
+  return POS_ALL_PROMOS.filter(p => p.status !== '停用' && p.showAsButton && !isTierPerkPromo_(p) && isPromoInPeriod_(p) && posActDayOk_(p.name)).map(p => p.name);
+}
+function posCatShort_(cat) { return String(cat || '').split('_').pop(); }
+// 按下活動鍵前的檢查：通過回 true；不通過跳提示回 false
+function posDiscountPrecheck_(type) {
+  const b = VOUCHER_BEHAVIOR[type] || {};
+  if (!posActDayOk_(type)) { alert(`今天不是「${type}」的活動日`); return false; }
+  if (posMemberOnlyToday_(type) && !selectedMember) { alert(`「${type}」限會員使用，請先在上方查詢會員`); return false; }
+  if (b.requireCat && !posCart.some(c => c.cat === b.requireCat)) { alert(`「${type}」要搭配「${posCatShort_(b.requireCat)}」的餐點，請先點一份`); return false; }
+  if (b.requireItem && !posCart.some(c => c.baseName === b.requireItem)) { alert(`「${type}」要搭配「${b.requireItem}」，請先點一份`); return false; }
+  // 不併用：新按的是不併用、或訂單裡已經有不併用的 → 問店員要留哪一個
+  const others = directDiscounts.map(d => d.type).concat(appliedVouchers.map(v => v.type)).filter(t => t !== type);
+  const exclOld = directDiscounts.filter(d => (VOUCHER_BEHAVIOR[d.type] || {}).exclusive).map(d => d.type)
+    .concat(appliedVouchers.filter(v => (VOUCHER_BEHAVIOR[v.type] || {}).exclusive).map(v => v.type));
+  if (others.length && (b.exclusive || exclOld.length)) {
+    const why = b.exclusive ? `「${type}」不能跟其他優惠一起用` : `這張訂單已經用了不能併用的「${exclOld.join('、')}」`;
+    if (!confirm(`${why}。
+
+按「確定」：改用「${type}」，拿掉「${others.join('、')}」
+按「取消」：保留原本的優惠`)) return false;
+    directDiscounts = [];
+    appliedVouchers = [];
+    renderMemberVoucherPanel();
+    return 'replaced';
+  }
+  return true;
+}
+// 會員被清掉時(查詢別的手機查無會員等)，已套用的「會員限定」活動優惠一起拿掉並提醒(不然非會員會用到會員限定)
+function posDropMemberOnlyDiscounts_() {
+  if (selectedMember || !directDiscounts.length) return;
+  const drop = directDiscounts.filter(d => posMemberOnlyToday_(d.type));
+  if (!drop.length) return;
+  directDiscounts = directDiscounts.filter(d => !posMemberOnlyToday_(d.type));
+  setTimeout(() => alert(`已沒有選會員，限會員的「${drop.map(d => d.type).join('、')}」已拿掉`), 0);
+}
+
 function applyDirectDiscount(type) {
   const behavior = VOUCHER_BEHAVIOR[type];
   if (!behavior) { alert('未知的折抵類型：' + type); return; }
   if (!behavior.autoAddItem && posCart.length === 0) { alert('請先選購品項'); return; }
+  const pre = posDiscountPrecheck_(type);   // 第四波 4-1：活動日／會員限定／需搭配／不併用
+  if (!pre) return;
   // 折扣疊加防呆(2026-09-17新增)：這張訂單已經套用過門市活動折抵，再套用第二個前先跟店員確認，
-  // 避免尖峰時段連點兩個折扣按鈕誤疊加算錯帳(例如買一送一又點第二件六折)
-  if (directDiscounts.length > 0) {
+  // 避免尖峰時段連點兩個折扣按鈕誤疊加算錯帳(例如買一送一又點第二件六折)；不併用剛換過就不用再問
+  if (pre !== 'replaced' && directDiscounts.length > 0) {
     const already = directDiscounts.map(d => d.type).join('、');
     if (!confirm(`這張訂單已經套用「${already}」，確定要再疊加「${type}」嗎？`)) return;
   }
@@ -1925,7 +1979,7 @@ function goToPosDiscountCategory() {
 
   const grid = document.createElement('div');
   grid.className = 'pos-item-grid';
-  DISCOUNT_CATEGORY_ITEMS.forEach(type => {
+  [...posDiscountTypesNow_(), '活動飲品升級'].forEach(type => {
     const card = document.createElement('div');
     card.className = 'pos-grid-card pos-discount-card';
     card.innerHTML = `<div class="name">${type}</div>`;
@@ -2682,6 +2736,7 @@ function editPosCartLine(lineKey) {
 }
 
 function renderPosCart() {
+  posDropMemberOnlyDiscounts_();   // 第四波 4-1：沒選會員就拿掉會員限定的活動優惠
   const linesEl = document.getElementById('pos-cart-lines');
   linesEl.innerHTML = '';
   if (posCart.length === 0) {
