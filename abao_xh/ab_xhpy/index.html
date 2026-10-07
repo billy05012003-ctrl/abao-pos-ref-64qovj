@@ -1558,8 +1558,18 @@ function maybeAutoClaim_() {
     }).catch(err => console.warn('活動券自動領取失敗(這次不套用，重新整理頁面會再試)', err));
   }, 500);
 }
+// 活動贈品在背景加進/拿掉(例如券剛自動領到)：購物車開著就重畫一次品項清單(10-07 實測雞塊行慢一步才出現)
+var cartRerenderTimer_ = null;
+function scheduleCartRerender_() {
+  if (cartRerenderTimer_) return;
+  cartRerenderTimer_ = setTimeout(() => {
+    cartRerenderTimer_ = null;
+    updateCartBar();
+    if (document.getElementById('cart-overlay').classList.contains('open')) renderCart();
+  }, 0);
+}
 function recalcVoucherDiscounts_() {
-  syncActGifts_();
+  if (syncActGifts_()) scheduleCartRerender_();
   const pick = currentPickupISO_();
   // 活動券一律自動：贈品券綁到贈品那一列；任兩件的券自動加入(下面算完是 $0 就拿掉，免得付款時白白核銷)
   actVouchersForPickup_().forEach(v => {
@@ -1955,12 +1965,14 @@ function renderTierBenefits() {
   });
 }
 
+var vouchersLoadedAt_ = 0;   // 上次讀到會員兌換券的時間(openCart 判斷要不要重讀)
 function loadCheckoutVouchers() {
   const phone = document.getElementById('cust-phone').value.trim();
   const listEl = document.getElementById('checkout-voucher-list');
   if (!phone) { listEl.innerHTML = '<div style="color:#a30000;font-size:0.8rem;">請先輸入手機號碼</div>'; return; }
   listEl.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;">查詢中...</div>';
   apiGet_({ action: 'getMemberVouchers', phone }).then(data => {
+    if (data.status === 'ok') vouchersLoadedAt_ = Date.now();
     memberAllVouchers_ = (data.status === 'ok') ? data.vouchers : [];
     checkoutMemberVouchers = memberAllVouchers_.filter(v => v.usable && groupVoucherAllowed_(v));   // 請客：見 groupVoucherAllowed_
     // 重新查詢(例如剛領完券)：還能用的已選券留著，其他的清掉避免對到舊資料
@@ -3446,7 +3458,7 @@ function renderCart() {
         ? `<br><span style="color:#1e7b34;font-size:0.78rem;font-weight:700;">➕ 加一元多一件${c.gift.type !== '加一元多一件' ? '（' + escapeHtml_(c.gift.type) + '）' : ''}</span><br><span style="color:var(--muted);font-size:0.8rem">$${c.price - lineBase_(c) + 1}<span style="text-decoration:line-through;margin-left:4px;">$${c.price}</span>${c.price > lineBase_(c) ? '（加料照收）' : ''}</span>`
         : c.gift
         ? `<br><span style="color:#1e7b34;font-size:0.78rem;font-weight:700;">🎁 活動贈品（${escapeHtml_(c.gift.type)}）</span><br><span style="color:var(--muted);font-size:0.8rem">$0<span style="text-decoration:line-through;margin-left:4px;">$${c.price}</span>${c.qty > 1 ? ' x ' + c.qty : ''}</span>`
-        : `${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span>`}</div>
+        : `${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span>${groupCheckoutMode && c.groupActUsed > 0 ? '<br><span style="color:#1e7b34;font-size:0.78rem;font-weight:700;">🎁 已套用' + escapeHtml_(c.who || '') + '的活動優惠（見下方揪團活動優惠）</span>' : ''}`}</div>
       <div style="display:flex;align-items:center;gap:8px;flex:none;">
         <button class="qty-btn" data-act="dec">-</button>
         <span>${c.qty}</span>
@@ -3492,6 +3504,8 @@ function changeQty(lineKey, delta) {
 }
 
 function openCart() {
+  // 券可能在別的地方變了(退款退回、別台裝置用掉)：超過 30 秒沒讀就重讀(10-07 實測退款後同一頁要重新整理才有雞塊)
+  if (verifiedMember && !groupCheckoutMode && Date.now() - vouchersLoadedAt_ > 30000) loadCheckoutVouchers();
   renderCart();
   refreshGroupCartUi_();
   document.getElementById('cart-view').style.display = 'block';
@@ -4233,8 +4247,8 @@ function refreshGroupCartUi_() {
   document.getElementById('group-agree-row').style.display = open && each ? 'flex' : 'none';
   const btn = document.getElementById('group-submit-btn');
   btn.style.display = open ? 'block' : 'none';
-  const eachLines = cart.concat(otherNeedsAsGroupItems_());   // 含自己的其他需求(跟payMyGroupShare_同一套算法)
-  btn.textContent = each ? `送出並付款（$${Math.max(0, eachLines.reduce((s, c) => s + c.qty * c.price, 0) - myTierPerks_(eachLines).total - checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0))}）` : '送出我的餐點到揪團';
+  // 金額跟下面「應付金額」同一套 cartDue_(先重算券再算，10-07 實測按鈕曾短暫顯示 $0)
+  btn.textContent = each ? `送出並付款（$${cartDue_().due}）` : '送出我的餐點到揪團';
 }
 
 function onGroupPayModeChange_() {
@@ -4430,13 +4444,22 @@ function renderGroupPanel_() {
     const paid = each && m.payState && m.payState !== '未付款';
     const canRemove = host && !m.isHost && editable && !paid;
     const badge = each ? `<span class="group-status ${m.payState === '已付款' ? 'done' : m.payState === '付款中' ? 'locked' : m.payState === '已退款' ? 'dead' : ''}" style="margin-left:6px;">${escapeHtml_(m.payState)}</span>` : '';
-    h += `<div class="group-member${m.isMe ? ' me' : ''}"><div class="gm-head"><span>${escapeHtml_(m.name)}${m.isHost ? '（團主）' : ''}${m.isMe ? '（你）' : ''}${badge}</span><span>$${m.subtotal}</span></div>`;
+    // 各付各的(10-07)：付款中/已付款顯示訂單實付(活動優惠、兌換券付款時才折)，原價劃掉；還沒付的標原價
+    const paidAmt = each && typeof m.paidAmount === 'number' ? m.paidAmount : null;
+    const amtHtml = paidAmt != null && paidAmt !== m.subtotal
+      ? `<span><span style="color:var(--muted);font-weight:normal;text-decoration:line-through;font-size:0.85rem;margin-right:4px;">$${m.subtotal}</span>$${paidAmt}</span>`
+      : `<span>$${paidAmt != null ? paidAmt : m.subtotal}${each && paidAmt == null && m.items.length ? '<span style="color:var(--muted);font-weight:normal;font-size:0.75rem;">（原價）</span>' : ''}</span>`;
+    h += `<div class="group-member${m.isMe ? ' me' : ''}"><div class="gm-head"><span>${escapeHtml_(m.name)}${m.isHost ? '（團主）' : ''}${m.isMe ? '（你）' : ''}${badge}</span>${amtHtml}</div>`;
     m.items.forEach(it => { h += `<div class="gm-item"><span>${it.x2 ? '其他需求：' : ''}${escapeHtml_(it.name)}${it.size ? ' (' + escapeHtml_(it.size) + ')' : ''}${it.x2 ? '' : ' x' + it.qty}${it.note === '活動贈品' ? '（活動贈品）' : ''}</span><span>${it.x2 && !it.price ? '' : '$' + it.price * it.qty}</span></div>`; });
     if (!each && m.actDiscount > 0) h += `<div class="gm-item" style="color:#c0392b;"><span>🎁 活動優惠（${escapeHtml_([...new Set(m.actTypes || [])].join('、'))}）</span><span>-$${m.actDiscount}</span></div>`;
     if (canRemove) h += `<div style="text-align:right;"><button type="button" style="border:none;background:none;color:#a30000;font-size:0.8rem;cursor:pointer;" onclick="removeGroupMember('${m.memberId}')">刪除這個人的餐點</button></div>`;
     h += '</div>';
   });
-  h += `<div class="cart-total"><span>合計（${g.members.length} 人）</span><span>${actTotal ? `<span style="color:var(--muted);font-weight:normal;text-decoration:line-through;font-size:0.9rem;margin-right:6px;">$${g.total}</span>$${g.total - actTotal}` : '$' + g.total}</span></div>`;
+  const eachShown = each ? g.members.reduce((t, m) => t + (typeof m.paidAmount === 'number' ? m.paidAmount : m.subtotal), 0) : 0;
+  h += each
+    ? `<div class="cart-total"><span>合計（${g.members.length} 人）</span><span>${eachShown !== g.total ? `<span style="color:var(--muted);font-weight:normal;text-decoration:line-through;font-size:0.9rem;margin-right:6px;">$${g.total}</span>` : ''}$${eachShown}</span></div>`
+      + (g.members.some(m => typeof m.paidAmount !== 'number' && m.items.length) ? `<div style="font-size:0.8rem;color:var(--muted);text-align:right;margin-top:-4px;">還沒付款的人顯示原價，活動優惠、兌換券付款時自動折抵</div>` : '')
+    : `<div class="cart-total"><span>合計（${g.members.length} 人）</span><span>${actTotal ? `<span style="color:var(--muted);font-weight:normal;text-decoration:line-through;font-size:0.9rem;margin-right:6px;">$${g.total}</span>$${g.total - actTotal}` : '$' + g.total}</span></div>`;
   if (actTotal) h += `<div style="font-size:0.8rem;color:var(--muted);text-align:right;margin-top:-4px;">已扣大家的活動優惠 -$${actTotal}；會員權益、兌換券在團主結帳時再算</div>`;
   if (each) {
     // 各付各的：每個人管自己那份(團主也一樣)
