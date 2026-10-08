@@ -910,13 +910,21 @@ function buildAvailSelect_(current, onChange) {
 // (renderPosLocalItemStatusManager)合併成一份，分類改手風琴摺疊，每個品項同時顯示兩個獨立開關，
 // 呈現方式對齊POS後台的「品項上下架」頁面
 let itemStatusExpandedCats = new Set();
+// 品項上下架清單(10-08)：菜單品項改照線上正式版菜單(CATALOG)產生，新增/合併分類(例如板燒漢堡／土司、豪華海陸漢堡)自動跟上；
+// 原本寫死的 ITEM_LIST 只留「加購品項/配料選擇」那組(客製化選項的上下架，菜單裡沒有)；菜單還沒讀到時先用舊清單
+function posItemStatusList_() {
+  const list = [];
+  Object.entries(CATALOG || {}).forEach(([cat, items]) => (items || []).forEach(it => list.push({ category: cat, name: it.name })));
+  if (!list.length) return ITEM_LIST;
+  return list.concat(ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY));
+}
 
 function renderMergedItemStatusList() {
   const container = document.getElementById('pos-item-status-list');
   container.innerHTML = '';
   const overrides = currentStoreStatus.items || {};
   const grouped = new Map();
-  ITEM_LIST.forEach(it => {
+  posItemStatusList_().forEach(it => {
     if (!grouped.has(it.category)) grouped.set(it.category, []);
     grouped.get(it.category).push(it);
   });
