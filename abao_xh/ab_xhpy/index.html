@@ -507,7 +507,7 @@
 <div class="overlay" id="cart-overlay">
   <div class="sheet">
     <div id="cart-view">
-      <h2>我的訂單</h2>
+      <h2>購物車</h2>
       <div id="cart-lines"></div>
       <div class="cart-total"><span>總計</span><span id="cart-total">$0</span></div>
       <div id="cart-otherneeds"></div>
@@ -4659,7 +4659,8 @@ function renderMyOrdersPane_() {
   if (myOrdersLoading_ && !myOrdersData_) { el.innerHTML = tabs + '<div class="hp-empty">載入中…</div>'; return; }
   if (myOrdersErr_ && !myOrdersData_) { el.innerHTML = tabs + `<div class="hp-empty">${escapeHtml_(myOrdersErr_)}<br><button type="button" class="mo-btn" style="margin-top:10px;" onclick="loadMyOrders_(true)">重新整理</button></div>`; return; }
   const d = myOrdersData_ || { orders: [], groups: [], days: 30 };
-  const list = mySub_ === 'orders' ? d.orders : d.groups;
+  // 老闆 10-08 定：個人紀錄只放自己點的一般單，揪團單只放揪團紀錄(卡片上補付款狀態與實付)
+  const list = mySub_ === 'orders' ? d.orders.filter(o => !o.group) : d.groups;
   const body = list.length ? list.map(mySub_ === 'orders' ? myOrderCardHtml_ : myGroupCardHtml_).join('')
     : `<div class="hp-empty">最近 ${d.days || 30} 天沒有${mySub_ === 'orders' ? '訂單' : '揪團'}紀錄</div>`;
   el.innerHTML = tabs + body + `<div class="mo-note" style="text-align:center;margin:6px 0 4px;">只顯示最近 ${d.days || 30} 天${myOrdersLoading_ ? '・更新中…' : ''}　<a href="javascript:void(0)" onclick="loadMyOrders_(true)" style="color:var(--brand);">重新整理</a></div>`;
@@ -4681,10 +4682,15 @@ function myOrderCardHtml_(o) {
 function myGroupCardHtml_(g) {
   const cls = MY_GROUP_STATUS_[g.status] !== undefined ? MY_GROUP_STATUS_[g.status] : '';
   const items = g.myItems.length ? g.myItems.map(i => `${escapeHtml_(i.name)} ×${i.qty}`).join('<br>') : '<span class="mo-note">還沒點餐</span>';
+  // 自己付款的那張單(請客＝團主那張、各付各的＝自己那張)：補付款狀態與實付；請客的團員是團主付錢，沒有自己的單
+  const paid = g.orderId ? ((myOrdersData_ || {}).orders || []).find(o => o.orderId === g.orderId) : null;
+  const pst = paid ? (MY_ORDER_STATUS_[paid.status] || [paid.status, '']) : null;
+  const payLine = paid ? `<div class="mo-foot" style="margin-top:6px;"><span>${g.payMode === 'each' ? '我付的' : '全團'}實付 <b>$${paid.total}</b>${paid.points ? `<span class="mo-note">　+${paid.points} 點</span>` : ''}</span><span class="mo-st ${pst[1]}">${escapeHtml_(pst[0])}</span></div>` : '';
   return `<div class="mo-card">
     <div class="mo-head"><span>${myWhen_(g.pickupDate, g.pickupTime)} 取餐<span class="mo-tag">${g.payMode === 'each' ? '各付各的' : '我請客'}</span><span class="mo-tag">${g.isHost ? '我是團主' : '團員'}</span></span><span class="mo-st ${cls}">${escapeHtml_(g.status)}</span></div>
     <div class="mo-title">${escapeHtml_(g.hostName)} 的揪團</div>
     <div class="mo-items">${items}</div>
+    ${payLine}
     <div class="mo-foot"><span>${g.mySubtotal ? '我的餐點 <b>$' + g.mySubtotal + '</b>' : ''}${g.orderId ? `<span class="mo-note">　${escapeHtml_(g.orderId)}</span>` : ''}</span>
       <button type="button" class="mo-btn" onclick="openMyGroup_('${escapeHtml_(g.groupId)}')">打開揪團</button></div>
   </div>`;
@@ -4703,6 +4709,8 @@ function reorderMyOrder_(orderId) {
   const o = ((myOrdersData_ || {}).orders || []).find(x => x.orderId === orderId);
   if (!o) return;
   if (groupCheckoutMode) { alert('請先完成或取消揪團結帳，再使用再點一次'); return; }
+  // 網路慢時 LINE 登入/會員資料還沒帶好：先不加購物車(不然購物車打開會停在登入/加入會員的畫面)
+  if (!verifiedMember) { alert('會員資料還在載入，請稍等幾秒再按一次「再點一次」'); return; }
   const added = [], skipped = [];
   const origAlert = window.alert;
   try {
