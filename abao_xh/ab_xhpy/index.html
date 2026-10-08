@@ -772,8 +772,8 @@ async function initLineLogin_() {
   if (!data.lineSession) { lineStatusHtml_(`<div style="color:#a30000;">${escapeHtml_(data.message || 'LINE 登入失敗，請重新整理頁面')}</div>`); return; }
   lineSession_ = data.lineSession;
   if (data.status === 'ok') applyLineMember_(data.member);
-  if (homeTab_ === 'mine') loadMyOrders_(true);   // 我的訂單(10-08)：停在我的訂單時登入完成就讀
   else renderLineRegister_(data.lineName || '');
+  if (homeTab_ === 'mine') loadMyOrders_(true);   // 我的訂單(10-08)：停在我的訂單時登入完成就讀
 }
 function applyLineMember_(member) {
   document.getElementById('cust-phone').value = member.phone;
