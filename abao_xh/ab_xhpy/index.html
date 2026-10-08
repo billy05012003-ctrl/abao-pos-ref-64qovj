@@ -208,7 +208,22 @@
   #home-tabbar button.on { color: var(--brand); font-weight: 700; }
   #home-tabbar .ht-badge { position: absolute; top: 3px; left: calc(50% + 8px); background: var(--brand); color: #fff; border-radius: 999px; font-size: 0.65rem; min-width: 16px; padding: 0 4px; line-height: 16px; display: none; }
   body.home-tabs #cart-bar { bottom: calc(56px + env(safe-area-inset-bottom)); }
-  body.home-tabs.tab-new #home-pane-new, body.home-tabs.tab-perk #home-pane-perk { display: block; }
+  body.home-tabs.tab-new #home-pane-new, body.home-tabs.tab-perk #home-pane-perk, body.home-tabs.tab-mine #home-pane-mine { display: block; }
+  /* 我的訂單(10-08)：個人紀錄／揪團紀錄 */
+  .mo-tabs { display: flex; gap: 8px; margin: 2px 0 12px; }
+  .mo-tabs button { flex: 1; border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 8px 0; font-weight: 700; font-size: 0.88rem; color: var(--muted); cursor: pointer; }
+  .mo-tabs button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .mo-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+  .mo-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--muted); }
+  .mo-st { flex: none; font-size: 0.74rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e9f6ec; color: #2d7a3a; }
+  .mo-st.warn { background: #fff3e0; color: #c26a00; }
+  .mo-st.off { background: #f1f1f1; color: #888; }
+  .mo-title { font-weight: 800; font-size: 0.95rem; margin: 6px 0 4px; }
+  .mo-tag { display: inline-block; font-size: 0.7rem; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; padding: 0 5px; margin-left: 6px; color: var(--muted); vertical-align: middle; }
+  .mo-items { font-size: 0.85rem; line-height: 1.6; color: #444; }
+  .mo-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.85rem; }
+  .mo-btn { flex: none; border: none; background: var(--brand); color: #fff; border-radius: 8px; padding: 7px 14px; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
+  .mo-note { font-size: 0.76rem; color: var(--muted); }
   body.home-tabs:not(.tab-order) #store-strip, body.home-tabs:not(.tab-order) #closed-notice, body.home-tabs:not(.tab-order) #store-status-notice,
   body.home-tabs:not(.tab-order) #group-banner, body.home-tabs:not(.tab-order) nav#tabs, body.home-tabs:not(.tab-order) main#menu,
   body.home-tabs:not(.tab-order) #cart-bar { display: none !important; }
@@ -341,6 +356,7 @@
 </header>
 <div id="home-pane-new" class="home-pane"></div>
 <div id="home-pane-perk" class="home-pane"></div>
+<div id="home-pane-mine" class="home-pane"></div>
 <!-- 2026-09-30：原本這裡寫死的「營業時間＋信用卡付款」說明拿掉，營業時間改由後台設定自動產生，說明文字集中到「訂餐資訊」頁 -->
 <div id="store-strip">
   <div id="member-strip">
@@ -440,13 +456,14 @@
   <button type="button" id="home-tab-new" onclick="switchHomeTab_('new')"><span class="ht-ic">✨</span>新品推薦</button>
   <button type="button" id="home-tab-perk" onclick="switchHomeTab_('perk')"><span class="ht-ic">🎁</span>會員好康</button>
   <button type="button" id="home-tab-order" onclick="switchHomeTab_('order')"><span class="ht-ic">🛒</span>線上點餐<span class="ht-badge" id="home-tab-badge"></span></button>
+  <button type="button" id="home-tab-mine" onclick="switchHomeTab_('mine')"><span class="ht-ic">📋</span>我的訂單</button>
 </nav>
 <div class="overlay" id="home-detail-overlay" style="z-index:26;" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="sheet" id="home-detail-body"></div>
 </div>
 
 <div id="cart-bar" onclick="openCart()">
-  <div><span class="count" id="cart-count">0</span>查看訂單</div>
+  <div><span class="count" id="cart-count">0</span>查看購物車</div>
   <strong id="cart-total-bar">$0</strong>
 </div>
 
@@ -549,6 +566,7 @@
       <p id="confirm-msg">付款已完成，取餐時請出示此訂單編號或本畫面。如需協助請來電客服 0909-504662。</p>
       <pre id="order-summary"></pre>
       <button class="btn-primary" onclick="closeAll()">完成，關閉視窗</button>
+      <button type="button" id="confirm-mine-btn" onclick="closeAll(); openMyOrdersTab_()" style="display:block;width:100%;margin-top:8px;padding:10px;border:1px solid var(--border);background:#fff;border-radius:10px;font-weight:700;color:var(--brand);">查看我的訂單</button>
     </div>
   </div>
 </div>
@@ -754,6 +772,7 @@ async function initLineLogin_() {
   if (!data.lineSession) { lineStatusHtml_(`<div style="color:#a30000;">${escapeHtml_(data.message || 'LINE 登入失敗，請重新整理頁面')}</div>`); return; }
   lineSession_ = data.lineSession;
   if (data.status === 'ok') applyLineMember_(data.member);
+  if (homeTab_ === 'mine') loadMyOrders_(true);   // 我的訂單(10-08)：停在我的訂單時登入完成就讀
   else renderLineRegister_(data.lineName || '');
 }
 function applyLineMember_(member) {
@@ -3369,7 +3388,10 @@ function confirmAddToCart() {
     comboDrinkPrice: currentModal.comboDrinkPrice, comboDrinkBasePrice: currentModal.comboDrinkBasePrice,
     comboDrinkUpgradeFee: currentModal.comboDrinkUpgradeFee, appliedUpgradeRule: currentModal.appliedUpgradeRule || null,
     comboDrinkExtraGroups: (currentModal.comboDrinkExtraGroups || []).slice(), activeDrinkGroupKey: currentModal.activeDrinkGroupKey,
-    x1: x1Addon ? x1Addon.name : null, x1Sauces: Object.fromEntries(x1SauceGroups.map(g => [g.name, g.picks.slice()]))
+    x1: x1Addon ? x1Addon.name : null, x1Sauces: Object.fromEntries(x1SauceGroups.map(g => [g.name, g.picks.slice()])),
+    // 我的訂單「再點一次」(10-08)：明確記單點/套餐、份量二選一(漲價後不能再靠 basePrice 比對判斷)
+    setForm: currentModal.item.price_set ? (currentModal.basePrice === currentModal.item.price_set ? 'set' : 'single') : undefined,
+    altForm: currentModal.item.price_alt ? (currentModal.basePrice === currentModal.item.price_alt ? 'b' : 'a') : undefined
   };
   // 節氣贈品(10-04)：從二選一點進來的這一份另外一行贈品(不合併、不能變更，券折成 $0)；多點的份數照一般品項加
   const gp = pendingGiftPick_;
@@ -3587,7 +3609,8 @@ function submitOrder(e) {
   const appliedVoucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   // 2026-09-19：補送品項備註(note)，出單機廚房單會印在該品項下面；之前只送name/size/qty/price，客人寫的「少蔥」等會遺失
-  const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '', x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined }));   // x1＝套餐加購價，後端照後台價驗證並記在訂單
+  const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '', x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined,
+    edit: c.edit && !c.gift ? c.edit : undefined }));   // x1＝套餐加購價，後端照後台價驗證並記在訂單；edit＝點餐選擇快照(我的訂單「再點一次」用，後端只存不算錢)
 
   // 「取餐現場付款」只有PAY_AT_PICKUP_ENABLED開啟時欄位才會顯示，關閉時select維持隱藏，
   // 這裡讀不到值就當作沒選(走原本的線上付款流程)，跟目前行為完全一致
@@ -4582,15 +4605,16 @@ function initHomeTabs_() {
   // 揪團連結、付款返回一律停在線上點餐；LINE 圖文選單之後可以用 ?tab=perk 直接開會員好康
   const want = URL_PARAMS_.get('tab');
   const busy = URL_PARAMS_.get('g') || URL_PARAMS_.get('mpgreturn');
-  switchHomeTab_(!busy && (want === 'new' || want === 'perk') ? want : 'order', true);
+  switchHomeTab_(!busy && (want === 'new' || want === 'perk' || want === 'mine') ? want : 'order', true);
   promoSettingsReady.then(() => { homeDataReady_ = true; renderHomeNewPane_(); renderHomePerkPane_(); });
 }
 function switchHomeTab_(tab, noScroll) {
   homeTab_ = tab;
-  document.body.classList.remove('tab-new', 'tab-perk', 'tab-order');
+  document.body.classList.remove('tab-new', 'tab-perk', 'tab-order', 'tab-mine');
   document.body.classList.add('tab-' + tab);
-  ['new', 'perk', 'order'].forEach(t => document.getElementById('home-tab-' + t).classList.toggle('on', t === tab));
+  ['new', 'perk', 'order', 'mine'].forEach(t => document.getElementById('home-tab-' + t).classList.toggle('on', t === tab));
   if (tab === 'perk') renderHomePerkPane_();   // 跨過午夜、剛驗證完會員都重算一次
+  if (tab === 'mine') loadMyOrders_(false);    // 我的訂單(10-08)：20 秒內切回來不重讀
   if (!noScroll) window.scrollTo(0, 0);
 }
 function updateHomeTabBadge_(count) {
@@ -4598,6 +4622,169 @@ function updateHomeTabBadge_(count) {
   if (!b) return;
   b.textContent = count;
   b.style.display = count > 0 ? 'block' : 'none';
+}
+// ---------- 我的訂單(10-08，規格 我的訂單設計_2026-10-08.md)：個人紀錄／揪團紀錄＋再點一次 ----------
+// 後端 myOrders 自己驗 LINE 通行證、只回本人最近 30 天的資料；門市單、揪團單只能看，一般線上單有點餐選擇快照才能再點一次
+let myOrdersData_ = null, myOrdersAt_ = 0, myOrdersLoading_ = false, myOrdersErr_ = '', mySub_ = 'orders';
+const MY_ORDER_STATUS_ = {
+  '待付款': ['待付款', 'warn'], '未取餐': ['已成立・待取餐', ''], '已取餐': ['已取餐', 'off'], '待收款': ['取餐時付款', 'warn'],
+  '已作廢': ['已作廢', 'off'], '已退款': ['已退款', 'off'], '退款處理中': ['退款處理中', 'warn']
+};
+const MY_GROUP_STATUS_ = { '收單中': '', '已結單': '', '已截止': 'warn', '付款中': 'warn', '已成立': '', '已退款': 'off', '已作廢': 'off' };
+function openMyOrdersTab_() {
+  myOrdersAt_ = 0;   // 剛下完單：一定重讀
+  if (HOME_TABS_ON) switchHomeTab_('mine');
+}
+function loadMyOrders_(force) {
+  if (!lineSession_) { renderMyOrdersPane_(); return; }
+  if (myOrdersLoading_) return;
+  if (!force && myOrdersData_ && Date.now() - myOrdersAt_ < 20000) { renderMyOrdersPane_(); return; }
+  myOrdersLoading_ = true; myOrdersErr_ = '';
+  renderMyOrdersPane_();
+  apiPost_({ action: 'myOrders', storeId: 'meibao' }).then(d => {
+    if (d.status === 'ok') { myOrdersData_ = d; myOrdersAt_ = Date.now(); }
+    else myOrdersErr_ = d.code === 'line_not_member' ? '請先完成會員註冊，才看得到訂單紀錄' : (d.message || '讀取失敗，請稍後再試');
+  }).catch(() => { myOrdersErr_ = '網路不穩，讀取失敗，請稍後再試'; })
+    .finally(() => { myOrdersLoading_ = false; renderMyOrdersPane_(); });
+}
+function myWhen_(ymd, hm) { return ymd ? `${homeMd_(ymd)}（${homeWd_(ymd)}）${hm ? ' ' + hm : ''}` : ''; }
+function renderMyOrdersPane_() {
+  const el = document.getElementById('home-pane-mine');
+  if (!el) return;
+  const tabs = `<div class="mo-tabs"><button type="button" class="${mySub_ === 'orders' ? 'on' : ''}" onclick="mySub_='orders';renderMyOrdersPane_()">個人紀錄</button><button type="button" class="${mySub_ === 'groups' ? 'on' : ''}" onclick="mySub_='groups';renderMyOrdersPane_()">揪團紀錄</button></div>`;
+  if (!lineSession_) {
+    el.innerHTML = tabs + `<div class="hp-empty">用 LINE 登入後，就看得到最近 30 天的訂單和揪團<br><button type="button" class="mo-btn" style="margin-top:10px;background:#06C755;" onclick="lineLoginRedirect_()">用 LINE 登入</button></div>`;
+    return;
+  }
+  if (myOrdersLoading_ && !myOrdersData_) { el.innerHTML = tabs + '<div class="hp-empty">載入中…</div>'; return; }
+  if (myOrdersErr_ && !myOrdersData_) { el.innerHTML = tabs + `<div class="hp-empty">${escapeHtml_(myOrdersErr_)}<br><button type="button" class="mo-btn" style="margin-top:10px;" onclick="loadMyOrders_(true)">重新整理</button></div>`; return; }
+  const d = myOrdersData_ || { orders: [], groups: [], days: 30 };
+  const list = mySub_ === 'orders' ? d.orders : d.groups;
+  const body = list.length ? list.map(mySub_ === 'orders' ? myOrderCardHtml_ : myGroupCardHtml_).join('')
+    : `<div class="hp-empty">最近 ${d.days || 30} 天沒有${mySub_ === 'orders' ? '訂單' : '揪團'}紀錄</div>`;
+  el.innerHTML = tabs + body + `<div class="mo-note" style="text-align:center;margin:6px 0 4px;">只顯示最近 ${d.days || 30} 天${myOrdersLoading_ ? '・更新中…' : ''}　<a href="javascript:void(0)" onclick="loadMyOrders_(true)" style="color:var(--brand);">重新整理</a></div>`;
+}
+function myOrderCardHtml_(o) {
+  const st = MY_ORDER_STATUS_[o.status] || [o.status, ''];
+  const items = o.items.filter(i => !i.gift).map(i => `${i.who ? '<b>' + escapeHtml_(i.who) + '</b> ' : ''}${escapeHtml_(i.name)}${i.size ? ' ' + escapeHtml_(i.size) : ''} ×${i.qty}`);
+  const gifts = o.items.filter(i => i.gift).map(i => escapeHtml_(i.name.split('（')[0]));
+  const canReorder = o.items.some(i => i.edit);
+  const why = o.channel === '門市' ? '門市單' : (o.group ? '揪團單' : '');
+  return `<div class="mo-card">
+    <div class="mo-head"><span>${myWhen_(o.pickupDate, o.pickupTime)}<span class="mo-tag">${escapeHtml_(o.channel)}</span>${o.group ? '<span class="mo-tag">揪團</span>' : ''}</span><span class="mo-st ${st[1]}">${escapeHtml_(st[0])}</span></div>
+    <div class="mo-title">${escapeHtml_(o.orderId)}</div>
+    <div class="mo-items">${items.join('<br>')}${gifts.length ? `<br><span class="mo-note">🎁 ${gifts.join('、')}</span>` : ''}${o.needs.length ? `<br><span class="mo-note">其他需求：${o.needs.map(escapeHtml_).join('、')}</span>` : ''}</div>
+    <div class="mo-foot"><span>實付 <b>$${o.total}</b>${o.points ? `<span class="mo-note">　+${o.points} 點</span>` : ''}</span>
+      ${canReorder ? `<button type="button" class="mo-btn" onclick="reorderMyOrder_('${escapeHtml_(o.orderId)}')">再點一次</button>` : (why ? `<span class="mo-note">${why}不能再點一次</span>` : '')}</div>
+  </div>`;
+}
+function myGroupCardHtml_(g) {
+  const cls = MY_GROUP_STATUS_[g.status] !== undefined ? MY_GROUP_STATUS_[g.status] : '';
+  const items = g.myItems.length ? g.myItems.map(i => `${escapeHtml_(i.name)} ×${i.qty}`).join('<br>') : '<span class="mo-note">還沒點餐</span>';
+  return `<div class="mo-card">
+    <div class="mo-head"><span>${myWhen_(g.pickupDate, g.pickupTime)} 取餐<span class="mo-tag">${g.payMode === 'each' ? '各付各的' : '我請客'}</span><span class="mo-tag">${g.isHost ? '我是團主' : '團員'}</span></span><span class="mo-st ${cls}">${escapeHtml_(g.status)}</span></div>
+    <div class="mo-title">${escapeHtml_(g.hostName)} 的揪團</div>
+    <div class="mo-items">${items}</div>
+    <div class="mo-foot"><span>${g.mySubtotal ? '我的餐點 <b>$' + g.mySubtotal + '</b>' : ''}${g.orderId ? `<span class="mo-note">　${escapeHtml_(g.orderId)}</span>` : ''}</span>
+      <button type="button" class="mo-btn" onclick="openMyGroup_('${escapeHtml_(g.groupId)}')">打開揪團</button></div>
+  </div>`;
+}
+// 打開揪團：把自己的金鑰寫回這支手機(換手機、清過資料也找得回來)，再照揪團連結打開
+function openMyGroup_(gid) {
+  const g = ((myOrdersData_ || {}).groups || []).find(x => x.groupId === gid);
+  if (!g) return;
+  const old = loadGroupCtx_(gid) || {};
+  try { localStorage.setItem(groupStoreKey_(gid), JSON.stringify({ ...old, groupId: gid, memberToken: g.memberToken, hostToken: g.hostToken || old.hostToken, name: old.name || g.myName })); } catch (e) {}
+  location.href = location.pathname + '?g=' + encodeURIComponent(gid) + (MPG_SANDBOX ? '&mpgtest=1' : '');
+}
+// 再點一次：每一項用點餐選擇快照，照「購物車變更」同一套還原到客製化畫面，用現在的菜單價格算好再加入購物車；
+// 不在菜單、售完、選項已經沒有的跳過，最後告訴客人哪幾樣沒放進去。活動贈品不帶(結帳時照當天活動自動送)
+function reorderMyOrder_(orderId) {
+  const o = ((myOrdersData_ || {}).orders || []).find(x => x.orderId === orderId);
+  if (!o) return;
+  if (groupCheckoutMode) { alert('請先完成或取消揪團結帳，再使用再點一次'); return; }
+  const added = [], skipped = [];
+  const origAlert = window.alert;
+  try {
+    o.items.forEach(line => {
+      if (line.gift) return;
+      const short = line.name.split('（')[0];
+      if (!line.edit) { skipped.push(short + '：無法自動加入'); return; }
+      let msg = '';
+      window.alert = m => { msg = msg || String(m || ''); };
+      let why = '';
+      try { why = reorderLine_(line); } catch (e) { why = '無法自動加入'; }
+      window.alert = origAlert;
+      if (why) { skipped.push(short + '：' + why); closeItemModal(); }
+      else added.push(short);
+    });
+  } finally {
+    window.alert = origAlert;
+    document.getElementById('drink-overlay').classList.remove('open');
+    if (currentModal) closeItemModal();
+  }
+  saveCartSession();
+  updateCartBar();
+  switchHomeTab_('order');
+  if (added.length) openCart();
+  const parts = [];
+  if (added.length) parts.push(`已照現在的價格放進購物車：${added.join('、')}`);
+  if (skipped.length) parts.push(`下面${skipped.length}樣沒有放進去，請重新點：\n・${skipped.join('\n・')}`);
+  if (!added.length && !skipped.length) parts.push('這張單沒有可以再點的餐點');
+  setTimeout(() => alert(parts.join('\n\n') + (added.length ? '\n\n優惠券和活動優惠會在結帳時照今天的規則重新計算。' : '')), 0);
+}
+function reorderLine_(line) {
+  const snap = line.edit || {};
+  const item = (CATALOG[snap.cat] || []).find(it => it.name === snap.itemName);
+  if (!item) return '已經不在線上菜單';
+  const st = itemAvailabilityMap[item.name];
+  if (st) return st === '永久下架' ? '暫停供應' : '今日售完';
+  if (snap.appliedUpgradeRule) return '活動飲品升級請重新選';
+  openItemModal(snap.cat, snap.key, item);
+  const ov = document.getElementById('item-overlay');
+  const pick = (name, value) => { const r = ov.querySelector(`input[name="${name}"][value="${value}"]`); if (r && !r.checked) { r.checked = true; r.dispatchEvent(new Event('change')); } };
+  // 1) 份量／單點套餐／份量二選一：用現在的價格(觸發原本的 change 讓價格與套餐限定選項跟著出現)
+  if (item.price_m && item.price_l && snap.size) pick('size', snap.size);
+  if (item.price_alt) pick('qty', snap.altForm || 'a');
+  if (item.price_set) pick('setform', snap.setForm || 'single');
+  // 2) 選項：每一個都要還在、沒售完，不然整項跳過(不硬塞錯的)
+  for (const gKey of Object.keys(snap.groups || {})) {
+    const vals = snap.groups[gKey] || [];
+    const g = OPTION_GROUPS[gKey];
+    if (!g) { if (vals.length) return '部分選項已經沒有'; continue; }
+    if (!vals.every(v => g.options.some(o => o.name === v) && !itemAvailabilityMap[v])) return gKey === 'combo_drink' ? '套餐飲料已經沒有' : '部分選項已經沒有或售完';
+    currentModal.groups[gKey] = vals.slice();
+  }
+  // 3) 套餐飲料：用現在的份量加價重算，不用快照裡的舊價格
+  currentModal.comboDrinkName = snap.comboDrinkName || null;
+  currentModal.comboDrinkSize = snap.comboDrinkSize || null;
+  currentModal.activeDrinkGroupKey = snap.activeDrinkGroupKey;
+  currentModal.comboDrinkExtraGroups = (snap.comboDrinkExtraGroups || []).filter(gk => OPTION_GROUPS[gk]);
+  currentModal.comboDrinkBasePrice = snap.comboDrinkBasePrice;
+  currentModal.comboDrinkUpgradeFee = 0; currentModal.appliedUpgradeRule = null; currentModal.comboDrinkPrice = 0;
+  if (snap.comboDrinkName && snap.activeDrinkGroupKey === 'combo_drink') {
+    const p = COMBO_DRINK_PRICES[snap.comboDrinkName];
+    if (!p) return '套餐飲料已經沒有';
+    if (itemAvailabilityMap[snap.comboDrinkName]) return '套餐飲料今日售完';
+    if (p.single != null) currentModal.comboDrinkPrice = p.single;
+    else {
+      const sz = String(snap.comboDrinkSize || '').toLowerCase();
+      if (p[sz] == null) return '套餐飲料的份量已經沒有';
+      currentModal.comboDrinkPrice = p[sz];
+    }
+  }
+  currentModal.drinkDone = !!snap.comboDrinkName;
+  // 4) 套餐加價購(×1)：還在才帶，價格照現在的
+  if (snap.x1) {
+    if (!shopX1For_(snap.cat).some(a => a.name === snap.x1)) return '加價購「' + snap.x1 + '」已經沒有';
+    currentModal.x1 = snap.x1;
+    currentModal.x1Sauces = snap.x1Sauces && !Array.isArray(snap.x1Sauces) ? JSON.parse(JSON.stringify(snap.x1Sauces)) : {};
+  }
+  currentModal.qty = Math.max(1, Number(line.qty) || 1);
+  document.getElementById('item-modal-note').value = snap.note || '';
+  const before = cart.reduce((s, c) => s + c.qty, 0);
+  confirmAddToCart();
+  return cart.reduce((s, c) => s + c.qty, 0) > before ? '' : '需要重新選擇';
 }
 function onMemberWhoClick_() {
   if (HOME_TABS_ON) switchHomeTab_('perk');
