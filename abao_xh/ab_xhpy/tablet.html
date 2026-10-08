@@ -1188,7 +1188,7 @@ function findCatalogItemPrice_(name) {
 let memberVouchers = []; // 目前查到的會員兌換券清單(getMemberVouchers回傳)
 let appliedVouchers = []; // 本次結帳已套用的兌換券(有backend voucherId的持久記錄)，可複選多張：[{voucherId, type, mode, discountAmount, targetLineKey?}, ...]
 let pendingVoucherForItemPick = null; // item模式兌換券選好後、等待店員點選購物車品項時的暫存
-let directDiscounts = []; // 門市活動直接折抵(POS按鈕)，不對應任何backend voucherId、不留兌換券記錄：[{type, discountAmount, targetLineKey?}, ...]
+let directDiscounts = []; // 門市活動直接折抵(POS按鈕)，不對應任何backend voucherId、不留兌換券記錄：[{type, discountAmount, targetLineKey?, act?, actDate?}, ...](act＝今天的門市活動，4-2 限量計數用)
 let pendingDirectDiscount = null; // item模式折抵選好後、等待店員點選購物車品項時的暫存
 
 function isValidPhone_(phone) {
@@ -1609,6 +1609,27 @@ function posTodayActsOf_(type) { const t = todayYmd_(); return posStoreActsOf_(t
 // 沒綁門市活動＝照舊每天都在；有綁＝今天要是其中一個活動的活動日
 function posActDayOk_(type) { return !posStoreActsOf_(type).length || posTodayActsOf_(type).length > 0; }
 function posMemberOnlyToday_(type) { return posTodayActsOf_(type).some(a => a.memberOnly); }
+// 第四波 4-2(10-08 老闆選 B)：活動鍵折扣帶「今天哪個活動」，結帳送到後端記進折扣明細，限量活動(農曆初一)的門市用量靠它算；
+// 一張券綁多個活動時優先記有限量的那個
+function posActTag_(type) {
+  const acts = posTodayActsOf_(type);
+  const a = acts.find(x => Number(x.limit) > 0) || acts[0];
+  return a ? { act: a.id, actDate: todayYmd_() } : {};
+}
+// 限量活動按鍵前查剩幾組(線上＋門市合計)；查不到(網路問題)就先放行，結帳時後端會再擋
+async function posActQuotaOk_(type) {
+  const a = posTodayActsOf_(type).find(x => Number(x.limit) > 0);
+  if (!a) return true;
+  const inCart = directDiscounts.filter(d => d.act === a.id).length;
+  try {
+    const q = await apiGet({ action: 'actQuota', storeId: STORE_ID, actId: a.id, date: todayYmd_() });
+    if (q && q.status === 'ok' && q.limit && q.left - inCart <= 0) {
+      alert(`「${type}」今天的名額已經滿了（限量 ${q.limit} 組，線上＋門市合計）`);
+      return false;
+    }
+  } catch (e) { /* 結帳時後端再檢查 */ }
+  return true;
+}
 function posDiscountTypesNow_() {
   return POS_ALL_PROMOS.filter(p => p.status !== '停用' && p.showAsButton && !isTierPerkPromo_(p) && isPromoInPeriod_(p) && posActDayOk_(p.name)).map(p => p.name);
 }
@@ -1646,10 +1667,11 @@ function posDropMemberOnlyDiscounts_() {
   setTimeout(() => alert(`已沒有選會員，限會員的「${drop.map(d => d.type).join('、')}」已拿掉`), 0);
 }
 
-function applyDirectDiscount(type) {
+async function applyDirectDiscount(type) {
   const behavior = VOUCHER_BEHAVIOR[type];
   if (!behavior) { alert('未知的折抵類型：' + type); return; }
   if (!behavior.autoAddItem && posCart.length === 0) { alert('請先選購品項'); return; }
+  if (!(await posActQuotaOk_(type))) return;   // 第四波 4-2：限量活動先查名額(放在不併用前，名額滿了就不用問要留哪個)
   const pre = posDiscountPrecheck_(type);   // 第四波 4-1：活動日／會員限定／需搭配／不併用
   if (!pre) return;
   // 折扣疊加防呆(2026-09-17新增)：這張訂單已經套用過門市活動折抵，再套用第二個前先跟店員確認，
@@ -1659,12 +1681,12 @@ function applyDirectDiscount(type) {
     if (!confirm(`這張訂單已經套用「${already}」，確定要再疊加「${type}」嗎？`)) return;
   }
   if (behavior.mode === 'fixed') {
-    directDiscounts.push({ type, discountAmount: behavior.amount });
+    directDiscounts.push({ type, discountAmount: behavior.amount, ...posActTag_(type) });
     renderPosCart();
     return;
   }
   if (behavior.mode === 'order') {
-    directDiscounts.push({ type, mode: 'order', pct: behavior.pct, discountAmount: 0 });
+    directDiscounts.push({ type, mode: 'order', pct: behavior.pct, discountAmount: 0, ...posActTag_(type) });
     renderPosCart();
     return;
   }
@@ -1729,7 +1751,7 @@ function applyDirectDiscountEffect_(type, effect, lineKey) {
     changePosQty(lineKey, 1);
     discountAmount = base - 1;
   }
-  directDiscounts.push({ type, discountAmount, targetLineKey: lineKey });
+  directDiscounts.push({ type, discountAmount, targetLineKey: lineKey, ...posActTag_(type) });
   closeDirectDiscountItemPicker();
   renderPosCart();
 }
@@ -2982,7 +3004,7 @@ function posDiscountLines_() {
   const perks = currentTierPerks_();
   return [
     ...appliedVouchers.map(v => ({ label: v.type, amount: v.discountAmount })),
-    ...directDiscounts.map(d => ({ label: d.type, amount: d.discountAmount })),
+    ...directDiscounts.map(d => ({ label: d.type, amount: d.discountAmount, ...(d.act ? { act: d.act, actDate: d.actDate } : {}) })),   // 第四波 4-2：帶活動ID＋活動日
     ...(perks.spend ? [{ label: '滿額折', amount: perks.spend }] : []),
     ...perks.promos.map(x => ({ label: x.name, amount: x.amount }))
   ].filter(d => d.amount);
