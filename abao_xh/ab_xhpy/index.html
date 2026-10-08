@@ -4029,6 +4029,15 @@ function confirmPickupPicker_() {
   if (!t) { alert('請選擇取餐時間'); return; }
   setCheckoutPickup_(d, t);
   closePickupPicker_();
+  refreshAfterPickupChange_();
+}
+// 改取餐日(10-08 老闆實測發現)：活動券/贈品是照取餐日判斷的，改完要立刻重算——改到非活動日拿掉週四雞塊等贈品與折扣，
+// 改到別的活動日就套上那天的活動；購物車開著就重畫(原本要等下次重畫才更新，付款時才被後端擋下)
+function refreshAfterPickupChange_() {
+  recalcVoucherDiscounts_();
+  saveCartSession();
+  updateCartBar();
+  if (document.getElementById('cart-overlay').classList.contains('open')) renderCart();
 }
 // 營業時間由後台「商店時段設定」的營業時間自動產生：每天一樣→「每日 05:20～13:00」；不一樣→連續同時段的星期合併列出
 function formatBusinessHoursLines_(list) {
