@@ -4701,8 +4701,34 @@ function myGroupCardHtml_(g) {
     <div class="mo-items">${items}</div>
     ${payLine}
     <div class="mo-foot"><span>${g.mySubtotal ? '我的餐點 <b>$' + g.mySubtotal + '</b>' : ''}${g.orderId ? `<span class="mo-note">　${escapeHtml_(g.orderId)}</span>` : ''}</span>
-      <button type="button" class="mo-btn" onclick="openMyGroup_('${escapeHtml_(g.groupId)}')">打開揪團</button></div>
+      ${MY_GROUP_DONE_.includes(g.status)
+        ? `<button type="button" class="mo-btn" style="background:#fff;color:var(--brand);border:1px solid var(--brand);" onclick="viewMyGroupResult_('${escapeHtml_(g.groupId)}')">查看結果</button>`
+        : `<button type="button" class="mo-btn" onclick="openMyGroup_('${escapeHtml_(g.groupId)}')">打開揪團</button>`}</div>
   </div>`;
+}
+// 已經結束的團(老闆 10-08 選 A)：只彈出結果，不進入揪團模式(點餐頁上方不會掛揪團橫條)；進行中的團才「打開揪團」
+const MY_GROUP_DONE_ = ['已成立', '已作廢', '已截止', '已退款'];
+function viewMyGroupResult_(gid) {
+  const g = ((myOrdersData_ || {}).groups || []).find(x => x.groupId === gid);
+  if (!g) return;
+  const body = document.getElementById('home-detail-body');
+  const head = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;"><h2 style="margin:0;">${escapeHtml_(g.hostName)} 的揪團</h2><button type="button" onclick="document.getElementById('home-detail-overlay').classList.remove('open')" style="border:none;background:none;font-size:1.4rem;cursor:pointer;padding:0 4px;line-height:1;">✕</button></div>`;
+  body.innerHTML = head + '<div class="hp-empty" style="margin-top:10px;">載入中…</div>';
+  document.getElementById('home-detail-overlay').classList.add('open');
+  apiPost_({ action: 'groupGet', groupId: gid, token: g.hostToken || g.memberToken || '' }).then(v => {
+    if (v.status !== 'ok') { body.innerHTML = head + `<div class="hp-empty" style="margin-top:10px;">${escapeHtml_(v.message || '讀取失敗，請稍後再試')}</div>`; return; }
+    const each = v.payMode === 'each';
+    const members = (v.members || []).map(m => `<div class="mo-card" style="margin:8px 0;${m.isMe ? 'border-color:var(--brand);' : ''}">
+        <div class="mo-head"><b style="color:#333;font-size:0.9rem;">${escapeHtml_(m.name)}${m.isHost ? '（團主）' : ''}${m.isMe ? '（你）' : ''}</b><span>${each && m.payState ? `<span class="mo-st ${m.payState === '已付款' ? '' : m.payState === '已退款' ? 'off' : 'warn'}">${escapeHtml_(m.payState)}</span> ` : ''}<b style="color:#333;">$${m.subtotal || 0}</b></span></div>
+        <div class="mo-items" style="margin-top:4px;">${(m.items || []).length ? m.items.map(i => `${escapeHtml_(i.name)} ×${i.qty}`).join('<br>') : '<span class="mo-note">沒有點餐</span>'}</div>
+      </div>`).join('');
+    const result = v.groupStatus === '已成立' ? `✅ 已付款成立${v.orderId ? '，訂單編號 ' + escapeHtml_(v.orderId) : ''}`
+      : v.groupStatus === '已作廢' ? '這個揪團已作廢（沒有在時限內完成付款）'
+      : v.groupStatus === '已截止' ? '揪團已截止：已付款的人訂單都已成立，沒付款的人這次沒有成立'
+      : v.groupStatus === '已退款' ? '這個揪團的訂單已退款' : escapeHtml_(v.groupStatus);
+    body.innerHTML = head + `<div class="mo-note" style="margin:6px 0 2px;">${escapeHtml_(v.payModeText || (each ? '各付各的' : '我請客'))}・取餐 ${escapeHtml_(myWhen_(v.pickupDate, v.pickupTime))}　<span class="mo-st ${MY_GROUP_STATUS_[v.groupStatus] || ''}">${escapeHtml_(v.groupStatus)}</span></div>`
+      + members + `<div class="mo-foot" style="font-size:0.95rem;"><b>合計（${(v.members || []).length} 人）</b><b>$${v.total || 0}</b></div><div class="mo-note" style="margin-top:8px;">${result}</div>`;
+  }).catch(() => { body.innerHTML = head + '<div class="hp-empty" style="margin-top:10px;">網路不穩，讀取失敗，請稍後再試</div>'; });
 }
 // 打開揪團：把自己的金鑰寫回這支手機(換手機、清過資料也找得回來)，再照揪團連結打開
 function openMyGroup_(gid) {
