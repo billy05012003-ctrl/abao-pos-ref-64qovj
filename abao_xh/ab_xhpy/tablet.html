@@ -110,6 +110,19 @@
   .mc-accordion-item-row .controls { display:flex; gap:12px; flex-wrap:wrap; }
   .mc-accordion-item-row .control-group { display:flex; flex-direction:column; gap:2px; }
   .mc-accordion-item-row .control-group .label { font-size:0.68rem; color:var(--muted); }
+  /* POS管理分組按鈕格(10-10，規格 上下架管理與POS管理調整設計_2026-10-09.md)：還沒做的灰色「準備中」 */
+  .pmg-today { background:#fff8f2; border:1px solid #ffd699; border-radius:10px; padding:10px 12px; font-size:0.88rem; margin:8px 0 4px; }
+  .pmg-grp { font-size:0.78rem; color:var(--muted); margin:12px 0 6px; }
+  .pmg-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .pmg-tile { background:#fff; border:1px solid var(--border); border-radius:12px; padding:14px 6px; text-align:center; font-size:0.88rem; cursor:pointer; color:#222; font-family:inherit; }
+  .pmg-tile .ic { font-size:1.4rem; display:block; margin-bottom:4px; }
+  .pmg-tile:disabled { background:#f2f2f2; color:#999; border-style:dashed; cursor:default; }
+  .pmg-soon { display:inline-block; font-size:0.68rem; background:#ddd; color:#666; padding:1px 6px; border-radius:6px; margin-top:4px; }
+  .pmg-sub { display:none; margin:8px 0 0; padding:0; box-shadow:none; }
+  .pmg-kv { display:grid; grid-template-columns:110px 1fr; gap:6px 8px; font-size:0.86rem; }
+  .pmg-kv div:nth-child(odd) { color:var(--muted); }
+  .soon-card { opacity:.6; border:1px dashed #ccc; }
+  .tag-printed { display:inline-block; font-size:0.72rem; padding:1px 6px; border-radius:4px; background:#fdecea; color:#a32d2d; margin-left:4px; }
 </style>
 </head>
 <body>
@@ -318,6 +331,11 @@
       <div class="meta" id="revenue-count">今日 0 筆已付款訂單</div>
     </section>
 
+    <section style="margin:0 0 12px;" class="soon-card">
+      <h2>即將取餐提醒 <span class="pmg-soon">準備中</span></h2>
+      <div style="font-size:0.76rem;color:var(--muted);">取餐時間前 30 分鐘提醒該開始做的預約單（點餐頁開放後再決定要不要做）</div>
+    </section>
+
     <section style="margin:0 0 12px;">
       <h2>待取餐訂單 <span class="refresh-link" onclick="loadOrders()">重新整理</span></h2>
       <div id="orders-list"><div class="empty-hint">載入中...</div></div>
@@ -351,15 +369,33 @@
 <div class="pos-overlay" id="pos-manage-overlay" style="z-index:27;">
   <div class="pos-sheet" style="max-width:480px;">
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:2px;">
-      <button type="button" onclick="closePosManageOverlay()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
-      <h2 style="margin:0; flex:1; font-size:1rem;">POS管理</h2>
+      <button type="button" onclick="posManageBack_()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
+      <h2 id="pos-manage-title" style="margin:0; flex:1; font-size:1rem;">POS管理</h2>
     </div>
 
-    <section style="margin:12px 0;">
-      <h2 style="font-size:0.95rem;">開帳／關帳</h2>
-      <div style="font-size:0.76rem;color:var(--muted);margin:-4px 0 10px;">
-        「關帳」會把今天(取餐日期=今天)還卡著的「取餐付款待收款」「線上金流待付款」訂單一次作廢，先看過清單再確認，需要店長以上權限。
+    <!-- 10-10 改分組按鈕格(延遲性的功能放這裡；即時性的在「上下架管理」) -->
+    <div id="pmg-home">
+      <div id="pmg-today" class="pmg-today">今天開帳狀態載入中…</div>
+      <div class="pmg-grp">每日</div>
+      <div class="pmg-grid">
+        <button type="button" class="pmg-tile" onclick="pmgOpen_('open')"><span class="ic">🔓</span>開帳</button>
+        <button type="button" class="pmg-tile" onclick="openCloseRegisterPreview()"><span class="ic">🔒</span>關帳</button>
+        <button type="button" class="pmg-tile" onclick="pmgOpen_('log')"><span class="ic">📋</span>開關帳記錄</button>
       </div>
+      <div class="pmg-grp">帳務</div>
+      <div class="pmg-grid">
+        <button type="button" class="pmg-tile" disabled><span class="ic">📊</span>報表<br><span class="pmg-soon">準備中</span></button>
+        <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
+      </div>
+      <div class="pmg-grp">系統</div>
+      <div class="pmg-grid">
+        <button type="button" class="pmg-tile" onclick="pmgOpen_('ver')"><span class="ic">🔄</span>資料版本</button>
+        <button type="button" class="pmg-tile" disabled><span class="ic">🧾</span>電子發票設定<br><span class="pmg-soon">準備中</span></button>
+        <button type="button" class="pmg-tile" onclick="pmgOpen_('staff')"><span class="ic">👥</span>夥伴帳號說明</button>
+      </div>
+    </div>
+
+    <section class="pmg-sub" id="pmg-sub-open">
       <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">開帳夥伴(選填)</label>
       <select id="pos-open-staff-select" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;margin-bottom:8px;">
         <option value="">請選擇夥伴</option>
@@ -367,21 +403,21 @@
       <div class="row">
         <button class="btn btn-primary" onclick="doOpenRegister()">開帳</button>
       </div>
-      <div class="row" style="margin-top:16px;">
-        <button class="btn btn-danger" style="opacity:0.85;" onclick="openCloseRegisterPreview()">⚠ 關帳（今日訂單將作廢）</button>
-      </div>
       <div id="pos-manage-result" style="font-size:0.8rem;color:var(--brand);margin-top:8px;"></div>
     </section>
 
-    <section style="margin:12px 0;">
-      <h2 style="font-size:0.95rem;">開關帳記錄 <span class="refresh-link" onclick="loadRegisterLog()">重新整理</span></h2>
+    <section class="pmg-sub" id="pmg-sub-log">
+      <div style="text-align:right;margin-bottom:6px;"><span class="refresh-link" onclick="loadRegisterLog()">重新整理</span></div>
       <div id="register-log-list"><div class="empty-hint">載入中...</div></div>
     </section>
 
-    <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
-    <section style="margin:0 0 12px;">
-      <h2 style="font-size:0.95rem;">夥伴帳號管理</h2>
-      <div style="font-size:0.76rem;color:var(--muted);">新增/編輯夥伴請到POS後台「POS管理」→「夥伴帳號管理」設定。這裡「開帳」的夥伴清單、「關帳」跟「贈送兌換券」需要的店長/老闆PIN驗證，都是讀同一份設定。</div>
+    <section class="pmg-sub" id="pmg-sub-ver">
+      <div style="text-align:right;margin-bottom:6px;"><span class="refresh-link" onclick="loadPmgCfgStatus_()">重新整理</span></div>
+      <div id="pmg-ver-body"><div class="empty-hint">載入中...</div></div>
+    </section>
+
+    <section class="pmg-sub" id="pmg-sub-staff">
+      <div style="font-size:0.82rem;color:var(--muted);line-height:1.6;">新增/編輯夥伴請到POS後台「POS管理」→「夥伴帳號管理」設定。這裡「開帳」的夥伴清單、「關帳」跟「贈送兌換券」需要的店長/老闆PIN驗證，都是讀同一份設定。</div>
     </section>
   </div>
 </div>
@@ -391,6 +427,9 @@
     <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
       <button type="button" onclick="closeCloseRegisterPreview()" style="border:none; background:none; font-size:1.3rem; cursor:pointer; padding:0 6px 0 0; line-height:1;">←</button>
       <h2 style="margin:0; flex:1; font-size:1rem;">關帳確認</h2>
+    </div>
+    <div style="font-size:0.76rem;color:var(--muted);margin:0 0 10px;">
+      「關帳」會把今天(取餐日期=今天)還卡著的「取餐付款待收款」「線上金流待付款」訂單一次作廢，先看過清單再確認，需要店長以上權限。
     </div>
     <div id="close-register-preview-list"><div class="empty-hint">載入中...</div></div>
     <div style="margin-top:10px;">
@@ -523,16 +562,27 @@ function refreshStatusBanner() {
   const banner = document.getElementById('status-banner');
   if (currentStoreStatus.paused) {
     banner.className = 'status-banner status-paused';
-    banner.textContent = '⛔ 暫停接單中';
+    banner.textContent = '⛔ 暫停接單中' + pauseDetail_(currentStoreStatus);
   } else if (currentStoreStatus.busy) {
     banner.className = 'status-banner status-busy';
-    banner.textContent = '⚠️ 忙碌中（線上點餐每' + (currentStoreStatus.busyIntervalMinutes || 0) + '分鐘限接1張新單，不影響現場POS點餐）';
+    banner.textContent = '⚠️ 忙碌中（' + (currentStoreStatus.busyBy ? currentStoreStatus.busyBy + '，' : '') + '線上點餐每' + (currentStoreStatus.busyIntervalMinutes || 0) + '分鐘限接1張新單，不影響現場POS點餐）';
   } else {
     banner.className = 'status-banner status-ok';
     banner.textContent = '✅ 正常供餐中';
   }
   document.getElementById('busy-btn').textContent = currentStoreStatus.busy ? '取消忙碌' : '設為忙碌';
   document.getElementById('pause-btn').textContent = currentStoreStatus.paused ? '恢復接單' : '暫停接單';
+}
+
+// 10-10：暫停紅條寫是誰、從平板還是後台停的，跟幾點自動恢復，例如「（後台・張力升，到 10:45 自動恢復）」
+function pauseDetail_(st) {
+  const parts = [];
+  if (st.pausedBy) parts.push(st.pausedBy);
+  if (st.pausedUntil) {
+    const d = new Date(st.pausedUntil);
+    if (!isNaN(d)) parts.push('到 ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ' 自動恢復');
+  }
+  return parts.length ? '（' + parts.join('，') + '）' : '';
 }
 
 function loadStoreStatus() {
@@ -643,7 +693,7 @@ function loadRefundableOrders() {
     box.innerHTML = data.orders.map(o => `
       <div class="order-card">
         <div>
-          <div><strong>${o.orderId}</strong> <span class="meta">[${o.channel}] ${o.status}</span></div>
+          <div><strong>${o.orderId}</strong> <span class="meta">[${o.channel}] ${o.status}</span>${o.printed ? '<span class="tag-printed">🖨已出單</span>' : ''}</div>
           <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div>
         </div>
         ${o.needsManual
@@ -741,12 +791,63 @@ let posStaffListCache_ = [];
 let closeRegisterStaffConfigured_ = true;
 function openPosManageOverlay() {
   document.getElementById('pos-manage-result').textContent = '';
+  pmgOpen_(null);
   document.getElementById('pos-manage-overlay').classList.add('open');
   loadRegisterLog();
   loadPosStaffForOpenSelect_();
 }
 function closePosManageOverlay() {
   document.getElementById('pos-manage-overlay').classList.remove('open');
+}
+// 10-10 分組按鈕格：name=null 回按鈕格首頁；子頁面左上 ← 回首頁，首頁 ← 關閉
+const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', staff: '夥伴帳號說明' };
+let pmgCurrent_ = null;
+function pmgOpen_(name) {
+  pmgCurrent_ = name;
+  document.getElementById('pmg-home').style.display = name ? 'none' : 'block';
+  Object.keys(PMG_TITLES_).forEach(k => { document.getElementById('pmg-sub-' + k).style.display = k === name ? 'block' : 'none'; });
+  document.getElementById('pos-manage-title').textContent = name ? 'POS管理 ／ ' + PMG_TITLES_[name] : 'POS管理';
+  if (name === 'log') loadRegisterLog();
+  if (name === 'ver') loadPmgCfgStatus_();
+}
+function posManageBack_() { if (pmgCurrent_) pmgOpen_(null); else closePosManageOverlay(); }
+function escapeHtml_(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+// 今天開帳狀態(按鈕格最上方)：看開關帳記錄今天最新一筆；記錄要權限才看得到時不顯示細節
+function renderPmgToday_(logs) {
+  const box = document.getElementById('pmg-today');
+  if (!box) return;
+  const now = new Date();
+  const head = '📅 今天 ' + (now.getMonth() + 1) + '/' + now.getDate() + '（' + '日一二三四五六'[now.getDay()] + '）';
+  if (logs === null) { box.textContent = head + '｜開帳狀態請到「開關帳記錄」查看'; return; }
+  const sameDay = t => { const d = new Date(t); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate(); };
+  const hm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+  const last = (logs || []).find(l => sameDay(l.time));   // 記錄是新到舊
+  if (!last) { box.innerHTML = head + '｜<b>還沒開帳</b>'; return; }
+  const who = escapeHtml_(String(last.note || '').replace(/^夥伴：/, ''));
+  box.innerHTML = head + '｜<b>' + (last.type === '開帳' ? '已開帳' : '已' + escapeHtml_(last.type)) + '</b>' +
+    (last.type === '開帳' && who ? '｜開帳夥伴：' + who : '') + ' ' + hm(last.time);
+}
+// 資料版本：菜單／優惠最後發布時間、這台平板目前用的版本跟最新一不一致
+function pmgFmtTime_(ms) {
+  if (!ms || isNaN(Number(ms)) || Number(ms) < 1e12) return '—';
+  const d = new Date(Number(ms));
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function loadPmgCfgStatus_() {
+  const box = document.getElementById('pmg-ver-body');
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'cfgStatus', storeId: STORE_ID }).then(d => {
+    if (!d || d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">讀取失敗，請稍後再試</div>'; return; }
+    const mine = cfgBaseVer;
+    const same = mine !== null && String(mine) === String(d.ver);
+    box.innerHTML = `
+      <div class="pmg-kv">
+        <div>菜單</div><div>${d.menuPublishedAt ? pmgFmtTime_(d.menuPublishedAt) + ' 發布' : '—（這版上線後還沒發布過）'}</div>
+        <div>優惠／會員相關</div><div>${d.promoPublishedAt ? pmgFmtTime_(d.promoPublishedAt) + ' 發布' : '—（這版上線後還沒發布過）'}</div>
+        <div>這台平板</div><div>${mine === null ? '還在讀取中' : (same ? '跟最新一致 ✅' : '<span style="color:#a32d2d;">不是最新，閒置時會自動更新</span>')}</div>
+      </div>
+      <div style="font-size:0.76rem;color:var(--muted);margin-top:8px;">後台發布後 1～2 分鐘內，平板閒置時會自動更新；這裡可以確認有沒有更新到。</div>`;
+  }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
 }
 
 // POS夥伴管理(2026-09-18新增)：開帳的夥伴下拉選單，讀清單一次快取起來，關帳確認畫面也會用到同一份
@@ -817,9 +918,11 @@ function loadRegisterLog() {
   if (posPermRole_('registerLog') !== '夥伴' && !registerLogUnlocked_) {
     const c = document.getElementById('register-log-list');
     if (c) c.innerHTML = '<button class="btn" onclick="unlockRegisterLog_()">🔒 查看開關帳記錄（需要' + posPermRole_('registerLog') + '以上）</button>';
+    renderPmgToday_(null);
     return;
   }
   apiGet({ action: 'registerLog', storeId: STORE_ID }).then(data => {
+    renderPmgToday_(data && data.status === 'ok' ? data.logs : []);
     const container = document.getElementById('register-log-list');
     if (!container) return;
     if (data.status !== 'ok' || data.logs.length === 0) {
@@ -1351,6 +1454,7 @@ function renderMemberVoucherPanel() {
     <div style="margin-top:8px;padding:6px 8px;border-radius:8px;background:#fff4e5;">
       <div style="font-size:0.8rem;font-weight:600;color:#a35b00;margin-bottom:4px;">店員贈送（店家成本，不扣會員點數）</div>
       ${grantHtml}
+      <div class="soon-card" style="margin-top:8px;padding:6px 8px;border-radius:8px;font-size:0.8rem;"><b>＋ 快速發點</b> <span class="pmg-soon">準備中</span><div style="color:var(--muted);font-size:0.74rem;">客人說剛才沒集到點時，店長以上手動補點數</div></div>
     </div>
     </details>
   `;
@@ -3087,7 +3191,7 @@ function applyCfgUpdateNow_() {
   softRefreshPosConfig_();
 }
 function checkCfgVersion_() {
-  apiGet({ action: 'cfgVersion', storeId: STORE_ID }).then(d => {
+  apiGet({ action: 'cfgVersion', storeId: STORE_ID, myVer: cfgBaseVer === null ? '' : cfgBaseVer }).then(d => {   // myVer：讓後台「資料版本」看得到這台讀到哪一版(10-10)
     if (!d || d.status !== 'ok') return;
     if (cfgBaseVer === null) { cfgBaseVer = d.ver; return; }   // 開機後第一次查：當作目前版本
     if (d.ver !== cfgBaseVer) cfgPendingVer = d.ver;

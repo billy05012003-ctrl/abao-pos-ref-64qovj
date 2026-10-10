@@ -154,6 +154,35 @@
   .mc-value-row .mc-v-name { flex:2; min-width:100px; }
   .mc-value-row .mc-v-price, .mc-value-row .mc-v-pricem, .mc-value-row .mc-v-pricel { width:72px; }
   .mc-value-row button { border:none; background:none; color:var(--brand); cursor:pointer; font-size:0.78rem; padding:4px 6px; }
+  /* 10-10 上下架管理同步＋POS管理按鈕格(規格 上下架管理與POS管理調整設計_2026-10-09.md) */
+  .ops-two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  @media (max-width:700px) { .ops-two { grid-template-columns:1fr; } }
+  .ops-card { background:#fff; border:1px solid #eee; border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .ops-card h3 { font-size:0.95rem; margin:0 0 6px; }
+  .ops-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+  .ops-btn { border:none; border-radius:8px; padding:7px 12px; font-size:0.85rem; font-weight:600; cursor:pointer; background:#eee; color:#333; }
+  .ops-btn.primary { background:var(--brand); color:#fff; }
+  .ops-btn.danger { background:#A32D2D; color:#fff; }
+  .ops-btn:disabled { opacity:.5; cursor:default; }
+  .ops-order { display:flex; justify-content:space-between; align-items:center; gap:8px; border-top:1px solid #f2f2f2; padding:8px 0; font-size:0.85rem; }
+  .ops-meta { color:var(--muted); font-size:0.78rem; }
+  .ops-refresh { font-size:0.75rem; color:var(--muted); text-decoration:underline; cursor:pointer; font-weight:normal; margin-left:6px; }
+  .ops-money { color:var(--brand); font-size:1.5rem; font-weight:700; }
+  .ops-tag { display:inline-block; font-size:0.72rem; padding:1px 6px; border-radius:4px; background:#eee; color:#555; margin-left:4px; }
+  .ops-tag.printed { background:#fdecea; color:#a32d2d; }
+  .ops-warn { background:#fff8e1; border:1px solid #f0c419; border-radius:8px; padding:8px 10px; font-size:0.82rem; color:#7a5b00; margin:8px 0; }
+  .pmg-today { background:#fff8f2; border:1px solid #ffd699; border-radius:10px; padding:10px 12px; font-size:0.9rem; margin-bottom:6px; }
+  .pmg-grp { font-size:0.8rem; color:var(--muted); margin:14px 0 6px; }
+  .pmg-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 170px)); gap:10px; }
+  @media (max-width:700px) { .pmg-grid { grid-template-columns:repeat(2, 1fr); } }
+  .pmg-tile { background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px 6px; text-align:center; font-size:0.9rem; cursor:pointer; color:#222; font-family:inherit; }
+  .pmg-tile .ic { font-size:1.4rem; display:block; margin-bottom:4px; }
+  .pmg-tile:disabled { background:#f2f2f2; color:#999; border-style:dashed; cursor:default; }
+  .pmg-soon { display:inline-block; font-size:0.68rem; background:#ddd; color:#666; padding:1px 6px; border-radius:6px; margin-top:4px; }
+  .pmg-crumb { font-size:0.9rem; margin:0 0 10px; }
+  .pmg-crumb a { color:var(--brand); cursor:pointer; text-decoration:none; font-weight:600; }
+  .pmg-kv { display:grid; grid-template-columns:120px 1fr; gap:6px 8px; font-size:0.88rem; }
+  .pmg-kv div:nth-child(odd) { color:var(--muted); }
 </style>
 </head>
 <body>
@@ -217,7 +246,7 @@
 </div>
 <div class="app-shell">
 <nav class="sidebar" id="tabbar">
-  <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">品項上下架</button>
+  <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">上下架管理</button>
   <button id="tab-btn-merchant" onclick="toggleMerchantGroup()">
     <span class="group-toggle">商家管理 <span class="group-caret" id="merchant-caret">▶</span></span>
   </button>
@@ -248,10 +277,11 @@
     <button class="sub-item" id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')" style="display:none;">飲品升級</button>
   </div>
   <button id="tab-btn-group" onclick="switchBackofficeTab('group')">👥 團購模組</button>
-  <button id="tab-btn-posmanage" onclick="togglePosManageGroup()">
-    <span class="group-toggle">⚙ POS管理 <span class="group-caret" id="posmanage-caret">▶</span></span>
+  <!-- 10-10：POS管理改成點進去是分組按鈕格，側欄不再展開子選單(子選單 DOM 保留隱藏，切換程式沿用) -->
+  <button id="tab-btn-posmanage" onclick="switchPosManageSubview('home')">
+    <span class="group-toggle">⚙ POS管理 <span class="group-caret" id="posmanage-caret" style="display:none;">▶</span></span>
   </button>
-  <div class="sub-list" id="posmanage-sublist">
+  <div class="sub-list" id="posmanage-sublist" style="display:none;">
     <button class="sub-item" id="pmg-sub-btn-log" onclick="switchPosManageSubview('log')">開關帳記錄</button>
     <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">夥伴帳號管理</button>
     <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">角色權限設定</button>
@@ -260,6 +290,38 @@
 <main class="main-content">
 <div id="month-remind" style="display:none;"></div>
 <div id="view-availability" class="view">
+  <!-- 10-10 上下架管理同步：跟門市平板「上下架管理」讀同一份資料；營業狀態/標記已付款/退款要輸 PIN，紀錄會註明「後台」 -->
+  <div class="ops-two">
+    <div class="ops-card">
+      <h3>營業狀態 <span class="ops-refresh" onclick="loadBoStoreStatus_()">重新整理</span></h3>
+      <div id="bo-ops-status" style="font-size:0.85rem;">載入中...</div>
+      <div class="ops-row"><button class="ops-btn" id="bo-ops-busy-btn" onclick="boBusyClick_()">設為忙碌</button>
+        <select id="bo-ops-busy-min"><option value="15">每15分鐘限接1張</option><option value="30">每30分鐘限接1張</option><option value="60">每60分鐘限接1張</option></select></div>
+      <div class="ops-row"><button class="ops-btn" id="bo-ops-pause-btn" onclick="boPauseClick_()">暫停接單</button>
+        <select id="bo-ops-pause-min"><option value="15">暫停15分鐘</option><option value="30">暫停30分鐘</option><option value="60">暫停60分鐘</option></select></div>
+      <div class="ops-meta">只影響線上點餐，不影響門市 POS；按下要輸入 PIN</div>
+    </div>
+    <div class="ops-card">
+      <h3>當日營收 <span class="ops-refresh" onclick="loadBoRevenue_()">重新整理</span></h3>
+      <div class="ops-money" id="bo-ops-revenue">—</div>
+      <div class="ops-meta" id="bo-ops-revenue-count"></div>
+    </div>
+  </div>
+  <div class="ops-card">
+    <h3>待取餐訂單 <span class="ops-refresh" onclick="loadBoOrders_()">重新整理</span> <span class="ops-tag">只看</span></h3>
+    <div id="bo-ops-orders"><div class="ops-meta">載入中...</div></div>
+  </div>
+  <div class="ops-card" id="bo-ops-stuck-card" style="display:none;">
+    <h3>⚠️ 卡住的待付款訂單（超過10分鐘） <span class="ops-refresh" onclick="loadBoStuck_()">重新整理</span></h3>
+    <div class="ops-meta">標記已付款前，請先到藍新商店後台「查詢交易紀錄」核對客人的卡真的扣款成功。</div>
+    <div id="bo-ops-stuck"></div>
+  </div>
+  <div class="ops-card">
+    <h3>訂單退款 <span class="ops-refresh" onclick="loadBoRefundable_()">載入／重新整理</span></h3>
+    <div class="ops-meta">近3天已收款、尚未退款的訂單。退款要店長以上 PIN，紀錄會註明「後台」。線上信用卡單會退回客人的卡；現場單只記錄，錢請店裡當場退給客人。</div>
+    <div id="bo-ops-refund"><div class="ops-meta" style="padding:8px 0;">按上方「載入」查看可退款訂單</div></div>
+  </div>
+  <h3 style="font-size:1rem;margin:18px 0 6px;border-top:2px solid #eee;padding-top:12px;">品項上下架</h3>
   <p style="font-size:0.8rem;color:var(--muted);">
     每個品項有兩個獨立開關：<b>線上點餐</b>(共用同一份狀態) 跟 <b>POS功能</b>(獨立狀態，互不影響)。
     這裡改了會直接反映到對應的前台畫面，不需要老闆自己再跑去POS功能操作。
@@ -552,13 +614,42 @@
   <div id="grp-list"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-posmanage" class="view" style="display:none;">
+  <!-- 10-10 分組按鈕格(POS管理項目最雜，用按鈕比較不會視覺疲勞；目前只有這區用按鈕) -->
+  <div id="pmg-subview-home">
+    <div id="bo-pmg-today" class="pmg-today">今天開帳狀態載入中…</div>
+    <div class="pmg-grp">每日</div>
+    <div class="pmg-grid">
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('log')"><span class="ic">📋</span>開關帳記錄</button>
+    </div>
+    <div class="pmg-grp">帳務</div>
+    <div class="pmg-grid">
+      <button type="button" class="pmg-tile" disabled><span class="ic">📊</span>報表<br><span class="pmg-soon">準備中</span></button>
+      <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
+    </div>
+    <div class="pmg-grp">帳號與權限</div>
+    <div class="pmg-grid">
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('partner')"><span class="ic">👥</span>夥伴帳號管理</button>
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('perm')"><span class="ic">🔑</span>角色權限設定</button>
+    </div>
+    <div class="pmg-grp">系統</div>
+    <div class="pmg-grid">
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('ver')"><span class="ic">🔄</span>資料版本</button>
+      <button type="button" class="pmg-tile" disabled><span class="ic">🧾</span>電子發票設定<br><span class="pmg-soon">準備中</span></button>
+    </div>
+  </div>
+  <div id="pmg-subview-ver" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 資料版本 <span class="ops-refresh" onclick="loadBoCfgStatus_()">重新整理</span></div>
+    <div id="bo-pmg-ver"><div class="empty-hint">載入中...</div></div>
+  </div>
   <div id="pmg-subview-log">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 開關帳記錄</div>
     <p style="font-size:0.8rem;color:var(--muted);">
       POS功能「開帳／關帳」的歷史記錄，唯讀。實際操作(開帳/關帳按鈕)在POS功能那邊，這裡只是給老闆/店長事後查看。
     </p>
     <div id="pmg-log-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pmg-subview-perm" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 角色權限設定</div>
     <p style="font-size:0.8rem;color:var(--muted);">
       每個POS功能選「最低要什麼角色」才能做：<b>夥伴</b>=任何人都能做、不用PIN；<b>店長</b>／<b>老闆</b>=POS上會跳出輸入PIN，角色不夠會被擋(後端也會再檢查一次)。
       日常操作輸入一次PIN後5分鐘內不用再輸；退款、人工標記已付款、贈送兌換券、關帳每次都要輸入。標「僅畫面」的項目只控制POS畫面。
@@ -569,6 +660,7 @@
     <span id="perm-save-result" style="font-size:0.85rem;margin-left:8px;"></span>
   </div>
   <div id="pmg-subview-partner" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 夥伴帳號管理</div>
     <p style="font-size:0.8rem;color:var(--muted);">
       3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>店長只能管理夥伴帳號</b>，店長／老闆帳號只有老闆能改。
       建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設，老闆忘記請到Google試算表「POS夥伴」分頁修改。用4碼PIN碼識別身份，
@@ -594,6 +686,19 @@
   <div class="mc-modal">
     <button type="button" class="mc-modal-close" onclick="closeMcItemModal()">×</button>
     <div id="mc-item-modal-body"></div>
+  </div>
+</div>
+<div id="bo-ops-pin-overlay" class="mc-modal-overlay" style="display:none;" onclick="if(event.target===this)closeBoOpsPin_()">
+  <div class="mc-modal" style="max-width:420px;">
+    <button type="button" class="mc-modal-close" onclick="closeBoOpsPin_()">×</button>
+    <h3 id="bo-ops-pin-title" style="margin-top:0;font-size:1rem;"></h3>
+    <div id="bo-ops-pin-body" style="font-size:0.85rem;"></div>
+    <label style="display:block;font-size:0.8rem;color:var(--muted);margin:10px 0 4px;" id="bo-ops-pin-label">PIN</label>
+    <input type="password" id="bo-ops-pin-input" inputmode="numeric" maxlength="4" placeholder="4碼數字" style="width:100%;padding:8px;border:1px solid #ccc;border-radius:8px;font-size:0.95rem;box-sizing:border-box;" onkeydown="if(event.key==='Enter')confirmBoOpsPin_()">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button type="button" class="ops-btn" onclick="closeBoOpsPin_()">取消</button>
+      <button type="button" class="ops-btn primary" id="bo-ops-pin-ok" onclick="confirmBoOpsPin_()">確定</button>
+    </div>
   </div>
 </div>
 <div id="hb-cal-overlay" class="mc-modal-overlay" style="display:none;" onclick="if(event.target===this)closeHbCal()">
@@ -662,6 +767,7 @@ function boLogin() {
     saveBoSession_();
     document.getElementById('bo-login-overlay').style.display = 'none';
     renderBoUser_();
+    loadBoRevenue_(); loadBoOrders_(); loadBoStuck_();   // 10-10 上下架管理同步
   }).catch(() => { err.textContent = '網路異常，請稍後再試'; });
 }
 function boLogout() {
@@ -754,7 +860,7 @@ function switchMemberSubview(name) {
 // 「POS管理」側欄巢狀展開(2026-09-16新增)：開關帳記錄(唯讀)＋POS夥伴管理
 let posManageLogLoaded = false;
 let posStaffLoaded = false;
-let currentPosManageSubview = 'log';
+let currentPosManageSubview = 'home';   // 10-10：點 POS管理先到分組按鈕格
 function togglePosManageGroup() {
   const sublist = document.getElementById('posmanage-sublist');
   const willOpen = !sublist.classList.contains('open');
@@ -780,6 +886,179 @@ function loadPosManageLog() {
         ${l.note ? `<span style="color:var(--muted);">（${escapeHtml(l.note)}）</span>` : ''}
       </div>`).join('');
   });
+}
+
+// ---- 上下架管理同步(10-10，規格 上下架管理與POS管理調整設計_2026-10-09.md) ----
+// 跟門市平板讀同一份資料。營業狀態/標記已付款/退款都要輸 PIN(名字＝登入的人)，送 via:'bo'，後端會在紀錄標「後台」。
+// 待取餐訂單只看不放按鈕(可以取餐/已收款/作廢要在店裡看到客人才按)
+const BO_OPS_STORE = 'meibao';
+let boStoreStatus_ = {};
+function boHm_(iso) { const d = new Date(iso); return isNaN(d) ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function renderBoStoreStatus_(st) {
+  if (!st || st.status !== 'ok') return;
+  boStoreStatus_ = st;
+  const box = document.getElementById('bo-ops-status');
+  if (st.paused) {
+    const parts = [st.pausedBy, st.pausedUntil ? '到 ' + boHm_(st.pausedUntil) + ' 自動恢復' : ''].filter(Boolean);
+    box.innerHTML = '<span style="color:#a32d2d;font-weight:600;">⛔ 暫停接單中</span>' + (parts.length ? '（' + escapeHtml(parts.join('，')) + '）' : '');
+  } else if (st.busy) {
+    box.innerHTML = '<span style="color:#a3620a;font-weight:600;">⚠️ 忙碌中</span>（' + (st.busyBy ? escapeHtml(st.busyBy) + '，' : '') + '每' + (st.busyIntervalMinutes || 0) + '分鐘限接1張）';
+  } else {
+    box.innerHTML = '<span style="color:#1f7a3d;font-weight:600;">✅ 正常供餐中</span>';
+  }
+  document.getElementById('bo-ops-busy-btn').textContent = st.busy ? '取消忙碌' : '設為忙碌';
+  document.getElementById('bo-ops-pause-btn').textContent = st.paused ? '恢復接單' : '暫停接單';
+}
+function loadBoStoreStatus_() {
+  return apiGet({ action: 'storeStatus', storeId: BO_OPS_STORE }).then(renderBoStoreStatus_).catch(() => {});
+}
+// PIN 視窗：名字固定是登入的人；bodyHtml 可放確認說明/黃色警告
+let boOpsPinCb_ = null;
+function openBoOpsPin_(title, bodyHtml, cb) {
+  if (!boSession) { showBoLogin_('請先登入'); return; }
+  boOpsPinCb_ = cb;
+  document.getElementById('bo-ops-pin-title').textContent = title;
+  document.getElementById('bo-ops-pin-body').innerHTML = bodyHtml || '';
+  document.getElementById('bo-ops-pin-label').textContent = boSession.name + ' 的 PIN';
+  document.getElementById('bo-ops-pin-input').value = '';
+  document.getElementById('bo-ops-pin-overlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('bo-ops-pin-input').focus(), 50);
+}
+function closeBoOpsPin_() { document.getElementById('bo-ops-pin-overlay').style.display = 'none'; boOpsPinCb_ = null; }
+function confirmBoOpsPin_() {
+  const pin = document.getElementById('bo-ops-pin-input').value.trim();
+  if (!pin) { alert('請輸入 PIN'); return; }
+  const cb = boOpsPinCb_;
+  closeBoOpsPin_();
+  if (cb) cb(pin);
+}
+function boOpsPost_(payload) {
+  return apiPost(Object.assign({ storeId: BO_OPS_STORE, via: 'bo', staffName: boSession ? boSession.name : '' }, payload));
+}
+function boBusyClick_() {
+  const on = !!boStoreStatus_.busy;
+  const min = Number(document.getElementById('bo-ops-busy-min').value);
+  openBoOpsPin_(on ? '取消忙碌' : '設為忙碌', on ? '' : '線上點餐改成每 ' + min + ' 分鐘限接 1 張新單。', pin => {
+    boOpsPost_(on ? { action: 'clearBusy', staffPin: pin } : { action: 'setBusy', minutes: min, staffPin: pin })
+      .then(d => { if (d.status !== 'ok') alert(d.message || '操作失敗'); return loadBoStoreStatus_(); })
+      .catch(() => alert('網路異常，請重新整理確認狀態'));
+  });
+}
+function boPauseClick_() {
+  const on = !!boStoreStatus_.paused;
+  const min = Number(document.getElementById('bo-ops-pause-min').value);
+  openBoOpsPin_(on ? '恢復接單' : '暫停接單', on ? '' : '線上點餐暫停 ' + min + ' 分鐘，時間到自動恢復。門市平板會顯示是後台由你暫停的。', pin => {
+    boOpsPost_(on ? { action: 'clearPause', staffPin: pin } : { action: 'setPause', minutes: min, staffPin: pin })
+      .then(d => { if (d.status !== 'ok') alert(d.message || '操作失敗'); return loadBoStoreStatus_(); })
+      .catch(() => alert('網路異常，請重新整理確認狀態'));
+  });
+}
+function loadBoRevenue_() {
+  apiGet({ action: 'todayRevenue', storeId: BO_OPS_STORE }).then(d => {
+    if (d.status !== 'ok') { document.getElementById('bo-ops-revenue').textContent = '—'; document.getElementById('bo-ops-revenue-count').textContent = d.message || '讀取失敗'; return; }
+    document.getElementById('bo-ops-revenue').textContent = '$' + d.total;
+    document.getElementById('bo-ops-revenue-count').textContent = '今日 ' + d.count + ' 筆已付款訂單';
+  }).catch(() => {});
+}
+function loadBoOrders_() {
+  const box = document.getElementById('bo-ops-orders');
+  apiGet({ action: 'todayOrders', storeId: BO_OPS_STORE }).then(d => {
+    if (d.status !== 'ok') { box.innerHTML = '<div class="ops-meta">' + escapeHtml(d.message || '讀取失敗') + '</div>'; return; }
+    if (!d.orders.length) { box.innerHTML = '<div class="ops-meta" style="padding:8px 0;">目前沒有待取餐訂單</div>'; return; }
+    box.innerHTML = d.orders.map(o => `<div class="ops-order"><div><b>${escapeHtml(o.orderId)}</b><div class="ops-meta">取餐時間 ${escapeHtml(o.pickupTime)}　$${escapeHtml(o.totalAmount)}</div></div>
+      <span class="ops-meta" style="${o.unpaid ? 'color:#a32d2d;' : ''}">${o.unpaid ? '取餐付款・待收款' : '未取餐'}</span></div>`).join('');
+  }).catch(() => { box.innerHTML = '<div class="ops-meta">網路異常，請稍後再試</div>'; });
+}
+function loadBoStuck_() {
+  apiGet({ action: 'stuckPaymentOrders', storeId: BO_OPS_STORE }).then(d => {
+    const card = document.getElementById('bo-ops-stuck-card');
+    if (d.status !== 'ok' || !d.orders.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    document.getElementById('bo-ops-stuck').innerHTML = d.orders.map(o => `<div class="ops-order"><div><b>${escapeHtml(o.orderId)}</b><div class="ops-meta">取餐時間 ${escapeHtml(o.pickupTime)}　$${escapeHtml(o.totalAmount)}　${escapeHtml(o.note || '')}</div></div>
+      <button class="ops-btn primary" onclick="boConfirmPayment_('${escapeHtml(o.orderId)}')">標記已付款</button></div>`).join('');
+  }).catch(() => {});
+}
+function boConfirmPayment_(orderId) {
+  openBoOpsPin_('標記已付款：' + orderId, '<div class="ops-warn">請先到藍新商店後台「查詢交易紀錄」核對客人的卡真的扣款成功再標記。標記後客人可以直接取餐。</div>', pin => {
+    boOpsPost_({ action: 'staffConfirmPayment', orderId: orderId, staffPin: pin }).then(d => {
+      if (d.status !== 'ok') { alert('標記失敗：' + (d.message || '')); return; }
+      alert('已標記已付款');
+      loadBoStuck_(); loadBoOrders_(); loadBoRevenue_();
+    }).catch(() => alert('網路異常，結果不確定，請重新整理確認'));
+  });
+}
+function loadBoRefundable_() {
+  const box = document.getElementById('bo-ops-refund');
+  box.innerHTML = '<div class="ops-meta" style="padding:8px 0;">載入中...</div>';
+  apiGet({ action: 'refundableOrders', storeId: BO_OPS_STORE }).then(d => {
+    if (d.status !== 'ok') { box.innerHTML = '<div class="ops-meta">' + escapeHtml(d.message || '載入失敗') + '</div>'; return; }
+    const pend = d.pendingRefunds || [];
+    const pendHtml = pend.length ? '<div class="ops-meta" style="margin-top:8px;">⏳ 退款處理中（等藍新請款完成後自動退款，不用再操作）：<br>' +
+      pend.map(p => escapeHtml(p.orderId + '　$' + p.totalAmount + '　(' + p.requestedAt + ' 受理)')).join('<br>') + '</div>' : '';
+    if (!d.orders.length) { box.innerHTML = '<div class="ops-meta" style="padding:8px 0;">近3天沒有可退款的訂單</div>' + pendHtml; return; }
+    box.innerHTML = d.orders.map(o => `<div class="ops-order"><div><b>${escapeHtml(o.orderId)}</b> <span class="ops-meta">[${escapeHtml(o.channel)}] ${escapeHtml(o.status)}</span>${o.printed ? '<span class="ops-tag printed">🖨已出單</span>' : ''}
+        <div class="ops-meta">$${escapeHtml(o.totalAmount)}　${o.needsManual ? '<span style="color:#a32d2d;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div></div>
+      ${o.needsManual ? '<button class="ops-btn" disabled>無法自動退</button>'
+        : `<button class="ops-btn danger" onclick="boRefund_('${escapeHtml(o.orderId)}', ${Number(o.totalAmount) || 0}, ${o.gateway ? 'true' : 'false'}, ${o.printed ? 'true' : 'false'})">退款</button>`}</div>`).join('') + pendHtml;
+  }).catch(() => { box.innerHTML = '<div class="ops-meta">網路異常，請稍後再試</div>'; });
+}
+function boRefund_(orderId, amount, viaGateway, printed) {
+  const how = viaGateway ? '線上信用卡單，系統會向藍新退回客人的卡。' : '現場付款單，系統只記錄退款，<b>錢要請店裡當場退給客人</b>。';
+  const warn = printed ? '<div class="ops-warn">⚠️ 這張已經出單，廚房可能已經在做。<br>請先打電話通知店裡<b>不要交餐</b>，再按確定。</div>' : '';
+  openBoOpsPin_('確定要退款「' + orderId + '」$' + amount + ' 嗎？', warn + '<div>' + how + '退款後扣回點數與消費、退回用掉的兌換券，<b>無法復原</b>。紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」。</div>', pin => {
+    boOpsPost_({ action: 'refundOrder', orderId: orderId, staffPin: pin }).then(d => {
+      if (d.status !== 'ok') { alert('退款失敗：' + (d.message || '')); loadBoRefundable_(); return; }
+      if (d.pending) {
+        alert('退款已受理（還沒退到客人的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。系統已先扣回點數與消費、退回兌換券，之後會自動退款，請勿重複按退款。\n金額：$' + d.amount);
+      } else {
+        alert('退款完成\n方式：' + d.mode + '\n金額：$' + d.amount + '\n扣回點數：' + (d.pointsReverted || 0) + '　退回兌換券：' + (d.vouchersRestored || 0) + ' 張');
+      }
+      loadBoRefundable_(); loadBoOrders_(); loadBoRevenue_();
+    }).catch(() => alert('網路異常，退款結果不確定，請先按「重新整理」確認這張單的狀態，不要重複退款'));
+  });
+}
+// POS管理首頁：今天開帳狀態(看開關帳記錄今天最新一筆)
+function loadBoPmgToday_() {
+  const box = document.getElementById('bo-pmg-today');
+  const now = new Date();
+  const head = '📅 今天 ' + (now.getMonth() + 1) + '/' + now.getDate() + '（' + '日一二三四五六'[now.getDay()] + '）';
+  apiGet({ action: 'registerLog', storeId: SCHED_STORE_ID }).then(d => {
+    if (d.status !== 'ok') { box.textContent = head + '｜' + (d.message || '讀取失敗'); return; }
+    const same = t => { const x = new Date(t); return x.getFullYear() === now.getFullYear() && x.getMonth() === now.getMonth() && x.getDate() === now.getDate(); };
+    const last = (d.logs || []).find(l => same(l.time));
+    if (!last) { box.innerHTML = head + '｜<b>還沒開帳</b>'; return; }
+    const who = String(last.note || '').replace(/^夥伴：/, '');
+    box.innerHTML = head + '｜<b>' + (last.type === '開帳' ? '已開帳' : '已' + escapeHtml(last.type)) + '</b>' + (last.type === '開帳' && who ? '｜開帳夥伴：' + escapeHtml(who) : '') + ' ' + boHm_(last.time);
+  }).catch(() => { box.textContent = head + '｜網路異常'; });
+}
+// 資料版本：菜單/會員相關最後發布時間＋每台門市平板最後讀到哪一版
+function boFmtMs_(ms) {
+  if (!ms || Number(ms) < 1e12) return '—';
+  const d = new Date(Number(ms));
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function loadBoCfgStatus_() {
+  const box = document.getElementById('bo-pmg-ver');
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'cfgStatus', storeId: SCHED_STORE_ID }).then(d => {
+    if (d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml(d.message || '讀取失敗') + '</div>'; return; }
+    const now = Date.now();
+    const devs = (d.devices || []).map(v => {
+      let st;
+      if (!v.seenAt) st = '<span style="color:#888;">還沒回報（這台平板還沒更新到新版程式）</span>';
+      else if (now - v.seenAt > 86400000) st = '<span style="color:#a32d2d;">⚠️ 超過 1 天沒回報</span>';
+      else if (String(v.seenVer) !== String(d.ver)) st = '<span style="color:#a32d2d;">⚠️ 還是舊版（閒置時會自動更新）</span>';
+      else st = '<span style="color:#1f7a3d;">✅ 跟最新一致</span>';
+      return `<div class="ops-order"><div><b>門市平板（${boFmtMs_(v.created).split(' ')[0]} 啟用：${escapeHtml(v.by)}）</b><div class="ops-meta">最後回報 ${boFmtMs_(v.seenAt)}</div></div><div style="font-size:0.85rem;">${st}</div></div>`;
+    }).join('');
+    box.innerHTML = `<div class="ops-card">
+        <div class="pmg-kv">
+          <div>菜單</div><div>${d.menuPublishedAt ? boFmtMs_(d.menuPublishedAt) + ' 發布' : '—（這版上線後還沒發布過）'}</div>
+          <div>優惠／會員相關</div><div>${d.promoPublishedAt ? boFmtMs_(d.promoPublishedAt) + ' 發布' : '—（這版上線後還沒發布過）'}</div>
+        </div></div>
+      <div class="ops-card"><h3>門市平板</h3>${devs || '<div class="ops-meta">沒有啟用中的平板</div>'}
+        <div class="ops-meta" style="margin-top:6px;">平板每分鐘查一次有沒有新版，閒置時自動更新；版本沒變時約 10 分鐘更新一次回報時間。</div></div>`;
+  }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
 }
 
 // ---- POS權限設定(2026-09-25新增)：每個POS功能的最低角色 ----
@@ -963,6 +1242,10 @@ function switchBackofficeTab(name) {
   if (name === 'posmanage' && currentPosManageSubview === 'perm' && !posPermLoaded) { posPermLoaded = true; loadPosPermissionsAdmin(); }
   document.getElementById('pmg-subview-log').style.display = (name === 'posmanage' && currentPosManageSubview === 'log') ? 'block' : 'none';
   document.getElementById('pmg-subview-partner').style.display = (name === 'posmanage' && currentPosManageSubview === 'partner') ? 'block' : 'none';
+  document.getElementById('pmg-subview-home').style.display = (name === 'posmanage' && currentPosManageSubview === 'home') ? 'block' : 'none';
+  document.getElementById('pmg-subview-ver').style.display = (name === 'posmanage' && currentPosManageSubview === 'ver') ? 'block' : 'none';
+  if (name === 'posmanage' && currentPosManageSubview === 'home') loadBoPmgToday_();
+  if (name === 'posmanage' && currentPosManageSubview === 'ver') loadBoCfgStatus_();
   if (name === 'posmanage') {
     document.getElementById('posmanage-sublist').classList.add('open');
     document.getElementById('posmanage-caret').classList.add('open');
@@ -1420,6 +1703,7 @@ let mcCurrentGroupCode = null; // 'NEW'代表正在新增群組
 
 function loadAvailability() {
   document.getElementById('availability-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  if (boSession) { loadBoRevenue_(); loadBoOrders_(); loadBoStuck_(); }   // 10-10 上下架管理同步(要後台登入才讀得到)
   return Promise.all([
     apiGet({ action: 'storeStatus', storeId: 'meibao' }),
     apiGet({ action: 'posItemStatus' }),
@@ -1427,6 +1711,7 @@ function loadAvailability() {
   ]).then(([storeData, posData]) => {
     tabletStatusMap = (storeData.status === 'ok' && storeData.items) ? storeData.items : {};
     posStatusMap = (posData.status === 'ok' && posData.items) ? posData.items : {};
+    renderBoStoreStatus_(storeData);
     renderAvailabilityList();
   }).catch(() => {
     document.getElementById('availability-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
