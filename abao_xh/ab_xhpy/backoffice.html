@@ -299,7 +299,7 @@
         <select id="bo-ops-busy-min"><option value="15">每15分鐘限接1張</option><option value="30">每30分鐘限接1張</option><option value="60">每60分鐘限接1張</option></select></div>
       <div class="ops-row"><button class="ops-btn" id="bo-ops-pause-btn" onclick="boPauseClick_()">暫停接單</button>
         <select id="bo-ops-pause-min"><option value="15">暫停15分鐘</option><option value="30">暫停30分鐘</option><option value="60">暫停60分鐘</option></select></div>
-      <div class="ops-meta">只影響線上點餐，不影響門市 POS；按下要輸入 PIN</div>
+      <div class="ops-meta">只影響線上點餐，不影響門市 POS；要不要輸入 PIN 照「角色權限設定」</div>
     </div>
     <div class="ops-card">
       <h3>當日營收 <span class="ops-refresh" onclick="loadBoRevenue_()">重新整理</span></h3>
@@ -318,7 +318,7 @@
   </div>
   <div class="ops-card">
     <h3>訂單退款 <span class="ops-refresh" onclick="loadBoRefundable_()">載入／重新整理</span></h3>
-    <div class="ops-meta">近3天已收款、尚未退款的訂單。退款要店長以上 PIN，紀錄會註明「後台」。線上信用卡單會退回客人的卡；現場單只記錄，錢請店裡當場退給客人。</div>
+    <div class="ops-meta">近3天已收款、尚未退款的訂單。要不要輸入 PIN 照「角色權限設定」，紀錄會註明「後台」。線上信用卡單會退回客人的卡；現場單只記錄，錢請店裡當場退給客人。</div>
     <div id="bo-ops-refund"><div class="ops-meta" style="padding:8px 0;">按上方「載入」查看可退款訂單</div></div>
   </div>
   <h3 style="font-size:1rem;margin:18px 0 6px;border-top:2px solid #eee;padding-top:12px;">品項上下架</h3>
@@ -912,22 +912,32 @@ function renderBoStoreStatus_(st) {
 function loadBoStoreStatus_() {
   return apiGet({ action: 'storeStatus', storeId: BO_OPS_STORE }).then(renderBoStoreStatus_).catch(() => {});
 }
-// PIN 視窗：名字固定是登入的人；bodyHtml 可放確認說明/黃色警告
-let boOpsPinCb_ = null;
-function openBoOpsPin_(title, bodyHtml, cb) {
+// PIN 視窗：名字固定是登入的人；bodyHtml 可放確認說明/黃色警告。
+// permCode＝角色權限設定的功能代碼(10-10 老闆選 2a)：當下讀一次設定，設「夥伴」的只跳確認、不要 PIN(後端也不檢查 PIN，跳了等於沒作用)；讀不到就照舊要 PIN
+let boOpsPinCb_ = null, boOpsNeedPin_ = true;
+function openBoOpsPin_(title, bodyHtml, cb, permCode) {
   if (!boSession) { showBoLogin_('請先登入'); return; }
-  boOpsPinCb_ = cb;
-  document.getElementById('bo-ops-pin-title').textContent = title;
-  document.getElementById('bo-ops-pin-body').innerHTML = bodyHtml || '';
-  document.getElementById('bo-ops-pin-label').textContent = boSession.name + ' 的 PIN';
-  document.getElementById('bo-ops-pin-input').value = '';
-  document.getElementById('bo-ops-pin-overlay').style.display = 'flex';
-  setTimeout(() => document.getElementById('bo-ops-pin-input').focus(), 50);
+  const show = needPin => {
+    boOpsPinCb_ = cb; boOpsNeedPin_ = needPin;
+    document.getElementById('bo-ops-pin-title').textContent = title;
+    document.getElementById('bo-ops-pin-body').innerHTML = bodyHtml || '';
+    document.getElementById('bo-ops-pin-label').textContent = boSession.name + ' 的 PIN';
+    document.getElementById('bo-ops-pin-label').style.display = needPin ? 'block' : 'none';
+    document.getElementById('bo-ops-pin-input').style.display = needPin ? 'block' : 'none';
+    document.getElementById('bo-ops-pin-input').value = '';
+    document.getElementById('bo-ops-pin-overlay').style.display = 'flex';
+    if (needPin) setTimeout(() => document.getElementById('bo-ops-pin-input').focus(), 50);
+  };
+  if (!permCode) { show(true); return; }
+  apiGet({ action: 'posPermissions', storeId: BO_OPS_STORE })
+    .then(d => show(!(d && d.status === 'ok' && d.perms && d.perms[permCode] === '夥伴')))
+    .catch(() => show(true));
 }
+function openBoOpsPinFor_(permCode, title, bodyHtml, cb) { openBoOpsPin_(title, bodyHtml, cb, permCode); }
 function closeBoOpsPin_() { document.getElementById('bo-ops-pin-overlay').style.display = 'none'; boOpsPinCb_ = null; }
 function confirmBoOpsPin_() {
-  const pin = document.getElementById('bo-ops-pin-input').value.trim();
-  if (!pin) { alert('請輸入 PIN'); return; }
+  const pin = boOpsNeedPin_ ? document.getElementById('bo-ops-pin-input').value.trim() : '';
+  if (boOpsNeedPin_ && !pin) { alert('請輸入 PIN'); return; }
   const cb = boOpsPinCb_;
   closeBoOpsPin_();
   if (cb) cb(pin);
@@ -938,7 +948,7 @@ function boOpsPost_(payload) {
 function boBusyClick_() {
   const on = !!boStoreStatus_.busy;
   const min = Number(document.getElementById('bo-ops-busy-min').value);
-  openBoOpsPin_(on ? '取消忙碌' : '設為忙碌', on ? '' : '線上點餐改成每 ' + min + ' 分鐘限接 1 張新單。', pin => {
+  openBoOpsPinFor_('busy', on ? '取消忙碌' : '設為忙碌', on ? '' : '線上點餐改成每 ' + min + ' 分鐘限接 1 張新單。', pin => {
     boOpsPost_(on ? { action: 'clearBusy', staffPin: pin } : { action: 'setBusy', minutes: min, staffPin: pin })
       .then(d => { if (d.status !== 'ok') alert(d.message || '操作失敗'); return loadBoStoreStatus_(); })
       .catch(() => alert('網路異常，請重新整理確認狀態'));
@@ -947,7 +957,7 @@ function boBusyClick_() {
 function boPauseClick_() {
   const on = !!boStoreStatus_.paused;
   const min = Number(document.getElementById('bo-ops-pause-min').value);
-  openBoOpsPin_(on ? '恢復接單' : '暫停接單', on ? '' : '線上點餐暫停 ' + min + ' 分鐘，時間到自動恢復。門市平板會顯示是後台由你暫停的。', pin => {
+  openBoOpsPinFor_('pause', on ? '恢復接單' : '暫停接單', on ? '' : '線上點餐暫停 ' + min + ' 分鐘，時間到自動恢復。門市平板會顯示是後台由你暫停的。', pin => {
     boOpsPost_(on ? { action: 'clearPause', staffPin: pin } : { action: 'setPause', minutes: min, staffPin: pin })
       .then(d => { if (d.status !== 'ok') alert(d.message || '操作失敗'); return loadBoStoreStatus_(); })
       .catch(() => alert('網路異常，請重新整理確認狀態'));
@@ -979,7 +989,7 @@ function loadBoStuck_() {
   }).catch(() => {});
 }
 function boConfirmPayment_(orderId) {
-  openBoOpsPin_('標記已付款：' + orderId, '<div class="ops-warn">請先到藍新商店後台「查詢交易紀錄」核對客人的卡真的扣款成功再標記。標記後客人可以直接取餐。</div>', pin => {
+  openBoOpsPinFor_('confirmPayment', '標記已付款：' + orderId, '<div class="ops-warn">請先到藍新商店後台「查詢交易紀錄」核對客人的卡真的扣款成功再標記。標記後客人可以直接取餐。</div>', pin => {
     boOpsPost_({ action: 'staffConfirmPayment', orderId: orderId, staffPin: pin }).then(d => {
       if (d.status !== 'ok') { alert('標記失敗：' + (d.message || '')); return; }
       alert('已標記已付款');
@@ -1005,7 +1015,7 @@ function loadBoRefundable_() {
 function boRefund_(orderId, amount, viaGateway, printed) {
   const how = viaGateway ? '線上信用卡單，系統會向藍新退回客人的卡。' : '現場付款單，系統只記錄退款，<b>錢要請店裡當場退給客人</b>。';
   const warn = printed ? '<div class="ops-warn">⚠️ 這張已經出單，廚房可能已經在做。<br>請先打電話通知店裡<b>不要交餐</b>，再按確定。</div>' : '';
-  openBoOpsPin_('確定要退款「' + orderId + '」$' + amount + ' 嗎？', warn + '<div>' + how + '退款後扣回點數與消費、退回用掉的兌換券，<b>無法復原</b>。紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」。</div>', pin => {
+  openBoOpsPinFor_('refund', '確定要退款「' + orderId + '」$' + amount + ' 嗎？', warn + '<div>' + how + '退款後扣回點數與消費、退回用掉的兌換券，<b>無法復原</b>。紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」。</div>', pin => {
     boOpsPost_({ action: 'refundOrder', orderId: orderId, staffPin: pin }).then(d => {
       if (d.status !== 'ok') { alert('退款失敗：' + (d.message || '')); loadBoRefundable_(); return; }
       if (d.pending) {
@@ -1042,22 +1052,34 @@ function loadBoCfgStatus_() {
   box.innerHTML = '<div class="empty-hint">載入中...</div>';
   apiGet({ action: 'cfgStatus', storeId: SCHED_STORE_ID }).then(d => {
     if (d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml(d.message || '讀取失敗') + '</div>'; return; }
-    const now = Date.now();
-    const devs = (d.devices || []).map(v => {
-      let st;
-      if (!v.seenAt) st = '<span style="color:#888;">還沒回報（這台平板還沒更新到新版程式）</span>';
-      else if (now - v.seenAt > 86400000) st = '<span style="color:#a32d2d;">⚠️ 超過 1 天沒回報</span>';
-      else if (String(v.seenVer) !== String(d.ver)) st = '<span style="color:#a32d2d;">⚠️ 還是舊版（閒置時會自動更新）</span>';
-      else st = '<span style="color:#1f7a3d;">✅ 跟最新一致</span>';
-      return `<div class="ops-order"><div><b>門市平板（${boFmtMs_(v.created).split(' ')[0]} 啟用：${escapeHtml(v.by)}）</b><div class="ops-meta">最後回報 ${boFmtMs_(v.seenAt)}</div></div><div style="font-size:0.85rem;">${st}</div></div>`;
+    // 10-10 改版(老闆看不懂)：清單是「平板啟用紀錄」不是實體平板→只列最近 7 天有回報的，其餘收成一行；狀態用時間講清楚
+    const now = Date.now(), RECENT = 7 * 86400000;
+    const ago = ms => { const m = Math.max(0, Math.round((now - ms) / 60000)); return m < 1 ? '剛剛' : m < 60 ? m + ' 分鐘前' : m < 1440 ? Math.round(m / 60) + ' 小時前' : Math.round(m / 1440) + ' 天前'; };
+    const all = d.devices || [];
+    const active = all.filter(v => v.seenAt && now - v.seenAt <= RECENT);
+    const oldCount = all.length - active.length;
+    const devs = active.map(v => {
+      let st, detail = '';
+      if (now - v.seenAt > 86400000) {
+        st = '<span style="color:#a32d2d;">⚠️ 超過 1 天沒打開（' + ago(v.seenAt) + '）</span>';
+      } else if (String(v.seenVer) !== String(d.ver)) {
+        st = '<span style="color:#a32d2d;">⚠️ 還沒換新版（' + ago(v.seenAt) + '回報）</span>';
+        detail = '最新設定 ' + boFmtMs_(Number(d.ver)) + ' 發布，這台平板還沒更新；閒置 30 秒後會自動更新';
+      } else {
+        st = '<span style="color:#1f7a3d;">✅ 已是最新版（' + ago(v.seenAt) + '回報）</span>';
+      }
+      return `<div class="ops-order"><div><b>門市平板</b><div class="ops-meta">${boFmtMs_(v.created).split(' ')[0]} 由 ${escapeHtml(v.by)} 啟用${detail ? '<br>' + detail : ''}</div></div><div style="font-size:0.85rem;text-align:right;">${st}</div></div>`;
     }).join('');
+    const notYet = '今天起開始記錄，下次發布後顯示';
     box.innerHTML = `<div class="ops-card">
+        <div class="ops-meta" style="margin-bottom:6px;">後台最後一次發布到正式版的時間</div>
         <div class="pmg-kv">
-          <div>菜單</div><div>${d.menuPublishedAt ? boFmtMs_(d.menuPublishedAt) + ' 發布' : '—（這版上線後還沒發布過）'}</div>
-          <div>優惠／會員相關</div><div>${d.promoPublishedAt ? boFmtMs_(d.promoPublishedAt) + ' 發布' : '—（這版上線後還沒發布過）'}</div>
+          <div>菜單</div><div>${d.menuPublishedAt ? boFmtMs_(d.menuPublishedAt) + ' 發布' : notYet}</div>
+          <div>優惠／會員相關</div><div>${d.promoPublishedAt ? boFmtMs_(d.promoPublishedAt) + ' 發布' : notYet}</div>
         </div></div>
-      <div class="ops-card"><h3>門市平板</h3>${devs || '<div class="ops-meta">沒有啟用中的平板</div>'}
-        <div class="ops-meta" style="margin-top:6px;">平板每分鐘查一次有沒有新版，閒置時自動更新；版本沒變時約 10 分鐘更新一次回報時間。</div></div>`;
+      <div class="ops-card"><h3>門市平板有沒有換成新版</h3>${devs || '<div class="ops-meta" style="padding:6px 0;">最近 7 天沒有平板回報（平板打開 POS 頁後約 1 分鐘會出現在這裡）</div>'}
+        ${oldCount ? '<div class="ops-meta" style="margin-top:8px;">另有 ' + oldCount + ' 筆舊的平板啟用紀錄（最近 7 天沒有使用，可能是舊測試機、手機，或重新啟用前留下的），不影響運作。</div>' : ''}
+        <div class="ops-meta" style="margin-top:6px;">平板每分鐘查一次有沒有新版，閒置時自動更新。</div></div>`;
   }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
 }
 

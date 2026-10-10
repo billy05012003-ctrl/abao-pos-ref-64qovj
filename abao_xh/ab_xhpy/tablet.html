@@ -842,9 +842,9 @@ function loadPmgCfgStatus_() {
     const same = mine !== null && String(mine) === String(d.ver);
     box.innerHTML = `
       <div class="pmg-kv">
-        <div>菜單</div><div>${d.menuPublishedAt ? pmgFmtTime_(d.menuPublishedAt) + ' 發布' : '—（這版上線後還沒發布過）'}</div>
-        <div>優惠／會員相關</div><div>${d.promoPublishedAt ? pmgFmtTime_(d.promoPublishedAt) + ' 發布' : '—（這版上線後還沒發布過）'}</div>
-        <div>這台平板</div><div>${mine === null ? '還在讀取中' : (same ? '跟最新一致 ✅' : '<span style="color:#a32d2d;">不是最新，閒置時會自動更新</span>')}</div>
+        <div>菜單</div><div>${d.menuPublishedAt ? pmgFmtTime_(d.menuPublishedAt) + ' 發布' : '今天起開始記錄，下次發布後顯示'}</div>
+        <div>優惠／會員相關</div><div>${d.promoPublishedAt ? pmgFmtTime_(d.promoPublishedAt) + ' 發布' : '今天起開始記錄，下次發布後顯示'}</div>
+        <div>這台平板</div><div>${mine === null ? '還在讀取中' : (same ? '✅ 已是最新版' : '<span style="color:#a32d2d;">⚠️ 還沒換新版，閒置 30 秒後會自動更新</span>')}</div>
       </div>
       <div style="font-size:0.76rem;color:var(--muted);margin-top:8px;">後台發布後 1～2 分鐘內，平板閒置時會自動更新；這裡可以確認有沒有更新到。</div>`;
   }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
