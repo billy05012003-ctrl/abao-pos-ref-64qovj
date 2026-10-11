@@ -4011,6 +4011,7 @@ function showMpgReturnEnded_(orderId, text) {
     '</p><button type="button" class="btn-primary" onclick="location.replace(location.href)">回到點餐</button>';
 }
 function pollMpgOrderStatus_(orderId, ctx, attempt) {
+  if (attempt === 0) mpgPollStart_[orderId] = Date.now();
   apiGet_({ action: 'orderStatus', orderId }).then(data => {
     if (data.status === 'ok' && (data.orderStatus === '已退款' || data.orderStatus === '退款處理中' || data.orderStatus === '已作廢')) {
       showMpgReturnEnded_(orderId, data.orderStatus === '已作廢'
@@ -4034,22 +4035,25 @@ function pollMpgOrderStatus_(orderId, ctx, attempt) {
       try { localStorage.removeItem('abao_mpg_pending_' + orderId); } catch (e) {}
       cart = [];
       saveCartSession();
-    } else if (attempt < mpgPollLimit_(orderId)) {
+    } else if (mpgKeepWaiting_(orderId, attempt)) {
       setTimeout(() => pollMpgOrderStatus_(orderId, ctx, attempt + 1), 2000);
     } else {
       showMpgNotPaid_(orderId, ctx);
     }
   }).catch(() => {
-    if (attempt < mpgPollLimit_(orderId)) setTimeout(() => pollMpgOrderStatus_(orderId, ctx, attempt + 1), 2000);
+    if (mpgKeepWaiting_(orderId, attempt)) setTimeout(() => pollMpgOrderStatus_(orderId, ctx, attempt + 1), 2000);
     else showMpgNotPaid_(orderId, ctx);
   });
 }
 // 10-11(老闆實測：藍新沒付款直接按「返回商店」→ 卡在確認付款中，重新整理又重等，卡到 30 分鐘作廢)：
-// 第一次回來等 30 秒(藍新通知偶爾慢)；同一張單重新整理只等 4 秒，就顯示「還沒收到付款」＋「回到點餐」
-function mpgPollLimit_(orderId) {
+// 第一次回來照時鐘等 20 秒(老闆定案；藍新通知偶爾慢，原本算次數，加上每次查詢本身的時間實測超過 30 秒)；
+// 同一張單重新整理只查 2 次(約 4 秒)，就顯示「還沒收到付款」＋「回到點餐」
+var mpgPollStart_ = {};   // var：頁面載入時 checkMpgReturn 可能比這行先跑
+function mpgKeepWaiting_(orderId, attempt) {
   let waited = false;
   try { waited = sessionStorage.getItem('abao_mpg_waited_' + orderId) === '1'; } catch (e) {}
-  return waited ? 2 : 15;
+  if (waited) return attempt < 2;
+  return Date.now() - (mpgPollStart_[orderId] || 0) < 20000;
 }
 function showMpgNotPaid_(orderId, ctx) {
   try { sessionStorage.setItem('abao_mpg_waited_' + orderId, '1'); } catch (e) {}
