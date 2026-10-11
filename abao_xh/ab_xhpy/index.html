@@ -1192,6 +1192,7 @@ let currentModal = null; // {cat, item, size, price, groups: {groupKey: [selecte
 const CART_SESSION_KEY = 'abao_cart_meibao';
 function saveCartSession() {
   try { sessionStorage.setItem(CART_SESSION_KEY, JSON.stringify(cart)); } catch (e) {}
+  navSync_();   // 購物車有沒有東西會影響首頁按「‹」要不要先提醒(10-11 D18-1)
 }
 function loadCartSession() {
   try {
@@ -2053,7 +2054,7 @@ function giftVoucherCancel_(voucherId) {
 }
 // 領取：處理完(領到／自己的／已失效)就把網址上的 gift 拿掉，重新整理不會再跳
 function giftClearUrl_() {
-  const u = new URL(location.href); u.searchParams.delete('gift'); history.replaceState(null, '', u.toString());
+  const u = new URL(location.href); u.searchParams.delete('gift'); navReplaceUrl_(u.toString());
 }
 function openGiftClaim_() {
   if (giftClaimShown_) return;
@@ -3758,6 +3759,115 @@ function hidePayBusy_() { const el = document.getElementById('pay-busy'); if (el
 // 從藍新付款頁按「上一頁」回來(瀏覽器還原舊畫面)：把「前往付款中」收掉
 window.addEventListener('pageshow', e => { if (e.persisted) hidePayBusy_(); });
 
+// ---------- 瀏覽器「‹」／Android 返回鍵／iPhone 左滑返回(10-11 D18-1，規格 點餐頁返回鍵設計_2026-10-11.md) ----------
+// 做法＝「返回陷阱」：有視窗開著(或購物車有東西)時，瀏覽器歷史在目前這格上面多墊一格 {abaoTrap}；
+// 按「‹」＝退回底下那格、頁面收到 popstate → 執行最上層視窗的「←／✕」，還需要就再墊一格。永遠只墊一格。
+// 老闆定案：「›」不支援(墊的那格被前進回來時直接退回去，畫面不動)；底部分頁切換不算一步；
+// 首頁什麼都沒開但購物車有東西：第一次按只提醒「再按一次離開點餐頁」，3 秒內再按才真的離開。
+// 這裡用 var：saveCartSession 在頁面載入初期就會被呼叫，那時下面這幾行還沒跑到
+var navReady_ = false, navStack_ = [], navIgnorePop_ = false, navHomeWarned_ = false, navBaseUrl_ = '', navUrlDirty_ = false, navToastTimer_ = null;
+// 改網址一律走這裡(取代 history.replaceState(null, ...))：墊著陷阱時不能把陷阱標記洗掉；
+// 墊著陷阱時改的網址記起來，退回底下那格時補成最新網址(不然開團後按 ‹，網址會變回沒有 g= 的舊網址)
+function navReplaceUrl_(url) {
+  if (navTrapped_()) { navBaseUrl_ = new URL(url, location.href).href; navUrlDirty_ = true; }
+  history.replaceState(history.state && history.state.abaoTrap ? history.state : null, '', url);
+}
+function navTrapped_() { return !!(history.state && history.state.abaoTrap); }
+// Chrome/Safari：沒有被點過的頁面自己加的歷史紀錄，按返回會被整個跳過(連點餐頁一起離開)，所以客人點過畫面才墊
+function navUserActive_() { return !(navigator.userActivation && !navigator.userActivation.hasBeenActive); }
+function navTopLayer_() {
+  navStack_ = navStack_.filter(id => { const el = document.getElementById(id); return el && el.classList.contains('open'); });
+  return navStack_[navStack_.length - 1] || '';
+}
+function navNeed_() {
+  if (navTopLayer_()) return true;
+  return cart.length > 0 && !navHomeWarned_;
+}
+function navSync_() {
+  if (!navReady_ || navIgnorePop_) return;   // 收回陷阱的 popstate 還沒回來：等它回來再判斷
+  const need = navNeed_(), trapped = navTrapped_();
+  if (need && !trapped) {
+    if (!navUserActive_()) return;
+    history.pushState({ abaoTrap: 1 }, '');
+  } else if (!need && trapped) {
+    navIgnorePop_ = true;
+    history.back();   // 客人自己按 ✕ 關光了：把墊的那格收回，下次按 ‹ 不用多按一下
+  }
+}
+function navToast_(text) {
+  let el = document.getElementById('nav-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'nav-toast';
+    el.style.cssText = 'position:fixed;left:50%;bottom:140px;transform:translateX(-50%);z-index:9998;background:rgba(0,0,0,0.8);color:#fff;padding:10px 18px;border-radius:999px;font-size:0.9rem;white-space:nowrap;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.style.display = 'block';
+  clearTimeout(navToastTimer_);
+  navToastTimer_ = setTimeout(() => { el.style.display = 'none'; }, 3000);
+}
+// 最上層視窗的「‹」＝畫面上那顆 ←／✕ 的效果(套餐上一步取消該頁選擇等規則都在原本的函式裡)
+function navBackLayer_(id) {
+  const el = document.getElementById(id);
+  const shown = vid => { const v = document.getElementById(vid); return !!v && v.style.display === 'block'; };
+  const busy = document.getElementById('pay-busy');
+  if (busy && busy.style.display !== 'none') return;   // 正在跳藍新付款頁：不動
+  switch (id) {
+    case 'item-overlay': itemModalBack_(); break;
+    case 'drink-overlay': cancelDrinkCustom(); break;
+    case 'cart-overlay':
+      if (shown('mpg-waiting-view')) break;            // 確認付款中：不能關
+      if (shown('confirm-view')) { closeAll(); break; }  // 訂單完成：回首頁，不能退回已付款的購物車
+      closeCart(); break;
+    case 'storeinfo-overlay': closeStoreInfo_(); break;
+    case 'wallet-overlay': closeWallet_(); break;
+    case 'pickup-overlay': closePickupPicker_(); break;
+    case 'category-overlay': closeCategoryMenu(); break;
+    case 'tier-overlay': closeTierOverlay(); break;
+    case 'group-create-overlay': closeGroupCreate(); break;
+    case 'group-overlay': closeGroupPanel(); break;
+    default: if (el) el.classList.remove('open');   // 新品／活動介紹、節氣贈品二選一等
+  }
+}
+window.addEventListener('popstate', e => {
+  const onTrap = !!(e.state && e.state.abaoTrap);
+  if (!onTrap && navUrlDirty_) { navUrlDirty_ = false; history.replaceState(history.state, '', navBaseUrl_); }
+  if (navIgnorePop_) { navIgnorePop_ = false; navSync_(); return; }
+  if (onTrap) {
+    // 按「›」前進回到墊的那格：老闆定案不支援 → 不需要墊的話直接退回去
+    if (!navNeed_()) { navIgnorePop_ = true; history.back(); }
+    return;
+  }
+  const top = navTopLayer_();
+  if (top) { navBackLayer_(top); navSync_(); return; }
+  if (cart.length > 0) {
+    // 首頁、購物車有東西：先提醒，3 秒內再按一次「‹」才真的離開；3 秒後重新墊回去
+    navHomeWarned_ = true;
+    navToast_('再按一次離開點餐頁');
+    setTimeout(() => { navHomeWarned_ = false; navSync_(); }, 3000);
+  }
+});
+(function navInit_() {
+  // 視窗開關集中在這裡看(class="overlay" 有沒有 open)，不用改每個開視窗的地方；之後新增的視窗自動支援
+  new MutationObserver(list => {
+    let hit = false;
+    for (const m of list) {
+      const t = m.target;
+      if (!t.classList || !t.classList.contains('overlay') || !t.id) continue;
+      hit = true;
+      if (t.classList.contains('open')) { if (!navStack_.includes(t.id)) navStack_.push(t.id); }
+      else navStack_ = navStack_.filter(x => x !== t.id);
+    }
+    if (hit) navSync_();
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  // 頁面一打開就自己開的視窗(付款回來的訂單完成、揪團連結)：等客人第一次點畫面再墊
+  document.addEventListener('click', () => setTimeout(navSync_, 0), true);
+  // 從藍新付款頁按上一頁、或重新整理後還停在墊的那格：重新判斷
+  window.addEventListener('pageshow', () => setTimeout(navSync_, 0));
+  navReady_ = true;
+})();
+
 // 前往付款失敗(網路/後端慢、建付款失敗)：揪團單(pendingOrderContext.groupPay)如果訂單其實已經建好(付款中)，
 // 餐點不放回購物車(再按送出會被「你已經送出付款」擋、繞圈)，改打開揪團畫面請客人按「繼續付款」；
 // 訂單沒建起來才照舊放回購物車重送。一般點餐照舊放回購物車(舊的待付款單 30 分鐘自動作廢)
@@ -3837,7 +3947,7 @@ function clearMpgReturnParams_() {
   const u = new URL(location.href);
   u.searchParams.delete('mpgreturn');
   u.searchParams.delete('orderId');
-  history.replaceState(null, '', u.toString());
+  navReplaceUrl_(u.toString());
 }
 // 已退款/已作廢/找不到的單：不能卡在「確認付款中」，說明狀況並讓客人回到點餐
 function showMpgReturnEnded_(orderId, text) {
@@ -4192,7 +4302,7 @@ function initGroupFromUrl_() {
   const hostKeyFromUrl = URL_PARAMS_.get('h');
   if (hostKeyFromUrl) {
     groupCtx.hostToken = hostKeyFromUrl; saveGroupCtx_();
-    const u = new URL(location.href); u.searchParams.delete('h'); history.replaceState(null, '', u.toString());
+    const u = new URL(location.href); u.searchParams.delete('h'); navReplaceUrl_(u.toString());
   }
   fetchGroup_().then(() => {
     // 第一次點連結進來的朋友：直接打開揪團說明
@@ -4215,7 +4325,7 @@ function leaveGroupView() {
   closeGroupPanel();
   if (groupCheckoutMode) exitGroupCheckout_();
   groupCtx = null; groupView = null;
-  const u = new URL(location.href); u.searchParams.delete('g'); u.searchParams.delete('h'); history.replaceState(null, '', u.toString());
+  const u = new URL(location.href); u.searchParams.delete('g'); u.searchParams.delete('h'); navReplaceUrl_(u.toString());
   renderGroupBanner_();
   refreshGroupCartUi_();
 }
@@ -4320,7 +4430,7 @@ function createGroup() {
     saveGroupCtx_();
     // 購物車裡已經點的餐保留，團主確認好再從「我的訂單」送出到揪團(老闆 09-30 定案)
     // 網址換成揪團連結(保留其他參數)，重新整理也回得來
-    const u = new URL(location.href); u.searchParams.set('g', data.groupId); u.searchParams.delete('h'); history.replaceState(null, '', u.toString());
+    const u = new URL(location.href); u.searchParams.set('g', data.groupId); u.searchParams.delete('h'); navReplaceUrl_(u.toString());
     closeGroupCreate();
     return fetchGroup_().then(() => openGroupPanel());
   }).catch(err => alert(err.message)).finally(() => { btn.disabled = false; btn.textContent = '開團並產生分享連結'; });
