@@ -3683,7 +3683,8 @@ function submitOrder(e) {
   const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓客人重選時段
   // voucherIds/phone先存著，等藍新付款成功那一步才由後端核銷，
   // 避免客人填完折抵資訊卻棄單，兌換券卻已經被扣掉的情況
-  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, cartBackup: cartBackup, groupPay: groupCheckoutMode && groupCtx ? 'host' : '' };
+  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, cartBackup: cartBackup, groupPay: groupCheckoutMode && groupCtx ? 'host' : '',
+    needsBackup: { sel: otherNeedsSel.slice(), none: otherNeedsNone, note } };   // 10-11：藍新沒付款就返回時，其他需求/備註跟品項一起放回
   cart = [];
   saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
   document.getElementById('cart-view').style.display = 'none';
@@ -3865,7 +3866,11 @@ function navBackLayer_(id) {
     case 'item-overlay': itemModalBack_(); break;
     case 'drink-overlay': cancelDrinkCustom(); break;
     case 'cart-overlay':
-      if (shown('mpg-waiting-view')) break;            // 確認付款中：不能關
+      if (shown('mpg-waiting-view')) {                 // 確認付款中：不能關；已顯示「還沒收到付款」＝按「回到點餐」
+        const b = document.getElementById('mpg-back-btn');
+        if (b && !b.disabled) b.click();
+        break;
+      }
       if (shown('confirm-view')) { closeAll(); break; }  // 訂單完成：回首頁，不能退回已付款的購物車
       closeCart(); break;
     case 'storeinfo-overlay': closeStoreInfo_(); break;
@@ -3963,6 +3968,7 @@ function startMpgPayment(orderId, amount) {
       form.appendChild(input);
     });
     document.body.appendChild(form);
+    try { sessionStorage.setItem('abao_mpg_leaving', orderId); } catch (e) {}   // 從藍新按「‹」回來時認得是哪張單(見 mpgReturnedByBack_)
     form.submit();
   }).catch(err => {
     console.warn('建立藍新付款請求失敗（網路問題）', err);
@@ -4028,14 +4034,76 @@ function pollMpgOrderStatus_(orderId, ctx, attempt) {
       try { localStorage.removeItem('abao_mpg_pending_' + orderId); } catch (e) {}
       cart = [];
       saveCartSession();
-    } else if (attempt < 15) {
+    } else if (attempt < mpgPollLimit_(orderId)) {
       setTimeout(() => pollMpgOrderStatus_(orderId, ctx, attempt + 1), 2000);
     } else {
-      document.getElementById('mpg-waiting-view').innerHTML =
-        '<h2>確認付款中…</h2><p style="color:#888;font-size:0.9rem;">付款確認需要一點時間，請稍後重新整理本頁，或截圖聯繫門市確認訂單狀態。</p>';
+      showMpgNotPaid_(orderId, ctx);
     }
   }).catch(() => {
-    if (attempt < 15) setTimeout(() => pollMpgOrderStatus_(orderId, ctx, attempt + 1), 2000);
+    if (attempt < mpgPollLimit_(orderId)) setTimeout(() => pollMpgOrderStatus_(orderId, ctx, attempt + 1), 2000);
+    else showMpgNotPaid_(orderId, ctx);
+  });
+}
+// 10-11(老闆實測：藍新沒付款直接按「返回商店」→ 卡在確認付款中，重新整理又重等，卡到 30 分鐘作廢)：
+// 第一次回來等 30 秒(藍新通知偶爾慢)；同一張單重新整理只等 4 秒，就顯示「還沒收到付款」＋「回到點餐」
+function mpgPollLimit_(orderId) {
+  let waited = false;
+  try { waited = sessionStorage.getItem('abao_mpg_waited_' + orderId) === '1'; } catch (e) {}
+  return waited ? 2 : 15;
+}
+function showMpgNotPaid_(orderId, ctx) {
+  try { sessionStorage.setItem('abao_mpg_waited_' + orderId, '1'); } catch (e) {}
+  const isGroup = !!(ctx && ctx.groupPay);
+  document.getElementById('mpg-waiting-view').innerHTML =
+    '<h2>還沒收到付款</h2><p style="color:#888;font-size:0.9rem;line-height:1.6;">這筆訂單（' + escapeHtml_(orderId) + '）還沒完成付款。<br>' +
+    (isGroup ? '揪團的單請回揪團畫面按「繼續付款」。' : '按「回到點餐」會把剛剛的餐點放回購物車，可以重新付款。') +
+    '<br>沒付款的訂單 30 分鐘後會自動取消。如果你剛剛其實有付款，請先到「我的訂單」看一下，不要重複付款。</p>' +
+    '<button type="button" class="btn-primary" id="mpg-back-btn">回到點餐</button>';
+  document.getElementById('mpg-back-btn').onclick = () => mpgBackToOrder_(orderId, ctx);
+}
+// 10-11(老闆實測：藍新頁按「‹」要按兩下才正常)：瀏覽器「‹」回來不會經過「返回商店」的網址，畫面停在送出付款那一刻
+// (購物車視窗開著但空的，餐點在送出前已清掉)。認得是從藍新退回來的，就直接照「回到點餐」：沒付款→餐點放回購物車
+window.addEventListener('pageshow', function mpgReturnedByBack_() {
+  let oid = null;
+  try { oid = sessionStorage.getItem('abao_mpg_leaving'); sessionStorage.removeItem('abao_mpg_leaving'); } catch (e) {}
+  if (!oid || new URLSearchParams(location.search).get('mpgreturn') === '1') return;   // 「返回商店」導回走 checkMpgReturn
+  let ctx = pendingOrderContext && pendingOrderContext.backendOrderId === oid ? pendingOrderContext : null;
+  if (!ctx) { try { ctx = JSON.parse(localStorage.getItem('abao_mpg_pending_' + oid) || 'null'); } catch (e) {} }
+  hidePayBusy_();
+  ['cart-view', 'confirm-view', 'mpg-waiting-view'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+  document.getElementById('cart-overlay').classList.add('open');   // 剛好已付款時要顯示訂單完成
+  mpgBackToOrder_(oid, ctx);
+});
+// 回到點餐：先再查一次(剛好在這時候付款確認到了就照付款成功處理，不放回購物車，免得重複下單)
+function mpgBackToOrder_(orderId, ctx) {
+  const btn = document.getElementById('mpg-back-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '確認中…'; }
+  apiGet_({ action: 'orderStatus', orderId }).catch(() => ({})).then(data => {
+    if (data && data.status === 'ok' && (data.orderStatus === '未取餐' || data.orderStatus === '已取餐')) {
+      try { sessionStorage.removeItem('abao_mpg_waited_' + orderId); } catch (e) {}
+      pollMpgOrderStatus_(orderId, ctx, 0);   // 走原本的付款成功流程(顯示訂單完成)
+      return;
+    }
+    clearMpgReturnParams_();
+    try { localStorage.removeItem('abao_mpg_pending_' + orderId); sessionStorage.removeItem('abao_mpg_waited_' + orderId); } catch (e) {}
+    const view = document.getElementById('mpg-waiting-view');
+    view.style.display = 'none';
+    view.innerHTML = '<h2>確認付款中…</h2><p style="color:#888; font-size:0.9rem;">已從藍新付款頁返回，正在確認付款結果，請稍候不要關閉視窗。</p>';
+    if (ctx && !ctx.groupPay && Array.isArray(ctx.cartBackup) && ctx.cartBackup.length) {
+      cart = ctx.cartBackup;
+      const nb = ctx.needsBackup;
+      if (nb) {
+        otherNeedsSel = Array.isArray(nb.sel) ? nb.sel.slice() : [];
+        otherNeedsNone = !!nb.none;
+        document.getElementById('cust-note').value = nb.note || '';
+      }
+      saveCartSession();
+      updateCartBar();
+      openCart();
+      return;
+    }
+    document.getElementById('cart-overlay').classList.remove('open');
+    if (ctx && ctx.groupPay) openGroupPanel();
   });
 }
 
