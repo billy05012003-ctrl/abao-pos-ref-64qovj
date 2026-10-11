@@ -1998,6 +1998,20 @@ function renderTierBenefits() {
 }
 
 var vouchersLoadedAt_ = 0;   // 上次讀到會員兌換券的時間(openCart 判斷要不要重讀)
+// 藍新沒付款返回(10-11)：把客人原本手動選的兌換券放回。會員券還沒讀到就先記著，loadCheckoutVouchers 讀到時再套
+var pendingVoucherRestore_ = null;
+function applyVoucherRestore_() {
+  if (!pendingVoucherRestore_ || !vouchersLoadedAt_) return;
+  const list = pendingVoucherRestore_;
+  pendingVoucherRestore_ = null;
+  list.forEach(v => {
+    if (checkoutSelectedVouchers.some(x => x.voucherId === v.voucherId)) return;   // 已經選著(瀏覽器還原畫面時記憶體還在)
+    if (!checkoutMemberVouchers.some(x => x.voucherId === v.voucherId)) return;   // 券已經不能用
+    toggleCheckoutVoucher(v.voucherId, v.type, true);
+  });
+  renderCheckoutVoucherList();
+  updateCheckoutTotalDisplay();
+}
 function loadCheckoutVouchers() {
   const phone = document.getElementById('cust-phone').value.trim();
   const listEl = document.getElementById('checkout-voucher-list');
@@ -2010,6 +2024,7 @@ function loadCheckoutVouchers() {
     // 重新查詢(例如剛領完券)：還能用的已選券留著，其他的清掉避免對到舊資料
     const still = new Set(checkoutMemberVouchers.map(v => v.voucherId));
     checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v => still.has(v.voucherId));
+    if (data.status === 'ok') applyVoucherRestore_();
     renderCheckoutVoucherList();
     updateCheckoutTotalDisplay();
     if (HOME_TABS_ON) renderHomePerkPane_();   // 看板的「領券/已領取」
@@ -2216,12 +2231,15 @@ function actVoucherRow_(v, b, pick) {
       <span>${on ? '✅ ' : ''}${escapeHtml_(v.type)}<br><span style="color:${on ? '#1e7b34' : 'var(--muted)'};font-size:0.74rem;">${status}</span></span>${action}
     </div>`;
 }
-function toggleCheckoutVoucher(voucherId, type) {
+// quiet(10-11)：藍新沒付款返回、自動把原本選的券放回時用，套不上就默默略過，不跳提示
+function toggleCheckoutVoucher(voucherId, type, quiet) {
+  const alert = quiet ? () => {} : (m => window.alert(m));
   const idx = checkoutSelectedVouchers.findIndex(v => v.voucherId === voucherId);
   if (idx !== -1) {
     checkoutSelectedVouchers.splice(idx, 1);
   } else {
     const behavior = VOUCHER_BEHAVIOR[type];
+    if (!behavior) return;
     const mv = memberAllVouchers_.find(x => x.voucherId === voucherId);
     if (mv && mv.actDate && mv.actDate !== currentPickupISO_()) { alert(`這張券只能用在 ${homeMd_(mv.actDate)} 取餐的訂單，請先把取餐日改成 ${homeMd_(mv.actDate)}`); return; }
     if (behavior.requireCat && !cartHasCat_(behavior.requireCat)) { alert(`要搭配「${shortCatName(behavior.requireCat)}」的餐點才能使用這張券`); return; }
@@ -3684,7 +3702,8 @@ function submitOrder(e) {
   // voucherIds/phone先存著，等藍新付款成功那一步才由後端核銷，
   // 避免客人填完折抵資訊卻棄單，兌換券卻已經被扣掉的情況
   pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, cartBackup: cartBackup, groupPay: groupCheckoutMode && groupCtx ? 'host' : '',
-    needsBackup: { sel: otherNeedsSel.slice(), none: otherNeedsNone, note } };   // 10-11：藍新沒付款就返回時，其他需求/備註跟品項一起放回
+    needsBackup: { sel: otherNeedsSel.slice(), none: otherNeedsNone, note },   // 10-11：藍新沒付款就返回時，其他需求/備註跟品項一起放回
+    voucherBackup: checkoutSelectedVouchers.filter(v => !v.auto).map(v => ({ voucherId: v.voucherId, type: v.type })) };   // 客人手動選的兌換券(活動券/等級優惠會自動重套)
   cart = [];
   saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
   document.getElementById('cart-view').style.display = 'none';
@@ -4103,7 +4122,9 @@ function mpgBackToOrder_(orderId, ctx) {
       }
       saveCartSession();
       updateCartBar();
+      if (Array.isArray(ctx.voucherBackup) && ctx.voucherBackup.length) pendingVoucherRestore_ = ctx.voucherBackup;
       openCart();
+      applyVoucherRestore_();   // 會員券已經讀過就馬上套；還沒讀到等 loadCheckoutVouchers
       return;
     }
     document.getElementById('cart-overlay').classList.remove('open');
