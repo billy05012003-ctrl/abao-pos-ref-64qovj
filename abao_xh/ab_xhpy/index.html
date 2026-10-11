@@ -3969,6 +3969,8 @@ function payFailed_(message) {
 function startMpgPayment(orderId, amount) {
   // pendingOrderContext(訂單摘要/兌換券選擇)存到localStorage，因為送出表單導頁後整個頁面會離開，
   // 等藍新導回來時原本的JS記憶體狀態已經沒了，要靠這份存檔重建完成畫面
+  // 揪團的單記下團號(10-11)：藍新導回的網址沒有 g=，沒付款回來要靠它打開原本那一團(不然揪團畫面一直「載入中」)
+  if (pendingOrderContext && pendingOrderContext.groupPay && groupCtx) pendingOrderContext.groupId = groupCtx.groupId;
   try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(pendingOrderContext)); } catch (e) {}
   const returnUrl = location.origin + location.pathname + '?mpgreturn=1&orderId=' + encodeURIComponent(orderId);
   apiPost_({ action: 'createMpgPayment', orderId, amount, itemDesc: STORE_NAME, returnUrl, sandbox: MPG_SANDBOX }).then(data => {
@@ -4128,7 +4130,14 @@ function mpgBackToOrder_(orderId, ctx) {
       return;
     }
     document.getElementById('cart-overlay').classList.remove('open');
-    if (ctx && ctx.groupPay) openGroupPanel();
+    if (ctx && ctx.groupPay) {
+      if (!groupCtx && ctx.groupId) {
+        groupCtx = loadGroupCtx_(ctx.groupId) || { groupId: ctx.groupId };
+        const u = new URL(location.href); u.searchParams.set('g', ctx.groupId); navReplaceUrl_(u.toString());   // 重新整理也回得到這一團
+      }
+      if (groupCtx) openGroupPanel();
+      else openMyOrdersTab_();   // 找不到是哪一團(舊版建的單)：到「我的訂單」的揪團紀錄
+    }
   });
 }
 
@@ -4657,6 +4666,7 @@ function leaveGroup() {
 }
 
 function openGroupPanel() {
+  if (!groupCtx) { alert('找不到這個揪團，請從揪團連結重新打開，或到「我的訂單」看揪團紀錄'); return; }   // 不然面板一直「載入中」
   document.getElementById('group-overlay').classList.add('open');
   renderGroupPanel_();
   fetchGroup_().then(renderGroupPanel_).catch(err => { document.getElementById('group-body').innerHTML = '<div style="color:#a30000">' + escapeHtml_(err.message) + '</div>'; });
