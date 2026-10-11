@@ -197,6 +197,14 @@
     width: 100%; background: #fff; color: var(--brand); border: 1px solid var(--brand); border-radius: 10px;
     padding: 12px; font-size: 1rem; margin-top: 8px; cursor: pointer;
   }
+  /* 滑動前往付款(10-11 老闆參考酷澎「滑動立即結帳」)：按鈕拖到底才送出，防誤觸 */
+  .slide-pay { position: relative; height: 52px; margin-top: 16px; border-radius: 10px; background: #fbe3d8; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+  .slide-pay-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 52px; background: #f4b79c; border-radius: 10px; }
+  .slide-pay-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding-left: 40px; font-size: 1.02rem; font-weight: 700; color: var(--brand-dark); pointer-events: none; }
+  .slide-pay-knob { position: absolute; left: 0; top: 0; width: 52px; height: 52px; border-radius: 10px; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; cursor: grab; touch-action: none; }
+  .slide-pay.back .slide-pay-knob, .slide-pay.back .slide-pay-fill { transition: transform 0.2s ease, width 0.2s ease; }
+  .slide-pay.nudge .slide-pay-knob { animation: slidePayNudge 0.6s ease; }
+  @keyframes slidePayNudge { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(26px); } 60% { transform: translateX(6px); } }
   /* 首頁上方：取餐時間列＋地址＋揪團/自取規則(2026-09-30 老闆參考大麥定案，頁面少文字、說明集中到「訂餐資訊」) */
   #store-strip { background: #fff; border-bottom: 1px solid var(--border); padding: 10px 12px; }
   /* 底部三分頁(2026-09-30 第一波，HOME_TABS_ON 才加 body.home-tabs)：新品推薦／會員好康／線上點餐 */
@@ -543,7 +551,11 @@
         <input type="checkbox" id="agree-terms" style="width:20px; height:20px; margin-top:1px; flex:none;">
         <span>我已閱讀並同意<a href="javascript:void(0)" onclick="openStoreInfo_('rules')">自取規則</a>、<a href="info.html#refund" target="_blank" rel="noopener">退款政策</a>、<a href="info.html#terms" target="_blank" rel="noopener">服務條款</a>及<a href="info.html#privacy" target="_blank" rel="noopener">隱私權政策</a></span>
       </label>
-      <button class="btn-primary" id="go-checkout" onclick="goToPayment_()">前往付款</button>
+      <div class="slide-pay" id="go-checkout" role="button" tabindex="0" aria-label="滑動前往付款">
+        <div class="slide-pay-fill"></div>
+        <div class="slide-pay-text">滑動前往付款</div>
+        <div class="slide-pay-knob">»</div>
+      </div>
       <button class="btn-secondary" onclick="closeCart()">繼續點餐</button>
     </div>
 
@@ -3560,6 +3572,42 @@ function goToPayment_() {
   if (!document.getElementById('cust-name').value.trim()) { alert('請填寫取餐人姓名'); openPickupPicker_(); return; }
   submitOrder({ preventDefault() {} });
 }
+// 滑動前往付款(10-11)：把按鈕拖過 85% 才呼叫 goToPayment_(檢查都在裡面，被擋下就彈回原位)；
+// 只點一下不送出，按鈕往右晃一下提示要滑。鍵盤 Enter／空白鍵照舊可以直接前往付款
+(function initSlidePay_() {
+  const track = document.getElementById('go-checkout');
+  const knob = track.querySelector('.slide-pay-knob'), fill = track.querySelector('.slide-pay-fill');
+  let startX = 0, x = 0, dragging = false, moved = false;
+  const max = () => track.clientWidth - knob.offsetWidth;
+  const setX = v => { x = Math.max(0, Math.min(max(), v)); knob.style.transform = `translateX(${x}px)`; fill.style.width = (x + knob.offsetWidth) + 'px'; };
+  const reset = () => { track.classList.add('back'); setX(0); setTimeout(() => track.classList.remove('back'), 220); };
+  knob.addEventListener('pointerdown', e => {
+    dragging = true; moved = false; startX = e.clientX - x;
+    track.classList.remove('back', 'nudge');
+    knob.setPointerCapture(e.pointerId);
+  });
+  knob.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    if (Math.abs(e.clientX - startX - x) > 2) moved = true;
+    setX(e.clientX - startX);
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false;
+    if (x >= max() * 0.85) {
+      track.classList.add('back'); setX(max());
+      setTimeout(() => { goToPayment_(); setTimeout(reset, 400); }, 150);   // 被擋下(沒勾同意等)跳完提示就彈回；成功的話付款等待畫面會蓋住
+      return;
+    }
+    reset();
+    if (!moved) { void track.offsetWidth; track.classList.add('nudge'); }
+  };
+  knob.addEventListener('pointerup', end);
+  knob.addEventListener('pointercancel', end);
+  track.addEventListener('click', e => { if (e.target === track) { track.classList.remove('nudge'); void track.offsetWidth; track.classList.add('nudge'); } });
+  track.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToPayment_(); } });
+  window.addEventListener('pageshow', () => setX(0));   // 從藍新付款頁按上一頁回來：按鈕回到左邊
+})();
 function backToCart() {
   document.getElementById('cart-view').style.display = 'block';
 }
