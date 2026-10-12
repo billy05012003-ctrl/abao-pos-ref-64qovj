@@ -178,6 +178,18 @@
 </header>
 <div id="cfg-update-banner" class="status-banner" style="display:none;cursor:pointer;background:#fff3cd;color:#7a5300" onclick="applyCfgUpdateNow_()">📢 菜單／優惠有更新：這筆結完會自動更新（或按這裡立即更新）</div>
 <div id="cfg-update-toast" style="display:none;position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:60;background:#2e7d32;color:#fff;padding:8px 14px;border-radius:8px;font-size:0.9rem;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.2)">✅ 菜單／優惠已更新</div>
+<!-- 線上單確認接單(10-12)：線上點餐的單要在這裡按確認才會出單 -->
+<div id="oc-banner" class="status-banner" style="display:none;cursor:pointer;background:#c62828;color:#fff;font-size:1rem" onclick="openOnlineConfirm_()"></div>
+<div class="pos-overlay" id="oc-overlay" onclick="if(event.target===this)closeOnlineConfirm_()">
+  <div class="pos-sheet" style="max-width:560px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+      <h2 style="margin:0;font-size:1.1rem">🔔 線上單待確認</h2>
+      <button type="button" class="btn btn-secondary" onclick="closeOnlineConfirm_()">關閉</button>
+    </div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">按「確認接單並出單」後，出單機會馬上印出這張單。</div>
+    <div id="oc-list"></div>
+  </div>
+</div>
 <div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
@@ -3208,6 +3220,82 @@ function tryApplyCfgUpdate_() {
 Promise.all([menuCmsDataReady, promoSettingsReady, drinkUpgradeRulesReady]).then(checkCfgVersion_);
 setInterval(checkCfgVersion_, CFG_POLL_MS);
 setInterval(tryApplyCfgUpdate_, 10000);
+
+// ---------- 線上單確認接單(2026-10-12 老闆定案) ----------
+// 線上點餐的單(預訂單、即時單都一樣)後端先標「待確認」，不會出單；這裡每 15 秒讀一次待確認清單，
+// 上方紅色橫幅＋提示音，店員按「確認接單並出單」→ 後端改待列印，出單模組下一輪(約 10 秒內)印出。
+// 提示音：即時單(今天取餐)每 30 秒響一次直到確認；預訂單只亮紅條，取餐前 30 分鐘還沒確認才開始響
+const OC_POLL_MS_ = 15000, OC_BEEP_EVERY_MS_ = 30000, OC_PRE_BEEP_MIN_ = 30;
+let ocOrders_ = [], ocLastBeep_ = 0, ocAudio_ = null, ocLoading_ = false;
+function ocEnsureAudio_() { try { if (!ocAudio_) ocAudio_ = new (window.AudioContext || window.webkitAudioContext)(); if (ocAudio_.state === 'suspended') ocAudio_.resume(); } catch (e) {} }
+document.addEventListener('pointerdown', ocEnsureAudio_);   // 瀏覽器規定：要有人點過畫面才能出聲
+function ocBeep_() {
+  if (!ocAudio_ || ocAudio_.state !== 'running') return;
+  [0, 0.35].forEach(t => {   // 叮咚兩聲，跟出單模組斷線的單聲區分
+    const o = ocAudio_.createOscillator(), g = ocAudio_.createGain();
+    o.frequency.value = t ? 660 : 990; g.gain.value = 0.35; o.connect(g); g.connect(ocAudio_.destination);
+    o.start(ocAudio_.currentTime + t); o.stop(ocAudio_.currentTime + t + 0.28);
+  });
+}
+function ocPickupMs_(o) { return new Date(o.pickupDate + 'T' + (o.pickupTime || '00:00') + ':00').getTime(); }
+function ocUrgent_(o) { return !o.preorder || ocPickupMs_(o) - Date.now() <= OC_PRE_BEEP_MIN_ * 60000; }
+function ocLoad_() {
+  if (ocLoading_ || !posDeviceToken_()) return;
+  ocLoading_ = true;
+  apiGet({ action: 'pendingConfirmOrders', storeId: STORE_ID }).then(d => {
+    if (d && d.status === 'ok') { ocOrders_ = d.orders || []; ocRender_(); }
+  }).catch(() => {}).finally(() => { ocLoading_ = false; });
+}
+function ocRender_() {
+  const b = document.getElementById('oc-banner'), n = ocOrders_.length;
+  if (document.getElementById('oc-overlay').classList.contains('open')) ocRenderList_();
+  if (!n) { b.style.display = 'none'; return; }
+  const now = ocOrders_.filter(o => !o.preorder).length;
+  b.textContent = `🔔 有 ${n} 張線上單待確認（即時 ${now}／預訂 ${n - now}）：按這裡確認接單`;
+  b.style.display = 'block';
+  if (ocOrders_.some(ocUrgent_) && Date.now() - ocLastBeep_ >= OC_BEEP_EVERY_MS_ - 2000) { ocBeep_(); ocLastBeep_ = Date.now(); }
+}
+function ocWhenText_(o) {
+  const d = new Date(o.pickupDate + 'T00:00:00'), wk = '日一二三四五六'[d.getDay()];
+  return (o.preorder ? `${d.getMonth() + 1}/${d.getDate()}（${wk}）` : '今天 ') + (o.pickupTime || '');
+}
+function ocRenderList_() {
+  const el = document.getElementById('oc-list');
+  if (!ocOrders_.length) { el.innerHTML = '<div class="empty-hint">目前沒有待確認的線上單 ✅</div>'; return; }
+  el.innerHTML = ocOrders_.map(o => {
+    const main = o.items.filter(it => !it.x2), needs = o.items.filter(it => it.x2);
+    const lines = main.map(it => `<div>${it.qty} × ${it.who ? '［' + escapeHtml_(it.who) + '］' : ''}${escapeHtml_(it.name)}${it.size ? ' ' + escapeHtml_(it.size) : ''}${it.note && !/贈品/.test(it.note) ? '<span style="color:var(--muted)">（' + escapeHtml_(it.note) + '）</span>' : ''}</div>`).join('');
+    const pd = o.enqueuedAt ? new Date(o.enqueuedAt) : null;
+    const placed = pd ? (pd.toDateString() === new Date().toDateString() ? '' : `${pd.getMonth() + 1}/${pd.getDate()} `) + pd.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    return `<div style="border:2px solid ${o.preorder ? '#ffd699' : '#e57373'};border-radius:10px;padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <b style="font-size:1.05rem">${escapeHtml_(ocWhenText_(o))} 取餐</b>
+        <span style="font-size:0.75rem;padding:2px 8px;border-radius:999px;background:${o.preorder ? '#fff3cd' : '#fde8e8'};color:${o.preorder ? '#7a5300' : '#a32d2d'}">${o.preorder ? '預訂' : '即時'}</span>
+      </div>
+      <div style="font-size:0.85rem;color:var(--muted);margin:2px 0 6px">${escapeHtml_(o.orderId)}・${escapeHtml_(o.name || '（未填姓名）')}・下單 ${placed}</div>
+      <div style="font-size:0.92rem;line-height:1.5">${lines}</div>
+      ${needs.length ? `<div style="font-size:0.85rem;margin-top:4px">其他需求：${needs.map(it => escapeHtml_(it.name)).join('、')}</div>` : ''}
+      ${o.note ? `<div style="font-size:0.85rem;margin-top:4px;color:#a3620a">備註：${escapeHtml_(o.note)}</div>` : ''}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px">
+        <span style="font-weight:700">$${o.total}<span style="font-weight:400;font-size:0.8rem;color:var(--muted)">　${escapeHtml_(o.payText)}</span></span>
+        <button type="button" class="btn btn-primary" onclick="ocConfirm_('${escapeHtml_(o.orderId)}', this)">✅ 確認接單並出單</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function openOnlineConfirm_() { ocRenderList_(); document.getElementById('oc-overlay').classList.add('open'); ocLoad_(); }
+function closeOnlineConfirm_() { document.getElementById('oc-overlay').classList.remove('open'); }
+function ocConfirm_(orderId, btn) {
+  btn.disabled = true; btn.textContent = '確認中…';
+  apiPost({ action: 'confirmOnlineOrder', orderId, storeId: STORE_ID }).then(d => {
+    if (!d || d.status !== 'ok') { alert((d && d.message) || '確認失敗，請再按一次'); btn.disabled = false; btn.textContent = '✅ 確認接單並出單'; return; }
+    ocOrders_ = ocOrders_.filter(o => o.orderId !== orderId);
+    ocRender_();
+    if (!ocOrders_.length) closeOnlineConfirm_();
+  }).catch(() => { alert('網路異常，請再按一次'); btn.disabled = false; btn.textContent = '✅ 確認接單並出單'; });
+}
+ocLoad_();
+setInterval(ocLoad_, OC_POLL_MS_);
 </script>
 </body>
 </html>
