@@ -3573,6 +3573,7 @@ function closeCart() {
 // 2026-09-30 老闆定案：拿掉「取餐資訊」頁，我的訂單直接前往付款(姓名/取餐時間在首頁「取餐資訊」視窗)
 function goToPayment_() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
+  if (mpgPrevPaidGuard_()) return;   // 從藍新按 ‹ 回來的購物車：先確認上一筆沒付才付(10-12)
   const currentPhone = document.getElementById('cust-phone').value.trim();
   if (!verifiedMember || verifiedMember.phone !== currentPhone) { alert('請先完成會員驗證，才能送出訂單'); return; }
   if (!otherNeedsReady_()) return;
@@ -4097,10 +4098,33 @@ window.addEventListener('pageshow', function mpgReturnedByBack_() {
   hidePayBusy_();
   ['cart-view', 'confirm-view', 'mpg-waiting-view'].forEach(id => { document.getElementById(id).style.display = 'none'; });
   document.getElementById('cart-overlay').classList.add('open');   // 剛好已付款時要顯示訂單完成
-  mpgBackToOrder_(oid, ctx);
+  mpgBackToOrder_(oid, ctx, true);
 });
+// 10-12 防重複下單：從藍新按 ‹ 回來時藍新通知可能還沒到(客人其實付了)，購物車先放回，
+// 等客人再按付款時才確認上一筆(那時通常已過十幾秒，通知早到了)：已付→顯示那筆的訂單完成，不建新單；沒付→照常付款
+function mpgPrevPaidGuard_() {
+  let prev = null;
+  try { prev = JSON.parse(sessionStorage.getItem('abao_mpg_prev') || 'null'); } catch (e) {}
+  if (!prev || !prev.orderId) return false;
+  showPayBusy_('確認上一筆付款狀態…');
+  apiGet_({ action: 'orderStatus', orderId: prev.orderId }).catch(() => ({})).then(d => {
+    hidePayBusy_();
+    try { sessionStorage.removeItem('abao_mpg_prev'); } catch (e) {}
+    if (d && d.status === 'ok' && (d.orderStatus === '未取餐' || d.orderStatus === '已取餐')) {
+      alert('剛剛那筆訂單（' + prev.orderId + '）已經付款成功，不用再付一次。');
+      cart = []; saveCartSession(); updateCartBar();
+      ['cart-view', 'confirm-view'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+      document.getElementById('mpg-waiting-view').style.display = 'block';
+      document.getElementById('cart-overlay').classList.add('open');
+      pollMpgOrderStatus_(prev.orderId, prev.ctx, 0);   // 走原本的付款成功流程(顯示訂單完成)
+      return;
+    }
+    goToPayment_();   // 確定沒付(或查不到網路)：照常前往付款
+  });
+  return true;
+}
 // 回到點餐：先再查一次(剛好在這時候付款確認到了就照付款成功處理，不放回購物車，免得重複下單)
-function mpgBackToOrder_(orderId, ctx) {
+function mpgBackToOrder_(orderId, ctx, guardPrev) {
   const btn = document.getElementById('mpg-back-btn');
   if (btn) { btn.disabled = true; btn.textContent = '確認中…'; }
   apiGet_({ action: 'orderStatus', orderId }).catch(() => ({})).then(data => {
@@ -4125,6 +4149,7 @@ function mpgBackToOrder_(orderId, ctx) {
       saveCartSession();
       updateCartBar();
       if (Array.isArray(ctx.voucherBackup) && ctx.voucherBackup.length) pendingVoucherRestore_ = ctx.voucherBackup;
+      if (guardPrev) { try { sessionStorage.setItem('abao_mpg_prev', JSON.stringify({ orderId, ctx })); } catch (e) {} }   // 見 mpgPrevPaidGuard_
       openCart();
       applyVoucherRestore_();   // 會員券已經讀過就馬上套；還沒讀到等 loadCheckoutVouchers
       return;
