@@ -3242,6 +3242,7 @@ function wizRender_() {
     nav.innerHTML = `<button type="button" class="btn-primary" id="wiz-next-btn" onclick="wizNext_()">${w.fromConfirm ? '完成變更' : '下一步：' + escapeHtml_(w.steps[w.idx + 1].title)}</button>`;
   } else nav.innerHTML = '';
   wizRefresh_();
+  navSync_();   // 套餐每一步＝瀏覽器 ‹ 的一格(客人點「下一步」的當下墊好，見 navSync_)
 }
 
 function wizRefresh_() {
@@ -3829,38 +3830,57 @@ function hidePayBusy_() { const el = document.getElementById('pay-busy'); if (el
 window.addEventListener('pageshow', e => { if (e.persisted) hidePayBusy_(); });
 
 // ---------- 瀏覽器「‹」／Android 返回鍵／iPhone 左滑返回(10-11 D18-1，規格 點餐頁返回鍵設計_2026-10-11.md) ----------
-// 做法＝「返回陷阱」：有視窗開著(或購物車有東西)時，瀏覽器歷史在目前這格上面多墊一格 {abaoTrap}；
-// 按「‹」＝退回底下那格、頁面收到 popstate → 執行最上層視窗的「←／✕」，還需要就再墊一格。永遠只墊一格。
-// 老闆定案：「›」不支援(墊的那格被前進回來時直接退回去，畫面不動)；底部分頁切換不算一步；
-// 首頁什麼都沒開但購物車有東西：第一次按只提醒「再按一次離開點餐頁」，3 秒內再按才真的離開。
+// 10-12 改版(老闆用 Android 平板實測：首頁提醒、兩層視窗都直接離開點餐頁)：Android Chrome 會跳過「客人剛剛沒點畫面時」
+// 網頁自己加的歷史紀錄。原本按 ‹ 之後才「再墊一格」，那時沒有點畫面 → 被跳過。改成「一層一格」：
+// 開視窗／套餐往下一步／購物車放進東西，都是客人點畫面的當下，就把需要的格數一次墊好 {abaoNav: 第幾格}；
+// 按 ‹ 只是一格一格往回退、執行最上層的「←／✕」，按完之後絕不補格(要補也等客人下次點畫面)。
+// 格數＝購物車有東西(首頁提醒)1 格＋每個開著的視窗 1 格(套餐視窗＝還能按幾次 ← 就幾格)。
+// 老闆定案：「›」不支援(前進回來直接退回去)；底部分頁切換不算一步；首頁購物車有東西先提醒「再按一次離開點餐頁」。
 // 這裡用 var：saveCartSession 在頁面載入初期就會被呼叫，那時下面這幾行還沒跑到
-var navReady_ = false, navStack_ = [], navIgnorePop_ = false, navHomeWarned_ = false, navBaseUrl_ = '', navUrlDirty_ = false, navToastTimer_ = null;
-// 改網址一律走這裡(取代 history.replaceState(null, ...))：墊著陷阱時不能把陷阱標記洗掉；
-// 墊著陷阱時改的網址記起來，退回底下那格時補成最新網址(不然開團後按 ‹，網址會變回沒有 g= 的舊網址)
+var navReady_ = false, navStack_ = [], navPendingGo_ = false, navInPop_ = false, navLastA_ = 0, navHomeWarned_ = false, navBaseUrl_ = '', navUrlDirty_ = false, navToastTimer_ = null, navGoTimer_ = null;
+// 改網址一律走這裡(取代 history.replaceState(null, ...))：不能把格數標記洗掉；
+// 墊著格子時改的網址記起來，退回底下的格子時補成最新網址(不然開團後按 ‹，網址會變回沒有 g= 的舊網址)
 function navReplaceUrl_(url) {
-  if (navTrapped_()) { navBaseUrl_ = new URL(url, location.href).href; navUrlDirty_ = true; }
-  history.replaceState(history.state && history.state.abaoTrap ? history.state : null, '', url);
+  navBaseUrl_ = new URL(url, location.href).href;
+  navUrlDirty_ = navDepthOf_(history.state) > 0;
+  history.replaceState(history.state, '', url);
 }
-function navTrapped_() { return !!(history.state && history.state.abaoTrap); }
-// Chrome/Safari：沒有被點過的頁面自己加的歷史紀錄，按返回會被整個跳過(連點餐頁一起離開)，所以客人點過畫面才墊
-function navUserActive_() { return !(navigator.userActivation && !navigator.userActivation.hasBeenActive); }
+function navDepthOf_(st) { return (st && st.abaoNav) || 0; }
+// 客人剛點過畫面(幾秒內)才墊格子；Android Chrome、iPhone Safari 都是看這個
+function navUserActive_() { return navigator.userActivation ? navigator.userActivation.isActive : true; }
 function navTopLayer_() {
   navStack_ = navStack_.filter(id => { const el = document.getElementById(id); return el && el.classList.contains('open'); });
   return navStack_[navStack_.length - 1] || '';
 }
-function navNeed_() {
-  if (navTopLayer_()) return true;
-  return cart.length > 0 && !navHomeWarned_;
+// 套餐視窗要幾格＝還能按幾次 ←：變更中(從確認頁點進來)先回確認頁再一步步退；其他＝目前第幾步
+function navLayerDepth_(id) {
+  if (id !== 'item-overlay') return 1;
+  const w = currentModal && currentModal.wiz;
+  if (!w) return 1;
+  return w.fromConfirm ? w.steps.length + 1 : w.idx + 1;
+}
+function navDesired_() {
+  navTopLayer_();
+  let d = (cart.length > 0 && !navHomeWarned_) ? 1 : 0;
+  navStack_.forEach(id => { d += navLayerDepth_(id); });
+  return d;
+}
+function navGo_(n) {
+  navPendingGo_ = true;
+  clearTimeout(navGoTimer_);
+  navGoTimer_ = setTimeout(() => { navPendingGo_ = false; }, 1500);   // 保險：popstate 沒回來也不要卡住
+  history.go(n);
 }
 function navSync_() {
-  if (!navReady_ || navIgnorePop_) return;   // 收回陷阱的 popstate 還沒回來：等它回來再判斷
-  const need = navNeed_(), trapped = navTrapped_();
-  if (need && !trapped) {
-    if (!navUserActive_()) return;
-    history.pushState({ abaoTrap: 1 }, '');
-  } else if (!need && trapped) {
-    navIgnorePop_ = true;
-    history.back();   // 客人自己按 ✕ 關光了：把墊的那格收回，下次按 ‹ 不用多按一下
+  if (!navReady_ || navInPop_ || navPendingGo_) return;
+  const D = navDesired_(), A = navDepthOf_(history.state);
+  navLastA_ = A;
+  if (D > A) {
+    if (!navUserActive_()) return;   // 不是客人剛點畫面：先不墊，等下次點畫面(click 監聽會再叫一次)
+    for (let k = A + 1; k <= D; k++) history.pushState({ abaoNav: k }, '');
+    navLastA_ = D;
+  } else if (D < A) {
+    navGo_(D - A);   // 客人自己按 ✕／加入購物車關掉了：多的格子收回，下次按 ‹ 不用多按
   }
 }
 function navToast_(text) {
@@ -3903,25 +3923,44 @@ function navBackLayer_(id) {
     default: if (el) el.classList.remove('open');   // 新品／活動介紹、節氣贈品二選一等
   }
 }
-window.addEventListener('popstate', e => {
-  const onTrap = !!(e.state && e.state.abaoTrap);
-  if (!onTrap && navUrlDirty_) { navUrlDirty_ = false; history.replaceState(history.state, '', navBaseUrl_); }
-  if (navIgnorePop_) { navIgnorePop_ = false; navSync_(); return; }
-  if (onTrap) {
-    // 按「›」前進回到墊的那格：老闆定案不支援 → 不需要墊的話直接退回去
-    if (!navNeed_()) { navIgnorePop_ = true; history.back(); }
-    return;
-  }
+// 按一次 ‹ 要做的事：關最上層視窗(或套餐退一步)；什麼都沒開但購物車有東西＝提醒
+function navBackOnce_() {
   const top = navTopLayer_();
-  if (top) { navBackLayer_(top); navSync_(); return; }
-  if (cart.length > 0) {
-    // 首頁、購物車有東西：先提醒，3 秒內再按一次「‹」才真的離開；3 秒後重新墊回去
+  if (top) { navBackLayer_(top); return true; }
+  if (cart.length > 0 && !navHomeWarned_) {
+    // 3 秒內再按一次「‹」就離開；3 秒後客人點一下畫面就重新保護(不能自己補格，見最上面說明)
     navHomeWarned_ = true;
     navToast_('再按一次離開點餐頁');
-    setTimeout(() => { navHomeWarned_ = false; navSync_(); }, 3000);
+    setTimeout(() => { navHomeWarned_ = false; }, 3000);
+    return true;
   }
+  return false;
+}
+window.addEventListener('popstate', e => {
+  const newA = navDepthOf_(e.state);
+  if (navUrlDirty_ && location.href !== navBaseUrl_) history.replaceState(history.state, '', navBaseUrl_);
+  if (newA === 0) navUrlDirty_ = false;
+  if (navPendingGo_) { navPendingGo_ = false; clearTimeout(navGoTimer_); navLastA_ = newA; navSync_(); return; }
+  const delta = navLastA_ - newA;
+  navLastA_ = newA;
+  if (delta <= 0) {
+    // 按「›」前進：老闆定案不支援 → 多出來的格子直接退回去，畫面不動
+    const D = navDesired_();
+    if (newA > D) navGo_(D - newA);
+    return;
+  }
+  navInPop_ = true;
+  try {
+    for (let k = 0; k < delta; k++) {   // 一次退好幾格(長按返回選更早的頁)：一層一層照做
+      if (navDesired_() <= newA) break;
+      if (!navBackOnce_()) break;
+    }
+  } finally { navInPop_ = false; }
+  const D = navDesired_();
+  if (D < newA) navGo_(D - newA);   // 做完比格子少(例如套餐退到第一頁又關掉)：多的收回；比格子多就等客人下次點畫面再墊
 });
 (function navInit_() {
+  navLastA_ = navDepthOf_(history.state);
   // 視窗開關集中在這裡看(class="overlay" 有沒有 open)，不用改每個開視窗的地方；之後新增的視窗自動支援
   new MutationObserver(list => {
     let hit = false;
@@ -3936,7 +3975,7 @@ window.addEventListener('popstate', e => {
   }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
   // 頁面一打開就自己開的視窗(付款回來的訂單完成、揪團連結)：等客人第一次點畫面再墊
   document.addEventListener('click', () => setTimeout(navSync_, 0), true);
-  // 從藍新付款頁按上一頁、或重新整理後還停在墊的那格：重新判斷
+  // 從藍新付款頁按上一頁、或重新整理後還停在墊的格子上：重新判斷(多的收回)
   window.addEventListener('pageshow', () => setTimeout(navSync_, 0));
   navReady_ = true;
 })();
