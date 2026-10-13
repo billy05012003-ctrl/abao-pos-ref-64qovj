@@ -238,7 +238,8 @@
       </div>
       <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個客人現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
       <div id="pos-cash-fields" style="display:none;margin-top:8px;">
-        <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">實收金額</label>
+        <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">實收金額（必填）</label>
+        <div id="pos-cash-quick" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;"></div>
         <input type="number" id="pos-cash-received" inputmode="numeric" min="0" placeholder="輸入客人給的金額" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:1rem;" oninput="updatePosCashChange_()">
         <div id="pos-cash-change-result" style="margin-top:6px;font-size:1.05rem;font-weight:700;"></div>
       </div>
@@ -3139,6 +3140,7 @@ function renderPosCart() {
   }
   document.getElementById('pos-cart-total').textContent = '$' + getPosCartFinalTotal();
   updateMobileCartBar();
+  refreshPosCheckoutInfo_();
 }
 
 // 自訂折數(2026-09-25新增)：打N折＝折掉(100-N)%，四捨五入到元
@@ -3180,14 +3182,21 @@ function changePosQty(lineKey, delta) {
 // 大麥POS參考版面：訂單/結帳固定顯示在右側第四欄，不用彈窗打開/關閉
 function showPosCheckout() {
   if (posCart.length === 0) { alert('請先選購品項'); return; }
+  document.getElementById('pos-checkout-btn').style.display = 'none';
+  document.getElementById('pos-checkout-panel').style.display = 'block';
+  refreshPosCheckoutInfo_();
+}
+// 結帳畫面的會員那行＋現金快速按鈕/找零。10-13 老闆實測：先按結帳再查會員，這行還寫「未選會員」→
+// 改成 renderPosCart(查會員、換會員、改購物車都會呼叫)時，結帳畫面開著就跟著更新
+function refreshPosCheckoutInfo_() {
+  if (document.getElementById('pos-checkout-panel').style.display === 'none') return;
   const total = getPosCartFinalTotal();
   document.getElementById('pos-checkout-member').textContent = selectedMember && selectedMember.offline
     ? `已記下會員電話 ${selectedMember.phone}（離線，網路恢復上傳時補點數）`
     : selectedMember
     ? `已選會員：${selectedMember.name}（${selectedMember.tier}，本次預估可得 ${Math.floor(total / 100) * (MEMBER_TIER_MULTIPLIER[selectedMember.tier] || 1)} 點）`
     : '未選會員（不累計點數）';
-  document.getElementById('pos-checkout-btn').style.display = 'none';
-  document.getElementById('pos-checkout-panel').style.display = 'block';
+  if (document.getElementById('pos-payment-method').value === '現金') { renderPosCashQuick_(); updatePosCashChange_(); }   // 金額變了：快速按鈕/找零跟著新金額
 }
 function backToPosCart() {
   document.getElementById('pos-checkout-panel').style.display = 'none';
@@ -3234,10 +3243,21 @@ function onPosPaymentMethodChange() {
   if (method !== '現金') {
     document.getElementById('pos-cash-received').value = '';
     document.getElementById('pos-cash-change-result').textContent = '';
-  }
+  } else renderPosCashQuick_();
+}
+// 10-13 老闆定案：現金實收金額必填(結帳時檢查不能少於應收)，快速按鈕一鍵帶入「剛好」或 $100／$500／$1000(比應收大的才列)
+function renderPosCashQuick_() {
+  const total = getPosCartFinalTotal();
+  const amounts = [total].concat([100, 500, 1000].filter(a => a > total));
+  document.getElementById('pos-cash-quick').innerHTML = amounts.map((a, i) =>
+    `<button type="button" class="pos-pay-btn" style="flex:1 1 22%;min-width:64px;padding:8px 4px" onclick="setPosCashReceived_(${a})">${i === 0 ? '剛好 $' + a : '$' + a}</button>`).join('');
+}
+function setPosCashReceived_(a) {
+  document.getElementById('pos-cash-received').value = a;
+  updatePosCashChange_();
 }
 
-// 現金找零計算(2026-09-17新增)：只是給店員的心算輔助，不影響實際送出的訂單金額/付款方式
+// 現金找零計算(2026-09-17新增)：顯示找零給店員看；10-13 起現金結帳實收金額必填(submitPosOrder 檢查)
 function updatePosCashChange_() {
   const receivedInput = document.getElementById('pos-cash-received').value;
   const resultEl = document.getElementById('pos-cash-change-result');
@@ -3321,6 +3341,14 @@ function submitPosOrder() {
   // 2026-09-19：補送品項備註(note)供出單機廚房單使用
   const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '' }));
   const paymentMethod = document.getElementById('pos-payment-method').value;
+  if (paymentMethod === '現金') {   // 10-13：現金實收金額必填、不能少於應收
+    const rv = document.getElementById('pos-cash-received').value;
+    if (rv === '' || !(Number(rv) >= total)) {
+      alert(rv === '' ? '現金結帳請輸入實收金額（可以按「剛好」或 $100／$500／$1000）' : `實收金額 $${Number(rv)} 少於應收 $${total}，請再確認`);
+      document.getElementById('pos-cash-received').focus();
+      return;
+    }
+  }
   const scheduled = document.getElementById('pos-schedule-toggle').checked;
   let pickupDate = '', pickupTime = '';
   if (scheduled) {
