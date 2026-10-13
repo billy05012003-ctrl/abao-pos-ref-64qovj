@@ -34,16 +34,17 @@
   <div id="linkBanner">⚠ 出單機斷線！請確認印表機電源已開，系統會自動重連</div>
   <h1>出單頁（平板・Fully Kiosk）　<span id="storeLabel"></span></h1>
   <div class="sub">要用「Fully Kiosk Browser」開這一頁（不是Chrome），並在Fully設定開啟「Enable JavaScript Interface」。開著這一頁、保持在前景、螢幕不要關，會自動把線上訂單印到出單機。</div>
-  <div class="warnbox">Fully 收不到印表機回傳資料（沒有缺紙/上蓋偵測），但「送出失敗」會即時回報，所以抓得到印表機關機/藍牙斷線：斷線時頁面變紅＋嗶聲、暫停領單（單子留在佇列不會漏），每15秒自動重連，恢復後自動補印。</div>
+  <div class="warnbox"><b>出單方式在 POS 頁「POS管理 → 出單機設定」切換（藍牙／網路出單機）。</b>網路出單機：平板經店裡路由器直接送到出單機 IP，不經外網（斷網照印）；會回報沒紙、上蓋打開。以下說明是藍牙：Fully 收不到印表機回傳資料（沒有缺紙/上蓋偵測），但「送出失敗」會即時回報，所以抓得到印表機關機/藍牙斷線：斷線時頁面變紅＋嗶聲、暫停領單（單子留在佇列不會漏），每15秒自動重連，恢復後自動補印。</div>
 
   <div class="card">
     <div class="grid">
-      <div class="kv">藍牙介面<b id="stIface" class="bad">尚未偵測</b></div>
+      <div class="kv">出單方式<b id="stIface" class="bad">尚未偵測</b></div>
       <div class="kv">印表機連線<b id="stPort" class="bad">尚未連線</b></div>
       <div class="kv">接單列印<b id="stRun" class="bad">未開始</b></div>
       <div class="kv">最後一次查詢<b id="stPoll">—</b></div>
       <div class="kv">今日已送印<b id="stCount">0 張</b></div>
       <div class="kv">心跳單<b id="stHeartbeat">尚未開始</b></div>
+      <div class="kv">杯貼標籤機<b id="stLabel">不使用</b></div>
     </div>
   </div>
 
@@ -72,6 +73,12 @@ const STORE_LABEL = '溪湖培英店';
 const DEFAULT_BT_NAME = 'TM-m10-HIP6666';
 const LINK_CHECK_SEC = 5;          // 每幾秒檢查一次連線
 const RECONNECT_EVERY_SEC = 15;    // 斷線時每幾秒自動重連一次
+// 10-13 出單方式(每台平板自己設，POS 頁「POS管理→出單機設定」)：bt＝藍牙(Fully)；net＝網路出單機(Epson ePOS-Print)，
+// 平板經店裡路由器直接送到出單機 IP，不經外網(斷網時離線單也照印)
+const EPOS_TIMEOUT_MS = 10000;
+function getMode() { try { return localStorage.getItem('abao_print_mode') === 'net' ? 'net' : 'bt'; } catch (e) { return 'bt'; } }
+function getIp() { try { return localStorage.getItem('abao_print_ip') || ''; } catch (e) { return ''; } }
+function isNet() { return getMode() === 'net'; }
 function $(id) { return document.getElementById(id); }
 $('storeLabel').textContent = STORE_LABEL;
 
@@ -102,7 +109,7 @@ function buildTicketBytes(lines) {
   const missingAll = [];
   for (const line of lines) { const r = encodeBig5(line + '\n'); out.push(...r.bytes); missingAll.push(...r.missing); }
   out.push(0x1C, 0x2E, 0x1B, 0x64, 5);                 // FS . 離開中文模式 + 走紙5行
-  if ($('optCut').checked) out.push(0x1D, 0x56, 0x42, 0x00);
+  if (isNet() || $('optCut').checked) out.push(0x1D, 0x56, 0x42, 0x00);   // 網路出單機(TM-T82III)有切刀，一律切
   return { data: new Uint8Array(out), missing: missingAll };
 }
 function toHex(bytes) {
@@ -208,6 +215,7 @@ function setLink(up, why) {
     document.body.classList.remove('linkdown');
     if (running) { alarm(false); schedule(0); }       // 恢復後馬上領單，把斷線期間留在佇列的單補印出來
   }
+  if (!up) $('linkBanner').textContent = '⚠ 出單機斷線' + (why ? '（' + why + '）' : '') + '！請確認印表機電源、紙捲、上蓋' + (isNet() ? '、網路線' : '') + '，系統會自動重連';
   if (!up && !linkDownSince) {
     linkDownSince = Date.now();
     log('⚠ 出單機斷線（' + why + '），暫停領單，單子留在佇列不會漏', 'e');
@@ -217,6 +225,13 @@ function setLink(up, why) {
   setState('stPort', up ? '已連線' : '斷線 ' + Math.round((Date.now() - linkDownSince) / 1000) + ' 秒', up ? 'ok' : 'bad');
 }
 async function reconnect(reason) {
+  if (isNet()) {
+    lastReconnectAt = Date.now();
+    const r = await eposRequest('');
+    if (!r.ok) log('網路出單機連不上（' + reason + '）：' + r.why, 'y');
+    setLink(r.ok, r.why);
+    return r.ok;
+  }
   if (reconnecting) return false;
   reconnecting = true; lastReconnectAt = Date.now();
   try {
@@ -230,10 +245,19 @@ async function reconnect(reason) {
   } finally { reconnecting = false; }
 }
 // 連線監控：每5秒送探測指令；失敗＝斷線(頁面變紅+嗶聲)，斷線中每15秒自動重連
-let linkTimer = null;
+let linkTimer = null, netProbing = false;
 function startLinkMonitor() {
   clearInterval(linkTimer);
   linkTimer = setInterval(async () => {
+    if (isNet()) {
+      if (!getIp() || netProbing || printing) return;
+      netProbing = true;
+      try {
+        const r = await eposRequest('');
+        if (r.ok) setLink(true); else { setLink(false, r.why); beep(); }
+      } finally { netProbing = false; }
+      return;
+    }
     if (!hasF() || reconnecting || printing) return;
     const ok = fullySend(PROBE_HEX);
     if (ok) { setLink(true); return; }
@@ -258,12 +282,166 @@ async function fullyPrint(bytes) {
   } finally { printing = false; }
 }
 
+// ---------- 網路出單機（Epson ePOS-Print，10-13）----------
+// 用 ePOS-Print XML 的 <command> 直接送現有的 ESC/POS(Big5 繁中)內容，版面跟藍牙一模一樣。
+// 印表機要：店裡路由器給固定 IP、ePOS-Print 開啟；Fully 要開「Ignore SSL Errors」(印表機是自簽憑證)
+const EPOS_ERR_TEXT = { EPTR_COVER_OPEN: '上蓋打開', EPTR_REC_EMPTY: '沒紙了', EPTR_AUTOMATICAL: '切刀卡住', EPTR_MECHANICAL: '機構錯誤', EPTR_UNRECOVERABLE: '印表機故障', EX_TIMEOUT: '印表機沒回應', DeviceNotFound: '找不到印表機', SchemaError: '指令格式錯誤', PrintSystemError: '印表機系統錯誤', EX_BADPORT: '印表機連接埠錯誤' };
+async function eposRequest(inner) {
+  const ip = getIp();
+  if (!ip) return { ok: false, why: '還沒設定出單機 IP' };
+  const body = '<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>' +
+    '<epos-print xmlns="http://www.epson-pos.com/schemas/2011/03/epos-print">' + inner + '</epos-print></s:Body></s:Envelope>';
+  const ac = new AbortController(), to = setTimeout(() => ac.abort(), EPOS_TIMEOUT_MS + 5000);
+  try {
+    const r = await fetch('https://' + ip + '/cgi-bin/epos/service.cgi?devid=local_printer&timeout=' + EPOS_TIMEOUT_MS, {
+      method: 'POST', body, signal: ac.signal,
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT', 'SOAPAction': '""' }
+    });
+    const xml = await r.text();
+    const m = xml.match(/<response\b[^>]*>/);
+    if (!m) return { ok: false, why: '印表機回應看不懂（HTTP ' + r.status + '）' };
+    const attr = n => { const a = m[0].match(new RegExp('\\b' + n + '="([^"]*)"')); return a ? a[1] : ''; };
+    const ok = attr('success') === 'true', code = attr('code');
+    return { ok, code, status: Number(attr('status')) || 0, why: ok ? '' : (EPOS_ERR_TEXT[code] || code || '列印失敗') };
+  } catch (e) {
+    return { ok: false, unreachable: true, why: '連不到出單機 ' + ip };
+  } finally { clearTimeout(to); }
+}
+async function eposPrint(bytes) {
+  printing = true;
+  try {
+    const r = await eposRequest('<command>' + toHex(bytes) + '</command>');
+    if (r.ok) { setLink(true); return true; }
+    log('網路出單失敗：' + r.why, 'e');
+    setLink(false, r.why);
+    return false;
+  } finally { printing = false; }
+}
+
+// ---------- 飲料杯貼標籤機（10-13 老闆定案）----------
+// 標籤機走藍牙(Fully btSendHexData)。Fully 一次只能連一台藍牙 → 出單機要先改成網路出單機，藍牙才給標籤機。
+// 版面用 canvas 畫成黑白圖、TSPL 的 BITMAP 送出(不靠標籤機內建中文字型，換廠牌也印得出繁中)。
+// 杯貼資料(一杯一張)由雲端 buildCupLabels_／平板離線 offlineBuildCupLabels_ 產生，跟廚房單一起送來
+const LABEL_W_MM = 40, LABEL_H_MM = 30, LABEL_GAP_MM = 2, LABEL_DPMM = 8;   // 40×30mm 杯貼；203dpi ≈ 每 mm 8 點 → 320×240 點
+const TSPL_BLACK_BIT = 0;   // TSPL BITMAP 這一位元＝印黑點。實機印出來黑白相反就改 1
+function getLabelMode() { try { return localStorage.getItem('abao_label_mode') === 'bt' ? 'bt' : 'off'; } catch (e) { return 'off'; } }
+function getLabelBt() { try { return localStorage.getItem('abao_label_bt') || ''; } catch (e) { return ''; } }
+function labelOn() { return getLabelMode() === 'bt' && isNet() && !!getLabelBt(); }
+let labelOpened = false, labelLinkUp = false;
+function refreshLabelState(msg, ok) {
+  if (msg) { setState('stLabel', msg, ok ? 'ok' : 'bad'); return; }
+  if (getLabelMode() !== 'bt') setState('stLabel', '不使用');
+  else if (!isNet()) setState('stLabel', '出單機要先改網路才能用藍牙', 'bad');
+  else setState('stLabel', '藍牙 ' + getLabelBt(), labelLinkUp ? 'ok' : '');
+}
+// 一張杯貼的版面：①單號 取餐時間｜第幾杯 ②品名＋份量(太長自動縮小) ③冰塊甜度加料、※備註 ④【揪團名字】　價格
+function labelWrap(g, text, x, y, maxW, lh, maxLines) {
+  const lines = [];
+  let cur = '';
+  for (const ch of String(text)) {
+    if (g.measureText(cur + ch).width > maxW && cur) { lines.push(cur); cur = ''; }
+    cur += ch;
+  }
+  if (cur) lines.push(cur);
+  if (lines.length > maxLines) { lines.length = maxLines; lines[maxLines - 1] = lines[maxLines - 1].slice(0, -1) + '…'; }
+  lines.forEach((l, i) => g.fillText(l, x, y + i * lh));
+  return y + lines.length * lh;
+}
+function drawLabel(lb) {
+  const W = LABEL_W_MM * LABEL_DPMM, H = LABEL_H_MM * LABEL_DPMM, M = 8;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const font = (px, bold) => (bold ? 'bold ' : '') + px + 'px "Noto Sans TC","Microsoft JhengHei",sans-serif';
+  g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#000'; g.textBaseline = 'top';
+  g.font = font(24, true);
+  g.fillText(lb.no + '  ' + lb.time, M, 6);
+  const cnt = lb.idx + '/' + lb.total;
+  g.fillText(cnt, W - M - g.measureText(cnt).width, 6);
+  g.fillRect(M, 36, W - 2 * M, 2);
+  let px = 36;
+  g.font = font(px, true);
+  while (px > 24 && g.measureText(lb.name).width > W - 2 * M) { px -= 2; g.font = font(px, true); }
+  let y = labelWrap(g, lb.name, M, 44, W - 2 * M, px + 4, 2);
+  const opt = (lb.opts || []).join('・') + (lb.note ? ((lb.opts || []).length ? '・' : '') + '※' + lb.note : '');
+  if (opt) { g.font = font(24, false); labelWrap(g, opt, M, y + 2, W - 2 * M, 28, H - 34 - (y + 2) >= 84 ? 3 : 2); }
+  g.font = font(24, true);
+  if (lb.who) g.fillText('【' + lb.who + '】', M, H - 30);
+  if (lb.price) g.fillText(lb.price, W - M - g.measureText(lb.price).width, H - 30);
+  return c;
+}
+// canvas → TSPL：SIZE/GAP/CLS/BITMAP/PRINT
+function labelBitmap(c) {
+  const W = c.width, H = c.height, wb = Math.ceil(W / 8);
+  const d = c.getContext('2d').getImageData(0, 0, W, H).data;
+  const out = new Uint8Array(wb * H).fill(TSPL_BLACK_BIT ? 0x00 : 0xFF);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4;
+    if (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11 >= 128) continue;   // 淺色＝不印
+    const k = y * wb + (x >> 3), bit = 0x80 >> (x & 7);
+    if (TSPL_BLACK_BIT) out[k] |= bit; else out[k] &= ~bit;
+  }
+  return { wb, h: H, bytes: out };
+}
+function tsplLabelBytes(lb) {
+  const bm = labelBitmap(drawLabel(lb));
+  const ascii = t => Array.from(t, ch => ch.charCodeAt(0));
+  const head = ascii('SIZE ' + LABEL_W_MM + ' mm,' + LABEL_H_MM + ' mm\r\nGAP ' + LABEL_GAP_MM + ' mm,0 mm\r\nDIRECTION 1\r\nCLS\r\nBITMAP 0,0,' + bm.wb + ',' + bm.h + ',0,');
+  const tail = ascii('\r\nPRINT 1,1\r\n');
+  const out = new Uint8Array(head.length + bm.bytes.length + tail.length);
+  out.set(head, 0); out.set(bm.bytes, head.length); out.set(tail, head.length + bm.bytes.length);
+  return out;
+}
+function labelOpen() {
+  const F = getF();
+  try { F.btClose(); } catch (e) {}
+  try { F.btOpenByName(getLabelBt()); } catch (e) { log('標籤機連線呼叫失敗：' + e.message, 'e'); }
+}
+async function labelSend(bytes) {
+  if (!hasF()) return false;
+  const hex = toHex(bytes);
+  if (!labelOpened) { labelOpen(); labelOpened = true; await sleep(3000); }
+  if (fullySend(hex)) { labelLinkUp = true; return true; }
+  log('杯貼送出失敗，重新連線標籤機再試一次', 'y');
+  labelOpen(); await sleep(3000);
+  labelLinkUp = fullySend(hex);
+  return labelLinkUp;
+}
+// 這台平板印過哪些單的杯貼(老闆 10-13：廚房單補印時杯貼不跟著補，除非第一次沒印成；要補用 POS 頁「補印杯貼」挑杯印)
+const LABEL_DONE_KEY = 'abao_label_done';
+function labelDoneMap() { try { return JSON.parse(localStorage.getItem(LABEL_DONE_KEY) || '{}') || {}; } catch (e) { return {}; } }
+function labelMarkDone(orderId) {
+  const m = labelDoneMap(), cut = Date.now() - 3 * 86400000;
+  Object.keys(m).forEach(k => { if (m[k] < cut) delete m[k]; });
+  m[orderId] = Date.now();
+  try { localStorage.setItem(LABEL_DONE_KEY, JSON.stringify(m)); } catch (e) {}
+}
+// 一張單的杯貼全部印(廚房單印成功後才呼叫)；沒接標籤機就跳過；印過的不重印(force＝補印杯貼)
+async function printLabels(labels, orderId, force) {
+  if (!labelOn() || !labels || !labels.length) return true;
+  if (!force && orderId && labelDoneMap()[orderId]) { log('杯貼已經印過，不重印（' + orderId + '；要補請用「補印杯貼」）'); return true; }
+  let ok = true;
+  for (const lb of labels) { if (!(await labelSend(tsplLabelBytes(lb)))) { ok = false; break; } }
+  if (ok && orderId && !force) labelMarkDone(orderId);
+  log(ok ? (force ? '補印杯貼 ' : '已印杯貼 ') + labels.length + ' 張（' + orderId + '）' : '⚠ 杯貼沒印出來（' + orderId + '）：請確認標籤機電源、藍牙', ok ? 'g' : 'e');
+  refreshLabelState(ok ? '藍牙 ' + getLabelBt() + '（正常）' : '⚠ 杯貼沒印出來', ok);
+  return ok;
+}
+const LABEL_SAMPLE = { no: '0030', time: '08:30', idx: 2, total: 3, name: '阿薩姆奶茶 L', opts: ['少冰', '半糖', '加茶珠'], note: '', who: '小美', price: '$45' };
+
+// 送印：照這台平板設定的出單方式
+function printerSend(bytes) { return isNet() ? eposPrint(bytes) : fullyPrint(bytes); }
+function printerReady() { return isNet() ? !!getIp() : hasF(); }
+
 function refreshIfaceState() {
+  if (isNet()) { setState('stIface', getIp() ? '網路出單機 ' + getIp() : '網路出單機（還沒設定 IP）', getIp() ? 'ok' : 'bad'); refreshButtons(); return; }
   setState('stIface', hasF() ? 'Fully藍牙已偵測' + (window.fully ? '' : '（透過上層頁面）') : '找不到Fully介面（要用Fully Kiosk開、且設定要開Enable JavaScript Interface）', hasF() ? 'ok' : 'bad');
   refreshButtons();
 }
-function refreshButtons() { $('btnToggle').disabled = !(hasF() && getKey()); }
+function refreshButtons() { $('btnToggle').disabled = !(printerReady() && getKey()); }
 $('btnConnect').onclick = async () => {
+  if (isNet()) { const ok = await reconnect('手動按①'); log(ok ? '網路出單機連線正常' : '網路出單機連不上，請確認 IP、電源、網路線', ok ? 'g' : 'e'); startLinkMonitor(); return; }
   if (!hasF()) { log('找不到Fully藍牙介面，確認是用Fully Kiosk開這頁、且已開啟Enable JavaScript Interface', 'e'); return; }
   try { localStorage.setItem('abao_print_btname', getBtName()); } catch (e) {}
   lastReconnectAt = 0;
@@ -280,8 +458,8 @@ $('btnKey').onclick = async () => {
 };
 $('btnTest').onclick = async () => {
   const now = new Date().toLocaleString('zh-TW', { hour12: false });
-  const { data } = buildTicketBytes(['== 出單頁測試(Fully) ==', STORE_LABEL, now, '中文、English、$123 ○']);
-  const ok = await fullyPrint(data);
+  const { data } = buildTicketBytes(['== 出單頁測試(' + (isNet() ? '網路' : 'Fully藍牙') + ') ==', STORE_LABEL, now, '中文、English、$123 ○']);
+  const ok = await printerSend(data);
   log(ok ? '測試單已送出' : '測試單送出失敗（出單機斷線？）', ok ? 'g' : 'e');
 };
 
@@ -302,7 +480,7 @@ async function sendHeartbeat() {
   heartbeatCount++;
   const now = new Date().toLocaleString('zh-TW', { hour12: false });
   const { data } = buildTicketBytes(['== 心跳單(系統自動) ==', STORE_LABEL, now, '系統正常運作 #' + heartbeatCount]);
-  const ok = await fullyPrint(data);
+  const ok = await printerSend(data);
   setState('stHeartbeat', (ok ? '已印' : '❌送印失敗') + '第' + heartbeatCount + '次（' + now + '）', ok ? 'ok' : 'bad');
   log(ok ? '心跳單已送出 #' + heartbeatCount : '心跳單送印失敗 #' + heartbeatCount, ok ? 'g' : 'e');
 }
@@ -345,6 +523,8 @@ async function tick() {
   try {
     // 斷線中不領單：單子留在後端佇列(待列印)，恢復連線後 setLink 會立刻觸發下一輪領單補印
     if (!linkUp) { setState('stPoll', '斷線中，暫停領單'); return; }
+    // 10-13 離線收銀：POS 頁還有離線單沒補傳完先不領單(補傳時雲端會把卡頓那次送到的同一張標已列印，避免印兩次)
+    try { const pc = window.parent !== window && window.parent.posOfflinePendingCount_; if (pc && pc() > 0) { setState('stPoll', '等離線單補傳完再領單'); return; } } catch (e) {}
     const key = getKey();
     const claim = await apiPost({ action: 'claimPrint', storeId: STORE_ID, printKey: key, limit: 3 });
     setState('stPoll', new Date().toLocaleTimeString('zh-TW', { hour12: false }));
@@ -361,7 +541,7 @@ async function tick() {
 }
 async function printOne(t) {
   const { data, missing } = buildTicketBytes(t.lines);
-  const ok = await fullyPrint(data);
+  const ok = await printerSend(data);
   // 送印失敗不回報：後端領單租約(60秒)到期後單子自動回到待列印，恢復連線後會以「補印」再印出
   if (!ok) { log('印出失敗 ' + t.orderId + '，留在佇列，恢復連線後自動補印', 'e'); return; }
   try {
@@ -373,8 +553,66 @@ async function printOne(t) {
   } catch (e) {
     log('回報後端失敗 ' + t.orderId + '：' + e.message, 'e');
   }
+  await printLabels(t.labels, t.orderId);   // 10-13 飲料杯貼
 }
 function alarm(on) { document.body.classList.toggle('alarm', !!on); }
+
+// 10-13 離線收銀：POS 頁斷網時把自己排好的單直接送來印(不經雲端佇列)。成功回 true；出單機沒連上/不是 Fully 回 false
+window.printLocalLines_ = async function (lines, labels, orderId) {
+  if (!printerReady()) return false;
+  const t0 = Date.now();
+  while (printing && Date.now() - t0 < 10000) await sleep(200);
+  const { data, missing } = buildTicketBytes(lines);
+  const ok = await printerSend(data);
+  log(ok ? '已送印離線單' + (missing.length ? '；缺字改印?：' + missing.join('') : '') : '離線單送印失敗（出單機斷線？）', ok ? 'g' : 'e');
+  if (ok) { printedToday++; setState('stCount', printedToday + ' 張'); await printLabels(labels, orderId || '離線單'); }
+  return ok;
+};
+// 10-13 給 POS 頁「出單機設定」用：讀設定、改設定(權限 POS 頁先驗過)、印測試單
+window.printCfg_ = () => ({ mode: getMode(), ip: getIp(), linkUp, running, fully: hasF(), key: !!getKey(), labelMode: getLabelMode(), labelBt: getLabelBt(), labelLinkUp });
+window.printSetCfg_ = async function (cfg) {
+  try {
+    localStorage.setItem('abao_print_mode', cfg.mode === 'net' ? 'net' : 'bt');
+    if (cfg.mode === 'net') localStorage.setItem('abao_print_ip', String(cfg.ip || '').trim());
+    if (cfg.labelMode) {   // 10-13 杯貼標籤機：藍牙(要出單機是網路)／不使用
+      localStorage.setItem('abao_label_mode', cfg.labelMode === 'bt' ? 'bt' : 'off');
+      if (cfg.labelMode === 'bt') localStorage.setItem('abao_label_bt', String(cfg.labelBt || '').trim());
+      labelOpened = false; labelLinkUp = false;
+    }
+  } catch (e) { return { ok: false, why: '平板存不了設定' }; }
+  log('出單方式改成「' + (isNet() ? '網路出單機 ' + getIp() : '藍牙') + '」' + (cfg.by ? '（' + cfg.by + '）' : ''), 'g');
+  linkUp = false; linkDownSince = 0; document.body.classList.remove('linkdown');
+  refreshIfaceState();
+  lastReconnectAt = 0;
+  const ok = isNet() || hasF() ? await reconnect('改出單方式') : false;
+  startLinkMonitor();
+  if (getKey() && wantRun && !running) setRunning(true);
+  refreshLabelState();
+  return Object.assign({ ok }, window.printCfg_());
+};
+// 補印杯貼(10-13)：POS 頁挑好的杯直接印(印過也印)
+window.printLabelsNow_ = async function (labels, orderId) {
+  if (!labelOn()) return { ok: false, why: getLabelMode() !== 'bt' ? '杯貼標籤機設定成不使用' : !isNet() ? '出單機要先改成網路出單機' : '還沒填標籤機藍牙名稱' };
+  const ok = await printLabels(labels, orderId, true);
+  return { ok, why: ok ? '' : '標籤機沒回應，請確認電源、藍牙' };
+};
+// 杯貼：畫一張範例給 POS 頁看版面(不用接標籤機)；有接標籤機就順便印出來
+window.labelPreview_ = lb => drawLabel(lb || LABEL_SAMPLE).toDataURL('image/png');
+window.printTestLabel_ = async function () {
+  const img = window.labelPreview_(LABEL_SAMPLE);
+  if (!labelOn()) return { ok: false, img, why: getLabelMode() !== 'bt' ? '杯貼標籤機設定成不使用' : !isNet() ? '出單機要先改成網路出單機' : '還沒填標籤機藍牙名稱' };
+  const ok = await printLabels([LABEL_SAMPLE], '測試杯貼', true);
+  return { ok, img, why: ok ? '' : '標籤機沒回應' };
+};
+window.printTest_ = async function () {
+  const now = new Date().toLocaleString('zh-TW', { hour12: false });
+  const { data } = buildTicketBytes(['== 出單機測試單 ==', STORE_LABEL, '出單方式：' + (isNet() ? '網路 ' + getIp() : '藍牙'), now, '中文、English、$123 ○']);
+  const t0 = Date.now();
+  while (printing && Date.now() - t0 < 10000) await sleep(200);
+  const ok = await printerSend(data);
+  log(ok ? '測試單已送出' : '測試單送出失敗', ok ? 'g' : 'e');
+  return ok;
+};
 
 // ---------- 看門狗 ----------
 let lastTickBeat = Date.now();
@@ -407,7 +645,9 @@ document.addEventListener('visibilitychange', () => {
   try { $('btName').value = localStorage.getItem('abao_print_btname') || DEFAULT_BT_NAME; } catch (e) { $('btName').value = DEFAULT_BT_NAME; }
   refreshIfaceState();
   try { wantRun = localStorage.getItem('abao_print_run') === '1'; } catch (e) {}
-  if (!hasF()) { log('尚未偵測到Fully藍牙介面，確認：①是用Fully Kiosk開的這一頁 ②Fully設定裡「Enable JavaScript Interface」已開啟', 'y'); return; }
+  if (isNet()) log('出單方式：網路出單機 ' + (getIp() || '（還沒設定 IP，請到 POS管理→出單機設定）'));
+  refreshLabelState();
+  if (!isNet() && !hasF()) { log('尚未偵測到Fully藍牙介面，確認：①是用Fully Kiosk開的這一頁 ②Fully設定裡「Enable JavaScript Interface」已開啟', 'y'); return; }
   // 重開頁面自動連線＋開始監控（不用人按①）
   await reconnect('頁面載入');
   startLinkMonitor();

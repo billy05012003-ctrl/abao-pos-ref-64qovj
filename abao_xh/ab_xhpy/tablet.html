@@ -190,6 +190,18 @@
     <div id="oc-list"></div>
   </div>
 </div>
+<!-- 離線收銀(10-13)：斷網紅條／補傳中／上傳失敗 -->
+<div id="offline-banner" class="status-banner" style="display:none;color:#fff;font-size:1rem;cursor:pointer" onclick="openOfflineList_()"></div>
+<div class="pos-overlay" id="offline-overlay" onclick="if(event.target===this)closeOfflineList_()">
+  <div class="pos-sheet" style="max-width:560px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+      <h2 style="margin:0;font-size:1.1rem">📴 離線單（還沒上傳到雲端）</h2>
+      <button type="button" class="btn btn-secondary" onclick="closeOfflineList_()">關閉</button>
+    </div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">網路恢復後會自動上傳。取餐付款的單，客人來付錢時按「已收款」。</div>
+    <div id="offline-list"></div>
+  </div>
+</div>
 <div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
@@ -255,6 +267,7 @@
     <div id="pos-confirm-panel" style="display:none;text-align:center;">
       <div style="font-size:1.2rem;font-weight:bold;color:var(--brand);margin:10px 0;" id="pos-confirm-order-no"></div>
       <p id="pos-confirm-points" style="color:#888;font-size:0.85rem;"></p>
+      <button class="btn btn-secondary" id="pos-offline-reprint-btn" style="display:none;width:100%;padding:10px;margin-bottom:6px;">🖨 重印這張離線單</button>
       <button class="btn btn-primary" style="width:100%;padding:10px;" onclick="closePosCartAll()">開始新訂單</button>
     </div>
 
@@ -353,6 +366,13 @@
       <div id="orders-list"><div class="empty-hint">載入中...</div></div>
     </section>
 
+    <section style="margin:0 0 12px;">
+      <h2>🏷 補印杯貼 <span class="refresh-link" onclick="loadLabelOrders_()">載入／重新整理</span></h2>
+      <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">今天有飲料的單（新的在上面）。點一張單，勾要補的杯，按「印出勾選的杯貼」。</div>
+      <input type="text" id="lbl-search" inputmode="text" placeholder="輸入單號後段找，例如 0030、L03" oninput="renderLabelOrders_()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;margin-bottom:8px;">
+      <div id="lbl-orders"><div class="empty-hint">按上方「載入」查看今天有飲料的單</div></div>
+    </section>
+
     <section style="margin:0 0 12px;display:none;" id="stuck-payment-section">
       <h2>⚠️待付款訂單(卡住超過10分鐘) <span class="refresh-link" onclick="loadStuckPaymentOrders()">重新整理</span></h2>
       <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
@@ -404,8 +424,8 @@
         <button type="button" class="pmg-tile" onclick="pmgOpen_('ver')"><span class="ic">🔄</span>資料版本</button>
         <button type="button" class="pmg-tile" disabled><span class="ic">🧾</span>電子發票設定<br><span class="pmg-soon">準備中</span></button>
         <button type="button" class="pmg-tile" onclick="pmgOpen_('staff')"><span class="ic">👥</span>夥伴帳號說明</button>
-        <!-- 10-10 佔位：之後在這裡選出單方式 藍牙／網路(填 IP)／USB(備案、未支援)＋列印測試單，改設定要店長/老闆 PIN；等 TM-T82III 網路實測通過再做 -->
-        <button type="button" class="pmg-tile" disabled><span class="ic">🖨️</span>出單機設定<br><span class="pmg-soon">準備中</span></button>
+        <!-- 10-13 出單機設定：這台平板用藍牙或網路出單機(填 IP)，改設定要店長以上 PIN(權限 printSettings) -->
+        <button type="button" class="pmg-tile" onclick="pmgOpen_('printer')"><span class="ic">🖨️</span>出單機設定</button>
       </div>
     </div>
 
@@ -428,6 +448,36 @@
     <section class="pmg-sub" id="pmg-sub-ver">
       <div style="text-align:right;margin-bottom:6px;"><span class="refresh-link" onclick="loadPmgCfgStatus_()">重新整理</span></div>
       <div id="pmg-ver-body"><div class="empty-hint">載入中...</div></div>
+    </section>
+
+    <section class="pmg-sub" id="pmg-sub-printer">
+      <div id="prn-status" class="pmg-today" style="margin-bottom:10px">讀取中…</div>
+      <div style="font-size:0.85rem;font-weight:600;margin:0 0 6px">出單方式（這台平板）</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button type="button" class="pos-pay-btn" id="prn-mode-net" onclick="prnPickMode_('net')">🌐 網路出單機</button>
+        <button type="button" class="pos-pay-btn" id="prn-mode-bt" onclick="prnPickMode_('bt')">📶 藍牙</button>
+      </div>
+      <div id="prn-ip-row">
+        <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">出單機 IP（路由器替出單機設的固定 IP）</label>
+        <input type="text" id="prn-ip" inputmode="decimal" placeholder="例如 192.168.1.50" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;box-sizing:border-box;">
+      </div>
+      <div style="font-size:0.85rem;font-weight:600;margin:14px 0 6px">飲料杯貼標籤機</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button type="button" class="pos-pay-btn" id="lbl-mode-off" onclick="lblPickMode_('off')">不使用</button>
+        <button type="button" class="pos-pay-btn" id="lbl-mode-bt" onclick="lblPickMode_('bt')">📶 藍牙標籤機</button>
+      </div>
+      <div id="lbl-bt-row">
+        <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">標籤機藍牙名稱（平板系統藍牙先配對好；出單機要是網路出單機）</label>
+        <input type="text" id="lbl-bt" placeholder="例如 XP-420B" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;box-sizing:border-box;">
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:10px" onclick="prnSave_()">儲存並連線</button>
+      <button class="btn btn-secondary" id="prn-test-btn" style="width:100%;padding:10px;margin-top:6px" onclick="prnTest_()">🖨 印一張測試單</button>
+      <button class="btn btn-secondary" id="lbl-test-btn" style="width:100%;padding:10px;margin-top:6px" onclick="lblTest_()">🏷 杯貼版面預覽／印測試杯貼</button>
+      <div id="lbl-preview" style="display:none;text-align:center;margin-top:8px"><img id="lbl-preview-img" alt="杯貼預覽" style="width:240px;max-width:100%;border:1px dashed var(--border);border-radius:6px;image-rendering:pixelated"><div style="font-size:0.72rem;color:var(--muted)">40×30mm 實際大小約這張的 6 成</div></div>
+      <div style="font-size:0.76rem;color:var(--muted);line-height:1.6;margin-top:8px">
+        網路出單機：平板經店裡 Wi-Fi 直接送到出單機，<b>不經外網，斷網照印</b>（平板要保持連店裡 Wi-Fi）。第一次設定要在 Fully 設定開「Ignore SSL Errors」。<br>
+        改設定需要店長以上 PIN；設定存在這台平板，後台「門市平板（出單方式）」看得到。
+      </div>
     </section>
 
     <section class="pmg-sub" id="pmg-sub-staff">
@@ -499,10 +549,18 @@ const APP_KEY = 'abao-meibao-2026';
 // 2026-09-13發現：同一組查詢字串重複打會被瀏覽器/Google那邊快取住，改後台設定後同分頁沒重新整理
 // 還是讀到舊資料，過去交接記錄裡好幾次寫的「Google暫時性404/延遲」很可能有一部分其實是這個快取問題。
 // 補上_=時間戳記防快取參數，確保每次都真的打到最新資料
+// 10-13 離線收銀：所有雲端呼叫記「連得上／連不上」(判斷離線用)，並加逾時(卡住太久當失敗，結帳有結帳鍵重按不會重複)
+function netFetch_(url, opts, ms) {
+  const ac = typeof AbortController === 'function' ? new AbortController() : null;
+  const to = ac ? setTimeout(() => ac.abort(), ms) : 0;
+  return fetch(url, ac ? { ...opts, signal: ac.signal } : opts)
+    .then(r => { netOk_(); return r; }, e => { netFail_(); throw e; })
+    .finally(() => clearTimeout(to));
+}
 function apiGet(params) {
   // 2026-09-29 讀資料 API 收緊：讀取也帶平板通行證(今日訂單/營收/查會員等要有效通行證才回)
   const qs = new URLSearchParams({ ...params, posDevice: posDeviceToken_(), appKey: APP_KEY, _: Date.now() }).toString();
-  return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json()).then(d => {
+  return netFetch_(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }, 20000).then(r => r.json()).then(d => {
     if (d && d.code === 'pos_device') { setPosDeviceToken_(''); showPosDeviceBanner_(true); }
     return d;
   });
@@ -513,7 +571,7 @@ const POS_DEVICE_KEY_ = 'abao_pos_device_' + STORE_ID;
 function posDeviceToken_() { try { return localStorage.getItem(POS_DEVICE_KEY_) || ''; } catch (e) { return ''; } }
 function setPosDeviceToken_(t) { try { if (t) localStorage.setItem(POS_DEVICE_KEY_, t); else localStorage.removeItem(POS_DEVICE_KEY_); } catch (e) {} }
 function apiPost(payload) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ via: 'pos', posDevice: posDeviceToken_(), ...payload, appKey: APP_KEY }) }).then(r => r.json()).then(d => {
+  return netFetch_(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ via: 'pos', posDevice: posDeviceToken_(), ...payload, appKey: APP_KEY }) }, 35000).then(r => r.json()).then(d => {
     if (d && d.code === 'pos_device') { setPosDeviceToken_(''); showPosDeviceBanner_(true); }
     return d;
   });
@@ -535,6 +593,8 @@ function posPermRole_(code) { return POS_PERMS[code] || POS_PERM_DEFAULTS_[code]
 function withPosPerm_(code, label, fn, onCancel) {
   const role = posPermRole_(code);
   if (role === '夥伴') { fn('', ''); return; }
+  // 10-13 離線收銀：斷網沒辦法驗 PIN，結帳不擋(5 分鐘內有人輸過就沿用名字)
+  if (code === 'checkout' && posOffline_()) { const s = posPermSession_; fn(s && Date.now() < s.until ? s.name : '', ''); return; }
   const sess = posPermSession_;
   if (!POS_PERM_ALWAYS_ASK_.includes(code) && sess && Date.now() < sess.until && POS_ROLE_RANK_[sess.role] >= POS_ROLE_RANK_[role]) { fn(sess.name, sess.pin); return; }
   openPosStaffPinPrompt_(label + '需要' + role + '以上權限確認', (name, pin) => {
@@ -667,6 +727,58 @@ function loadOrders() {
       </div>
     `).join('');
   });
+}
+
+// ---------- 補印杯貼(10-13 老闆定案)：今天有飲料的單→點開→勾杯→印；不用 PIN。還沒上傳的離線單也列 ----------
+let labelOrders_ = [], labelOpenId_ = null;
+function loadLabelOrders_() {
+  const box = document.getElementById('lbl-orders');
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  const local = offlineLoad_().filter(o => !o.syncedAt).map(o => ({ orderId: o.orderId, time: o.pickupTime || new Date(o.createdAt).toTimeString().slice(0, 5), channel: 'POS（離線，還沒上傳）', createdAt: Date.parse(o.createdAt) || 0, labels: offlineLabels_(o) })).filter(o => o.labels.length);
+  const done = cloud => { labelOrders_ = local.concat(cloud).sort((a, b) => b.createdAt - a.createdAt); renderLabelOrders_(); };
+  if (posOffline_()) { done([]); return; }
+  apiGet({ action: 'labelOrders', storeId: STORE_ID }).then(d => {
+    if (!d || d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml_((d && d.message) || '讀取失敗') + '</div>'; return; }
+    done(d.orders || []);
+  }).catch(() => done([]));
+}
+function renderLabelOrders_() {
+  const box = document.getElementById('lbl-orders');
+  const q = document.getElementById('lbl-search').value.trim();
+  const list = labelOrders_.filter(o => !q || o.orderId.indexOf(q) !== -1);
+  if (!labelOrders_.length) { box.innerHTML = '<div class="empty-hint">今天還沒有飲料的單</div>'; return; }
+  if (!list.length) { box.innerHTML = '<div class="empty-hint">找不到單號有「' + escapeHtml_(q) + '」的單</div>'; return; }
+  const w = prnFrame_();
+  box.innerHTML = list.map(o => {
+    const open = o.orderId === labelOpenId_;
+    const no = o.labels[0].no;
+    const names = o.labels.map(l => l.name).join('、');
+    const cups = !open ? '' : `<div style="margin-top:8px">${o.labels.map((l, i) => `
+        <label style="display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px dashed var(--border)">
+          <input type="checkbox" class="lbl-cup" data-i="${i}" checked style="width:20px;height:20px">
+          ${w && w.labelPreview_ ? `<img src="${w.labelPreview_(l)}" alt="" style="width:120px;border:1px solid var(--border);border-radius:4px">` : ''}
+          <span style="font-size:0.85rem">${l.idx}/${l.total} ${escapeHtml_(l.name)}<br><span style="color:var(--muted)">${escapeHtml_((l.opts || []).join('・'))}</span></span>
+        </label>`).join('')}
+        <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="printLabelOrder_('${escapeHtml_(o.orderId)}', this)">🏷 印出勾選的杯貼</button></div>`;
+    return `<div class="order-card" style="display:block;cursor:pointer" onclick="if(!event.target.closest('label,button'))toggleLabelOrder_('${escapeHtml_(o.orderId)}')">
+      <div style="display:flex;justify-content:space-between;gap:8px"><strong>${escapeHtml_(no)}　${escapeHtml_(o.time)}</strong><span>${o.labels.length} 杯 ${open ? '▲' : '▼'}</span></div>
+      <div class="meta">${escapeHtml_(o.orderId)}・${escapeHtml_(o.channel)}・${escapeHtml_(names)}</div>${cups}
+    </div>`;
+  }).join('');
+}
+function toggleLabelOrder_(orderId) { labelOpenId_ = labelOpenId_ === orderId ? null : orderId; renderLabelOrders_(); }
+async function printLabelOrder_(orderId, btn) {
+  const o = labelOrders_.find(x => x.orderId === orderId);
+  if (!o) return;
+  const picked = Array.from(btn.parentNode.querySelectorAll('.lbl-cup')).filter(c => c.checked).map(c => o.labels[Number(c.dataset.i)]);
+  if (!picked.length) { alert('請勾要補印的杯'); return; }
+  const w = prnFrame_();
+  if (!w || typeof w.printLabelsNow_ !== 'function') { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
+  btn.disabled = true;
+  let r = null;
+  try { r = await w.printLabelsNow_(picked, orderId); } catch (e) {}
+  btn.disabled = false;
+  alert(r && r.ok ? '已補印 ' + picked.length + ' 張杯貼' : '杯貼沒印出來：' + ((r && r.why) || '出單模組沒回應'));
 }
 
 function loadStuckPaymentOrders() {
@@ -814,7 +926,7 @@ function closePosManageOverlay() {
   document.getElementById('pos-manage-overlay').classList.remove('open');
 }
 // 10-10 分組按鈕格：name=null 回按鈕格首頁；子頁面左上 ← 回首頁，首頁 ← 關閉
-const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', staff: '夥伴帳號說明' };
+const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', staff: '夥伴帳號說明', printer: '出單機設定' };
 let pmgCurrent_ = null;
 function pmgOpen_(name) {
   pmgCurrent_ = name;
@@ -823,6 +935,86 @@ function pmgOpen_(name) {
   document.getElementById('pos-manage-title').textContent = name ? 'POS管理 ／ ' + PMG_TITLES_[name] : 'POS管理';
   if (name === 'log') loadRegisterLog();
   if (name === 'ver') loadPmgCfgStatus_();
+  if (name === 'printer') prnLoad_();
+}
+// ---------- 出單機設定(10-13)：每台平板自己選藍牙／網路出單機(填 IP)；設定存在這台平板，出單模組(iframe)照著送 ----------
+let prnPickedMode_ = 'net', lblPickedMode_ = 'off';
+const PRN_IP_RE_ = /^(\d{1,3}\.){3}\d{1,3}(:\d{2,5})?$/;
+function prnFrame_() { try { const w = document.getElementById('printModuleFrame').contentWindow; return w && typeof w.printCfg_ === 'function' ? w : null; } catch (e) { return null; } }
+function prnCfg_() { const w = prnFrame_(); try { return w ? w.printCfg_() : null; } catch (e) { return null; } }
+// 回報給後台看的出單方式(跟著每分鐘查版本一起送)：網路|IP|連上1/0，或 藍牙||1/0
+function prnReport_() { const c = prnCfg_(); return c ? (c.mode === 'net' ? 'net|' + c.ip : 'bt|') + '|' + (c.linkUp ? 1 : 0) : ''; }
+function prnLoad_() {
+  const c = prnCfg_();
+  prnPickMode_(c ? c.mode : 'net');
+  document.getElementById('prn-ip').value = c && c.ip ? c.ip : '';
+  lblPickMode_(c && c.labelMode === 'bt' ? 'bt' : 'off');
+  document.getElementById('lbl-bt').value = c && c.labelBt ? c.labelBt : '';
+  document.getElementById('lbl-preview').style.display = 'none';
+  prnRenderStatus_();
+}
+function lblPickMode_(m) {
+  lblPickedMode_ = m === 'bt' ? 'bt' : 'off';
+  document.getElementById('lbl-mode-off').classList.toggle('active', lblPickedMode_ === 'off');
+  document.getElementById('lbl-mode-bt').classList.toggle('active', lblPickedMode_ === 'bt');
+  document.getElementById('lbl-bt-row').style.display = lblPickedMode_ === 'bt' ? '' : 'none';
+}
+async function lblTest_() {
+  const w = prnFrame_();
+  if (!w || typeof w.printTestLabel_ !== 'function') { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
+  const b = document.getElementById('lbl-test-btn');
+  b.disabled = true;
+  let r = null;
+  try { r = await w.printTestLabel_(); } catch (e) {}
+  b.disabled = false;
+  if (r && r.img) { document.getElementById('lbl-preview-img').src = r.img; document.getElementById('lbl-preview').style.display = ''; }
+  prnRenderStatus_();
+  if (r && r.ok) alert('測試杯貼已送出，請看標籤機');
+  else if (r && r.why) alert('下面是杯貼版面預覽（沒有印出來：' + r.why + '）');
+}
+function prnRenderStatus_() {
+  const c = prnCfg_(), el = document.getElementById('prn-status');
+  if (!c) { el.textContent = '⚠️ 出單模組還沒載入（要用 Fully 開這頁）'; return; }
+  const mode = c.mode === 'net' ? '網路出單機 ' + (c.ip || '（還沒設定 IP）') : '藍牙';
+  el.innerHTML = '目前：<b>' + escapeHtml_(mode) + '</b>｜' + (c.linkUp ? '<span style="color:#2e7d32">✅ 已連線</span>' : '<span style="color:#c62828">⚠️ 沒連上</span>') +
+    (c.running ? '' : '｜<span style="color:#c62828">接單列印還沒開始</span>') +
+    '<br>杯貼：<b>' + (c.labelMode === 'bt' ? '藍牙 ' + escapeHtml_(c.labelBt || '（沒填名稱）') : '不使用') + '</b>';
+}
+function prnPickMode_(m) {
+  prnPickedMode_ = m === 'bt' ? 'bt' : 'net';
+  document.getElementById('prn-mode-net').classList.toggle('active', prnPickedMode_ === 'net');
+  document.getElementById('prn-mode-bt').classList.toggle('active', prnPickedMode_ === 'bt');
+  document.getElementById('prn-ip-row').style.display = prnPickedMode_ === 'net' ? '' : 'none';
+}
+function prnSave_() {
+  const w = prnFrame_();
+  if (!w) { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
+  const ip = document.getElementById('prn-ip').value.trim();
+  if (prnPickedMode_ === 'net' && !PRN_IP_RE_.test(ip)) { alert('出單機 IP 格式不對，例如 192.168.1.50'); return; }
+  const lblBt = document.getElementById('lbl-bt').value.trim();
+  // 10-13 Fully 一次只能連一台藍牙：標籤機用藍牙，出單機就要是網路出單機
+  if (lblPickedMode_ === 'bt' && prnPickedMode_ !== 'net') { alert('平板只能連一台藍牙：要用藍牙標籤機，出單機要先改成「網路出單機」'); return; }
+  if (lblPickedMode_ === 'bt' && !lblBt) { alert('請填標籤機的藍牙名稱'); return; }
+  withPosPerm_('printSettings', '出單機設定', async (staffName) => {
+    document.getElementById('prn-status').textContent = '儲存並連線中…';
+    let r = null;
+    try { r = await w.printSetCfg_({ mode: prnPickedMode_, ip, labelMode: lblPickedMode_, labelBt: lblBt, by: staffName }); } catch (e) {}
+    prnRenderStatus_();
+    checkCfgVersion_();   // 馬上回報後台
+    if (r && r.ok) alert('已儲存，出單機連線正常');
+    else alert('已儲存，但出單機連不上：請確認出單機電源、' + (prnPickedMode_ === 'net' ? '網路線、IP 是否正確（第一次要在 Fully 開「Ignore SSL Errors」）' : '藍牙配對'));
+  });
+}
+async function prnTest_() {
+  const w = prnFrame_();
+  if (!w) { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
+  const b = document.getElementById('prn-test-btn');
+  b.disabled = true;
+  let ok = false;
+  try { ok = await w.printTest_(); } catch (e) {}
+  b.disabled = false;
+  prnRenderStatus_();
+  alert(ok ? '測試單已送出，請看出單機有沒有印出來' : '測試單送出失敗：請確認出單機電源、紙捲、' + (prnCfg_() && prnCfg_().mode === 'net' ? '網路線與 IP' : '藍牙'));
 }
 function posManageBack_() { if (pmgCurrent_) pmgOpen_(null); else closePosManageOverlay(); }
 function escapeHtml_(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -1333,6 +1525,7 @@ function lookupMember() {
     document.getElementById('member-info').innerHTML = '<div style="color:#a30000;font-size:0.85rem;">手機號碼格式不正確，請輸入09開頭的10碼數字</div>';
     return;
   }
+  if (posOffline_()) { offlineMember_(phone); return; }   // 10-13 離線收銀：記下電話就好
   const el = document.getElementById('member-info');
   el.textContent = '查詢中...';
   apiGet({ action: 'getMember', phone: phone }).then(data => {
@@ -1364,6 +1557,9 @@ function lookupMember() {
       el.textContent = data.message || '查詢失敗';
       renderPosCart();   // 第四波 4-1：沒有會員了，會員限定的活動優惠要拿掉
     }
+  }).catch(() => {
+    if (posOffline_()) offlineMember_(phone);
+    else el.textContent = '查詢失敗（網路不穩），請再按一次查詢';
   });
 }
 
@@ -1747,13 +1943,23 @@ async function posActQuotaOk_(type) {
   const a = posTodayActsOf_(type).find(x => Number(x.limit) > 0);
   if (!a) return true;
   const inCart = directDiscounts.filter(d => d.act === a.id).length;
-  try {
-    const q = await apiGet({ action: 'actQuota', storeId: STORE_ID, actId: a.id, date: todayYmd_() });
-    if (q && q.status === 'ok' && q.limit && q.left - inCart <= 0) {
-      alert(`「${type}」今天的名額已經滿了（限量 ${q.limit} 組，線上＋門市合計）`);
-      return false;
-    }
-  } catch (e) { /* 結帳時後端再檢查 */ }
+  if (!posOffline_()) {
+    try {
+      const q = await apiGet({ action: 'actQuota', storeId: STORE_ID, actId: a.id, date: todayYmd_() });
+      if (q && q.status === 'ok' && q.limit) actQuotaRemember_(a.id, q);   // 10-13：記住剩幾組，斷網時用
+      if (q && q.status === 'ok' && q.limit && q.left - inCart <= 0) {
+        alert(`「${type}」今天的名額已經滿了（限量 ${q.limit} 組，線上＋門市合計）`);
+        return false;
+      }
+      if (q && q.status === 'ok') return true;
+    } catch (e) { /* 下面用平板記住的名額判斷；結帳時後端再檢查 */ }
+  }
+  // 10-13 離線收銀：用平板記住的剩餘名額扣掉之後的離線單用量(老闆接受可能超賣一兩份)
+  const off = actQuotaOfflineLeft_(a.id);
+  if (off && off.left - inCart <= 0) {
+    alert(`「${type}」今天的名額已經滿了（限量 ${off.limit} 組；網路中斷，依這台平板的紀錄判斷）`);
+    return false;
+  }
   return true;
 }
 function posDiscountTypesNow_() {
@@ -2975,7 +3181,9 @@ function changePosQty(lineKey, delta) {
 function showPosCheckout() {
   if (posCart.length === 0) { alert('請先選購品項'); return; }
   const total = getPosCartFinalTotal();
-  document.getElementById('pos-checkout-member').textContent = selectedMember
+  document.getElementById('pos-checkout-member').textContent = selectedMember && selectedMember.offline
+    ? `已記下會員電話 ${selectedMember.phone}（離線，網路恢復上傳時補點數）`
+    : selectedMember
     ? `已選會員：${selectedMember.name}（${selectedMember.tier}，本次預估可得 ${Math.floor(total / 100) * (MEMBER_TIER_MULTIPLIER[selectedMember.tier] || 1)} 點）`
     : '未選會員（不累計點數）';
   document.getElementById('pos-checkout-btn').style.display = 'none';
@@ -2998,7 +3206,9 @@ function closePosCartAll() {
   document.getElementById('member-info').innerHTML = '';
   selectedMember = null;
   document.getElementById('pos-confirm-panel').style.display = 'none';
+  document.getElementById('pos-offline-reprint-btn').style.display = 'none';
   document.getElementById('pos-checkout-btn').style.display = 'block';
+  posCheckoutKey_ = null;   // 10-13 新訂單換新的結帳鍵
   // 每次開始新訂單都重置成安全預設值(LinePay現場、非預約)，避免上一張選的「取餐付款」／指定取餐時間
   // 殘留設定誤套到下一張現場立即結帳的訂單
   setPosPaymentMethod_('LinePay現場');
@@ -3140,7 +3350,7 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
   const btnOriginalText = btn.textContent;
   btn.textContent = '送出中...';
   const vStaff = posVoucherStaff_ || {};
-  apiPost({
+  const payload = {
     action: 'posCheckout', staffName, staffPin,
     voucherStaffName: vStaff.staffName || '', voucherStaffPin: vStaff.staffPin || '',
     storeId: STORE_ID,
@@ -3154,7 +3364,16 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     // 折扣明細＋會員等級(2026-09-26)：出單在合計上面逐行印，訂單表也存一份供報表
     discounts: posDiscountLines_(),
     memberTier: selectedMember ? selectedMember.tier : ''
-  }).then(data => {
+  };
+  payload.clientKey = posCheckoutKeyFor_(payload);   // 10-13：卡頓重按/離線補傳時雲端認同一張
+  const restoreBtn = () => { btn.disabled = false; btn.textContent = btnOriginalText; };
+  // 10-13 離線收銀：已判定離線就直接存平板＋直接印(兌換券要雲端核銷，離線不能用)
+  if (posOffline_()) {
+    if (appliedVouchers.length) { alert('網路中斷時不能用兌換券，請先拿掉兌換券再結帳'); restoreBtn(); return; }
+    offlineCheckout_(payload, payload.clientKey).finally(restoreBtn);
+    return;
+  }
+  apiPost(payload).then(data => {
     if (data.status !== 'ok') { alert(data.message || '結帳失敗'); return; }
     document.getElementById('pos-confirm-order-no').textContent = data.orderId;
     const notes = [];
@@ -3165,7 +3384,12 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     document.getElementById('pos-confirm-panel').style.display = 'block';
     loadRevenue();
   }).catch(() => {
-    alert('網路異常，結帳失敗，請重試');
+    // 10-13：卡頓只請店員再按一次(同一把結帳鍵，第一次其實有送到也不會重複)；已經判定離線才改走離線結帳
+    if (posOffline_() && !appliedVouchers.length && confirm('網路中斷了，要改用「離線結帳」嗎？\n（照常出單，網路恢復後自動上傳）')) {
+      offlineCheckout_(payload, payload.clientKey);
+      return;
+    }
+    alert('送出失敗（網路不穩），請再按一次「確認結帳」');
   }).finally(() => {
     btn.disabled = false;
     btn.textContent = btnOriginalText;
@@ -3205,7 +3429,7 @@ function applyCfgUpdateNow_() {
   softRefreshPosConfig_();
 }
 function checkCfgVersion_() {
-  apiGet({ action: 'cfgVersion', storeId: STORE_ID, myVer: cfgBaseVer === null ? '' : cfgBaseVer }).then(d => {   // myVer：讓後台「資料版本」看得到這台讀到哪一版(10-10)
+  apiGet({ action: 'cfgVersion', storeId: STORE_ID, myVer: cfgBaseVer === null ? '' : cfgBaseVer, pm: prnReport_() }).then(d => {   // pm：出單方式(10-13，後台「門市平板（出單方式）」看)   // myVer：讓後台「資料版本」看得到這台讀到哪一版(10-10)
     if (!d || d.status !== 'ok') return;
     if (cfgBaseVer === null) { cfgBaseVer = d.ver; return; }   // 開機後第一次查：當作目前版本
     if (d.ver !== cfgBaseVer) cfgPendingVer = d.ver;
@@ -3296,6 +3520,474 @@ function ocConfirm_(orderId, btn) {
 }
 ocLoad_();
 setInterval(ocLoad_, OC_POLL_MS_);
+// 離線出單排版(2026-10-13)：下面這段是後端 Code.gs 出單排版(buildTicketLines_)＋飲料杯貼(buildCupLabels_)與小工具原樣搬過來，改一邊要改另一邊；
+// _harness_offline_tmp.js、_harness_label_tmp.js 會比對兩邊排出來一模一樣。包在函式裡，名字不會跟這頁其他程式撞到
+const offlineTicketKit_ = (function () {
+  // ---- 從 Code.gs 搬來 START ----
+var STORE_DISPLAY_NAMES_ = { meibao: '溪湖培英店' };
+var COMBO_DRINK_CATEGORY_SOURCE_ = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
+  'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
+  'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
+var ORDER_COL_DISCOUNTS_ = 33, ORDER_COL_TIER_ = 34;
+function normalizeDateStr_(value) { return String(value); }
+function normalizeTimeStr_(value) { return String(value); }
+function dispWidth_(s) {
+  var w = 0;
+  for (var i = 0; i < s.length; i++) w += (s.charCodeAt(i) > 0x7F) ? 2 : 1;
+  return w;
+}
+function padRight_(s, w) { var n = w - dispWidth_(s); return n > 0 ? s + new Array(n + 1).join(' ') : s; }
+function padLeft_(s, w) { var n = w - dispWidth_(s); return n > 0 ? new Array(n + 1).join(' ') + s : s; }
+function wrapByWidth_(s, w) {
+  var out = [], cur = '', cw = 0;
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charAt(i), cwid = (s.charCodeAt(i) > 0x7F) ? 2 : 1;
+    if (cw + cwid > w) { out.push(cur); cur = ''; cw = 0; }
+    cur += c; cw += cwid;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+function parseOnlineNote_(note) {
+  var s = String(note || '');
+  var nm = s.match(/姓名:([^　]*)/);
+  var cn = s.match(/備註:(.*)$/);
+  if (nm || cn || s.indexOf('訂單編號:') === 0) return { name: nm ? nm[1].trim() : '', note: cn ? cn[1].trim() : '' };
+  return { name: '', note: s.trim() };
+}
+function wrapOptionText_(s, w) {
+  s = String(s || '');
+  if (dispWidth_(s) <= w) return [s];
+  var best = -1, width = 0;
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charAt(i);
+    if ((c === '(' || c === '（') && i > 0) best = i;   // 斷在括號前面：前段寬度＝還沒加上這個字
+    width += (s.charCodeAt(i) > 0x7F) ? 2 : 1;
+    if (width > w) break;
+    if (c === '：' || c === '、' || c === '/') best = i + 1;
+  }
+  if (best <= 0) return wrapByWidth_(s, w);
+  return [s.slice(0, best)].concat(wrapOptionText_(s.slice(best), w));
+}
+function splitTopLevelOptions_(s) {
+  var out = [], depth = 0, cur = '';
+  s = String(s || '');
+  for (var i = 0; i < s.length; i++) {
+    var c = s.charAt(i);
+    if (c === '（') depth++;
+    else if (c === '）' && depth > 0) depth--;
+    if (c === '、' && depth === 0) { out.push(cur); cur = ''; } else cur += c;
+  }
+  out.push(cur);
+  return out.map(function (x) { return x.trim(); }).filter(function (x) { return x; });
+}
+function buildTicketLines_(r, printCount) {
+  // 每行欄寬：這台出單機(HIP-6666)實測一行放不下48個半形字(分隔線與右靠價格會折行)，之前實測32欄剛好放得下，先用32。
+  // 換機型或紙寬時要重新量，見交接檔
+  var W = 32;
+  var storeName = STORE_DISPLAY_NAMES_[r[2]] || r[2];
+  var channel = r[9] || '';
+  var status = r[8];
+  var pickupDate = normalizeDateStr_(r[3]), pickupTime = normalizeTimeStr_(r[4]);
+  var dateShort = pickupDate.length >= 10 ? pickupDate.substring(5).replace('-', '/') : pickupDate;
+  var total = Number(r[6]) || 0;
+  var parsed = parseOnlineNote_(r[7]);
+  var items = [];
+  try { items = JSON.parse(r[5] || '[]'); } catch (e) { items = []; }
+  // 加價購×2其他需求(2026-09-27)：不跟餐點混在一起，餐點印完後另外印一段【其他需求】
+  var otherNeeds = items.filter(function (it) { return it && it.x2; });
+  items = items.filter(function (it) { return !(it && it.x2); });
+
+  var payLine;
+  if (status === '待收款') payLine = '★ 取餐付款 待收款 $' + total;
+  else if (channel === '線上') payLine = '付款：線上付款（已付款）'; // 後端沒指定付款方式時預設寫LinePay，但實際走藍新信用卡，不能照抄欄位值
+  else payLine = '付款：' + (r[10] || '') + '（已付款）';
+
+  var lines = [];
+  if (printCount > 1) lines.push('*** 補印 *** (第' + printCount + '次)');
+  lines.push('== ' + storeName + ' ==');
+  lines.push('訂單 ' + r[1] + '  [' + (channel || '') + ']');
+  lines.push('取餐 ' + dateShort + ' ' + pickupTime);
+  lines.push(payLine);
+  // 揪團單(2026-09-24)：品項帶who=名字，每人分一段印【名字】，方便分餐；同一人的品項排在一起(保持第一次出現的順序)
+  var whoOrder = [], byWho = {};
+  items.forEach(function (it) { var w = it && it.who ? String(it.who) : ''; if (!(w in byWho)) { byWho[w] = []; whoOrder.push(w); } byWho[w].push(it); });
+  var isGroup = whoOrder.some(function (w) { return w; });
+  // 各付各的：每人一張獨立訂單，品項帶groupHost=團主名字，標出是哪一團的
+  var eachHost = '';
+  items.forEach(function (it) { if (it && it.groupHost) eachHost = String(it.groupHost); });
+  if (isGroup) {
+    items = [];
+    whoOrder.forEach(function (w) { byWho[w].forEach(function (it) { items.push(it); }); });
+    lines.push(eachHost ? '★ ' + eachHost + '的揪團(各付各的)' : '★ 揪團 ' + whoOrder.length + '人');
+  }
+  if (parsed.name) lines.push((isGroup && !eachHost ? '團主：' : '客人：') + parsed.name);
+  lines.push(new Array(W + 1).join('-'));
+  var lastWho = null;
+  for (var i = 0; i < items.length; i++) {
+    var it = items[i] || {};
+    if (isGroup && String(it.who || '') !== lastWho) {
+      lastWho = String(it.who || '');
+      var whoSum = byWho[lastWho].reduce(function (s, x) { return s + (Number(x.price) || 0) * (Number(x.qty) || 1); }, 0);
+      var whoLabel = '【' + (lastWho || '未具名') + '】';
+      var whoPrice = '$' + whoSum;
+      lines.push(padRight_(whoLabel, W - dispWidth_(whoPrice)) + whoPrice);
+    }
+    // 客製化選項在前端是接在品名後面的括號「品名（選項1、選項2）」(見線上點餐/POS的displayName)，
+    // 這裡拆開：主行只放品名+數量+價格，選項一行一項縮排在下面，廚房一眼看得到
+    var fullName = String(it.name || '');
+    var baseName = fullName, opts = [];
+    var pm = fullName.match(/^([^（]*)（(.*)）\s*$/);
+    if (pm) { baseName = pm[1].trim(); opts = splitTopLevelOptions_(pm[2]); }
+    var label = baseName + (it.size ? '(' + it.size + ')' : '');
+    var qtyPart = ' x' + (Number(it.qty) || 1);
+    var pricePart = it.price !== undefined ? '$' + ((Number(it.price) || 0) * (Number(it.qty) || 1)) : '';
+    // 價格靠右佔「價格字數+1」欄，其餘給品名；先折品名，再把「 x數量」接在最後一行，放不下就獨立一行(不把x與數字切開)
+    var avail = W - (pricePart ? dispWidth_(pricePart) + 1 : 0);
+    var labelLines = wrapByWidth_(label, avail);
+    var lastIdx = labelLines.length - 1;
+    if (dispWidth_(labelLines[lastIdx] + qtyPart) <= avail) labelLines[lastIdx] += qtyPart;
+    else labelLines.push(qtyPart.replace(/^ /, ''));
+    for (var k = 0; k < labelLines.length; k++) {
+      lines.push(k === labelLines.length - 1 && pricePart ? padRight_(labelLines[k], avail) + padLeft_(pricePart, W - avail) : labelLines[k]);
+    }
+    // 套餐配料分層(2026-09-29 老闆定案，跟點餐頁套餐流程的頁面順序一致)：
+    //   第一層＝飲料之前的頁(第一頁餐點特製、升級套餐的點心)；第二層＝飲料頁(飲料名稱＋冰塊甜度，兩行對齊，不印「飲料：」)；
+    //   第三層＝飲料之後的頁(嚴選限定/豪華升級、加價購、醬料)。點餐頁把套餐飲料組成「飲料：中杯紅茶（正常冰、正常糖）」並排好順序
+    var afterDrink = false;
+    var pushOpt = function (text, level) {
+      var pad = new Array(level * 2 + 1).join(' ');
+      var ow = wrapOptionText_(text, W - pad.length - 2);
+      for (var q = 0; q < ow.length; q++) lines.push(pad + (q === 0 ? '- ' : '  ') + ow[q]);
+    };
+    for (var o = 0; o < opts.length; o++) {
+      var dm = opts[o].match(/^飲料：(.*?)(?:（(.*)）)?$/);
+      if (dm) {
+        pushOpt(dm[1], 2);
+        if (dm[2]) pushOpt(dm[2], 2);
+        afterDrink = true;
+        continue;
+      }
+      pushOpt(opts[o], afterDrink ? 3 : 1);
+    }
+    if (it.note) {
+      var inl = wrapByWidth_('※ ' + String(it.note), W - 2);
+      for (var z = 0; z < inl.length; z++) lines.push('  ' + inl[z]);
+    }
+  }
+  if (otherNeeds.length) {
+    lines.push('【其他需求】');
+    otherNeeds.forEach(function (n) {
+      var amt = Number(n.price) || 0;
+      var p = amt ? (amt > 0 ? '+$' : '-$') + Math.abs(amt) : '';
+      var nl2 = wrapByWidth_(String(n.name || '') + (n.who ? '（' + n.who + '）' : ''), W - 4 - (p ? dispWidth_(p) + 1 : 0));   // 揪團註明是誰的
+      for (var y = 0; y < nl2.length; y++) {
+        var s2 = (y === 0 ? '  - ' : '    ') + nl2[y];
+        lines.push(y === nl2.length - 1 && p ? padRight_(s2, W - dispWidth_(p)) + p : s2);
+      }
+    });
+  }
+  lines.push(new Array(W + 1).join('-'));
+  if (parsed.note) { var nl = wrapByWidth_('備註：' + parsed.note, W); for (var j = 0; j < nl.length; j++) lines.push(nl[j]); }
+  // 會員等級＋折扣明細(2026-09-26)：合計上面逐行印「折扣名稱  -$金額」，品項原價加總才對得上合計。
+  // 舊訂單沒有明細欄：品項加總比合計多的話印一行「優惠折抵」補差額
+  var tierName = r[ORDER_COL_TIER_ - 1] ? String(r[ORDER_COL_TIER_ - 1]) : '';
+  if (tierName) lines.push('會員：' + tierName);
+  var discounts = [];
+  try { discounts = r[ORDER_COL_DISCOUNTS_ - 1] ? JSON.parse(r[ORDER_COL_DISCOUNTS_ - 1]) : []; } catch (e) { discounts = []; }
+  if (!discounts.length) {
+    var rawSum = 0;
+    items.concat(otherNeeds).forEach(function (it) { rawSum += (Number(it && it.price) || 0) * (Number(it && it.qty) || 1); });
+    if (rawSum > total) discounts = [{ label: '優惠折抵', amount: rawSum - total }];
+  }
+  discounts.forEach(function (d) {
+    var amt = (d.amount >= 0 ? '-$' : '+$') + Math.abs(d.amount);
+    var avail2 = W - dispWidth_(amt) - 1;
+    var dl = wrapByWidth_(String(d.label), avail2);
+    for (var k2 = 0; k2 < dl.length; k2++) lines.push(k2 === dl.length - 1 ? padRight_(dl[k2], avail2) + padLeft_(amt, W - avail2) : dl[k2]);
+  });
+  lines.push('合計 $' + total);
+  return lines;
+}
+function buildCupLabels_(r, isDrinkName) {
+  var items = [];
+  try { items = JSON.parse(r[5] || '[]'); } catch (e) { items = []; }
+  var id = String(r[1] || '');
+  var no = id.indexOf('-') > 0 ? id.slice(id.indexOf('-') + 1) : id;
+  var time = normalizeTimeStr_(r[4]);
+  var cups = [];
+  items.forEach(function (it) {
+    if (!it || it.x2) return;
+    var full = String(it.name || ''), base = full, opts = [];
+    var pm = full.match(/^([^（]*)（(.*)）\s*$/);
+    if (pm) { base = pm[1].trim(); opts = splitTopLevelOptions_(pm[2]); }
+    var qty = Math.max(1, Math.min(Number(it.qty) || 1, 50));
+    var who = it.who ? String(it.who) : '';
+    var q;
+    if (isDrinkName(base)) {
+      for (q = 0; q < qty; q++) cups.push({ name: base + (it.size ? ' ' + it.size : ''), opts: opts, note: it.note ? String(it.note) : '', who: who, price: '$' + (Number(it.price) || 0) });
+      return;
+    }
+    opts.forEach(function (o) {
+      var dm = o.match(/^飲料：(.*?)(?:（(.*)）)?$/);
+      if (!dm) return;
+      for (q = 0; q < qty; q++) cups.push({ name: dm[1].trim(), opts: dm[2] ? splitTopLevelOptions_(dm[2]) : [], note: '', who: who, price: '套餐' });
+    });
+  });
+  return cups.map(function (c, i) {
+    return { no: no, time: time, idx: i + 1, total: cups.length, name: c.name, opts: c.opts, note: c.note, who: c.who, price: c.price };
+  });
+}
+  // ---- 從 Code.gs 搬來 END ----
+  return { lines: buildTicketLines_, labels: buildCupLabels_, drinkCats: COMBO_DRINK_CATEGORY_SOURCE_ };
+})();
+const offlineBuildTicketLines_ = offlineTicketKit_.lines, offlineBuildCupLabels_ = offlineTicketKit_.labels;
+
+// ---------- 離線收銀(2026-10-13 老闆定案，規格 離線收銀設計_2026-10-13.md) ----------
+// 斷線判斷：卡頓跟斷線分開。瀏覽器說沒網路，或「連續失敗 2 次以上且 30 秒沒成功過」才算離線(紅條)；
+// 離線時結帳存在這台平板、自己排版直接送出單機印，網路恢復後一張張補傳(posSyncOffline)，補傳完出單模組才繼續向雲端領單
+const NET_OFFLINE_AFTER_MS_ = 30000, NET_PROBE_MS_ = 10000, OFFLINE_SYNC_MS_ = 15000;
+const OFFLINE_Q_KEY_ = 'abao_pos_offline_q_' + STORE_ID, OFFLINE_SEQ_KEY_ = 'abao_pos_offline_seq_' + STORE_ID;
+let netLastOk_ = Date.now(), netFails_ = 0, netOffline_ = false, offlineSyncing_ = false;
+function posOffline_() { return netOffline_; }
+function netOk_() {
+  netLastOk_ = Date.now(); netFails_ = 0;
+  if (netOffline_) { netOffline_ = false; offlineRender_(); setTimeout(offlineSync_, 0); }
+}
+function netFail_() { netFails_++; netEval_(); }
+function netEval_() {
+  const off = navigator.onLine === false || (netFails_ >= 2 && Date.now() - netLastOk_ >= NET_OFFLINE_AFTER_MS_);
+  if (off === netOffline_) return;
+  netOffline_ = off;
+  offlineRender_();
+  if (!off) setTimeout(offlineSync_, 0);
+}
+// 成功/失敗由 apiGet 記；帶跟 checkCfgVersion_ 一樣的版本／出單方式，後台「資料版本」才不會被這個探測蓋成錯的
+function netProbe_() { apiGet({ action: 'cfgVersion', storeId: STORE_ID, myVer: cfgBaseVer === null ? '' : cfgBaseVer, pm: prnReport_() }).catch(() => {}); }
+window.addEventListener('offline', netEval_);
+window.addEventListener('online', netProbe_);
+setInterval(() => { if (netOffline_ || netFails_) netProbe_(); else netEval_(); }, NET_PROBE_MS_);
+
+// 離線單存在這台平板：[{orderId, clientKey, createdAt, items, totalAmount, paymentMethod, pickupDate, pickupTime, memberPhone, discounts,
+//   staffName, printed, syncedAt, cloudId, failed}]；上傳完的留到隔天(初一名額要算)
+function offlineLoad_() { try { return JSON.parse(localStorage.getItem(OFFLINE_Q_KEY_) || '[]') || []; } catch (e) { return []; } }
+function offlineSaveAll_(q) {
+  const cut = Date.now() - 2 * 86400000;
+  q = q.filter(o => !o.syncedAt || o.syncedAt > cut);
+  try { localStorage.setItem(OFFLINE_Q_KEY_, JSON.stringify(q)); return true; } catch (e) { return false; }
+}
+function offlinePending_() { return offlineLoad_().filter(o => !o.syncedAt && !o.failed); }
+function offlineFailed_() { return offlineLoad_().filter(o => !o.syncedAt && o.failed); }
+window.posOfflinePendingCount_ = () => offlinePending_().length;   // 出單模組(iframe)看：還有沒補傳的先不向雲端領單
+
+// 離線單編號：今天日期-L01、L02…(這台平板自己數；兩台撞號時後端自動改成 -L01-2)
+function offlineNextId_() {
+  const ymd = todayYmd_().replace(/-/g, '');
+  let st = {};
+  try { st = JSON.parse(localStorage.getItem(OFFLINE_SEQ_KEY_) || '{}') || {}; } catch (e) {}
+  const n = st.date === ymd ? (Number(st.n) || 0) + 1 : 1;
+  try { localStorage.setItem(OFFLINE_SEQ_KEY_, JSON.stringify({ date: ymd, n })); } catch (e) {}
+  return ymd + '-L' + String(n).padStart(2, '0');
+}
+
+// 結帳鍵：同一份內容(品項/金額/付款/會員/折扣/取餐時間)重按是同一把，內容改了就換新的
+let posCheckoutKey_ = null;
+function posCheckoutKeyFor_(p) {
+  const sig = JSON.stringify([p.items, p.totalAmount, p.paymentMethod, p.pickupDate, p.pickupTime, p.memberPhone, p.voucherIds, p.discounts]);
+  if (!posCheckoutKey_ || posCheckoutKey_.sig !== sig) posCheckoutKey_ = { sig, key: Date.now().toString(36) + Math.random().toString(36).slice(2, 10) };
+  return posCheckoutKey_.key;
+}
+
+// 出單內容：跟雲端出單同一套排版(offlineBuildTicketLines_)，最上面多印一行【離線單】
+function offlineTicketLines_(o) {
+  const r = [];
+  r[0] = o.createdAt; r[1] = o.orderId; r[2] = STORE_ID;
+  r[3] = o.pickupDate || todayYmd_();
+  r[4] = o.pickupTime || new Date(o.createdAt).toTimeString().slice(0, 5);
+  r[5] = JSON.stringify(o.items || []); r[6] = o.totalAmount; r[7] = '';
+  r[8] = o.paymentMethod === '取餐付款' ? '待收款' : (o.pickupDate ? '未取餐' : '已取餐');
+  r[9] = 'POS'; r[10] = o.paymentMethod;
+  r[32] = (o.discounts || []).length ? JSON.stringify(o.discounts) : '';
+  r[33] = '';
+  return ['【離線單】網路恢復後自動上傳'].concat(offlineBuildTicketLines_(r, 1));
+}
+// 杯貼(10-13)：跟雲端同一套 buildCupLabels_；哪些品名算飲料看菜單裡的飲料分類
+function offlineDrinkTest_() {
+  const set = new Set();
+  offlineTicketKit_.drinkCats.forEach(c => (CATALOG[c] || []).forEach(it => set.add(it.name)));
+  return name => set.has(name);
+}
+function offlineLabels_(o) {
+  try {
+    const r = [];
+    r[1] = o.orderId; r[4] = o.pickupTime || new Date(o.createdAt).toTimeString().slice(0, 5); r[5] = JSON.stringify(o.items || []);
+    return offlineBuildCupLabels_(r, offlineDrinkTest_());
+  } catch (e) { return []; }
+}
+async function offlinePrint_(o) {
+  try {
+    const w = document.getElementById('printModuleFrame').contentWindow;
+    if (!w || typeof w.printLocalLines_ !== 'function') return false;
+    return !!(await w.printLocalLines_(offlineTicketLines_(o), offlineLabels_(o), o.orderId));
+  } catch (e) { return false; }
+}
+
+async function offlineCheckout_(p, clientKey) {
+  const q = offlineLoad_();
+  const same = q.find(o => o.clientKey === clientKey);   // 同一張已經離線結過(例如按兩下)
+  if (same) { offlineShowDone_(same); return; }
+  const o = {
+    orderId: offlineNextId_(), clientKey, createdAt: new Date().toISOString(), storeId: STORE_ID,
+    items: p.items, totalAmount: p.totalAmount, paymentMethod: p.paymentMethod, pickupDate: p.pickupDate, pickupTime: p.pickupTime,
+    memberPhone: p.memberPhone, discounts: p.discounts, staffName: p.staffName, printed: false, syncedAt: null
+  };
+  q.push(o);
+  if (!offlineSaveAll_(q)) { alert('平板儲存空間不足，離線單存不進去，請改用手寫單'); return; }   // 先存再印：印失敗也不會漏單
+  offlineRender_();
+  o.printed = await offlinePrint_(o);
+  const q2 = offlineLoad_(), it = q2.find(x => x.clientKey === clientKey);
+  if (it) { it.printed = o.printed; offlineSaveAll_(q2); }
+  offlineShowDone_(o);
+}
+function offlineShowDone_(o) {
+  document.getElementById('pos-confirm-order-no').textContent = o.orderId;
+  const notes = ['📴 離線單：網路恢復後自動上傳'];
+  if (o.memberPhone) notes.push('會員點數上傳時補發');
+  if (o.paymentMethod === '取餐付款') notes.push('⚠️客人尚未付款：來付錢時點上方紅條→離線單→按「已收款」');
+  if (!o.printed) notes.push('⚠️出單機沒有印出來：按下面「重印」，或手寫這張單給廚房');
+  document.getElementById('pos-confirm-points').textContent = notes.join('　');
+  const rb = document.getElementById('pos-offline-reprint-btn');
+  rb.style.display = '';
+  rb.onclick = () => offlineReprint_(o.clientKey, rb);
+  document.getElementById('pos-checkout-panel').style.display = 'none';
+  document.getElementById('pos-confirm-panel').style.display = 'block';
+}
+
+// 網路恢復：一張張補傳。網路錯誤就停下等下一輪；後端拒絕(資料錯誤)的標起來不再自動重送、紅條提醒(絕不刪單)
+async function offlineSync_() {
+  if (offlineSyncing_ || netOffline_ || !offlinePending_().length) { offlineRender_(); return; }
+  offlineSyncing_ = true; offlineRender_();
+  let synced = 0;
+  try {
+    for (const o of offlinePending_()) {
+      let d;
+      try { d = await apiPost({ action: 'posSyncOffline', storeId: STORE_ID, order: o }); } catch (e) { break; }
+      if (d && d.code === 'pos_device') break;   // 平板通行證失效：啟用提示會出來，啟用後再傳
+      const q = offlineLoad_(), it = q.find(x => x.clientKey === o.clientKey);
+      if (!it) continue;
+      if (d && d.status === 'ok') {
+        it.syncedAt = Date.now(); it.cloudId = d.orderId; synced++;
+        // 上傳途中店員才按已收款：雲端那張還是待收款 → 補按雲端的「已收款」(失敗就留給店員在待取餐訂單按)
+        if (it.collected && !o.collected && !d.duplicate) apiPost({ action: 'markOrderCollected', orderId: d.orderId, storeId: STORE_ID }).catch(() => {});
+      }
+      else it.failed = (d && d.message) || '上傳失敗';
+      offlineSaveAll_(q);
+      offlineRender_();
+    }
+  } finally {
+    offlineSyncing_ = false;
+    offlineRender_();
+    if (synced) loadRevenue();
+  }
+}
+setInterval(() => { if (!netOffline_ && offlinePending_().length) offlineSync_(); }, OFFLINE_SYNC_MS_);
+setTimeout(offlineSync_, 3000);   // 上次離線單沒傳完就關掉頁面：打開後補傳
+
+function offlineRetryFailed_() {
+  const f = offlineFailed_();
+  if (!f.length) return;
+  if (!confirm('這些離線單上傳被雲端拒絕：\n' + f.map(o => o.orderId + '：' + o.failed).join('\n') + '\n\n要再試一次嗎？（還是不行請截圖給老闆）')) return;
+  const q = offlineLoad_();
+  q.forEach(o => { if (!o.syncedAt) delete o.failed; });
+  offlineSaveAll_(q);
+  offlineSync_();
+  offlineRenderList_();
+}
+
+// 離線單清單(點紅條打開)：還沒上傳的單，可以重印；取餐付款的單客人來付錢時按「已收款」
+function openOfflineList_() { offlineRenderList_(); document.getElementById('offline-overlay').classList.add('open'); }
+function closeOfflineList_() { document.getElementById('offline-overlay').classList.remove('open'); }
+function offlineRenderList_() {
+  const el = document.getElementById('offline-list');
+  if (!el) return;
+  const list = offlineLoad_().filter(o => !o.syncedAt);
+  if (!list.length) { el.innerHTML = '<div class="empty-hint">離線單都已上傳完成 ✅</div>'; return; }
+  const fail = list.some(o => o.failed);
+  el.innerHTML = (fail ? '<button type="button" class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="offlineRetryFailed_()">⚠️ 有單上傳失敗：按這裡再試一次</button>' : '') + list.map(o => {
+    const t = new Date(o.createdAt), hm = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+    const unpaid = o.paymentMethod === '取餐付款' && !o.collected;
+    const items = (o.items || []).map(it => `${escapeHtml_(it.name)}${it.size ? ' ' + escapeHtml_(it.size) : ''} ×${it.qty}`).join('、');
+    return `<div style="border:2px solid ${unpaid ? '#e57373' : 'var(--border)'};border-radius:10px;padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <b style="font-size:1.05rem">${escapeHtml_(o.orderId)}</b>
+        <span style="font-size:0.85rem;color:var(--muted)">${hm} 結帳${o.pickupDate ? '・取餐 ' + escapeHtml_(o.pickupDate.slice(5)) + ' ' + escapeHtml_(o.pickupTime || '') : ''}</span>
+      </div>
+      <div style="font-size:0.88rem;margin:4px 0">${items}</div>
+      <div style="font-size:0.85rem">$${o.totalAmount}　${escapeHtml_(o.paymentMethod)}${o.paymentMethod === '取餐付款' ? (o.collected ? '　<b style="color:#2e7d32">✅ 已收款</b>' : '　<b style="color:#c62828">尚未收款</b>') : ''}${o.memberPhone ? '　會員 ' + escapeHtml_(o.memberPhone) : ''}${o.printed ? '' : '　<b style="color:#c62828">出單機沒印出來</b>'}</div>
+      ${o.failed ? `<div style="font-size:0.85rem;color:#6a1b9a;margin-top:4px">上傳失敗：${escapeHtml_(o.failed)}</div>` : ''}
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button type="button" class="btn btn-secondary" onclick="offlineReprint_('${o.clientKey}', this)">🖨 重印</button>
+        ${unpaid ? `<button type="button" class="btn btn-primary" onclick="offlineMarkCollected_('${o.clientKey}')">💰 已收款</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+async function offlineReprint_(clientKey, btn) {
+  const o = offlineLoad_().find(x => x.clientKey === clientKey);
+  if (!o) return;
+  btn.disabled = true;
+  const ok = await offlinePrint_(o);
+  btn.disabled = false;
+  if (ok) { const q = offlineLoad_(), it = q.find(x => x.clientKey === clientKey); if (it) { it.printed = true; offlineSaveAll_(q); } offlineRenderList_(); }
+  alert(ok ? '已重印' : '出單機還是沒印出來，請確認出單機有開、網路線有接好');
+}
+function offlineMarkCollected_(clientKey) {
+  const q = offlineLoad_(), o = q.find(x => x.clientKey === clientKey);
+  if (!o || o.syncedAt) { alert('這張已經上傳到雲端了，請到「待取餐訂單」按已收款'); offlineRenderList_(); return; }
+  if (!confirm(`${o.orderId}：確定已經跟客人收到 $${o.totalAmount} 嗎？`)) return;
+  o.collected = true; o.collectedAt = Date.now();
+  offlineSaveAll_(q);
+  offlineRenderList_();
+}
+function offlineRender_() {
+  const b = document.getElementById('offline-banner');
+  if (!b) return;
+  if (document.getElementById('offline-overlay').classList.contains('open')) offlineRenderList_();
+  const pend = offlinePending_().length, fail = offlineFailed_();
+  if (netOffline_) {
+    b.style.background = '#b71c1c';
+    b.textContent = '📴 網路中斷・離線收銀中：照常點餐出單（不能用兌換券、會員折扣），網路恢復後自動上傳' + (pend ? `｜待上傳 ${pend} 張（按這裡看）` : '') + '｜平板請保持連店裡 Wi-Fi';
+  } else if (pend) {
+    b.style.background = '#e65100';
+    b.textContent = `⏳ 網路已恢復，離線單補傳中（剩 ${pend} 張），補傳完出單機才會繼續印線上單`;
+  } else if (fail.length) {
+    b.style.background = '#6a1b9a';
+    b.textContent = `⚠️ 有 ${fail.length} 張離線單上傳失敗（${fail.map(o => o.orderId).join('、')}）：按這裡再試一次，還是不行請截圖給老闆`;
+  } else { b.style.display = 'none'; return; }
+  b.style.display = 'block';
+}
+
+// 離線時會員：記下電話就好(查不到等級＝不套會員權益、不能用兌換券)，上傳時雲端照真正等級補點數
+function offlineMember_(phone) {
+  selectedMember = { phone, name: '會員 ' + phone, tier: '', points: 0, offline: true };
+  memberVouchers = [];
+  memberPanelOpen_ = false;
+  document.getElementById('member-info').innerHTML = `<div class="member-card">📴 離線中：已記下會員電話 <b>${phone}</b><br>網路恢復上傳時自動補點數（這張單不套會員折扣、不能用兌換券）</div>`;
+  renderPosCart();
+}
+
+// 初一等限量活動：連線時查到的剩餘名額記在平板；離線時用「記住的剩餘－之後的離線單用量」判斷(老闆接受可能超賣一兩份)
+function actQuotaCacheKey_(actId) { return 'abao_pos_actquota_' + STORE_ID + '_' + actId + '_' + todayYmd_(); }
+function actQuotaRemember_(actId, q) { try { localStorage.setItem(actQuotaCacheKey_(actId), JSON.stringify({ limit: q.limit, left: q.left, at: Date.now() })); } catch (e) {} }
+function actQuotaOfflineLeft_(actId) {
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(actQuotaCacheKey_(actId)) || 'null'); } catch (e) {}
+  if (!c || !c.limit) return null;
+  const used = offlineLoad_().filter(o => Date.parse(o.createdAt) > c.at)
+    .reduce((s, o) => s + (o.discounts || []).filter(d => d.act === actId).length, 0);
+  return { limit: c.limit, left: c.left - used };
+}
+offlineRender_();
 </script>
 </body>
 </html>

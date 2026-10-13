@@ -635,9 +635,13 @@
     <div class="pmg-grid">
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('ver')"><span class="ic">🔄</span>資料版本</button>
       <button type="button" class="pmg-tile" disabled><span class="ic">🧾</span>電子發票設定<br><span class="pmg-soon">準備中</span></button>
-      <!-- 10-10 佔位：每台門市平板用哪種出單方式(藍牙／網路＋IP)，只看不改(設定在平板 POS管理→出單機設定)；等網路實測通過再做 -->
-      <button type="button" class="pmg-tile" disabled><span class="ic">🖨️</span>門市平板（出單方式）<br><span class="pmg-soon">準備中</span></button>
+      <!-- 10-13 每台門市平板用哪種出單方式(藍牙／網路＋IP)，只看不改(設定在平板 POS管理→出單機設定) -->
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('printer')"><span class="ic">🖨️</span>門市平板（出單方式）</button>
     </div>
+  </div>
+  <div id="pmg-subview-printer" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 門市平板（出單方式） <span class="ops-refresh" onclick="loadBoPrinterModes_()">重新整理</span></div>
+    <div id="bo-pmg-printer"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pmg-subview-ver" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 資料版本 <span class="ops-refresh" onclick="loadBoCfgStatus_()">重新整理</span></div>
@@ -1049,6 +1053,25 @@ function boFmtMs_(ms) {
   const d = new Date(Number(ms));
   return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
+// 10-13 門市平板（出單方式）：每台平板每分鐘回報一次用藍牙還是網路出單機、出單機連上沒(只看；要改到那台平板 POS管理→出單機設定)
+function loadBoPrinterModes_() {
+  const box = document.getElementById('bo-pmg-printer');
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'cfgStatus', storeId: SCHED_STORE_ID }).then(d => {
+    if (d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml(d.message || '讀取失敗') + '</div>'; return; }
+    const now = Date.now();
+    const ago = ms => { const m = Math.max(0, Math.round((now - ms) / 60000)); return m < 1 ? '剛剛' : m < 60 ? m + ' 分鐘前' : m < 1440 ? Math.round(m / 60) + ' 小時前' : Math.round(m / 1440) + ' 天前'; };
+    const active = (d.devices || []).filter(v => v.seenAt && now - v.seenAt <= 7 * 86400000);
+    const rows = active.map(v => {
+      const [mode, ip, up] = String(v.pm || '').split('|');
+      const how = mode === 'net' ? '🌐 網路出單機 ' + escapeHtml(ip || '（沒設 IP）') : mode === 'bt' ? '📶 藍牙' : '（這台平板還沒更新，看不到）';
+      const st = !mode ? '' : up === '1' ? '<span style="color:#1f7a3d;">✅ 出單機連線中</span>' : '<span style="color:#a32d2d;">⚠️ 出單機沒連上</span>';
+      return `<div class="ops-order"><div><b>${how}</b><div class="ops-meta">${boFmtMs_(v.created).split(' ')[0]} 由 ${escapeHtml(v.by)} 啟用的平板｜${ago(v.seenAt)}回報</div></div><div style="font-size:0.85rem;text-align:right;">${st}</div></div>`;
+    }).join('');
+    box.innerHTML = `<div class="ops-card"><h3>門市平板用哪種出單機</h3>${rows || '<div class="ops-meta" style="padding:6px 0;">最近 7 天沒有平板回報</div>'}
+      <div class="ops-meta" style="margin-top:6px;">只能看；要改請到那台平板「POS管理 → 出單機設定」（要店長以上 PIN）。平板每分鐘回報一次。</div></div>`;
+  }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+}
 function loadBoCfgStatus_() {
   const box = document.getElementById('bo-pmg-ver');
   box.innerHTML = '<div class="empty-hint">載入中...</div>';
@@ -1268,6 +1291,8 @@ function switchBackofficeTab(name) {
   document.getElementById('pmg-subview-partner').style.display = (name === 'posmanage' && currentPosManageSubview === 'partner') ? 'block' : 'none';
   document.getElementById('pmg-subview-home').style.display = (name === 'posmanage' && currentPosManageSubview === 'home') ? 'block' : 'none';
   document.getElementById('pmg-subview-ver').style.display = (name === 'posmanage' && currentPosManageSubview === 'ver') ? 'block' : 'none';
+  document.getElementById('pmg-subview-printer').style.display = (name === 'posmanage' && currentPosManageSubview === 'printer') ? 'block' : 'none';
+  if (name === 'posmanage' && currentPosManageSubview === 'printer') loadBoPrinterModes_();
   if (name === 'posmanage' && currentPosManageSubview === 'home') loadBoPmgToday_();
   if (name === 'posmanage' && currentPosManageSubview === 'ver') loadBoCfgStatus_();
   if (name === 'posmanage') {
