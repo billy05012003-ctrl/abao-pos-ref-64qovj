@@ -1037,7 +1037,7 @@ function boRefund_(orderId, amount, viaGateway, printed) {
 function loadBoPmgToday_() {
   const box = document.getElementById('bo-pmg-today');
   const now = new Date();
-  const head = '📅 今天 ' + (now.getMonth() + 1) + '/' + now.getDate() + '（' + '日一二三四五六'[now.getDay()] + '）';
+  const head = '📅 今天 ' + (now.getMonth() + 1) + '/' + now.getDate() + '（星期' + '日一二三四五六'[now.getDay()] + '）';
   apiGet({ action: 'registerLog', storeId: SCHED_STORE_ID }).then(d => {
     if (d.status !== 'ok') { box.textContent = head + '｜' + (d.message || '讀取失敗'); return; }
     const same = t => { const x = new Date(t); return x.getFullYear() === now.getFullYear() && x.getMonth() === now.getMonth() && x.getDate() === now.getDate(); };
@@ -3505,7 +3505,7 @@ function hbActDiffMap_(list) { return Object.fromEntries((list || []).map(a => [
 function hbTitleOf_(a, b, id) { const x = (a || []).concat(b || []).find(y => y.id === id); return x ? x.title : id; }
 function hbJs_(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 function hbToday_() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-function hbMd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return m + '/' + d + '(' + HB_WEEKDAYS_[new Date(y, m - 1, d).getDay()] + ')'; }
+function hbMd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return m + '/' + d + '(星期' + HB_WEEKDAYS_[new Date(y, m - 1, d).getDay()] + ')'; }
 function hbTokenLabel_(t) { const [a, b] = t.split('~'); return b ? hbMd_(a) + '～' + hbMd_(b) : hbMd_(a); }
 function hbSplit_(v) { return String(v || '').split('、').map(x => x.trim()).filter(Boolean); }
 

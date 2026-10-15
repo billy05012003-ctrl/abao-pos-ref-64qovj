@@ -960,7 +960,7 @@ function formatDateLabel(offsetDays) {
   let dayName;
   if (offsetDays === 0) dayName = '今天';
   else if (offsetDays === 1) dayName = '明天';
-  else dayName = '週' + ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
+  else dayName = '星期' + ['日', '一', '二', '三', '四', '五', '六'][d.getDay()];
   return `${md}（${dayName}）`;
 }
 
@@ -5166,7 +5166,7 @@ function onMemberWhoClick_() {
 }
 function homeInPeriod_(x, t) { return !((x.startDate && t < x.startDate) || (x.endDate && t > x.endDate)); }
 function homeMd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return m + '/' + d; }
-function homeWd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return HOME_WEEKDAYS_[new Date(y, m - 1, d).getDay()]; }
+function homeWd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return '星期' + HOME_WEEKDAYS_[new Date(y, m - 1, d).getDay()]; }
 function homeAddDays_(ymd, n) { const [y, m, d] = ymd.split('-').map(Number); const x = new Date(y, m - 1, d + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
 function homeCssUrl_(u) { return "url('" + String(u).replace(/['"\\()]/g, encodeURIComponent) + "')"; }
 
@@ -5334,7 +5334,7 @@ function onHomeMemberLogin_() {
 function homeActWhen_(a, next, t) {
   if (next === homeAddDays_(t, 1)) return '明天 ' + homeMd_(next);
   const diff = Math.round((new Date(next + 'T00:00:00') - new Date(t + 'T00:00:00')) / 86400000);
-  if (diff < 7) return '週' + homeWd_(next) + ' ' + homeMd_(next);
+  if (diff < 7) return homeWd_(next) + ' ' + homeMd_(next);
   return homeMd_(next) + '（' + homeWd_(next) + '）';
 }
 function homeActSub_(a) {

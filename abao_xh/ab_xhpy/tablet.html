@@ -1024,7 +1024,7 @@ function renderPmgToday_(logs) {
   const box = document.getElementById('pmg-today');
   if (!box) return;
   const now = new Date();
-  const head = '📅 今天 ' + (now.getMonth() + 1) + '/' + now.getDate() + '（' + '日一二三四五六'[now.getDay()] + '）';
+  const head = '📅 今天 ' + (now.getMonth() + 1) + '/' + now.getDate() + '（星期' + '日一二三四五六'[now.getDay()] + '）';
   if (logs === null) { box.textContent = head + '｜開帳狀態請到「開關帳記錄」查看'; return; }
   const sameDay = t => { const d = new Date(t); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate(); };
   const hm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
@@ -3508,7 +3508,7 @@ function ocRender_() {
   if (ocOrders_.some(ocUrgent_) && Date.now() - ocLastBeep_ >= OC_BEEP_EVERY_MS_ - 2000) { ocBeep_(); ocLastBeep_ = Date.now(); }
 }
 function ocWhenText_(o) {
-  const d = new Date(o.pickupDate + 'T00:00:00'), wk = '日一二三四五六'[d.getDay()];
+  const d = new Date(o.pickupDate + 'T00:00:00'), wk = '星期' + '日一二三四五六'[d.getDay()];
   return (o.preorder ? `${d.getMonth() + 1}/${d.getDate()}（${wk}）` : '今天 ') + (o.pickupTime || '');
 }
 function ocRenderList_() {
