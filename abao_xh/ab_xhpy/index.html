@@ -662,16 +662,19 @@ const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡集中兩個小函式自動帶上，
 // 全站呼叫後端一律走這兩個函式，之後新增任何呼叫都自動套用，不用每處各自補
 const APP_KEY = 'abao-meibao-2026';
+const STORE_ID = 'meibao';
+// 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
+function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = STORE_ID; return p; }
 // 2026-09-13發現：同一組查詢字串重複打會被瀏覽器/Google那邊快取住，改後台設定後同分頁沒重新整理
 // 還是讀到舊資料，過去交接記錄裡好幾次寫的「Google暫時性404/延遲」很可能有一部分其實是這個快取問題。
 // 補上_=時間戳記防快取參數，確保每次都真的打到最新資料
 // 2026-09-29 LINE 登入：登入後每個請求自動帶 LINE 通行證(lineSession)，後端以 LINE 綁定的會員為準
 function apiGet_(params) {
-  const qs = new URLSearchParams({ ...params, ...(lineSession_ ? { lineSession: lineSession_ } : {}), appKey: APP_KEY, _: Date.now() }).toString();
+  const qs = new URLSearchParams({ ...withStore_(params), ...(lineSession_ ? { lineSession: lineSession_ } : {}), appKey: APP_KEY, _: Date.now() }).toString();
   return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json()).then(lineSessionCheck_);
 }
 function apiPost_(payload) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, ...(lineSession_ ? { lineSession: lineSession_ } : {}), appKey: APP_KEY }) }).then(r => r.json()).then(lineSessionCheck_);
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...withStore_(payload), ...(lineSession_ ? { lineSession: lineSession_ } : {}), appKey: APP_KEY }) }).then(r => r.json()).then(lineSessionCheck_);
 }
 
 // ---------------------------------------------------------------

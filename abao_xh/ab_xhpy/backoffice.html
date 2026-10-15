@@ -729,16 +729,19 @@
 <script>
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
 const APP_KEY = 'abao-meibao-2026';
+const BO_HOME_STORE_ = 'meibao';   // 這份後台所屬的門市(切到別店/品牌範本時各呼叫會明確帶 storeId)
+// 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
+function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = BO_HOME_STORE_; return p; }
 // 2026-09-13發現：同一組查詢字串重複打會被瀏覽器/Google那邊快取住，改後台設定後同分頁沒重新整理
 // 還是讀到舊資料，過去交接記錄裡好幾次寫的「Google暫時性404/延遲」很可能有一部分其實是這個快取問題。
 // 補上_=時間戳記防快取參數，確保每次都真的打到最新資料
 function apiGet(params) {
   // 2026-09-29 讀資料 API 收緊：讀取也帶後台通行證(揪團清單、開關帳記錄要登入才回)
-  const qs = new URLSearchParams({ ...params, boToken: boSession ? boSession.token : '', appKey: APP_KEY, _: Date.now() }).toString();
+  const qs = new URLSearchParams({ ...withStore_(params), boToken: boSession ? boSession.token : '', appKey: APP_KEY, _: Date.now() }).toString();
   return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json());
 }
 function apiPost(payload) {
-  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, boToken: boSession ? boSession.token : '', appKey: APP_KEY }) })
+  return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...withStore_(payload), boToken: boSession ? boSession.token : '', appKey: APP_KEY }) })
     .then(r => r.json())
     .then(d => { if (d && d.code === 'bo_auth') { boSession = null; saveBoSession_(); showBoLogin_(d.message); } return d; });
 }
@@ -782,7 +785,7 @@ function boLogout() {
   if (!confirm('確定要登出後台？')) return;
   const t = boSession && boSession.token;
   boSession = null; saveBoSession_(); renderBoUser_();
-  if (t) fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'boLogout', boToken: t, appKey: APP_KEY }) }).catch(() => {});
+  if (t) fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify(withStore_({ action: 'boLogout', boToken: t, appKey: APP_KEY })) }).catch(() => {});
   showBoLogin_();
 }
 function renderBoUser_() {

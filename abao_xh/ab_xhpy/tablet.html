@@ -547,6 +547,8 @@ const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡自動帶上，兩個入口只改這一處，
 // 之後不管POS功能繼續加什麼新API都會自動套用，不用每次補強都想一次
 const APP_KEY = 'abao-meibao-2026';
+// 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
+function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = STORE_ID; return p; }
 // 2026-09-13發現：同一組查詢字串重複打會被瀏覽器/Google那邊快取住，改後台設定後同分頁沒重新整理
 // 還是讀到舊資料，過去交接記錄裡好幾次寫的「Google暫時性404/延遲」很可能有一部分其實是這個快取問題。
 // 補上_=時間戳記防快取參數，確保每次都真的打到最新資料
@@ -560,7 +562,7 @@ function netFetch_(url, opts, ms) {
 }
 function apiGet(params) {
   // 2026-09-29 讀資料 API 收緊：讀取也帶平板通行證(今日訂單/營收/查會員等要有效通行證才回)
-  const qs = new URLSearchParams({ ...params, posDevice: posDeviceToken_(), appKey: APP_KEY, _: Date.now() }).toString();
+  const qs = new URLSearchParams({ ...withStore_(params), posDevice: posDeviceToken_(), appKey: APP_KEY, _: Date.now() }).toString();
   return netFetch_(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }, 20000).then(r => r.json()).then(d => {
     if (d && d.code === 'pos_device') { setPosDeviceToken_(''); showPosDeviceBanner_(true); }
     return d;
@@ -572,7 +574,7 @@ const POS_DEVICE_KEY_ = 'abao_pos_device_' + STORE_ID;
 function posDeviceToken_() { try { return localStorage.getItem(POS_DEVICE_KEY_) || ''; } catch (e) { return ''; } }
 function setPosDeviceToken_(t) { try { if (t) localStorage.setItem(POS_DEVICE_KEY_, t); else localStorage.removeItem(POS_DEVICE_KEY_); } catch (e) {} }
 function apiPost(payload) {
-  return netFetch_(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ via: 'pos', posDevice: posDeviceToken_(), ...payload, appKey: APP_KEY }) }, 35000).then(r => r.json()).then(d => {
+  return netFetch_(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ via: 'pos', posDevice: posDeviceToken_(), ...withStore_(payload), appKey: APP_KEY }) }, 35000).then(r => r.json()).then(d => {
     if (d && d.code === 'pos_device') { setPosDeviceToken_(''); showPosDeviceBanner_(true); }
     return d;
   });

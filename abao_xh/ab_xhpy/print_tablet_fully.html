@@ -68,6 +68,8 @@
 // ---------- 設定 ----------
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
 const APP_KEY = 'abao-meibao-2026';
+// 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
+function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = STORE_ID; return p; }
 const STORE_ID = 'meibao';
 const STORE_LABEL = '溪湖培英店';
 const DEFAULT_BT_NAME = 'TM-m10-HIP6666';
@@ -135,7 +137,7 @@ function fetchJson(url, opts) {
   return fetch(url, { ...opts, signal: ac.signal }).then(r => r.json()).finally(() => clearTimeout(to));
 }
 function apiPost(payload) {
-  return fetchJson(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) });
+  return fetchJson(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...withStore_(payload), appKey: APP_KEY }) });
 }
 const getKey = () => { try { return localStorage.getItem('abao_print_key') || ''; } catch (e) { return ''; } };
 
@@ -143,7 +145,7 @@ const getKey = () => { try { return localStorage.getItem('abao_print_key') || ''
 const PRINT_ROLE_RANK = { '夥伴': 1, '店長': 2, '老闆': 3 };
 let printSettingsUntil_ = 0;
 function apiGetPrint_(params) {
-  const qs = new URLSearchParams({ ...params, appKey: APP_KEY, _: Date.now() }).toString();
+  const qs = new URLSearchParams({ ...withStore_(params), appKey: APP_KEY, _: Date.now() }).toString();
   return fetchJson(ORDER_BACKEND_URL + '?' + qs, { cache: 'no-store' });
 }
 async function requirePrintSettingsPerm_() {

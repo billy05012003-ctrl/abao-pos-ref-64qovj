@@ -176,6 +176,7 @@
 (function () {
   const BACKEND = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
   const APP_KEY = "abao-meibao-2026";
+  const STORE_ID = 'meibao';   // 多店化第 1 段(2026-10-15)：呼叫後端一律帶店代號
   const HIDDEN_CATEGORIES = ['單點', '三明治', '其他'];   // 僅供店員內部使用的分類，不對外顯示
   const box = document.getElementById('menu-box');
 
@@ -201,7 +202,7 @@
     for (let i = 0; i < 7;) { let j = i; while (j + 1 < 7 && keys[j + 1] === keys[i]) j++; lines.push((i === j ? '星期' + names[order[i]] : '星期' + names[order[i]] + '～星期' + names[order[j]]) + ' ' + keys[i]); i = j + 1; }
     return lines;
   }
-  fetch(BACKEND + '?' + new URLSearchParams({ action: 'storeScheduleSettings', storeId: 'meibao', appKey: APP_KEY, _: Date.now() }).toString(), { cache: 'no-store' })
+  fetch(BACKEND + '?' + new URLSearchParams({ action: 'storeScheduleSettings', storeId: STORE_ID, appKey: APP_KEY, _: Date.now() }).toString(), { cache: 'no-store' })
     .then(r => r.json())
     .then(d => {
       if (!d || d.status !== 'ok' || !d.businessHours || !d.businessHours.length) return;
@@ -209,7 +210,7 @@
       document.querySelectorAll('.biz-hours').forEach(td => { td.innerHTML = html; });
     }).catch(() => {});
 
-  const qs = new URLSearchParams({ action: 'menuCmsData', appKey: APP_KEY, _: Date.now() }).toString();
+  const qs = new URLSearchParams({ action: 'menuCmsData', storeId: STORE_ID, appKey: APP_KEY, _: Date.now() }).toString();
   fetch(BACKEND + '?' + qs, { cache: 'no-store' })
     .then(r => r.json())
     .then(data => {
