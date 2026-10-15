@@ -124,6 +124,8 @@
   .sched-day-row .sched-ranges { flex:1; display:flex; flex-direction:column; gap:6px; }
   .sched-range-item { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
   .sched-range-item input[type="time"] { padding:5px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; }
+  .t24 { display:inline-flex; align-items:center; gap:2px; }
+  .t24 select { padding:5px 4px; border:1px solid var(--border); border-radius:6px; font-size:0.82rem; background:#fff; }
   .sched-range-item button { border:none; background:none; color:var(--brand); cursor:pointer; font-size:0.78rem; }
   .sched-pickup-field { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
   .sched-pickup-field label { width:180px; flex-shrink:0; font-size:0.85rem; }
@@ -888,7 +890,7 @@ function loadPosManageLog() {
     container.innerHTML = data.logs.map(l => `
       <div class="sched-special-row">
         <b>${escapeHtml(l.type)}</b>
-        <span>${new Date(l.time).toLocaleString('zh-TW')}</span>
+        <span>${new Date(l.time).toLocaleString('zh-TW', { hour12: false })}</span>
         ${l.note ? `<span style="color:var(--muted);">（${escapeHtml(l.note)}）</span>` : ''}
       </div>`).join('');
   });
@@ -1425,6 +1427,31 @@ function loadScheduleData() {
     renderSchedHours('order', '接單時間', schedOrderHours, 'sched-order-list');
     renderSchedPickupForm();
     renderSchedSpecialList();
+    t24Upgrade_(document.getElementById('sched-special-new-time-fields'));
+  });
+}
+
+// 時間一律 24 小時制(2026-10-15 老闆要求)：原生 <input type="time"> 會照電腦/手機地區設定顯示「上午/下午」，
+// 網頁沒辦法強制。改成「時／分」兩個下拉選單，選的值寫回原本那個 input(改成 hidden)，
+// 所以讀 .value 的程式(schedSaveRange/schedAddRange/特殊日期)都不用改。已換過的不會重複換
+function t24Upgrade_(root) {
+  if (!root) return;
+  root.querySelectorAll('input[type="time"]').forEach(inp => {
+    const v = /^\d{2}:\d{2}/.test(inp.value) ? inp.value.slice(0, 5) : '';
+    const [hv, mv] = v ? v.split(':') : ['', ''];
+    const opts = (n, cur) => '<option value="">--</option>' + Array.from({ length: n }, (_, i) => {
+      const s = String(i).padStart(2, '0');
+      return `<option value="${s}"${s === cur ? ' selected' : ''}>${s}</option>`;
+    }).join('');
+    const wrap = document.createElement('span');
+    wrap.className = 't24';
+    wrap.innerHTML = `<select class="t24-h" aria-label="時">${opts(24, hv)}</select><span>:</span><select class="t24-m" aria-label="分">${opts(60, mv)}</select>`;
+    inp.type = 'hidden';
+    inp.parentNode.insertBefore(wrap, inp);
+    const [hs, ms] = wrap.querySelectorAll('select');
+    const sync = () => { inp.value = hs.value && ms.value ? hs.value + ':' + ms.value : ''; };
+    hs.onchange = () => { if (hs.value && !ms.value) ms.value = '00'; sync(); };
+    ms.onchange = sync;
   });
 }
 
@@ -1455,6 +1482,7 @@ function renderSchedHours(kind, type, rules, containerId) {
         </div>
       </div>`;
   }).join('');
+  t24Upgrade_(container);
 }
 
 function schedSaveRange(kind, type, btn) {
@@ -2145,7 +2173,7 @@ function loadMcSnapshots() {
     el.innerHTML = all.map(s => `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
         <div>
-          <div>${new Date(s.createdAt).toLocaleString('zh-TW')}　【${s.status === 'draft' ? '草稿' : '正式上線'}】</div>
+          <div>${new Date(s.createdAt).toLocaleString('zh-TW', { hour12: false })}　【${s.status === 'draft' ? '草稿' : '正式上線'}】</div>
           <div style="color:var(--muted);">${escapeHtml(s.actionLabel || '')}</div>
         </div>
         <button type="button" class="mc-save-btn" style="white-space:nowrap;" onclick="restoreMcSnapshot('${s.snapshotId}','${s.status}')">回復到這個版本</button>
@@ -3456,7 +3484,7 @@ function loadPromoSnapshotPanel(panel) {
     listEl.innerHTML = all.map(s => `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:0.82rem;">
         <div>
-          <div>${new Date(s.createdAt).toLocaleString('zh-TW')}　【${s.version === 'draft' ? '草稿' : '正式上線'}】</div>
+          <div>${new Date(s.createdAt).toLocaleString('zh-TW', { hour12: false })}　【${s.version === 'draft' ? '草稿' : '正式上線'}】</div>
           <div style="color:var(--muted);">${escapeHtml(s.actionLabel || '')}</div>
         </div>
         <button type="button" class="mc-save-btn" style="white-space:nowrap;" onclick="restorePromoSnapshot_('${s.snapshotId}','${s.version}')">回復到這個版本</button>

@@ -1113,7 +1113,7 @@ function doOpenRegister() {
     // 需要PIN時以驗證過的人為準；不需要時沿用下拉選單選的人(只記錄)
     apiPost({ action: 'openRegister', storeId: STORE_ID, staffName: staffName || openBy, staffPin }).then(data => {
       if (data.status !== 'ok') { alert(data.message || '開帳失敗'); return; }
-      document.getElementById('pos-manage-result').textContent = '已開帳（' + new Date().toLocaleTimeString('zh-TW') + '）';
+      document.getElementById('pos-manage-result').textContent = '已開帳（' + new Date().toLocaleTimeString('zh-TW', { hour12: false }) + '）';
       loadRegisterLog();
     });
   });
@@ -1140,7 +1140,7 @@ function loadRegisterLog() {
       <div class="order-card">
         <div>
           <div><strong>${l.type}</strong></div>
-          <div class="meta">${new Date(l.time).toLocaleString('zh-TW')}${l.note ? '　' + l.note : ''}</div>
+          <div class="meta">${new Date(l.time).toLocaleString('zh-TW', { hour12: false })}${l.note ? '　' + l.note : ''}</div>
         </div>
       </div>
     `).join('');
