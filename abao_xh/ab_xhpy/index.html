@@ -2125,7 +2125,11 @@ function claimGiftVoucher_() {
 function renderCheckoutVoucherList() {
   const listEl = document.getElementById('checkout-voucher-list');
   updateWalletPills_();
-  const giftHtml = giftBlockHtml_();
+  // 還沒到生效日的券(例如註冊禮設「發放後第1天生效」)灰色列在最後、標幾號起可用，客人才知道有拿到(2026-10-15 老闆要求)；
+  // 不能套用、不算進「🎟 券 N」張數
+  const upcomingHtml = memberAllVouchers_.filter(v => v.statusText === '尚未生效' && groupVoucherAllowed_(v)).map(v =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.5;"><span>${escapeHtml_(v.type)}</span><span style="color:var(--muted);font-size:0.74rem;flex:none;">${/^\d{4}-\d{2}-\d{2}$/.test(v.effectiveDate) ? homeMd_(v.effectiveDate) + '（' + homeWd_(v.effectiveDate) + '）起可用' : '尚未生效'}</span></div>`).join('');
+  const giftHtml = upcomingHtml + giftBlockHtml_();
   if (checkoutMemberVouchers.length === 0) {
     listEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:6px 0;">目前沒有可用兌換券</div>' + giftHtml;
     return;
