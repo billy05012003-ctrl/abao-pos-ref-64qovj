@@ -198,7 +198,7 @@
       .map(r => r.start + '～' + r.end).join('、') || '公休');
     if (keys.every(k => k === keys[0])) return [keys[0] === '公休' ? '公休' : '每日 ' + keys[0] + '（無公休日）'];
     const lines = [];
-    for (let i = 0; i < 7;) { let j = i; while (j + 1 < 7 && keys[j + 1] === keys[i]) j++; lines.push((i === j ? '週' + names[order[i]] : '週' + names[order[i]] + '～週' + names[order[j]]) + ' ' + keys[i]); i = j + 1; }
+    for (let i = 0; i < 7;) { let j = i; while (j + 1 < 7 && keys[j + 1] === keys[i]) j++; lines.push((i === j ? '星期' + names[order[i]] : '星期' + names[order[i]] + '～星期' + names[order[j]]) + ' ' + keys[i]); i = j + 1; }
     return lines;
   }
   fetch(BACKEND + '?' + new URLSearchParams({ action: 'storeScheduleSettings', storeId: 'meibao', appKey: APP_KEY, _: Date.now() }).toString(), { cache: 'no-store' })

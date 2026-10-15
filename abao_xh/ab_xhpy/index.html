@@ -4376,7 +4376,7 @@ function formatBusinessHoursLines_(list) {
   for (let i = 0; i < 7;) {
     let j = i;
     while (j + 1 < 7 && keys[j + 1] === keys[i]) j++;
-    lines.push((i === j ? '週' + names[order[i]] : '週' + names[order[i]] + '～週' + names[order[j]]) + ' ' + keys[i]);
+    lines.push((i === j ? '星期' + names[order[i]] : '星期' + names[order[i]] + '～星期' + names[order[j]]) + ' ' + keys[i]);
     i = j + 1;
   }
   return lines;
