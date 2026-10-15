@@ -278,6 +278,10 @@
   .hp-mcard .nm { font-size: 1.15rem; font-weight: 800; }
   .hp-mcard .tr { font-size: 0.8rem; font-weight: 700; margin-top: 2px; background: rgba(255,255,255,0.6); border-radius: 999px; padding: 2px 10px; border: none; color: inherit; cursor: pointer; font-family: inherit; }
   .hp-mcard .prog { margin-top: 8px; font-size: 0.74rem; position: relative; z-index: 1; line-height: 1.5; }
+  .hp-mcard .tbar { position: relative; z-index: 1; height: 6px; margin-top: 6px; border-radius: 999px; background: rgba(0,0,0,0.12); overflow: hidden; }
+  .hp-mcard .tbar i { display: block; height: 100%; border-radius: 999px; background: currentColor; opacity: 0.75; }
+  .hp-mcard .acts { position: relative; z-index: 1; display: flex; justify-content: flex-end; gap: 14px; margin-top: 8px; }
+  .hp-mcard .acts button { border: none; background: none; padding: 2px 0; font-size: 0.76rem; color: inherit; opacity: 0.8; text-decoration: underline; font-family: inherit; cursor: pointer; }
   .hp-mcard .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; position: relative; z-index: 1; }
   .hp-mcard .stats button { background: rgba(255,255,255,0.7); border: none; border-radius: 10px; padding: 7px 2px; text-align: center; font-size: 0.72rem; color: inherit; cursor: pointer; font-family: inherit; }
   .hp-mcard .stats b { display: block; font-size: 1.1rem; }
@@ -414,6 +418,16 @@
   </div>
 </div>
 
+<div class="overlay" id="profile-overlay" style="z-index:26;">
+  <div class="sheet">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+      <h2 style="margin:0;">會員資料</h2>
+      <button type="button" onclick="closeProfile_()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <div id="profile-body"></div>
+    <button type="button" class="btn-secondary" onclick="lineLogout_()" style="margin-top:12px;">登出</button>
+  </div>
+</div>
 <div class="overlay" id="pickup-overlay" style="z-index:26;">
   <div class="sheet">
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
@@ -715,16 +729,39 @@ function loadLiffSdk_() {
 function lineStatusHtml_(html) {
   document.getElementById('member-verify-result').innerHTML = html;
 }
-function lineLoginRedirect_() {
+// 登入時告知條款(10-16，對照大麥登入頁)：連到商店資訊頁的服務條款、隱私權政策
+const LOGIN_TERMS_HTML_ = '<div style="font-size:0.72rem;color:var(--muted);margin-top:6px;line-height:1.4;">登入即表示同意 <a href="info.html#terms" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">服務條款</a> 與 <a href="info.html#privacy" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">隱私權政策</a></div>';
+function lineLoginRedirect_(reason) {
+  saveLoginResume_(reason || 'login');
   liff.login({ redirectUri: location.href });
+}
+// 先點餐、結帳才登入(10-16)：跳去 LINE 登入前把購物車／其他需求／備註／取餐時間／姓名存在 localStorage
+// (LINE 登入有時會換分頁，sessionStorage 的購物車會不見)；回來 15 分鐘內自動放回，結帳途中登入的直接打開購物車
+const LOGIN_RESUME_KEY_ = 'abao_login_resume_' + STORE_ID;
+function saveLoginResume_(reason) {
+  try {
+    const nm = document.getElementById('cust-name'), note = document.getElementById('cust-note');
+    localStorage.setItem(LOGIN_RESUME_KEY_, JSON.stringify({
+      t: Date.now(), reason, cart,
+      needs: { sel: otherNeedsSel.slice(), none: otherNeedsNone, note: note ? note.value : '' },
+      pickup: { d: document.getElementById('pickup-date').value, t: document.getElementById('pickup-time').value },
+      name: nm ? nm.value : ''
+    }));
+  } catch (e) {}
+}
+function takeLoginResume_() {
+  let r = null;
+  try { r = JSON.parse(localStorage.getItem(LOGIN_RESUME_KEY_) || 'null'); localStorage.removeItem(LOGIN_RESUME_KEY_); } catch (e) { return null; }
+  if (!r || !r.t || Date.now() - r.t > 15 * 60000) return null;
+  return r;
 }
 // 沒登入時頁面最上方固定顯示登入列(2026-09-29 老闆測揪團發現：朋友點連結先點餐，送出時才被要求登入，
 // 登入跳轉回來剛填的名字和餐點就不見了)，不用打開購物車才看到
 function showLineLoginBar_() {
   if (document.getElementById('line-login-bar')) return;
   document.body.insertAdjacentHTML('afterbegin', `
-    <div id="line-login-bar" style="position:sticky;top:0;z-index:50;background:#06C755;color:#fff;padding:10px 12px;display:flex;align-items:center;gap:10px;font-size:0.9rem;">
-      <span style="flex:1;">線上點餐請先用 LINE 登入，登入後自動帶入會員資料</span>
+    <div id="line-login-bar" style="background:#06C755;color:#fff;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:0.82rem;">
+      <span style="flex:1;line-height:1.4;">可以先點餐，結帳時再用 LINE 登入；登入可累積點數、使用優惠券${LOGIN_TERMS_HTML_.replace('color:var(--muted)', 'color:#e8fff0')}</span>
       <button type="button" onclick="lineLoginRedirect_()" style="flex:none;background:#fff;color:#06C755;border:none;border-radius:6px;padding:6px 12px;font-weight:700;">用 LINE 登入</button>
     </div>`);
 }
@@ -732,8 +769,9 @@ function renderLineLoginButton_(msg) {
   showLineLoginBar_();
   lineStatusHtml_(`
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;">
-      <div style="color:var(--muted);margin-bottom:8px;">${msg || '線上點餐需要 LINE 登入，登入後自動帶入會員資料'}</div>
+      <div style="color:var(--muted);margin-bottom:8px;">${msg || '結帳需要 LINE 登入，登入後自動帶入會員資料'}</div>
       <button type="button" class="btn-primary" style="margin-top:0;background:#06C755;border-color:#06C755;" onclick="lineLoginRedirect_()">用 LINE 登入</button>
+      ${LOGIN_TERMS_HTML_}
     </div>`);
 }
 async function initLineLogin_() {
@@ -751,17 +789,8 @@ async function initLineLogin_() {
     return;
   }
   if (!liff.isLoggedIn()) {
-    // 一打開就先登入，登入完才開始點餐(不然點到一半跳去登入，回來填的東西會不見)。
-    // 同一個分頁只自動跳一次：客人按取消或登入失敗回來，就改顯示最上方的登入列，不會一直跳
-    // 記號存 localStorage＋時間(LINE 登入跳轉有時會換分頁，sessionStorage 會不見)，2 分鐘內跳過就不再自動跳
-    let autoTried = false;
-    try { autoTried = Date.now() - Number(localStorage.getItem('abao_line_autologin') || 0) < 120000; } catch (e) {}
-    if (!autoTried) {
-      try { localStorage.setItem('abao_line_autologin', String(Date.now())); } catch (e) {}
-      lineStatusHtml_('<div style="color:var(--muted);">前往 LINE 登入...</div>');
-      lineLoginRedirect_();
-      return;
-    }
+    // 10-16 老闆：先點餐、結帳才登入——不再一打開就自動跳 LINE 登入(原本第一次整頁跳走、2 分鐘內再開只顯示登入列，
+    // 客人看到的畫面不一致)。想先登入的按上方登入列；沒登入按「前往付款」才帶去登入，跳走前先存好購物車(saveLoginResume_)
     renderLineLoginButton_();
     return;
   }
@@ -3589,7 +3618,17 @@ function goToPayment_() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
   if (mpgPrevPaidGuard_()) return;   // 從藍新按 ‹ 回來的購物車：先確認上一筆沒付才付(10-12)
   const currentPhone = document.getElementById('cust-phone').value.trim();
-  if (!verifiedMember || verifiedMember.phone !== currentPhone) { alert('請先完成會員驗證，才能送出訂單'); return; }
+  if (!verifiedMember || verifiedMember.phone !== currentPhone) {
+    // 10-16 先點餐、結帳才登入：還沒登入 LINE → 問一聲就帶去登入(購物車先存好，回來自動打開)；已登入但還沒建會員 → 照舊提醒填表
+    const lineReady = LINE_LOGIN_ON && window.liff && typeof liff.isLoggedIn === 'function';
+    if (lineReady && !liff.isLoggedIn()) {
+      if (confirm('結帳前需要用 LINE 登入。\n登入後會自動回到購物車，點好的餐點不會不見。\n\n要前往 LINE 登入嗎？')) lineLoginRedirect_('checkout');
+      return;
+    }
+    if (LINE_LOGIN_ON && !lineReady) { alert('LINE 登入元件還在載入，請稍等幾秒再按一次'); return; }
+    alert('請先完成會員驗證，才能送出訂單');
+    return;
+  }
   if (!otherNeedsReady_()) return;
   if (!document.getElementById('agree-terms').checked) { alert('請先勾選同意自取規則、退款政策、服務條款及隱私權政策'); return; }
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
@@ -5329,11 +5368,49 @@ function renderHomePerkMember_() {
       <button type="button" class="tr" onclick="openTierOverlay()">👑 ${escapeHtml_(tierName)} ›</button>
     </div>
     ${progress ? `<div class="prog">${progress}</div>` : ''}
+    ${tierProgressBar_(m)}
     <div class="stats">
       <button type="button" onclick="openWallet_('points')"><b>${Number(m.points) || 0}</b>⭐ 點數</button>
       <button type="button" onclick="openWallet_('voucher')"><b>${voucherCountText_()}</b>🎟 我的兌換券</button>
       <button type="button" onclick="openTierOverlay()"><b>›</b>👑 等級好禮</button>
-    </div>`;
+    </div>
+    <div class="acts"><button type="button" onclick="openProfile_()">會員資料</button><button type="button" onclick="lineLogout_()">登出</button></div>`;
+}
+// 升等進度條(10-16)：有下一級＝累積/下一級門檻；最高級＝累積/續等門檻(滿了就是滿格)
+function tierProgressBar_(m) {
+  if (!m || !SHOP_MEMBER_TIERS.length) return '';
+  const tiers = SHOP_MEMBER_TIERS.slice().sort((a, b) => a.order - b.order);
+  const cur = tiers.find(t => t.name === m.tier);
+  if (!cur) return '';
+  const spend = Number(m.periodSpend) || 0;
+  const next = tiers.find(t => t.order > cur.order && t.threshold > spend);
+  const goal = next ? Number(next.threshold) : (cur.continuationThreshold != null ? Number(cur.continuationThreshold) : 0);
+  if (!goal) return '';
+  const pct = Math.max(2, Math.min(100, Math.round(spend / goal * 100)));
+  return `<div class="tbar" title="${pct}%"><i style="width:${pct}%"></i></div>`;
+}
+// 會員資料(10-16)：先只能看；修改姓名/生日下一次加(要後端)，手機不給客人自己改
+function openProfile_() {
+  const m = verifiedMember;
+  if (!m) return;
+  const ph = String(m.phone || '');
+  const masked = ph.length === 10 ? ph.slice(0, 4) + '-***-' + ph.slice(7) : ph;
+  const tierName = m.tier ? (m.tier.endsWith('會員') ? m.tier : m.tier + '會員') : '';
+  const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:0.9rem;"><span style="color:var(--muted);">${k}</span><span style="text-align:right;">${v}</span></div>`;
+  const bd = m.birthday && /^\d{4}-\d{2}-\d{2}$/.test(m.birthday) ? m.birthday.slice(5).replace('-', '/') : '未填';
+  document.getElementById('profile-body').innerHTML =
+    row('姓名', escapeHtml_(m.name || '')) + row('手機', escapeHtml_(masked)) + row('生日', escapeHtml_(bd)) +
+    row('會員等級', escapeHtml_(tierName)) + row('點數', (Number(m.points) || 0) + ' 點') + row('登入方式', 'LINE') +
+    '<div style="font-size:0.78rem;color:var(--muted);margin-top:10px;line-height:1.5;">資料需要修改，請洽門市或客服 0909-504662。</div>';
+  document.getElementById('profile-overlay').classList.add('open');
+}
+function closeProfile_() { document.getElementById('profile-overlay').classList.remove('open'); }
+// 登出(10-16)：登出 LINE 後重新整理，購物車留著(這個分頁)；下次結帳再登入
+function lineLogout_() {
+  if (!confirm('確定要登出 LINE 嗎？\n登出後點餐頁不會顯示你的點數和兌換券，結帳時需要再登入。')) return;
+  try { if (window.liff && liff.isLoggedIn && liff.isLoggedIn()) liff.logout(); } catch (e) {}
+  try { localStorage.removeItem('abao_line_autologin'); } catch (e) {}
+  location.reload();
 }
 function onHomeMemberLogin_() {
   // 已登入 LINE 但還沒建會員：註冊表單在「我的訂單」裡；還沒登入 LINE 就直接去登入
@@ -5473,8 +5550,24 @@ scheduleSettingsReady.then(() => {
   populatePickupDate();
   populatePickupTime(document.getElementById('pickup-date').value);
   checkOrderWindow();
+  // 登入前選好的取餐時間放回去(額滿或過了就照原本規則改最早時段)；結帳途中去登入的，回來直接打開購物車
+  if (loginResume_ && loginResume_.pickup && loginResume_.pickup.t) { setCheckoutPickup_(loginResume_.pickup.d, loginResume_.pickup.t); updatePickupBar_(); }
+  if (loginResume_ && loginResume_.reason === 'checkout' && cart.length) openCart();
 });
 loadCartSession();
+// 先點餐、結帳才登入(10-16)：從 LINE 登入回來，把登入前存的購物車等放回去(這個分頁的購物車是空的才放，免得蓋掉)
+const loginResume_ = takeLoginResume_();
+if (loginResume_ && !cart.length && Array.isArray(loginResume_.cart) && loginResume_.cart.length) {
+  cart = loginResume_.cart;
+  const nb = loginResume_.needs;
+  if (nb) {
+    otherNeedsSel = Array.isArray(nb.sel) ? nb.sel.slice() : [];
+    otherNeedsNone = !!nb.none;
+    const noteEl = document.getElementById('cust-note'); if (noteEl) noteEl.value = nb.note || '';
+  }
+  const nmEl = document.getElementById('cust-name'); if (nmEl && loginResume_.name && !nmEl.value) nmEl.value = loginResume_.name;
+  saveCartSession();
+}
 updateCartBar();
 if (LINE_LOGIN_ON) initLineLogin_();
 else {
