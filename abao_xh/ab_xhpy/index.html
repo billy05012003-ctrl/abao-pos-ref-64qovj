@@ -1821,7 +1821,7 @@ function updateWalletPills_() {
   const vp = document.getElementById('ms-voucher-pill'), pp = document.getElementById('ms-points-pill');
   if (!vp || !pp) return;
   const used = checkoutSelectedVouchers.length;
-  vp.textContent = used ? `🎟 已套用 ${used}` : `🎟 券 ${checkoutMemberVouchers.length}`;
+  vp.textContent = used ? `🎟 已套用 ${used}` : `🎟 券 ${voucherCountText_()}`;
   vp.classList.toggle('on', used > 0);
   pp.textContent = `⭐ ${verifiedMember ? (Number(verifiedMember.points) || 0) : 0} 點`;
 }
@@ -2122,12 +2122,17 @@ function claimGiftVoucher_() {
   }).catch(() => { msg.textContent = '領取失敗，請確認網路連線後再試'; btn.disabled = false; });
 }
 
+// 還沒到生效日的券(清單灰色列、張數「＋N」共用同一份)
+function upcomingVouchers_() { return memberAllVouchers_.filter(v => v.statusText === '尚未生效' && groupVoucherAllowed_(v)); }
+// 券張數：今天能用的＋還沒生效的分開寫，例如「1＋2」；沒有還沒生效的就只寫「1」(2026-10-15 老闆選 B)
+function voucherCountText_() { const u = upcomingVouchers_().length; return checkoutMemberVouchers.length + (u ? '＋' + u : ''); }
+
 function renderCheckoutVoucherList() {
   const listEl = document.getElementById('checkout-voucher-list');
   updateWalletPills_();
   // 還沒到生效日的券(例如註冊禮設「發放後第1天生效」)灰色列在最後、標幾號起可用，客人才知道有拿到(2026-10-15 老闆要求)；
-  // 不能套用、不算進「🎟 券 N」張數
-  const upcomingHtml = memberAllVouchers_.filter(v => v.statusText === '尚未生效' && groupVoucherAllowed_(v)).map(v =>
+  // 不能套用；張數另外寫成「券 1＋2」(voucherCountText_)
+  const upcomingHtml = upcomingVouchers_().map(v =>
     `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.5;"><span>${escapeHtml_(v.type)}</span><span style="color:var(--muted);font-size:0.74rem;flex:none;">${/^\d{4}-\d{2}-\d{2}$/.test(v.effectiveDate) ? homeMd_(v.effectiveDate) + '（' + homeWd_(v.effectiveDate) + '）起可用' : '尚未生效'}</span></div>`).join('');
   const giftHtml = upcomingHtml + giftBlockHtml_();
   if (checkoutMemberVouchers.length === 0) {
@@ -5323,7 +5328,7 @@ function renderHomePerkMember_() {
     ${progress ? `<div class="prog">${progress}</div>` : ''}
     <div class="stats">
       <button type="button" onclick="openWallet_('points')"><b>${Number(m.points) || 0}</b>⭐ 點數</button>
-      <button type="button" onclick="openWallet_('voucher')"><b>${checkoutMemberVouchers.length}</b>🎟 我的兌換券</button>
+      <button type="button" onclick="openWallet_('voucher')"><b>${voucherCountText_()}</b>🎟 我的兌換券</button>
       <button type="button" onclick="openTierOverlay()"><b>›</b>👑 等級好禮</button>
     </div>`;
 }
