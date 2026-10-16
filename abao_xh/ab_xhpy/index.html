@@ -609,6 +609,7 @@
       <pre id="order-summary"></pre>
       <button class="btn-primary" onclick="closeAll()">完成，關閉視窗</button>
       <button type="button" id="confirm-mine-btn" onclick="closeAll(); openMyOrdersTab_()" style="display:block;width:100%;margin-top:8px;padding:10px;border:1px solid var(--border);background:#fff;border-radius:10px;font-weight:700;color:var(--brand);">查看我的訂單</button>
+      <a id="confirm-friend" href="#" target="_blank" rel="noopener" style="display:none;margin-top:14px;padding:10px;border-radius:10px;background:#06C755;color:#fff;font-weight:700;text-decoration:none;">加入 LINE 好友，收優惠與活動通知<span style="display:block;font-size:0.75rem;font-weight:400;opacity:0.9;margin-top:2px;">下次從官方帳號選單就能直接點餐</span></a>
     </div>
   </div>
 </div>
@@ -712,6 +713,7 @@ function apiPost_(payload) {
 // 會員手機仍放在原本的 #cust-phone(隱藏)，後面結帳/揪團/兌換券的既有流程都照舊讀它，不用各自改
 // ---------------------------------------------------------------
 const LIFF_ID = '2011773510-WG4YyKFL';
+const LINE_OA_ID_ = '@056bofyb';   // 官方帳號 A-Bao溪湖直營(訂單完成「加入 LINE 好友」按鈕用)
 // 正式上線時改 true(同時後端 LINE_LOGIN_REQUIRED_ 改 true、LINE Login 頻道要先 Publish)；
 // 上線前只有測試頁 line_test.html(或網址加 ?linetest=1)走 LINE 登入
 const LINE_LOGIN_OPEN = true;
@@ -834,6 +836,23 @@ async function initLineLogin_() {
   if (data.status === 'ok') applyLineMember_(data.member);
   else renderLineRegister_(data.lineName || '');
   if (homeTab_ === 'mine') loadMyOrders_(true);   // 我的訂單(10-08)：停在我的訂單時登入完成就讀
+}
+// 訂單完成提醒加好友(10-16 老闆)：紙本菜單 QR 直接進點餐頁、不經官方帳號，第一次 LINE 登入沒勾「加入好友」的客人在這裡補一次；
+// 已經是好友就不顯示(liff.getFriendship)，查不到好友狀態時照樣顯示
+function showFriendPromo_() {
+  const el = document.getElementById('confirm-friend');
+  if (!el) return;
+  el.href = 'https://line.me/R/ti/p/' + encodeURIComponent(LINE_OA_ID_);
+  el.style.display = 'none';
+  try {
+    if (window.liff && liff.isLoggedIn()) {
+      liff.getFriendship()
+        .then(r => { el.style.display = (r && r.friendFlag) ? 'none' : 'block'; })
+        .catch(() => { el.style.display = 'block'; });
+      return;
+    }
+  } catch (e) {}
+  el.style.display = 'block';
 }
 function applyLineMember_(member) {
   document.getElementById('cust-phone').value = member.phone;
@@ -3867,6 +3886,7 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
     const msg = document.getElementById('confirm-msg');
     if (msg && ctx.payAtPickup) msg.textContent = '訂單已成立，請於取餐時完成付款。如需協助請來電客服 0909-504662。';
     document.getElementById('confirm-view').style.display = 'block';
+    showFriendPromo_();
   };
   // 核銷失敗不擋訂單完成流程(客人已經看到折抵後金額，不應該卡在這裡)，只記log供事後排查
   const redeemAppliedVouchers = () => {
@@ -4189,6 +4209,7 @@ function pollMpgOrderStatus_(orderId, ctx, attempt) {
         document.getElementById('order-no').textContent = orderId;
         document.getElementById('order-summary').textContent = '付款已完成，取餐時請至現場出示此畫面。';
         document.getElementById('confirm-view').style.display = 'block';
+        showFriendPromo_();
       }
       try { localStorage.removeItem('abao_mpg_pending_' + orderId); } catch (e) {}
       cart = [];
