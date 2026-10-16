@@ -632,6 +632,7 @@
     <div class="pmg-grid">
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('partner')"><span class="ic">👥</span>夥伴帳號管理</button>
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('perm')"><span class="ic">🔑</span>角色權限設定</button>
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('linebind')"><span class="ic">💬</span>會員 LINE 綁定<br><span class="pmg-soon" id="bo-linebind-badge"></span></button>
     </div>
     <div class="pmg-grp">系統</div>
     <div class="pmg-grid">
@@ -640,6 +641,11 @@
       <!-- 10-13 每台門市平板用哪種出單方式(藍牙／網路＋IP)，只看不改(設定在平板 POS管理→出單機設定) -->
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('printer')"><span class="ic">🖨️</span>門市平板（出單方式）</button>
     </div>
+  </div>
+  <!-- 10-16 會員 LINE 綁定(限老闆)：換了新 LINE 的客人登入被擋時自動留申請，老闆回撥會員手機確認本人後換綁；也能只解除 -->
+  <div id="pmg-subview-linebind" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 會員 LINE 綁定 <span class="ops-refresh" onclick="loadBoLineBind_()">重新整理</span></div>
+    <div id="bo-pmg-linebind"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pmg-subview-printer" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 門市平板（出單方式） <span class="ops-refresh" onclick="loadBoPrinterModes_()">重新整理</span></div>
@@ -1077,6 +1083,82 @@ function loadBoPrinterModes_() {
       <div class="ops-meta" style="margin-top:6px;">只能看；要改請到那台平板「POS管理 → 出單機設定」（要店長以上 PIN）。平板每分鐘回報一次。</div></div>`;
   }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
 }
+// 10-16 會員 LINE 綁定(限老闆，後端也擋)：申請清單→回撥會員手機確認本人→換綁；另可只解除；下方最近 30 筆紀錄
+let boLineBindReqs_ = [];
+function loadBoLineBind_() {
+  const box = document.getElementById('bo-pmg-linebind');
+  if (!isBoOwner_()) { box.innerHTML = '<div class="empty-hint">會員 LINE 綁定只有老闆可以處理，請用老闆帳號登入後台。</div>'; return; }
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiPost({ action: 'lineBindAdmin', storeId: SCHED_STORE_ID }).then(d => {
+    if (d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml(d.message || '讀取失敗') + '</div>'; return; }
+    boLineBindReqs_ = d.requests || [];
+    const badge = document.getElementById('bo-linebind-badge');
+    if (badge) badge.textContent = boLineBindReqs_.length ? boLineBindReqs_.length + ' 筆待處理' : '';
+    const maskPhone = p => String(p).slice(0, 4) + '***' + String(p).slice(-3);
+    const reqHtml = boLineBindReqs_.map((r, i) => {
+      const kind = !r.isMember ? '⚠️ 查無這支手機的會員' : r.paused ? '綁定已解除，等重新綁定' : r.currentBound ? (r.sameLine ? '已經綁這個 LINE' : '換綁：原本綁別的 LINE') : '第一次綁 LINE';
+      return `<div class="ops-order" style="align-items:flex-start;"><div style="flex:1;">
+          <b>${escapeHtml(r.phone)}</b>　會員：${escapeHtml(r.memberName || '—')}　<span style="color:#a3620a;">${kind}</span>
+          <div class="ops-meta">${boFmtMs_(r.time)} 申請｜新 LINE 名稱：${escapeHtml(r.lineName || '—')}｜客人填的姓名：${escapeHtml(r.filledName || '—')}</div>
+          <input type="text" id="lb-note-${i}" maxlength="60" placeholder="確認方式(必填)，例：已回撥 ${maskPhone(r.phone)}，本人確認、問了生日" style="width:100%;margin-top:6px;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
+        </div><div style="display:flex;flex-direction:column;gap:6px;margin-left:8px;">
+          <button type="button" class="mc-add-btn" style="width:auto;padding:6px 12px;margin:0;" ${r.isMember ? '' : 'disabled'} onclick="boLineBindApprove_(${i})">換綁到這個 LINE</button>
+          <button type="button" style="padding:6px 12px;border:1px solid var(--border);background:#fff;border-radius:6px;" onclick="boLineBindReject_(${i})">不處理</button>
+        </div></div>`;
+    }).join('');
+    const logHtml = (d.logs || []).map(l => `<div class="sched-special-row"><b>${escapeHtml(l.type)}</b><span>${boFmtMs_(l.time)}</span><span>${escapeHtml(l.phone)}</span>
+      <span style="color:var(--muted);">${l.oldId ? '舊 ' + escapeHtml(l.oldId) + ' → ' : ''}${l.newId ? '新 ' + escapeHtml(l.newId) + (l.newName ? '（' + escapeHtml(l.newName) + '）' : '') : ''}｜${escapeHtml(l.by)}${l.note ? '｜' + escapeHtml(l.note) : ''}</span></div>`).join('');
+    box.innerHTML = `
+      <div class="ops-card"><h3>待處理的綁定申請</h3>
+        <div class="ops-meta" style="margin-bottom:6px;">客人換了新的 LINE、登入點餐頁時被擋下，系統會自動留在這裡。<b>處理前請回撥「會員資料上的手機號碼」</b>(不是客人另外給的號碼)，接通後再問一題只有本人知道的(生日、最近點了什麼)，確認是本人才按「換綁」。換綁後舊 LINE 立刻失去會員身分；點數、券、等級全部跟著。</div>
+        ${reqHtml || '<div class="ops-meta" style="padding:6px 0;">目前沒有待處理的申請</div>'}
+      </div>
+      <div class="ops-card" style="margin-top:12px;"><h3>只解除綁定</h3>
+        <div class="ops-meta" style="margin-bottom:6px;">LINE 被盜、或有人冒用別人的手機綁走會員時先解除，保住點數。解除後本人再用自己的 LINE 登入，會出現在上面的申請清單，回撥確認後再綁回。</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <input type="tel" id="lb-unbind-phone" maxlength="10" placeholder="會員手機 09xxxxxxxx" style="padding:6px;border:1px solid var(--border);border-radius:6px;width:150px;">
+          <input type="text" id="lb-unbind-note" maxlength="60" placeholder="解除原因(必填)" style="flex:1;min-width:160px;padding:6px;border:1px solid var(--border);border-radius:6px;">
+          <button type="button" style="padding:6px 12px;border:1px solid #a32d2d;color:#a32d2d;background:#fff;border-radius:6px;" onclick="boLineUnbind_()">解除綁定</button>
+        </div>
+      </div>
+      <div class="ops-card" style="margin-top:12px;"><h3>最近 30 筆綁定紀錄</h3>
+        <div class="ops-meta" style="margin-bottom:6px;">「自動綁定」＝門市辦的老會員第一次用 LINE 登入時系統自動綁好(比照 iCHEF 用手機對會員)；有人反映被冒用就用上面的「只解除綁定」。</div>
+        ${logHtml || '<div class="ops-meta" style="padding:6px 0;">還沒有紀錄</div>'}
+      </div>`;
+  }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+}
+function boLineBindApprove_(i) {
+  const r = boLineBindReqs_[i]; if (!r) return;
+  const note = (document.getElementById('lb-note-' + i).value || '').trim();
+  if (!note) { alert('請先填寫確認方式(例如：已回撥手機，本人確認)'); return; }
+  if (!confirm(`確定把會員 ${r.phone}（${r.memberName || '—'}）換綁到新 LINE「${r.lineName || '—'}」？\n\n舊 LINE 會立刻失去會員身分，點數、券、等級都跟著新 LINE。`)) return;
+  apiPost({ action: 'lineBindApprove', storeId: SCHED_STORE_ID, row: r.row, note }).then(d => {
+    if (d.status !== 'ok') { alert(d.message || '換綁失敗'); return; }
+    alert('完成：' + d.type + '。請客人重新整理點餐頁。');
+    loadBoLineBind_();
+  }).catch(() => alert('網路異常，請稍後再試'));
+}
+function boLineBindReject_(i) {
+  const r = boLineBindReqs_[i]; if (!r) return;
+  const note = (document.getElementById('lb-note-' + i).value || '').trim();
+  if (!confirm(`這筆申請(${r.phone})不處理？`)) return;
+  apiPost({ action: 'lineBindReject', storeId: SCHED_STORE_ID, row: r.row, note }).then(d => {
+    if (d.status !== 'ok') { alert(d.message || '操作失敗'); return; }
+    loadBoLineBind_();
+  }).catch(() => alert('網路異常，請稍後再試'));
+}
+function boLineUnbind_() {
+  const phone = (document.getElementById('lb-unbind-phone').value || '').trim();
+  const note = (document.getElementById('lb-unbind-note').value || '').trim();
+  if (!/^09\d{8}$/.test(phone)) { alert('請輸入正確的會員手機(09 開頭 10 碼)'); return; }
+  if (!note) { alert('請填寫解除原因'); return; }
+  if (!confirm(`確定解除會員 ${phone} 的 LINE 綁定？\n\n解除後這位會員暫時不能線上點餐，要等本人用 LINE 登入、你回撥確認後再綁回。`)) return;
+  apiPost({ action: 'lineUnbind', storeId: SCHED_STORE_ID, phone, note }).then(d => {
+    if (d.status !== 'ok') { alert(d.message || '解除失敗'); return; }
+    alert('已解除綁定');
+    loadBoLineBind_();
+  }).catch(() => alert('網路異常，請稍後再試'));
+}
 function loadBoCfgStatus_() {
   const box = document.getElementById('bo-pmg-ver');
   box.innerHTML = '<div class="empty-hint">載入中...</div>';
@@ -1298,6 +1380,8 @@ function switchBackofficeTab(name) {
   document.getElementById('pmg-subview-ver').style.display = (name === 'posmanage' && currentPosManageSubview === 'ver') ? 'block' : 'none';
   document.getElementById('pmg-subview-printer').style.display = (name === 'posmanage' && currentPosManageSubview === 'printer') ? 'block' : 'none';
   if (name === 'posmanage' && currentPosManageSubview === 'printer') loadBoPrinterModes_();
+  document.getElementById('pmg-subview-linebind').style.display = (name === 'posmanage' && currentPosManageSubview === 'linebind') ? 'block' : 'none';
+  if (name === 'posmanage' && currentPosManageSubview === 'linebind') loadBoLineBind_();
   if (name === 'posmanage' && currentPosManageSubview === 'home') loadBoPmgToday_();
   if (name === 'posmanage' && currentPosManageSubview === 'ver') loadBoCfgStatus_();
   if (name === 'posmanage') {
