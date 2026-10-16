@@ -319,6 +319,16 @@
   .hp-mcard.mini .stats { margin-top: 8px; }
   .hp-mcard.mini .stats button { padding: 6px 2px; font-size: 0.78rem; white-space: nowrap; }
   .hp-mcard.mini .stats b { display: inline; font-size: 0.95rem; margin-right: 3px; }
+  /* 10-16 點數紀錄、集點禮詳細、會員資料修改 */
+  .pl-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
+  .pl-row .pl-main { flex: 1; min-width: 0; }
+  .pl-row .pl-sub { color: var(--muted); font-size: 0.74rem; margin-top: 1px; }
+  .pl-row .pl-d { font-weight: 700; white-space: nowrap; }
+  .pl-row .pl-d.up { color: #1e8e3e; } .pl-row .pl-d.down { color: #c0392b; }
+  .pl-row .pl-bal { color: var(--muted); font-size: 0.74rem; white-space: nowrap; min-width: 52px; text-align: right; }
+  .rg-info { border: none; background: none; color: var(--brand); font-size: 0.76rem; padding: 0 2px; cursor: pointer; text-decoration: underline; font-family: inherit; }
+  .rg-detail { background: var(--bg); border-radius: 8px; padding: 8px 10px; margin: 2px 0 6px; font-size: 0.78rem; line-height: 1.6; }
+  .pf-input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; font-family: inherit; margin-top: 4px; }
   #cart-pickup-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font-size: 0.9rem; cursor: pointer; }
   #cart-pickup-row .cp-text { flex: 1; }
   #cart-pickup-row .cp-more { color: var(--brand); flex: none; }
@@ -418,7 +428,7 @@
       <button type="button" id="wallet-tab-points" onclick="switchWalletTab_('points')">集點兌換</button>
     </div>
     <div id="wallet-panel-voucher"><div id="checkout-voucher-list"></div></div>
-    <div id="wallet-panel-points" style="display:none;"><div id="cart-redeem-box"></div></div>
+    <div id="wallet-panel-points" style="display:none;"><div id="cart-redeem-box"></div><div id="point-log-box"></div></div>
     <button type="button" class="btn-primary" onclick="closeWallet_()">完成</button>
   </div>
 </div>
@@ -906,7 +916,7 @@ function applyPromoSettings_(data) {
   });
   // 集點禮兌換的券若不在期間內就先不列(後端也會擋)
   const promoByName_ = Object.fromEntries((data.promos || []).map(p => [p.name, p]));
-  POINT_REDEMPTION_CATALOG = (data.pointGifts || []).filter(g => g.status !== '停用' && isPromoInPeriod_(promoByName_[g.voucherType])).map(g => ({ points: g.points, voucherType: g.voucherType }));
+  POINT_REDEMPTION_CATALOG = (data.pointGifts || []).filter(g => g.status !== '停用' && isPromoInPeriod_(promoByName_[g.voucherType])).map(g => ({ points: g.points, voucherType: g.voucherType, desc: g.desc || '' }));
 }
 
 const PROMO_SETTINGS_CACHE_KEY = 'abao_pos_promo_settings_cache_v1';
@@ -1796,7 +1806,9 @@ function tierProgressText_(member) {
   const spend = Number(member.periodSpend) || 0;
   const fmt = n => '$' + Number(n).toLocaleString('en-US');
   const next = tiers.find(t => t.order > cur.order && t.threshold > spend);
-  if (next) return `再消費 <b>${fmt(next.threshold - spend)}</b> 就升級${escapeHtml_(next.name)}（半年內累積 ${fmt(spend)} / ${fmt(next.threshold)}）`;
+  const keep = member.tierKeepUntil ? `，等級保留到 ${tierKeepText_(member)}` : '';   // 10-16 升等後 6 個月保護期
+  if (next) return `再消費 <b>${fmt(next.threshold - spend)}</b> 就升級${escapeHtml_(next.name)}（半年內累積 ${fmt(spend)} / ${fmt(next.threshold)}）${keep}`;
+  if (keep && !tiers.some(t => t.order > cur.order)) return `已是最高等級，半年內累積 ${fmt(spend)}${keep}`;
   if (!tiers.some(t => t.order > cur.order) && cur.continuationThreshold != null) {
     return spend >= cur.continuationThreshold
       ? `已是最高等級，半年內累積 ${fmt(spend)}，已達續等門檻 ${fmt(cur.continuationThreshold)}`
@@ -1817,13 +1829,31 @@ function renderCartRedeem_() {
       <summary style="font-size:0.82rem;font-weight:600;color:var(--muted);cursor:pointer;">集點兌換（目前 ${pts} 點${canCount ? `，可兌換 ${canCount} 項` : ''}）</summary>
       ${POINT_REDEMPTION_CATALOG.map((e, idx) => {
         const enough = pts >= e.points;
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:0.82rem;${enough ? '' : 'opacity:0.5;'}">
-          <span>${e.points}點 → ${escapeHtml_(e.voucherType)}${enough ? '' : `<span style="color:#c0392b;">（還差${e.points - pts}點）</span>`}</span>
-          <button type="button" class="btn-secondary" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" ${enough ? '' : 'disabled'} onclick="redeemPointsInCart_(this, ${idx})">兌換</button>
-        </div>`;
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:0.82rem;">
+          <span style="${enough ? '' : 'opacity:0.5;'}">${e.points}點 → ${escapeHtml_(e.voucherType)}${enough ? '' : `<span style="color:#c0392b;">（還差${e.points - pts}點）</span>`}</span>
+          <span style="flex:none;display:flex;align-items:center;gap:6px;"><button type="button" class="rg-info" onclick="toggleRedeemDetail_(${idx})">詳細</button>
+          <button type="button" class="btn-secondary" style="width:auto;padding:3px 10px;margin-top:0;font-size:0.76rem;" ${enough ? '' : 'disabled'} onclick="redeemPointsInCart_(this, ${idx})">兌換</button></span>
+        </div>
+        <div class="rg-detail" id="rg-detail-${idx}" style="display:none;">${redeemDetailHtml_(e)}</div>`;
       }).join('')}
     </details>`;
   updateWalletPills_();
+}
+// 集點禮「詳細資訊」(10-16 老闆定案 4-1)：自動帶 所需點數／換到什麼／使用期限／限定等級，加上後台「說明」欄
+function redeemDetailHtml_(e) {
+  const p = ALL_PROMOS.find(x => x.name === e.voucherType) || {};
+  let what = '';
+  if (p.mode === 'fixed' && p.amount) what = `折抵 $${p.amount}`;
+  else if (p.effect === 'free' && p.targetItem) what = `免費兌換一份「${escapeHtml_(p.targetItem)}${p.targetSize ? '（' + escapeHtml_(p.targetSize) + '）' : ''}」`;
+  const lines = [`所需點數：${e.points} 點`, `換到：${escapeHtml_(e.voucherType)}${what ? '，' + what : ''}`,
+    '使用期限：兌換後不限期限，用掉為止', '兌換後到「兌換券」分頁，結帳時套用'];
+  if (p.minTier) lines.push(`限定：${escapeHtml_(p.minTier.endsWith('會員') ? p.minTier : p.minTier + '會員')}以上才能兌換`);
+  if (e.desc) lines.push(`說明：${escapeHtml_(e.desc)}`);
+  return lines.join('<br>');
+}
+function toggleRedeemDetail_(idx) {
+  const el = document.getElementById('rg-detail-' + idx);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 var cartRedeemOpen_ = true;   // 2026-09-30 搬到首頁「兌換券與集點」視窗，預設展開   // var：renderCartRedeem_寫在前面，避免let暫時性死區
 function redeemPointsInCart_(btn, idx) {
@@ -1850,6 +1880,7 @@ function updateWalletPills_() {
   setTimeout(renderMemberCard_, 0);
 }
 function switchWalletTab_(tab) {
+  if (tab === 'points') loadPointLog_();
   document.getElementById('wallet-tab-voucher').classList.toggle('active', tab === 'voucher');
   document.getElementById('wallet-tab-points').classList.toggle('active', tab === 'points');
   document.getElementById('wallet-panel-voucher').style.display = tab === 'voucher' ? '' : 'none';
@@ -1862,6 +1893,28 @@ function openWallet_(tab) {
   document.getElementById('wallet-overlay').classList.add('open');
 }
 function closeWallet_() { document.getElementById('wallet-overlay').classList.remove('open'); }
+// 點數紀錄(10-16 老闆定案 2-1～2-3)：後端從 10/16 起逐筆記；之前的只有一列「開始記錄」(那時已累積的點數)
+function loadPointLog_() {
+  const box = document.getElementById('point-log-box');
+  if (!box) return;
+  if (!verifiedMember) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="hp-sec" style="margin-top:14px;">點數紀錄</div><div style="font-size:0.8rem;color:var(--muted);padding:6px 0;">載入中…</div>';
+  apiGet_({ action: 'pointLog' }).then(data => {
+    if (!data || data.status !== 'ok') throw new Error((data && data.message) || '');
+    box.innerHTML = '<div class="hp-sec" style="margin-top:14px;">點數紀錄</div>' + pointLogHtml_(data);
+  }).catch(() => { box.innerHTML = '<div class="hp-sec" style="margin-top:14px;">點數紀錄</div><div style="font-size:0.8rem;color:var(--muted);padding:6px 0;">點數紀錄載入失敗，請稍後再試</div>'; });
+}
+function pointLogHtml_(data) {
+  const md = t => { const m = /^\d{4}-(\d{2})-(\d{2})(?: (\d{2}:\d{2}))?/.exec(t || ''); return m ? Number(m[1]) + '/' + Number(m[2]) + (m[3] ? ' ' + m[3] : '') : ''; };
+  if (!data.list.length) return `<div style="font-size:0.8rem;color:var(--muted);padding:6px 0;line-height:1.6;">目前累積 ${Number(data.points) || 0} 點。<br>逐筆點數紀錄從 10/16 開始，之後每次加點、扣點都會列在這裡。</div>`;
+  return data.list.map(x => {
+    if (x.type === '開始記錄') return `<div class="pl-row"><div class="pl-main">${md(x.time).split(' ')[0]} 以前累積<div class="pl-sub">這天以前沒有逐筆紀錄</div></div><span class="pl-d">${x.balance} 點</span><span class="pl-bal"></span></div>`;
+    const d = Number(x.delta) || 0;
+    const sub = [md(x.time), x.store, x.note || (x.orderId ? '單號 ' + x.orderId : '')].filter(Boolean).map(escapeHtml_).join('・');
+    return `<div class="pl-row"><div class="pl-main">${escapeHtml_(x.type)}<div class="pl-sub">${sub}</div></div>
+      <span class="pl-d ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '+' : ''}${d}</span><span class="pl-bal">剩 ${x.balance}</span></div>`;
+  }).join('') + (data.total > data.list.length ? '<div style="font-size:0.74rem;color:var(--muted);padding:6px 0;">只顯示最近 100 筆</div>' : '');
+}
 function renderMemberVerified_(member) {
   verifiedMember = member;
   renderMemberStrip_(member);
@@ -5360,7 +5413,8 @@ function renderMemberCard_() {
       <button type="button" onclick="openTierOverlay()">👑 等級好禮 ›</button>
     </div>`;
 }
-// 進度條後面的「還差 $X」：有下一級＝離升級；最高級＝離續等；已達門檻就不寫
+function tierKeepText_(m) { const x = /^(\d{4})-(\d{2})-(\d{2})$/.exec(m && m.tierKeepUntil || ''); return x ? x[1] + '/' + Number(x[2]) + '/' + Number(x[3]) : ''; }
+// 進度條後面的「還差 $X」：有下一級＝離升級；最高級＝離續等(保護期內改寫「保留到 YYYY/M/D」)；已達門檻就不寫
 function tierGapText_(m) {
   if (!m || !SHOP_MEMBER_TIERS.length) return '';
   const tiers = SHOP_MEMBER_TIERS.slice().sort((a, b) => a.order - b.order);
@@ -5368,6 +5422,7 @@ function tierGapText_(m) {
   if (!cur) return '';
   const spend = Number(m.periodSpend) || 0;
   const next = tiers.find(t => t.order > cur.order && t.threshold > spend);
+  if (!next && m.tierKeepUntil) return '保留到 ' + tierKeepText_(m);
   const goal = next ? Number(next.threshold) : (cur.continuationThreshold != null ? Number(cur.continuationThreshold) : 0);
   return goal > spend ? '還差 $' + (goal - spend).toLocaleString('en-US') : '';
 }
@@ -5384,7 +5439,8 @@ function tierProgressBar_(m) {
   const pct = Math.max(2, Math.min(100, Math.round(spend / goal * 100)));
   return `<div class="tbar" title="${pct}%"><i style="width:${pct}%"></i></div>`;
 }
-// 會員資料(10-16)：先只能看；修改姓名/生日下一次加(要後端)，手機不給客人自己改
+// 會員資料(10-16 老闆定案 1-1～1-3)：姓名隨時改(不可空白、最多 20 字)；生日沒填過可自己填一次、填過要找門市/客服(有生日禮)；
+// 手機不能自己改。後端 updateMemberProfile 以 LINE 綁定的會員為準，規則同一套
 function openProfile_() {
   const m = verifiedMember;
   if (!m) return;
@@ -5392,12 +5448,38 @@ function openProfile_() {
   const masked = ph.length === 10 ? ph.slice(0, 4) + '-***-' + ph.slice(7) : ph;
   const tierName = m.tier ? (m.tier.endsWith('會員') ? m.tier : m.tier + '會員') : '';
   const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:0.9rem;"><span style="color:var(--muted);">${k}</span><span style="text-align:right;">${v}</span></div>`;
-  const bd = m.birthday && /^\d{4}-\d{2}-\d{2}$/.test(m.birthday) ? m.birthday.slice(5).replace('-', '/') : '未填';
-  document.getElementById('profile-body').innerHTML =
-    row('姓名', escapeHtml_(m.name || '')) + row('手機', escapeHtml_(masked)) + row('生日', escapeHtml_(bd)) +
-    row('會員等級', escapeHtml_(tierName)) + row('點數', (Number(m.points) || 0) + ' 點') + row('登入方式', 'LINE') +
-    '<div style="font-size:0.78rem;color:var(--muted);margin-top:10px;line-height:1.5;">資料需要修改，請洽門市或客服 0909-504662。</div>';
+  const hasBd = !!(m.birthday && /^\d{4}-\d{2}-\d{2}$/.test(m.birthday));
+  const today = todayYmd_();
+  document.getElementById('profile-body').innerHTML = `
+    <label style="display:block;font-size:0.82rem;color:var(--muted);margin-top:4px;">姓名
+      <input id="pf-name" class="pf-input" maxlength="20" value="${escapeHtml_(m.name || '')}"></label>
+    <label style="display:block;font-size:0.82rem;color:var(--muted);margin-top:10px;">生日${hasBd ? '' : '（只能自己填一次，填了之後要修改請洽門市或客服）'}
+      ${hasBd ? `<div style="font-size:0.9rem;color:var(--text);padding:8px 0 2px;">${escapeHtml_(m.birthday.replace(/-/g, '/'))}</div>`
+              : `<input id="pf-bd" class="pf-input" type="date" min="1900-01-01" max="${today}">`}</label>
+    <div id="pf-msg" style="font-size:0.8rem;color:#c0392b;min-height:1.2em;margin-top:6px;"></div>
+    <button type="button" class="btn-primary" id="pf-save" style="margin-top:2px;" onclick="saveProfile_()">儲存</button>
+    <div style="margin-top:10px;">
+    ${row('手機', escapeHtml_(masked))}${row('會員等級', escapeHtml_(tierName) + (m.tierKeepUntil ? `<div style="font-size:0.76rem;color:var(--muted);">保留到 ${tierKeepText_(m)}</div>` : ''))}
+    ${row('點數', (Number(m.points) || 0) + ' 點')}${row('登入方式', 'LINE')}</div>
+    <div style="font-size:0.78rem;color:var(--muted);margin-top:10px;line-height:1.5;">手機${hasBd ? '、生日' : ''}需要修改，請洽門市或客服 0909-504662。</div>`;
   document.getElementById('profile-overlay').classList.add('open');
+}
+function saveProfile_() {
+  const msg = document.getElementById('pf-msg'), btn = document.getElementById('pf-save');
+  const name = document.getElementById('pf-name').value.trim();
+  const bdEl = document.getElementById('pf-bd');
+  const birthday = bdEl ? bdEl.value : '';
+  if (!name) { msg.textContent = '姓名不能空白'; return; }
+  if (birthday && !confirm(`生日填 ${birthday.replace(/-/g, '/')}，填了之後就不能自己修改，確定嗎？`)) return;
+  msg.textContent = ''; btn.disabled = true; btn.textContent = '儲存中…';
+  apiPost_({ action: 'updateMemberProfile', name, birthday }).then(data => {
+    btn.disabled = false; btn.textContent = '儲存';
+    if (!data || data.status !== 'ok') { msg.textContent = (data && data.message) || '儲存失敗'; return; }
+    Object.assign(verifiedMember, data.member);
+    renderMemberStrip_(verifiedMember);
+    openProfile_();
+    document.getElementById('pf-msg').innerHTML = '<span style="color:#1e8e3e;">已儲存</span>';
+  }).catch(() => { btn.disabled = false; btn.textContent = '儲存'; msg.textContent = '儲存失敗，請確認網路連線後再試'; });
 }
 function closeProfile_() { document.getElementById('profile-overlay').classList.remove('open'); }
 // 登出(10-16)：登出 LINE 後重新整理，購物車留著(這個分頁)；下次結帳再登入

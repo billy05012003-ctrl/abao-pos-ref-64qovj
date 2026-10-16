@@ -3408,7 +3408,7 @@ function refreshPromoPublishDiff_() {
   return Promise.all([get('draft'), get('live')]).then(([d, l]) => {
     if (d.status !== 'ok' || l.status !== 'ok') throw new Error();
     const promoMap = list => Object.fromEntries((list || []).map(p => [p.name, PROMO_DIFF_FIELDS_.map(f => p[f] === undefined ? '' : p[f])]));
-    const giftMap = list => Object.fromEntries((list || []).map(g => [g.voucherType, [g.points, g.order, g.status, g.locked]]));
+    const giftMap = list => Object.fromEntries((list || []).map(g => [g.voucherType, [g.points, g.order, g.status, g.locked, g.desc || '']]));
     const addonMap = list => Object.fromEntries((list || []).map(a => [a.name, ADDON_DIFF_FIELDS_.map(f => JSON.stringify(a[f] === undefined ? '' : a[f]))]));
     const changes = diffByKey_(promoMap(d.promos), promoMap(l.promos), k => '優惠券「' + k + '」')
       .concat(diffByKey_(giftMap(d.pointGifts), giftMap(l.pointGifts), k => '集點禮「' + k + '」'))
@@ -4830,6 +4830,8 @@ function renderPgEditor() {
       <label class="mc-field">所需點數<input id="pg-f-points" type="number" value="${g.points ?? ''}"></label>
       <label class="mc-field">優惠券名稱<select id="pg-f-type">${promoNameOptions_(g.voucherType)}</select></label>
     </div>
+    <label class="mc-field">說明(可空白，點餐頁「詳細資訊」會顯示；所需點數、換到什麼、使用期限、限定等級系統自動帶)
+      <textarea id="pg-f-desc" rows="2" maxlength="200" placeholder="例：一顆荷包蛋，可加在任何主餐">${escapeHtml(g.desc || '')}</textarea></label>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="pg-f-status">
         <option value="啟用" ${(g.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
@@ -4858,6 +4860,7 @@ function savePointGift() {
     voucherType: voucherType,
     points: points,
     status: document.getElementById('pg-f-status').value,
+    desc: document.getElementById('pg-f-desc').value.trim(),
     storeId: MC_STORE_ID,
     version: MC_STATUS,
     locked: lockedEl ? lockedEl.checked : false
