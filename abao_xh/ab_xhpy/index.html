@@ -236,7 +236,7 @@
   body.home-tabs:not(.tab-order) #group-banner, body.home-tabs:not(.tab-order) nav#tabs, body.home-tabs:not(.tab-order) main#menu,
   body.home-tabs:not(.tab-order) #cart-bar { display: none !important; }
   /* 點餐頁上方改簡版(老闆 09-30 照小介面 v3 定案)：會員等級、點數搬到會員好康的會員卡；三格改兩格 */
-  body.home-tabs #ms-tier, body.home-tabs #ms-points-pill, body.home-tabs #home-tier-btn { display: none !important; }
+  body.home-tabs #home-tier-btn { display: none !important; }
   body.home-tabs #store-actions { display: flex; }
   body.home-tabs #store-actions button { flex: 1; }
   .home-pane { max-width: 640px; margin: 0 auto; padding: 12px; }
@@ -306,11 +306,19 @@
   #pickup-bar { width: 100%; display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; color: var(--text); cursor: pointer; text-align: left; }
   #pickup-bar .pb-mode { font-weight: 700; padding-right: 8px; border-right: 1px solid #ccc; }
   #pickup-bar .pb-time { flex: 1; }
-  #member-strip { display: none; align-items: center; gap: 6px; margin-bottom: 8px; font-size: 0.88rem; }
-  #member-strip .ms-who { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-  #member-strip .ms-tier { color: var(--brand); font-weight: 700; }
-  #member-strip .ms-pill { flex: none; border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 0.8rem; color: var(--text); cursor: pointer; white-space: nowrap; }
-  #member-strip .ms-pill.on { border-color: var(--brand); color: var(--brand); font-weight: 700; }
+  #order-mcard { margin-bottom: 10px; }   /* 10-16 會員卡搬到線上點餐(原 #member-strip 一列) */
+  /* 10-16 老闆選 A1 精簡卡：姓名列放會員資料/登出、進度條後寫還差多少、三格改一排(高度約原本一半) */
+  .hp-mcard.mini { padding: 10px 12px; }
+  .hp-mcard.mini .top { justify-content: flex-start; align-items: center; gap: 8px; }
+  .hp-mcard.mini .nm { font-size: 1rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hp-mcard.mini .tr { margin-top: 0; flex: none; }
+  .hp-mcard.mini .lk { margin-left: auto; flex: none; display: flex; gap: 10px; }
+  .hp-mcard.mini .lk button { border: none; background: none; padding: 2px 0; font-size: 0.74rem; color: inherit; opacity: 0.8; text-decoration: underline; font-family: inherit; cursor: pointer; }
+  .hp-mcard.mini .pg { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.74rem; white-space: nowrap; }
+  .hp-mcard.mini .pg .tbar { flex: 1; margin-top: 0; }
+  .hp-mcard.mini .stats { margin-top: 8px; }
+  .hp-mcard.mini .stats button { padding: 6px 2px; font-size: 0.78rem; white-space: nowrap; }
+  .hp-mcard.mini .stats b { display: inline; font-size: 0.95rem; margin-right: 3px; }
   #cart-pickup-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; font-size: 0.9rem; cursor: pointer; }
   #cart-pickup-row .cp-text { flex: 1; }
   #cart-pickup-row .cp-more { color: var(--brand); flex: none; }
@@ -371,11 +379,8 @@
 <div id="home-pane-mine" class="home-pane"></div>
 <!-- 2026-09-30：原本這裡寫死的「營業時間＋信用卡付款」說明拿掉，營業時間改由後台設定自動產生，說明文字集中到「訂餐資訊」頁 -->
 <div id="store-strip">
-  <div id="member-strip">
-    <span class="ms-who" onclick="onMemberWhoClick_()">👋 <b id="ms-name"></b> <span class="ms-tier" id="ms-tier"></span></span>
-    <button type="button" class="ms-pill" id="ms-voucher-pill" onclick="openWallet_('voucher')">🎟 券 0</button>
-    <button type="button" class="ms-pill" id="ms-points-pill" onclick="openWallet_('points')">⭐ 0 點</button>
-  </div>
+  <!-- 10-16 老闆：會員卡從「會員好康」搬到這裡，取代原本「👋 姓名 券 N」那一列；沒登入就不顯示(最上方有登入列) -->
+  <div class="hp-mcard" id="order-mcard" style="display:none;"></div>
   <button type="button" id="pickup-bar" onclick="openPickupPicker_()"><span class="pb-mode">自取</span><span class="pb-time" id="pickup-bar-text">載入中…</span><span style="color:var(--muted);">▾</span></button>
   <div id="store-actions">
     <button type="button" id="home-group-btn" style="display:none;" onclick="onHomeGroupClick_()"><span class="sa-ic">👥</span><span>揪團</span><small>我請／你訂</small></button>
@@ -1838,24 +1843,11 @@ function redeemPointsInCart_(btn, idx) {
 }
 
 function renderMemberStrip_(member) {
-  if (HOME_TABS_ON) setTimeout(renderHomePerkMember_, 0);   // 會員好康的會員卡跟著更新
-  const el = document.getElementById('member-strip');
-  if (!el) return;
-  if (!member) { el.style.display = 'none'; return; }
-  document.getElementById('ms-name').textContent = member.name || '';
-  document.getElementById('ms-tier').textContent = member.tier ? (member.tier.endsWith('會員') ? member.tier : member.tier + '會員') : '';
-  el.style.display = 'flex';
   updateWalletPills_();
 }
-// 會員列兩顆按鈕：可用兌換券張數(有套用就顯示已套用幾張)、目前點數
+// 線上點餐上方的會員卡(點數、兌換券張數、等級)跟著更新
 function updateWalletPills_() {
-  if (HOME_TABS_ON) setTimeout(renderHomePerkMember_, 0);
-  const vp = document.getElementById('ms-voucher-pill'), pp = document.getElementById('ms-points-pill');
-  if (!vp || !pp) return;
-  const used = checkoutSelectedVouchers.length;
-  vp.textContent = used ? `🎟 已套用 ${used}` : `🎟 券 ${voucherCountText_()}`;
-  vp.classList.toggle('on', used > 0);
-  pp.textContent = `⭐ ${verifiedMember ? (Number(verifiedMember.points) || 0) : 0} 點`;
+  setTimeout(renderMemberCard_, 0);
 }
 function switchWalletTab_(tab) {
   document.getElementById('wallet-tab-voucher').classList.toggle('active', tab === 'voucher');
@@ -5211,10 +5203,6 @@ function reorderLine_(line) {
   confirmAddToCart();
   return cart.reduce((s, c) => s + c.qty, 0) > before ? '' : '需要重新選擇';
 }
-function onMemberWhoClick_() {
-  if (HOME_TABS_ON) switchHomeTab_('perk');
-  else openTierOverlay();
-}
 function homeInPeriod_(x, t) { return !((x.startDate && t < x.startDate) || (x.endDate && t > x.endDate)); }
 function homeMd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return m + '/' + d; }
 function homeWd_(ymd) { const [y, m, d] = ymd.split('-').map(Number); return '星期' + HOME_WEEKDAYS_[new Date(y, m - 1, d).getDay()]; }
@@ -5345,36 +5333,43 @@ function openHomeDetail_(c, item) {
   document.getElementById('home-detail-overlay').classList.add('open');
 }
 
-// ---------- 會員好康：會員卡 ----------
-function renderHomePerkMember_() {
-  const el = document.getElementById('home-mcard');
+// ---------- 會員卡(10-16 從會員好康搬到線上點餐上方) ----------
+function renderMemberCard_() {
+  const el = document.getElementById('order-mcard');
   if (!el) return;
   const m = verifiedMember;
-  if (!m) {
-    el.className = 'hp-mcard';
-    el.innerHTML = `<div class="top"><div><div class="nm">A-Bao 會員</div></div></div>
-      <div class="login">登入 LINE 會員後，這裡會顯示你的點數、兌換券和會員等級。
-        <br><button type="button" onclick="onHomeMemberLogin_()">用 LINE 登入／加入會員</button></div>`;
-    return;
-  }
+  if (!m) { el.style.display = 'none'; el.innerHTML = ''; return; }
   const tiers = SHOP_MEMBER_TIERS.slice().sort((a, b) => a.order - b.order);
   const idx = Math.max(0, tiers.findIndex(t => t.name === m.tier));
-  el.className = 'hp-mcard' + (idx < 3 ? ' t' + idx : '');
+  el.className = 'hp-mcard mini' + (idx < 3 ? ' t' + idx : '');
+  el.style.display = '';
   const tierName = m.tier ? (m.tier.endsWith('會員') ? m.tier : m.tier + '會員') : '';
-  const progress = tierProgressText_(m);
+  const bar = tierProgressBar_(m), gap = tierGapText_(m);
+  const used = checkoutSelectedVouchers.length;   // 這張單有套用券就顯示已套用幾張
+  // 完整說明(再消費多少升哪一級、半年累積)點「👑 等級 ›」看
   el.innerHTML = `
     <div class="top">
-      <div><div class="nm">${escapeHtml_(m.name || '')}</div></div>
+      <div class="nm">${escapeHtml_(m.name || '')}</div>
       <button type="button" class="tr" onclick="openTierOverlay()">👑 ${escapeHtml_(tierName)} ›</button>
+      <div class="lk"><button type="button" onclick="openProfile_()">會員資料</button><button type="button" onclick="lineLogout_()">登出</button></div>
     </div>
-    ${progress ? `<div class="prog">${progress}</div>` : ''}
-    ${tierProgressBar_(m)}
+    ${bar ? `<div class="pg">${bar}${gap ? `<span>${gap}</span>` : ''}</div>` : ''}
     <div class="stats">
       <button type="button" onclick="openWallet_('points')"><b>${Number(m.points) || 0}</b>⭐ 點數</button>
-      <button type="button" onclick="openWallet_('voucher')"><b>${voucherCountText_()}</b>🎟 我的兌換券</button>
-      <button type="button" onclick="openTierOverlay()"><b>›</b>👑 等級好禮</button>
-    </div>
-    <div class="acts"><button type="button" onclick="openProfile_()">會員資料</button><button type="button" onclick="lineLogout_()">登出</button></div>`;
+      <button type="button" onclick="openWallet_('voucher')"><b>${used ? used : voucherCountText_()}</b>🎟 ${used ? '已套用' : '兌換券'}</button>
+      <button type="button" onclick="openTierOverlay()">👑 等級好禮 ›</button>
+    </div>`;
+}
+// 進度條後面的「還差 $X」：有下一級＝離升級；最高級＝離續等；已達門檻就不寫
+function tierGapText_(m) {
+  if (!m || !SHOP_MEMBER_TIERS.length) return '';
+  const tiers = SHOP_MEMBER_TIERS.slice().sort((a, b) => a.order - b.order);
+  const cur = tiers.find(t => t.name === m.tier);
+  if (!cur) return '';
+  const spend = Number(m.periodSpend) || 0;
+  const next = tiers.find(t => t.order > cur.order && t.threshold > spend);
+  const goal = next ? Number(next.threshold) : (cur.continuationThreshold != null ? Number(cur.continuationThreshold) : 0);
+  return goal > spend ? '還差 $' + (goal - spend).toLocaleString('en-US') : '';
 }
 // 升等進度條(10-16)：有下一級＝累積/下一級門檻；最高級＝累積/續等門檻(滿了就是滿格)
 function tierProgressBar_(m) {
@@ -5482,11 +5477,10 @@ function claimHomeAct_(btn, actId, date) {
 function renderHomePerkPane_() {
   const el = document.getElementById('home-pane-perk');
   if (!el) return;
-  if (!document.getElementById('home-mcard')) {
-    el.innerHTML = '<div class="hp-mcard" id="home-mcard"></div><div id="home-acts"></div>';
+  if (!document.getElementById('home-acts')) {
+    el.innerHTML = '<div id="home-acts"></div>';   // 會員卡 10-16 搬到線上點餐
   }
-  renderHomePerkMember_();
-  if (!homeDataReady_) { document.getElementById('home-acts').innerHTML = '<div class="hp-empty" style="margin-top:14px;">活動載入中…</div>'; return; }
+  if (!homeDataReady_) { document.getElementById('home-acts').innerHTML = '<div class="hp-empty">活動載入中…</div>'; return; }
   const t = todayYmd_();
   // 活動開始/結束已經算進後端給的 dates(期間外不算活動日)，還沒開始的活動 60 天內有日子就先出現在「即將到來」
   const acts = HOME_ACTS.filter(a => a.status !== '停用').map(a => {
