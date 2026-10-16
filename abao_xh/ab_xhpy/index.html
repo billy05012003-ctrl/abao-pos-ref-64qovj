@@ -867,7 +867,7 @@ function renderLineRegister_(lineName) {
   lineStatusHtml_(`
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;">
       <div style="color:var(--brand);font-weight:600;">歡迎加入會員（免費，立即生效）</div>
-      <div style="color:var(--muted);font-size:0.8rem;margin:2px 0 8px;">第一次用 LINE 點餐，請填手機與姓名，之後就自動認得你</div>
+      <div style="color:var(--muted);font-size:0.8rem;margin:2px 0 8px;">第一次用 LINE 點餐，請填手機與姓名，之後就自動認得你；在門市辦過會員的，填同一支手機會自動帶入點數與等級</div>
       <label style="margin-top:0;">手機</label>
       <input type="tel" id="line-reg-phone" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="09xxxxxxxx">
       <label>姓名</label>
@@ -892,6 +892,8 @@ function submitLineRegister_() {
       return;
     }
     applyLineMember_(data.member);
+    // 10-16 門市老會員第一次用 LINE 登入自動綁定：告訴客人原本的點數等級都帶進來了
+    if (data.autoBound) alert('已找到您在門市的會員資料，點數、等級、兌換券都已帶入，之後用這個 LINE 登入就可以了。');
   }).catch(() => { msg.textContent = '建立會員失敗，請確認網路連線後再試'; btn.disabled = false; });
 }
 // ---------------------------------------------------------------
