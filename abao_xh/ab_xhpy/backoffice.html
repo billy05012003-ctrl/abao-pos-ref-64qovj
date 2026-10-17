@@ -227,7 +227,7 @@
 
 <header style="position:relative;">
   <h1>POS後台</h1>
-  <div class="sub">美寶美食館（A-Bao溪湖培英店）</div>
+  <div class="sub"><span data-store="legalName">美寶美食館</span>（<span data-store="displayName">A-Bao溪湖培英店</span>）</div>
   <div id="bo-user" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:0.85rem;display:none;">
     <span id="bo-user-text"></span>
     <button type="button" onclick="boLogout()" style="margin-left:8px;background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.6);border-radius:6px;padding:4px 10px;cursor:pointer;">登出</button>
@@ -735,9 +735,31 @@
 <script>
 const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
 const APP_KEY = 'abao-meibao-2026';
-const BO_HOME_STORE_ = 'meibao';   // 這份後台所屬的門市(切到別店/品牌範本時各呼叫會明確帶 storeId)
+// 這份後台所屬的門市(切到品牌範本時各呼叫會明確帶 storeId)。多店化第 3 段(2026-10-17)：看網址決定(…/abao_xh/<網址路徑>/backoffice.html)；
+// 培英網址 ab_xhpy＝歷史店代號 meibao，其他店網址路徑＝店代號；正式網域對不到就留空(後端記錄／擋)不猜培英，本機預覽才當培英
+const STORE_PATH_ALIAS_ = { ab_xhpy: 'meibao' };
+const BO_HOME_STORE_ = (function () {
+  const m = location.pathname.match(/[/]abao_xh[/]([A-Za-z0-9_]+)[/]/);
+  if (m) return STORE_PATH_ALIAS_[m[1]] || m[1];
+  return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : 'meibao';
+})();
+// 門市資料(後端 storeProfile，存在本機)：標 data-store 的地方換成本店的；培英 HTML 本來就寫培英，看起來不變
+let BO_STORE_PROFILE_ = null;
+try { BO_STORE_PROFILE_ = JSON.parse(localStorage.getItem('abao_store_profile_' + BO_HOME_STORE_) || 'null'); } catch (e) {}
+function boStoreShortName_() { return (BO_STORE_PROFILE_ && (BO_STORE_PROFILE_.legalName || BO_STORE_PROFILE_.shortName)) || (BO_HOME_STORE_ === 'meibao' ? '美寶美食館' : BO_HOME_STORE_); }
+function applyBoStoreProfile_(p) {
+  if (p && p.storeId) { BO_STORE_PROFILE_ = p; try { localStorage.setItem('abao_store_profile_' + BO_HOME_STORE_, JSON.stringify(p)); } catch (e) {} }
+  const prof = BO_STORE_PROFILE_;
+  if (!prof && BO_HOME_STORE_ === 'meibao') return;
+  document.querySelectorAll('[data-store]').forEach(el => { el.textContent = prof ? (prof[el.dataset.store] || '') : ''; });
+  if (prof && BO_HOME_STORE_ !== 'meibao') document.title = boStoreShortName_() + ' POS後台';
+}
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
 function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = BO_HOME_STORE_; return p; }
+document.addEventListener('DOMContentLoaded', () => {   // 多店化第 3 段：店名從門市資料讀
+  applyBoStoreProfile_();
+  apiGet({ action: 'storeProfile' }).then(d => { if (d && d.status === 'ok' && d.profile) applyBoStoreProfile_(d.profile); }).catch(() => {});
+});
 // 2026-09-13發現：同一組查詢字串重複打會被瀏覽器/Google那邊快取住，改後台設定後同分頁沒重新整理
 // 還是讀到舊資料，過去交接記錄裡好幾次寫的「Google暫時性404/延遲」很可能有一部分其實是這個快取問題。
 // 補上_=時間戳記防快取參數，確保每次都真的打到最新資料
@@ -754,7 +776,7 @@ function apiPost(payload) {
 
 // ---- POS後台登入(2026-09-25)：閘門之外再用店長/老闆PIN登入，後端發12小時通行證，改資料都要帶著 ----
 // 老闆定案：店長也能登入，但權限設定、付款方式設定、店長/老闆帳號只有老闆能改(後端也會擋)；帳號只能停用不能刪除
-const BO_SESSION_KEY = 'abao_bo_session_meibao';
+const BO_SESSION_KEY = 'abao_bo_session_' + BO_HOME_STORE_;
 let boSession = null;   // {token, name, role, exp}
 try { boSession = JSON.parse(localStorage.getItem(BO_SESSION_KEY) || 'null'); } catch (e) { boSession = null; }
 if (boSession && !(boSession.exp > Date.now())) boSession = null;
@@ -766,7 +788,7 @@ function showBoLogin_(msg) {
   document.getElementById('bo-login-pin').value = '';
   const sel = document.getElementById('bo-login-name');
   sel.innerHTML = '<option value="">載入中…</option>';
-  apiGet({ action: 'posStaffList', storeId: 'meibao' }).then(data => {
+  apiGet({ action: 'posStaffList', storeId: BO_HOME_STORE_ }).then(data => {
     const managers = (data.staff || []).filter(x => x.role === '店長' || x.role === '老闆');
     sel.innerHTML = managers.length
       ? '<option value="">請選擇</option>' + managers.map(x => `<option value="${escapeHtml(x.name)}">${escapeHtml(x.name)}（${escapeHtml(x.role)}）</option>`).join('')
@@ -778,7 +800,7 @@ function boLogin() {
   const pin = document.getElementById('bo-login-pin').value.trim();
   const err = document.getElementById('bo-login-err');
   err.textContent = '登入中…';
-  fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'boLogin', storeId: 'meibao', name, pin, appKey: APP_KEY }) }).then(r => r.json()).then(d => {
+  fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'boLogin', storeId: BO_HOME_STORE_, name, pin, appKey: APP_KEY }) }).then(r => r.json()).then(d => {
     if (d.status !== 'ok') { err.textContent = d.message || '登入失敗'; return; }
     boSession = { token: d.token, name: d.name, role: d.role, exp: d.exp };
     saveBoSession_();
@@ -813,16 +835,16 @@ function applyBoRoleUi_() {
 
 // 2026-09-12品牌菜單多店架構：「菜單管理」頁籤現在可以切換編輯對象——自己的門市(meibao)草稿，
 // 或品牌範本(__brand__)。後台一律只寫draft層，要上線一律走「發布」按鈕，不會直接改live。
-// 之後複製這份檔案給其他分店用時，把預設值('meibao')換成該店代號即可
-let MC_STORE_ID = 'meibao';
+// 多店化第 3 段(10-17)起預設值＝這份後台網址的門市(BO_HOME_STORE_)，不用再複製改代號
+let MC_STORE_ID = BO_HOME_STORE_;
 const MC_STATUS = 'draft';
 // 目前僅美寶正式運作，其餘三店代號先保留欄位，等分店真的建立後再補上正確代號
 const MC_STORE_OPTIONS = [
-  { id: 'meibao', label: '美寶美食館（自己的門市）' },
+  { id: BO_HOME_STORE_, label: boStoreShortName_() + '（自己的門市）' },
   { id: '__brand__', label: '品牌範本（推送到分店用）' }
 ];
 const MC_SYNC_TARGET_STORES = [
-  { id: 'meibao', label: '美寶美食館' }
+  { id: BO_HOME_STORE_, label: boStoreShortName_() }
 ];
 
 // 品項清單跟雲端平板/POS功能共用同一份(手動同步，來源見05_腳本/build_backoffice.py)
@@ -908,7 +930,7 @@ function loadPosManageLog() {
 // ---- 上下架管理同步(10-10，規格 上下架管理與POS管理調整設計_2026-10-09.md) ----
 // 跟門市平板讀同一份資料。營業狀態/標記已付款/退款都要輸 PIN(名字＝登入的人)，送 via:'bo'，後端會在紀錄標「後台」。
 // 待取餐訂單只看不放按鈕(可以取餐/已收款/作廢要在店裡看到客人才按)
-const BO_OPS_STORE = 'meibao';
+const BO_OPS_STORE = BO_HOME_STORE_;
 let boStoreStatus_ = {};
 function boHm_(iso) { const d = new Date(iso); return isNaN(d) ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
 function renderBoStoreStatus_(st) {
@@ -1478,9 +1500,9 @@ function saveStoreInfo() {
 }
 
 // ---- 商店時段設定（2026-09-16新增）----
-// 只做美寶一間店，storeId直接寫死'meibao'，不套用菜單管理那套MC_STORE_ID(那是給多店draft/live內容用的，
+// 本店(BO_HOME_STORE_，多店化第 3 段起看網址決定)，不套用菜單管理那套MC_STORE_ID(那是給多店draft/live內容用的，
 // 這個功能是單一即時生效的營運設定，跟門市狀態忙碌/暫停接單同一種性質，故意不比照CMS內容做草稿層)
-const SCHED_STORE_ID = 'meibao';
+const SCHED_STORE_ID = BO_HOME_STORE_;
 const SCHED_WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六']; // 對齊JS Date.getDay()(0=日)
 const SCHED_WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 顯示順序改成一二三四五六日，比較符合台灣習慣
 let schedLoaded = false;
@@ -1869,7 +1891,7 @@ function loadAvailability() {
   document.getElementById('availability-list').innerHTML = '<div class="empty-hint">載入中...</div>';
   if (boSession) { loadBoRevenue_(); loadBoOrders_(); loadBoStuck_(); }   // 10-10 上下架管理同步(要後台登入才讀得到)
   return Promise.all([
-    apiGet({ action: 'storeStatus', storeId: 'meibao' }),
+    apiGet({ action: 'storeStatus', storeId: BO_HOME_STORE_ }),
     apiGet({ action: 'posItemStatus' }),
     ensureMcCatalogLoaded_() // 2026-09-13改成跟「菜單管理」同一份即時資料，不再用寫死的ITEM_LIST快照
   ]).then(([storeData, posData]) => {
@@ -2081,9 +2103,9 @@ function mrGo_(sub) {
 }
 function refreshMonthReminder_() {
   return Promise.all([
-    apiGet({ action: 'promoSettings', storeId: 'meibao', version: 'live' }),
-    apiGet({ action: 'menuCmsData', storeId: 'meibao', status: 'live' }).catch(() => null),
-    apiGet({ action: 'storeStatus', storeId: 'meibao' }).catch(() => null)
+    apiGet({ action: 'promoSettings', storeId: BO_HOME_STORE_, version: 'live' }),
+    apiGet({ action: 'menuCmsData', storeId: BO_HOME_STORE_, status: 'live' }).catch(() => null),
+    apiGet({ action: 'storeStatus', storeId: BO_HOME_STORE_ }).catch(() => null)
   ]).then(([data, menu, st]) => {
     if (data.status !== 'ok') return;
     const ctx = { catalog: menu && menu.status === 'ok' ? menu.catalog : null, statuses: st && st.status === 'ok' ? (st.items || {}) : null };
@@ -4633,7 +4655,7 @@ function adSetCategories_() {
 }
 function ensureAdCatalog_() {
   if (Object.keys(mcCatalog).length || adCatalog_) return Promise.resolve();
-  return apiGet({ action: 'menuCmsData', storeId: MC_STORE_ID === '__brand__' ? 'meibao' : MC_STORE_ID, status: 'live' }).then(d => {
+  return apiGet({ action: 'menuCmsData', storeId: MC_STORE_ID === '__brand__' ? BO_HOME_STORE_ : MC_STORE_ID, status: 'live' }).then(d => {
     if (d.status === 'ok') { adCatalog_ = d.catalog; adItemGroups_ = d.itemGroups || {}; }
   }).catch(err => console.warn('加價購適用套餐清單讀取失敗', err));
 }

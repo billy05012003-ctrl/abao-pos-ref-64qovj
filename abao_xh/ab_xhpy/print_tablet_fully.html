@@ -70,8 +70,15 @@ const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re
 const APP_KEY = 'abao-meibao-2026';
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
 function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = STORE_ID; return p; }
-const STORE_ID = 'meibao';
-const STORE_LABEL = '溪湖培英店';
+// 多店化第 3 段(2026-10-17)：看網址決定是哪間店(…/abao_xh/<網址路徑>/頁名)；培英網址 ab_xhpy＝歷史店代號 meibao，其他店網址路徑＝店代號；
+// 正式網域對不到就留空(後端記錄／擋)不猜培英，本機才當培英。店名用門市設定的簡稱(後端 storeProfile，存在本機)
+const STORE_PATH_ALIAS_ = { ab_xhpy: 'meibao' };
+const STORE_ID = (function () {
+  const m = location.pathname.match(/[/]abao_xh[/]([A-Za-z0-9_]+)[/]/);
+  if (m) return STORE_PATH_ALIAS_[m[1]] || m[1];
+  return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : 'meibao';
+})();
+let STORE_LABEL = (function () { try { const p = JSON.parse(localStorage.getItem('abao_store_profile_' + STORE_ID) || 'null'); if (p && p.shortName) return p.shortName; } catch (e) {} return STORE_ID === 'meibao' ? '溪湖培英店' : STORE_ID; })();
 const DEFAULT_BT_NAME = 'TM-m10-HIP6666';
 const LINK_CHECK_SEC = 5;          // 每幾秒檢查一次連線
 const RECONNECT_EVERY_SEC = 15;    // 斷線時每幾秒自動重連一次
@@ -83,6 +90,12 @@ function getIp() { try { return localStorage.getItem('abao_print_ip') || ''; } c
 function isNet() { return getMode() === 'net'; }
 function $(id) { return document.getElementById(id); }
 $('storeLabel').textContent = STORE_LABEL;
+apiGetPrint_({ action: 'storeProfile', storeId: STORE_ID }).then(d => {   // 多店化第 3 段：店名改讀門市設定
+  if (!d || d.status !== 'ok' || !d.profile || !d.profile.shortName) return;
+  STORE_LABEL = d.profile.shortName;
+  try { localStorage.setItem('abao_store_profile_' + STORE_ID, JSON.stringify(d.profile)); } catch (e) {}
+  $('storeLabel').textContent = STORE_LABEL;
+}).catch(() => {});
 
 // ---------- Big5 編碼（跟筆電版共用同一套建表方式）----------
 const BIG5 = new Map();

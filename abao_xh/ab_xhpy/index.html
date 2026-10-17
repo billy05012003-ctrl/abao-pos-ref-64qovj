@@ -380,7 +380,7 @@
   <button id="cat-menu-btn" onclick="openCategoryMenu()" aria-label="餐點分類" style="position:absolute; left:12px; top:14px; background:none; border:none; color:#fff; font-size:1.4rem; cursor:pointer; padding:4px 6px; line-height:1;">☰</button>
   <!-- 2026-09-27 老闆指示拿掉「🎫 我的兌換券」查詢(只要輸入手機就能看別人的資料)；LINE 登入做好後改成「我的會員」頁 -->
   <div style="padding-left:34px; padding-right:34px;">
-    <h1>A-Bao溪湖培英店</h1>
+    <h1 data-store="displayName">A-Bao溪湖培英店</h1>
     <p>線上預訂・到店自取</p>
   </div>
 </header>
@@ -485,8 +485,8 @@
 
 <footer id="site-footer" style="text-align:center; font-size:0.8rem; color:var(--muted); line-height:1.8; padding:18px 16px 8px;">
   <div><a href="info.html" style="color:var(--brand-dark);">商店資訊</a>　|　<a href="info.html#refund" style="color:var(--brand-dark);">退款政策</a>　|　<a href="info.html#privacy" style="color:var(--brand-dark);">隱私權政策</a>　|　<a href="info.html#terms" style="color:var(--brand-dark);">服務條款</a></div>
-  <div><span style="white-space:nowrap;">A-Bao溪湖培英店（美寶美食館</span>　<span style="white-space:nowrap;">統一編號 82416619）</span></div>
-  <div><span style="white-space:nowrap;">彰化縣溪湖鎮東寮里培英路16號1樓</span>　<span style="white-space:nowrap;">客服電話 0909-504662</span></div>
+  <div><span style="white-space:nowrap;"><span data-store="displayName">A-Bao溪湖培英店</span>（<span data-store="legalName">美寶美食館</span></span>　<span style="white-space:nowrap;">統一編號 <span data-store="taxId">82416619</span>）</span></div>
+  <div><span style="white-space:nowrap;" data-store="address">彰化縣溪湖鎮東寮里培英路16號1樓</span>　<span style="white-space:nowrap;">客服電話 <span data-store="servicePhone">0909-504662</span></span></div>
 </footer>
 
 <nav id="home-tabbar">
@@ -604,7 +604,7 @@
     <div id="confirm-view">
       <h2>訂單完成</h2>
       <div class="order-no" id="order-no"></div>
-      <p id="confirm-msg">付款已完成，取餐時請出示此訂單編號或本畫面。如需協助請來電客服 0909-504662。</p>
+      <p id="confirm-msg">付款已完成，取餐時請出示此訂單編號或本畫面。如需協助請來電<span data-store-svc>客服 0909-504662</span>。</p>
       <p style="font-size:0.85rem;color:#a3620a;margin:-4px 0 8px;">店家確認接單後就會開始準備，可到「我的訂單」查看是否已確認。</p>
       <pre id="order-summary"></pre>
       <button class="btn-primary" onclick="closeAll()">完成，關閉視窗</button>
@@ -684,7 +684,6 @@ function rebuildOnlineCatalog_() {
 }
 function onlineItemNameOk_(name) { return Object.keys(CATALOG).some(cat => CATALOG[cat].some(it => it.name === name)); }
 
-const STORE_NAME = "美寶美食館（A-Bao溪湖培英店）";
 // 付款預設走藍新正式站；內部驗證時網址加 ?mpgtest=1 改走藍新驗證環境(後端有安全開關，關著時會拒絕)
 const MPG_TEST_PARAM = new URLSearchParams(location.search).get('mpgtest');
 const MPG_SANDBOX = MPG_TEST_PARAM === '1';
@@ -692,7 +691,35 @@ const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡集中兩個小函式自動帶上，
 // 全站呼叫後端一律走這兩個函式，之後新增任何呼叫都自動套用，不用每處各自補
 const APP_KEY = 'abao-meibao-2026';
-const STORE_ID = 'meibao';
+// 多店化第 3 段(2026-10-17)：同一份網頁看網址決定是哪間店(…/abao_xh/<網址路徑>/頁名)。培英網址 ab_xhpy＝歷史店代號 meibao，
+// 其他店網址路徑＝店代號(例 ab_xhzx)；正式網域對不到網址路徑就留空(後端會記錄／擋)不猜培英，本機預覽才當培英
+const STORE_PATH_ALIAS_ = { ab_xhpy: 'meibao' };
+const STORE_ID = (function () {
+  const m = location.pathname.match(/\/abao_xh\/([A-Za-z0-9_]+)\//);
+  if (m) return STORE_PATH_ALIAS_[m[1]] || m[1];
+  return /(^|\.)bzhouse\.tw$/.test(location.hostname) ? '' : 'meibao';
+})();
+// 門市資料(店名/登記名稱/統編/地址/電話)：後端「門市設定＋店家資訊」(storeProfile)，存在本機下次一打開先套用；
+// 網頁上標 data-store="欄位" 的地方換成本店資料(HTML 裡寫的是培英，培英看起來不變；別店還沒讀到前先清空，不會閃培英)
+const STORE_PROFILE_KEY_ = 'abao_store_profile_' + STORE_ID;
+let STORE_PROFILE_ = null;
+try { STORE_PROFILE_ = JSON.parse(localStorage.getItem(STORE_PROFILE_KEY_) || 'null'); } catch (e) {}
+function applyStoreProfile_(p) {
+  if (p && p.storeId) { STORE_PROFILE_ = p; try { localStorage.setItem(STORE_PROFILE_KEY_, JSON.stringify(p)); } catch (e) {} }
+  const prof = STORE_PROFILE_;
+  if (!prof && STORE_ID === 'meibao') return;
+  document.querySelectorAll('[data-store]').forEach(el => { el.textContent = prof ? (prof[el.dataset.store] || '') : ''; });
+  document.querySelectorAll('[data-store-svc]').forEach(el => { el.textContent = svcText_(); });
+  if (prof && prof.displayName) document.title = prof.displayName + '｜線上點餐';
+}
+function svcPhone_() { return (STORE_PROFILE_ && STORE_PROFILE_.servicePhone) || (STORE_ID === 'meibao' ? '0909-504662' : ''); }
+function svcText_() { const p = svcPhone_(); return p ? '客服 ' + p : '門市'; }
+applyStoreProfile_();   // 先套上次存的(或別店先清空)；最新的跟商店時段設定一起回來再套一次
+function storeNameForOrder_() {   // 訂單摘要／藍新商品名稱：「登記名稱（顯示店名）」
+  const p = STORE_PROFILE_;
+  if (!p) return STORE_ID === 'meibao' ? '美寶美食館（A-Bao溪湖培英店）' : 'A-Bao';
+  return p.legalName ? p.legalName + '（' + p.displayName + '）' : p.displayName;
+}
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
 function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = STORE_ID; return p; }
 // 2026-09-13發現：同一組查詢字串重複打會被瀏覽器/Google那邊快取住，改後台設定後同分頁沒重新整理
@@ -887,7 +914,7 @@ function submitLineRegister_() {
   msg.textContent = '';
   apiPost_({ action: 'lineRegister', phone, name }).then(data => {
     if (data.status !== 'ok') {
-      msg.textContent = (data.message || '建立會員失敗') + ((data.code === 'phone_exists' || data.code === 'phone_bound_other') ? '（客服 0909-504662）' : '');
+      msg.textContent = (data.message || '建立會員失敗') + ((data.code === 'phone_exists' || data.code === 'phone_bound_other') ? '（' + svcText_() + '）' : '');
       btn.disabled = false;
       return;
     }
@@ -982,7 +1009,7 @@ let BUSINESS_HOURS_BY_WEEKDAY = {}; // {0:[{start,end},...], 1:[...], ...} 0=日
 let ORDER_HOURS_BY_WEEKDAY = {};
 let SPECIAL_DATES = {}; // 'YYYY-MM-DD' -> {closed, start, end, note}
 // 店家資訊(2026-09-30)：後台「商家管理→店家資訊」編輯，跟商店時段設定一起讀回來；這裡是讀不到時的保底內容
-let STORE_INFO_ = {
+let STORE_INFO_ = STORE_ID !== 'meibao' ? { name: '', address: '', phone: '', pickupRules: '' } : {
   name: 'A-Bao溪湖培英店', address: '彰化縣溪湖鎮東寮里培英路16號1樓', phone: '04-8852662',
   pickupRules: '備餐時間15分鐘，請提早預訂。\n線上訂單以信用卡付款，付款完成後請依所選時段到店取餐。\n本店餐點為現做，已付款訂單，非特殊因素，不可退款。'
 };
@@ -1051,9 +1078,10 @@ function applyScheduleSettings_(data) {
   (data.specialDates || []).forEach(s => { SPECIAL_DATES[s.date] = s; });
   BUSINESS_HOURS_LIST_ = data.businessHours || [];
   if (data.storeInfo) STORE_INFO_ = data.storeInfo;
+  if (data.storeProfile) applyStoreProfile_(data.storeProfile);   // 多店化第 3 段：店名地址電話跟時段設定一起回來
 }
 
-const SCHEDULE_SETTINGS_CACHE_KEY = 'abao_pos_schedule_settings_cache_v1';
+const SCHEDULE_SETTINGS_CACHE_KEY = 'abao_pos_schedule_settings_cache_v1' + (STORE_ID === 'meibao' ? '' : '_' + STORE_ID);   // 培英沿用舊鍵
 // 保底預設值：完全讀不到雲端也沒有本地快取時使用，跟改造前寫死的行為(05:20-13:00營業、
 // 00:00-12:45可下單、15分鐘一格、每時段上限2單、最多訂到明天)完全一致，確保這次改造
 // 不會讓點餐頁在極端情況下(雲端試算表出問題)整個掛掉
@@ -1068,7 +1096,7 @@ function builtinDefaultScheduleSettings_() {
   };
 }
 function loadScheduleSettings() {
-  return apiGet_({ action: 'storeScheduleSettings', storeId: 'meibao' }).then(resp => {
+  return apiGet_({ action: 'storeScheduleSettings', storeId: STORE_ID }).then(resp => {
     if (!resp || resp.status !== 'ok') throw new Error('storeScheduleSettings回傳格式異常');
     applyScheduleSettings_(resp);
     try { localStorage.setItem(SCHEDULE_SETTINGS_CACHE_KEY, JSON.stringify(resp)); } catch (e) {}
@@ -1095,7 +1123,7 @@ const scheduleSettingsReady = loadScheduleSettings();
 // 本地快取兜底(付款方式不影響能不能點餐，讀不到就先不顯示這個選項，客人一樣能正常送單)
 let PAY_AT_PICKUP_ENABLED = false;
 function loadPaymentMethodSettings_() {
-  return apiGet_({ action: 'paymentMethodSettings', storeId: 'meibao' }).then(resp => {
+  return apiGet_({ action: 'paymentMethodSettings', storeId: STORE_ID }).then(resp => {
     if (!resp || resp.status !== 'ok') throw new Error('paymentMethodSettings回傳格式異常');
     PAY_AT_PICKUP_ENABLED = !!resp.payAtPickupEnabled;
   }).catch(err => {
@@ -1270,7 +1298,7 @@ function drinkGroupsFor(drinkName) {
 let currentModal = null; // {cat, item, size, price, groups: {groupKey: [selected option names]}, qty}
 
 // 購物車防手滑重整遺失：改用sessionStorage暫存，重整頁面不會清空（分頁關掉才清）
-const CART_SESSION_KEY = 'abao_cart_meibao';
+const CART_SESSION_KEY = 'abao_cart_' + STORE_ID;
 function saveCartSession() {
   try { sessionStorage.setItem(CART_SESSION_KEY, JSON.stringify(cart)); } catch (e) {}
   navSync_();   // 購物車有沒有東西會影響首頁按「‹」要不要先提醒(10-11 D18-1)
@@ -1654,7 +1682,7 @@ function maybeAutoClaim_() {
     }).map(a => a.id);
     if (!ids.length) return;
     ids.forEach(id => autoClaimTried_.add(id + '|' + pick + '|' + memberAllVouchers_.filter(v => v.actId === id && v.actDate === pick).length));
-    apiPost_({ action: 'autoClaimActVouchers', storeId: 'meibao', actIds: ids, date: pick }).then(d => {
+    apiPost_({ action: 'autoClaimActVouchers', storeId: STORE_ID, actIds: ids, date: pick }).then(d => {
       if (d && d.status === 'ok' && d.issued && d.issued.length) loadCheckoutVouchers();
     }).catch(err => console.warn('活動券自動領取失敗(這次不套用，重新整理頁面會再試)', err));
   }, 500);
@@ -3809,13 +3837,13 @@ function submitOrder(e) {
   const paymentNote = payAtPickupChosen
     ? '（已選擇取餐現場付款，請於取餐時完成付款）'
     : '（已完成線上信用卡付款，取餐時請出示此訂單編號）';
-  const summary = `【${STORE_NAME}】線上點餐訂單\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${time}\n---\n${lines}\n---\n${discountLine}總計：$${total}\n備註：${note || '無'}\n${paymentNote}`;
+  const summary = `【${storeNameForOrder_()}】線上點餐訂單\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${time}\n---\n${lines}\n---\n${discountLine}總計：$${total}\n備註：${note || '無'}\n${paymentNote}`;
 
   try {
-    let log = JSON.parse(localStorage.getItem('abao_orders_' + 'meibao') || '[]');
+    let log = JSON.parse(localStorage.getItem('abao_orders_' + STORE_ID) || '[]');
     log.push({orderNo, name, phone, time, note, total, cart, createdAt: new Date().toISOString()});
     if (log.length > 50) log = log.slice(-50); // 保留上限50筆，避免同一支手機長期使用無限累積
-    localStorage.setItem('abao_orders_' + 'meibao', JSON.stringify(log));
+    localStorage.setItem('abao_orders_' + STORE_ID, JSON.stringify(log));
   } catch (err) {}
 
   const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓客人重選時段
@@ -3830,7 +3858,7 @@ function submitOrder(e) {
   if (!payAtPickupChosen) showPayBusy_('正在前往付款…');
 
   createPendingOrderOnBackend({
-    storeId: 'meibao',
+    storeId: STORE_ID,
     pickupDate: gp ? gp.pickupDate : getPickupDateISO(Number(dateValue)),
     pickupTime: gp ? gp.pickupTime : document.getElementById('pickup-time').value,
     items: items,
@@ -3886,7 +3914,7 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
     document.getElementById('order-no').textContent = shownNo;
     document.getElementById('order-summary').textContent = String(ctx.summary || '').split(ctx.orderNo).join(shownNo);
     const msg = document.getElementById('confirm-msg');
-    if (msg && ctx.payAtPickup) msg.textContent = '訂單已成立，請於取餐時完成付款。如需協助請來電客服 0909-504662。';
+    if (msg && ctx.payAtPickup) msg.textContent = '訂單已成立，請於取餐時完成付款。如需協助請來電' + svcText_() + '。';
     document.getElementById('confirm-view').style.display = 'block';
     showFriendPromo_();
   };
@@ -4132,9 +4160,9 @@ function startMpgPayment(orderId, amount) {
   if (pendingOrderContext && pendingOrderContext.groupPay && groupCtx) pendingOrderContext.groupId = groupCtx.groupId;
   try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(pendingOrderContext)); } catch (e) {}
   const returnUrl = location.origin + location.pathname + '?mpgreturn=1&orderId=' + encodeURIComponent(orderId);
-  apiPost_({ action: 'createMpgPayment', orderId, amount, itemDesc: STORE_NAME, returnUrl, sandbox: MPG_SANDBOX }).then(data => {
+  apiPost_({ action: 'createMpgPayment', orderId, amount, itemDesc: storeNameForOrder_(), returnUrl, sandbox: MPG_SANDBOX }).then(data => {
     if (data.status !== 'ok') {
-      payFailed_('目前無法建立付款，請稍後再試，或來電洽詢客服 0909-504662。' + (data.message ? '\n（' + data.message + '）' : ''));
+      payFailed_('目前無法建立付款，請稍後再試，或來電洽詢' + svcText_() + '。' + (data.message ? '\n（' + data.message + '）' : ''));
       return;
     }
     const form = document.createElement('form');
@@ -4195,11 +4223,11 @@ function pollMpgOrderStatus_(orderId, ctx, attempt) {
   apiGet_({ action: 'orderStatus', orderId }).then(data => {
     if (data.status === 'ok' && (data.orderStatus === '已退款' || data.orderStatus === '退款處理中' || data.orderStatus === '已作廢')) {
       showMpgReturnEnded_(orderId, data.orderStatus === '已作廢'
-        ? '這筆訂單已作廢（未付款或已取消），如有疑問請來電客服 0909-504662。'
-        : '這筆訂單已' + (data.orderStatus === '已退款' ? '退款' : '在退款處理中') + '，如有疑問請來電客服 0909-504662。');
+        ? '這筆訂單已作廢（未付款或已取消），如有疑問請來電' + svcText_() + '。'
+        : '這筆訂單已' + (data.orderStatus === '已退款' ? '退款' : '在退款處理中') + '，如有疑問請來電' + svcText_() + '。');
       try { localStorage.removeItem('abao_mpg_pending_' + orderId); } catch (e) {}
     } else if (data.status === 'error' && /找不到訂單/.test(data.message || '')) {
-      showMpgReturnEnded_(orderId, '查不到這筆訂單，請確認網址是否正確，或來電客服 0909-504662。');
+      showMpgReturnEnded_(orderId, '查不到這筆訂單，請確認網址是否正確，或來電' + svcText_() + '。');
     } else if (data.status === 'ok' && (data.orderStatus === '未取餐' || data.orderStatus === '已取餐')) {
       clearMpgReturnParams_();
       document.getElementById('mpg-waiting-view').style.display = 'none';
@@ -4405,7 +4433,7 @@ function selectPickupTime_(value, ids) {
 function applySlotCapacity(dateValue, ids) {
   ids = ids || PICKUP_IDS_;
   const dateISO = getPickupDateISO(Number(dateValue));
-  apiGet_({ action: 'slotCounts', storeId: 'meibao', date: dateISO }).then(data => {
+  apiGet_({ action: 'slotCounts', storeId: STORE_ID, date: dateISO }).then(data => {
     if (data.status !== 'ok' || !data.counts) return;
     const grid = document.getElementById(ids.grid);
     if (document.getElementById(ids.date).value !== dateValue) return; // 使用者已經切換到別的日期，這批結果過期不套用
@@ -4751,7 +4779,7 @@ function createGroup() {
   const phone = groupVerifiedPhone_();
   if (!phone) { alert('會員驗證資料有異動，請回購物車重新驗證'); return; }
   const payMode = document.querySelector('input[name="group-paymode"]:checked').value;
-  const payload = { action: 'groupCreate', storeId: 'meibao', hostName: name, memberPhone: phone, payMode, deadlineMin: Number(document.getElementById('group-deadline').value), items: [] };   // 2026-09-30：開團不帶餐點，團主之後跟朋友一樣自己送出
+  const payload = { action: 'groupCreate', storeId: STORE_ID, hostName: name, memberPhone: phone, payMode, deadlineMin: Number(document.getElementById('group-deadline').value), items: [] };   // 2026-09-30：開團不帶餐點，團主之後跟朋友一樣自己送出
   const t = document.getElementById(GROUP_PICKUP_IDS_.time).value;   // 兩種都要選(請客 10-04 起)
   if (!t) { alert('請選擇取餐時間'); return; }
   payload.pickupDate = getPickupDateISO(Number(document.getElementById(GROUP_PICKUP_IDS_.date).value));
@@ -4811,11 +4839,11 @@ function payMyGroupShare_(myCart, phone, name, myNeeds) {
   const voucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   const lines = allLines.map(c => `- ${c.x2 ? '其他需求：' : ''}${c.name}${c.size ? '(' + c.size + ')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
-  const summary = `【${STORE_NAME}】揪團訂單（${groupView.hostName} 的揪團・各付各的）\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${groupPickupText_()}\n---\n${lines}\n---\n${perks.total ? '會員權益（' + verifiedMember.tier + '）：' + tierPerkText_(perks) + '\n' : ''}${voucherDiscount > 0 ? '已套用兌換券折抵：-$' + voucherDiscount + '\n' : ''}總計：$${total}\n（已完成線上信用卡付款，取餐時請出示此訂單編號）`;
+  const summary = `【${storeNameForOrder_()}】揪團訂單（${groupView.hostName} 的揪團・各付各的）\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${groupPickupText_()}\n---\n${lines}\n---\n${perks.total ? '會員權益（' + verifiedMember.tier + '）：' + tierPerkText_(perks) + '\n' : ''}${voucherDiscount > 0 ? '已套用兌換券折抵：-$' + voucherDiscount + '\n' : ''}總計：$${total}\n（已完成線上信用卡付款，取餐時請出示此訂單編號）`;
   pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds, voucherPhone: phone, payAtPickup: false, cartBackup: myCart, groupPay: 'each' };
   cart = []; saveCartSession(); updateCartBar();
   return createPendingOrderOnBackend({
-    storeId: 'meibao', groupId: groupCtx.groupId, memberToken: groupCtx.memberToken,
+    storeId: STORE_ID, groupId: groupCtx.groupId, memberToken: groupCtx.memberToken,
     items: myCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '' })),
     totalAmount: total, memberPhone: phone, voucherIds,
     note: `訂單編號:${orderNo}　姓名:${name}　電話:${phone}`
@@ -5095,7 +5123,7 @@ function loadMyOrders_(force) {
   if (!force && myOrdersData_ && Date.now() - myOrdersAt_ < 20000) { renderMyOrdersPane_(); return; }
   myOrdersLoading_ = true; myOrdersErr_ = '';
   renderMyOrdersPane_();
-  apiPost_({ action: 'myOrders', storeId: 'meibao' }).then(d => {
+  apiPost_({ action: 'myOrders', storeId: STORE_ID }).then(d => {
     if (d.status === 'ok') { myOrdersData_ = d; myOrdersAt_ = Date.now(); }
     else myOrdersErr_ = d.code === 'line_not_member' ? '請先完成會員註冊，才看得到訂單紀錄' : (d.message || '讀取失敗，請稍後再試');
   }).catch(() => { myOrdersErr_ = '網路不穩，讀取失敗，請稍後再試'; })
@@ -5484,7 +5512,7 @@ function openProfile_() {
     <div style="margin-top:10px;">
     ${row('手機', escapeHtml_(masked))}${row('會員等級', escapeHtml_(tierName) + (m.tierKeepUntil ? `<div style="font-size:0.76rem;color:var(--muted);">保留到 ${tierKeepText_(m)}</div>` : ''))}
     ${row('點數', (Number(m.points) || 0) + ' 點')}${row('登入方式', 'LINE')}</div>
-    <div style="font-size:0.78rem;color:var(--muted);margin-top:10px;line-height:1.5;">手機${hasBd ? '、生日' : ''}需要修改，請洽門市或客服 0909-504662。</div>`;
+    <div style="font-size:0.78rem;color:var(--muted);margin-top:10px;line-height:1.5;">手機${hasBd ? '、生日' : ''}需要修改，請洽門市或${escapeHtml_(svcText_())}。</div>`;
   document.getElementById('profile-overlay').classList.add('open');
 }
 function saveProfile_() {
@@ -5570,7 +5598,7 @@ function openHomeActDetail_(id) {
 }
 function claimHomeAct_(btn, actId, date) {
   btn.disabled = true; btn.textContent = '領取中…';
-  apiPost_({ action: 'claimActVoucher', storeId: 'meibao', actId, date }).then(data => {
+  apiPost_({ action: 'claimActVoucher', storeId: STORE_ID, actId, date }).then(data => {
     if (data.status !== 'ok' && data.code !== 'claimed') { alert(data.message || '領券失敗，請稍後再試'); btn.disabled = false; btn.textContent = '領券'; return; }
     alert(data.status === 'ok'
       ? `已領取「${data.type}」！\n只能用在 ${homeMd_(date)}（${homeWd_(date)}）取餐的訂單，符合條件結帳時會自動套用。`
@@ -5629,7 +5657,7 @@ if (HOME_TABS_ON) initHomeTabs_();
 // 狀態 4 秒還沒回來就先畫，晚到的時候 applyItemAvailability 發現有變再重畫
 // 10-07：菜單先用手機裡存的時，上下架狀態也先用上次存的立刻畫(不等 3～4 秒)，雲端狀態回來 applyItemAvailability 有變再重畫
 const STORE_STATUS_SAVE_KEY_ = 'abao_order_store_status_v1';
-const storeStatusReady = apiGet_({ action: 'storeStatus', storeId: 'meibao' }).then(d => {
+const storeStatusReady = apiGet_({ action: 'storeStatus', storeId: STORE_ID }).then(d => {
   if (d && d.status === 'ok') { try { localStorage.setItem(STORE_STATUS_SAVE_KEY_, JSON.stringify(d)); } catch (e) {} }
   return d;
 }).catch(err => { console.warn('讀取品項上下架狀態失敗（不影響點餐，全部視為供應中）', err); return null; });
@@ -5705,7 +5733,7 @@ function purgeOfflineCartLines_() {
 // 順便讀暫停接單/設為忙碌狀態，顯示非阻斷式提示（真正擋單是送出訂單時後端做，這裡只是提早讓客人知道）
 // 失敗就當作全部品項供應中、正常接單，不擋顧客點餐
 function applyItemAvailability(ready) {
-  (ready || apiGet_({ action: 'storeStatus', storeId: 'meibao' })).then(data => {
+  (ready || apiGet_({ action: 'storeStatus', storeId: STORE_ID })).then(data => {
     if (!data || data.status !== 'ok') return;
     const storeEl = document.getElementById('store-status-notice');
     if (data.paused) {
