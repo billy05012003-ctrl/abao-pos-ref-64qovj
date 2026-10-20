@@ -1850,7 +1850,10 @@ function offlinePmDelete(name) {
 // 分類名稱顯示用短名稱(去掉英文前綴)，比照線上點餐頁/POS功能的shortCatName()規則，
 // 分類本身(當API的key)還是用完整英文+中文的原始字串，只有畫面顯示這裡轉換
 const MC_SET_MEAL_CATEGORY = '美式狂想套餐 SET MEALS ($129)';
+// 10-21 方便素專區：卡片／活動的「連到分類」可以選它(點餐頁最前面的虛擬分類，不是真的菜單分類)
+const HB_VEG_LINK_ = '__veg__';
 function mcShortCatName(cat) {
+  if (cat === HB_VEG_LINK_) return '🌱 方便素專區';
   if (cat === MC_SET_MEAL_CATEGORY) return '美式狂想套餐';
   return cat.split('_').pop().split('（')[0].trim();
 }
@@ -2336,7 +2339,7 @@ function promoMenuRefIssues_(promoData, catalog, today) {
   const out = [];
   const checkLink = (label, x) => {
     if (x.linkType === '品項' && x.linkItem && !hasItem(x.linkCat, x.linkItem)) out.push(`${label}連到的品項「${x.linkItem}」`);
-    if (x.linkType === '分類' && x.linkCat && !catalog[x.linkCat]) out.push(`${label}連到的分類「${sc(x.linkCat)}」`);
+    if (x.linkType === '分類' && x.linkCat && x.linkCat !== HB_VEG_LINK_ && !catalog[x.linkCat]) out.push(`${label}連到的分類「${sc(x.linkCat)}」`);
   };
   (promoData.homeCards || []).filter(live).forEach(c => checkLink(`新品卡片「${c.title}」`, c));
   (promoData.homeActs || []).filter(live).forEach(a => checkLink(`活動「${a.title}」`, a));
@@ -2438,7 +2441,7 @@ function renderMcCatList() {
         const priceLabel = item.price != null ? ('$' + item.price)
           : (item.price_m != null || item.price_l != null) ? [item.price_m != null ? 'M$'+item.price_m : '', item.price_l != null ? 'L$'+item.price_l : ''].filter(Boolean).join(' ')
           : '';
-        itemRow.innerHTML = `<span class="mc-cat-handle" title="拖曳調整順序">⠿</span><span style="flex:1;min-width:0;">${item.locked ? '🔒 ' : ''}${escapeHtml(item.name)}</span><span class="mc-item-price">${escapeHtml(priceLabel)}</span>`;
+        itemRow.innerHTML = `<span class="mc-cat-handle" title="拖曳調整順序">⠿</span><span style="flex:1;min-width:0;">${item.locked ? '🔒 ' : ''}${item.veg ? '🌱 ' : ''}${escapeHtml(item.name)}</span><span class="mc-item-price">${escapeHtml(priceLabel)}</span>`;
         // 品項拖曳排序(10-02)：只在這個分類裡換位置，存的是草稿(要發布才會到點餐頁/平板)
         const itemHandle = itemRow.querySelector('.mc-cat-handle');
         itemHandle.addEventListener('click', ev => ev.stopPropagation());
@@ -2596,6 +2599,10 @@ function renderMcItemEditor() {
       填了「副價格」後，線上點餐會多顯示一個可選份量按鈕，前提是品項名稱要包含「(選項1/選項2)」格式，例如「蛋餅(半份/一份)」——「價格」對應第一個選項、「副價格」對應第二個選項
     </div>
     <label class="mc-field">備註<textarea id="mc-f-note" rows="2">${escapeHtml(item.note || '')}</textarea></label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin:8px 0;">
+      <input type="checkbox" id="mc-f-veg" ${item.veg ? 'checked' : ''}>
+      🌱 方便素（線上點餐最前面的「方便素」專區會列出，原分類也會貼 🌱；不含肉、但跟葷食共用廚具）
+    </label>
     ${MC_STORE_ID !== '__brand__' ? `
     <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin:8px 0;">
       <input type="checkbox" id="mc-f-locked" ${item.locked ? 'checked' : ''}>
@@ -2686,6 +2693,7 @@ function saveMcItem() {
     priceAlt: mcFieldValue('mc-f-pricealt'),
     note: mcFieldValue('mc-f-note'),
     locked: MC_STORE_ID !== '__brand__' && !!document.getElementById('mc-f-locked')?.checked,
+    veg: !!document.getElementById('mc-f-veg')?.checked,   // 10-21 方便素專區
     storeId: MC_STORE_ID,
     status: MC_STATUS
   };
@@ -3675,11 +3683,13 @@ function hbCatalog_() { return Object.keys(mcCatalog).length ? mcCatalog : (adCa
 // 卡片/活動連結不列出來，已經選了的標「線上看不到」(10-01 農曆初一連到單點，顧客按了找不到)
 // 「線上看不到」的分類(10-03 起照品項上下架的分類線上顯示開關，原本只看寫死的三個店員分類)
 function hbIsStaffCat_(c) { return !!c && !boOnlineCatVisible_(c); }
-function hbLinkCatOptions_(sel) {
+function hbLinkCatOptions_(sel, allowVeg) {
   const cat = hbCatalog_();
-  return `<option value="">請選分類</option>` + Object.keys(cat).filter(c => !hbIsStaffCat_(c)).map(c => `<option value="${escapeHtml(c)}" ${c === sel ? 'selected' : ''}>${escapeHtml(mcShortCatName(c))}</option>`).join('')
+  return `<option value="">請選分類</option>`
+    + (allowVeg ? `<option value="${HB_VEG_LINK_}" ${sel === HB_VEG_LINK_ ? 'selected' : ''}>🌱 方便素專區（後台勾「方便素」的品項）</option>` : '')
+    + Object.keys(cat).filter(c => !hbIsStaffCat_(c)).map(c => `<option value="${escapeHtml(c)}" ${c === sel ? 'selected' : ''}>${escapeHtml(mcShortCatName(c))}</option>`).join('')
     + (sel && hbIsStaffCat_(sel) ? `<option value="${escapeHtml(sel)}" selected>${escapeHtml(mcShortCatName(sel))}（線上看不到）</option>` : '')
-    + (sel && !cat[sel] ? `<option value="${escapeHtml(sel)}" selected>${escapeHtml(mcShortCatName(sel))}（菜單已沒有）</option>` : '');
+    + (sel && sel !== HB_VEG_LINK_ && !cat[sel] ? `<option value="${escapeHtml(sel)}" selected>${escapeHtml(mcShortCatName(sel))}（菜單已沒有）</option>` : '');
 }
 function hbStaffCatWarnHtml_(d) {
   if ((d.linkType !== '品項' && d.linkType !== '分類') || !hbIsStaffCat_(d.linkCat)) return '';
@@ -3693,7 +3703,7 @@ function renderHbList() {
     const cat = hbCatalog_();
     const row = c => {
       let link = c.linkType === '品項' ? '品項「' + c.linkItem + '」' + (c.saleDate ? '・' + hbMd_(c.saleDate) + ' 開賣' : '') : c.linkType === '分類' ? '分類「' + mcShortCatName(c.linkCat) + '」' : '只展示' + (c.saleDate ? '・' + hbMd_(c.saleDate) + ' 開賣' : '');
-      const missing = (c.linkType === '品項' && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem)) || (c.linkType === '分類' && !cat[c.linkCat]);
+      const missing = (c.linkType === '品項' && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem)) || (c.linkType === '分類' && c.linkCat !== HB_VEG_LINK_ && !cat[c.linkCat]);
       const staff = (c.linkType === '品項' || c.linkType === '分類') && hbIsStaffCat_(c.linkCat);
       const tags = [link, missing && Object.keys(cat).length ? '⚠菜單已沒有' : null, staff ? '⚠線上看不到' : null, hbPeriodTag_(c), c.status === '停用' ? '停用' : null].filter(Boolean).join('・');
       return `<div class="mc-item-row sort-row${c.id === hbCurrentId ? ' active' : ''}" data-key="${escapeHtml(c.id)}" onclick="hbEditCard('${hbJs_(c.id)}')">
@@ -3745,7 +3755,7 @@ function hbEditCard(id, noScroll) {
   renderHbList(); renderHbEditor();
   if (!noScroll) scrollEditorIntoView_('hb-editor');
 }
-function hbSetCardLink_(type) { hbDraft.linkType = type; renderHbEditor(); }
+function hbSetCardLink_(type) { hbDraft.linkType = type; if (type !== '分類' && hbDraft.linkCat === HB_VEG_LINK_) hbDraft.linkCat = ''; renderHbEditor(); }
 function hbSetCardCat_(cat) {
   hbDraft.linkCat = cat;
   if (hbDraft.linkType === '品項') hbDraft.linkItem = '';
@@ -3788,7 +3798,7 @@ function renderHbCardEditor_(el) {
     </div>
     ${d.linkType !== '只展示' ? `
     <div class="mc-field-row">
-      <label class="mc-field">分類<select onchange="hbSetCardCat_(this.value)">${catOpts(d.linkCat)}</select></label>
+      <label class="mc-field">分類<select onchange="hbSetCardCat_(this.value)">${catOpts(d.linkCat, d.linkType === '分類')}</select></label>
       ${d.linkType === '品項' ? `<label class="mc-field">品項<select onchange="hbSetCardItem_(this.value)">${itemOpts}</select></label>` : ''}
     </div>
     ${!cats.length ? '<div style="font-size:0.78rem;color:#c0392b;margin:-4px 0 8px;">菜單資料讀取失敗，請重新整理頁面</div>' : ''}
@@ -4107,7 +4117,7 @@ function hbActLinkHtml_(d) {
       ${!d.linkType ? '<div style="font-size:0.72rem;color:var(--muted);">還沒設定：「去點餐」回到線上點餐最上面。綁優惠券時會自動帶入券的分類或品項。</div>' : ''}
       ${d.linkType === '品項' || d.linkType === '分類' ? `
       <div class="mc-field-row" style="margin-top:6px;">
-        <label class="mc-field">分類<select onchange="hbDraft.linkCat=this.value;if(hbDraft.linkType==='品項')hbDraft.linkItem='';renderHbEditor();">${catOpts(d.linkCat)}</select></label>
+        <label class="mc-field">分類<select onchange="hbDraft.linkCat=this.value;if(hbDraft.linkType==='品項')hbDraft.linkItem='';renderHbEditor();">${catOpts(d.linkCat, d.linkType === '分類')}</select></label>
         ${d.linkType === '品項' ? `<label class="mc-field">品項<select onchange="hbDraft.linkItem=this.value;renderHbEditor();">${itemOpts}</select></label>` : ''}
       </div>
       ${!cats.length ? '<div style="font-size:0.78rem;color:#c0392b;">菜單資料讀取失敗，請重新整理頁面</div>' : ''}
