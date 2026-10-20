@@ -99,6 +99,9 @@
   .item .name { font-size: 0.92rem; }
   .new-item-badge { display: inline-block; margin-right: 5px; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.04em; color: #fff; background: var(--brand); border-radius: 4px; padding: 1px 5px; vertical-align: 1px; }
   .item .price { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+  .veg-item-badge { display: inline-block; margin-right: 5px; font-size: 0.66rem; font-weight: 700; color: #2f6b1f; background: #eaf6e2; border: 1px solid #b9dca5; border-radius: 4px; padding: 0 4px; vertical-align: 1px; }
+  .veg-zone-note { font-size: 0.78rem; color: #2f6b1f; background: #f3faee; border: 1px solid #cfe7c0; border-radius: 8px; padding: 8px 10px; margin: -4px 0 12px; line-height: 1.6; }
+  .rank-item-badge { display: inline-block; margin-top: 3px; font-size: 0.7rem; font-weight: 700; color: #b5470b; background: #fff1e6; border: 1px solid #f5c9a8; border-radius: 4px; padding: 0 5px; }
   .item .actions { display: flex; gap: 6px; flex-shrink: 0; }
   .item button.add {
     background: var(--brand);
@@ -1372,13 +1375,13 @@ function useVoucherToOrder_(voucherId, type) {
   pendingVoucherUse_ = { voucherId, type };
   if (type === '美式狂想乙套兌換券') {
     const names = (CATALOG[SET_MEAL_CATEGORY] || []).map(it => it.name);
-    const card = [...document.querySelectorAll('#menu .item')].find(el => names.includes(el.dataset.itemName));
+    const card = [...document.querySelectorAll('#menu .item:not(.veg-copy)')].find(el => names.includes(el.dataset.itemName));
     const sec = card && card.closest('section.category');
     if (sec) goToCategory(Number(sec.id.replace('cat-', '')));
     alert('請選一款美式狂想套餐，加入購物車時會自動套用這張券（只折套餐本身，加購、升級另外計價）');
     return;
   }
-  const card = [...document.querySelectorAll('#menu .item')].find(el => el.dataset.itemName === b.targetItem);
+  const card = [...document.querySelectorAll('#menu .item:not(.veg-copy)')].find(el => el.dataset.itemName === b.targetItem);
   const btn = card && card.querySelector('.add');
   if (!btn) { pendingVoucherUse_ = null; alert(`「${b.targetItem}」目前線上不提供，請到門市使用這張券`); return; }
   if (btn.disabled) { pendingVoucherUse_ = null; alert(`「${b.targetItem}」今天已售完`); return; }
@@ -1524,7 +1527,7 @@ function chooseGiftPick_(voucherId, name) {
   const b = v && VOUCHER_BEHAVIOR[v.type];
   document.getElementById('giftpick-overlay').classList.remove('open');
   if (!b) return;
-  const card = [...document.querySelectorAll('#menu .item')].find(el => el.dataset.itemName === name);
+  const card = [...document.querySelectorAll('#menu .item:not(.veg-copy)')].find(el => el.dataset.itemName === name);
   const btn = card && card.querySelector('.add');
   if (!btn) { alert(`「${name}」目前線上不提供，請改選另一樣`); return; }
   if (btn.disabled) { alert(`「${name}」今天已售完，請改選另一樣`); return; }
@@ -2617,19 +2620,20 @@ function renderMenu() {
   const menu = document.getElementById('menu');
   const catList = document.getElementById('category-list');
   const cats = Object.keys(CATALOG);
+  const hasVeg = renderVegZone_(tabs, menu, catList);   // 10-21 方便素專區放最前面
   cats.forEach((cat, i) => {
     const shortName = shortCatName(cat);
     const btn = document.createElement('button');
     btn.id = 'tab-btn-' + i;
     btn.textContent = shortName;
-    btn.className = i === 0 ? 'active' : '';
+    btn.className = i === 0 && !hasVeg ? 'active' : '';
     btn.onclick = () => goToCategory(i);
     tabs.appendChild(btn);
 
     const listItem = document.createElement('button');
     listItem.id = 'cat-list-item-' + i;
     listItem.type = 'button';
-    listItem.className = 'cat-list-item' + (i === 0 ? ' active' : '');
+    listItem.className = 'cat-list-item' + (i === 0 && !hasVeg ? ' active' : '');
     listItem.textContent = shortName;
     listItem.style.cssText = 'display:block; width:100%; text-align:left; border:none; background:none; padding:12px 4px; font-size:0.95rem; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text);';
     listItem.onclick = () => goToCategory(i);
@@ -2650,9 +2654,47 @@ function renderMenu() {
       section.appendChild(noteEl);
     }
 
-    CATALOG[cat].forEach((item, j) => {
+    CATALOG[cat].forEach((item, j) => { section.appendChild(buildMenuItemCard_(cat, i, item, j, false)); });
+    menu.appendChild(section);
+  });
+  refreshTierPerkBadges_();   // 菜單比會員驗證晚載入時補上等級優惠標示
+  refreshNewBadges_();
+  refreshRankBadges_();
+}
+// 方便素專區(2026-10-21 老闆定案)：後台品項勾「方便素」(item.veg)的，在分類列最前面多一段「🌱 方便素」，原分類也貼 🌱。
+// 專區不放進 CATALOG(點餐流程、套餐、加料都靠「原分類＋品名」找設定)，卡片點下去一律用原分類開；同名品項只列一次
+const VEG_CAT_KEY_ = '__veg__';
+function vegZoneItems_() {
+  const seen = new Set(), out = [];
+  Object.keys(CATALOG).forEach((cat, i) => CATALOG[cat].forEach((item, j) => {
+    if (item.veg && !seen.has(item.name)) { seen.add(item.name); out.push({ cat, i, item, j }); }
+  }));
+  return out;
+}
+function renderVegZone_(tabs, menu, catList) {
+  const list = vegZoneItems_();
+  if (!list.length) return false;
+  const btn = document.createElement('button');
+  btn.id = 'tab-btn-veg'; btn.textContent = '🌱 方便素'; btn.className = 'active';
+  btn.onclick = () => goToCategory('veg');
+  tabs.appendChild(btn);
+  const li = document.createElement('button');
+  li.id = 'cat-list-item-veg'; li.type = 'button'; li.className = 'cat-list-item active'; li.textContent = '🌱 方便素';
+  li.style.cssText = 'display:block; width:100%; text-align:left; border:none; background:none; padding:12px 4px; font-size:0.95rem; border-bottom:1px solid var(--border); cursor:pointer; color:var(--text);';
+  li.onclick = () => goToCategory('veg');
+  catList.appendChild(li);
+  const section = document.createElement('section');
+  section.className = 'category'; section.id = 'cat-veg';
+  section.innerHTML = '<h2>🌱 方便素</h2><div class="veg-zone-note">方便素：餐點不含肉類，但與葷食共用廚具與油鍋，嚴格素食者請斟酌。<br>加料、醬料請選不含肉的。</div>';
+  list.forEach(x => section.appendChild(buildMenuItemCard_(x.cat, x.i, x.item, x.j, true)));
+  menu.appendChild(section);
+  return true;
+}
+// 品項卡(原分類和方便素專區共用)；vegCopy＝專區裡的複本(class veg-copy，跳到品項等功能會略過它，找原分類那張)
+function buildMenuItemCard_(cat, i, item, j, vegCopy) {
+      const shortName = shortCatName(cat);
       const div = document.createElement('div');
-      div.className = 'item';
+      div.className = vegCopy ? 'item veg-copy' : 'item';
       div.dataset.itemName = item.name;
       const key = 'c' + i + '_i' + j;
 
@@ -2667,7 +2709,7 @@ function renderMenu() {
       div.innerHTML = `
         <img class="thumb" src="${item.photoUrl || (IMG_BASE + encodeURIComponent(shortName) + '/' + encodeURIComponent(imgSafeName(item.name)) + '.jpg')}" alt="" loading="lazy" onerror="this.style.display='none'">
         <div class="info">
-          <div class="name">${item.name}</div>
+          <div class="name">${!vegCopy && item.veg ? '<span class="veg-item-badge">🌱素</span>' : ''}${item.name}</div>
           <div class="price">${priceLabel}</div>
         </div>
         <div class="actions">
@@ -2675,13 +2717,34 @@ function renderMenu() {
         </div>
       `;
       div.querySelector('.add').onclick = () => openItemModal(cat, key, item);
-      section.appendChild(div);
-    });
-    menu.appendChild(section);
-  });
-  refreshTierPerkBadges_();   // 菜單比會員驗證晚載入時補上等級優惠標示
-  refreshNewBadges_();
+      return div;
 }
+// 分類排名(2026-10-21，老闆看酷澎「銷量第1」定案)：後端 salesRank 回「近 30 天線上單份數由多到少的品名」(至少 5 份才列、不含份數)，
+// 這裡每個分類挑看得到的前三名，價格下面貼「🔥 本類熱銷第N」；資料不夠(點餐頁剛開放)時後端清單是空的，標籤就不出現
+let SALES_RANK_NAMES_ = [];
+function refreshRankBadges_() {
+  document.querySelectorAll('.rank-item-badge').forEach(el => el.remove());
+  if (!SALES_RANK_NAMES_.length) return;
+  const order = {};
+  SALES_RANK_NAMES_.forEach((n, i) => { order[n] = i; });
+  Object.keys(CATALOG).forEach((cat, i) => {
+    const sec = document.getElementById('cat-' + i);
+    if (!sec) return;
+    const top = [...new Set(CATALOG[cat].map(it => it.name))].filter(n => n in order).sort((a, b) => order[a] - order[b]).slice(0, 3);
+    top.forEach((name, k) => {
+      const card = [...sec.querySelectorAll('.item')].find(el => el.dataset.itemName === name);
+      const info = card && card.querySelector('.info');
+      if (!info) return;
+      const b = document.createElement('div');
+      b.className = 'rank-item-badge';
+      b.textContent = '🔥 本類熱銷第' + (k + 1);
+      info.appendChild(b);
+    });
+  });
+}
+apiGet_({ action: 'salesRank', storeId: STORE_ID }).then(d => {
+  if (d && d.status === 'ok' && Array.isArray(d.names)) { SALES_RANK_NAMES_ = d.names; refreshRankBadges_(); }
+}).catch(() => {});
 // 菜單 NEW 標籤(2026-10-04 老闆定案：不另建「新品上市」分類，新品放在它原本的分類，靠新品推薦卡片＋菜單 NEW 標籤告訴客人)：
 // 「新品上市」卡片(啟用、期間內、連單一品項)連到的那道餐，菜單品名前貼 NEW；卡片到期/停用/改成只展示就自動消失，不用另外設定
 function refreshNewBadges_() {
@@ -5328,6 +5391,7 @@ function homeCardState_(c) {
   // 連單一品項＋開賣日還沒到(10-04)：顯示「X/X 開賣」、點了只看介紹(品項開賣前通常先設永久下架，不然會變成暫停供應)
   if (c.linkType === '品項' && c.saleDate && c.saleDate > todayYmd_()) return { ok: true, presale: true, item: (CATALOG_ALL[c.linkCat] || []).find(it => it.name === c.linkItem) };
   if (!Object.keys(CATALOG).length) return { wait: true };
+  if (c.linkType === '分類' && c.linkCat === VEG_CAT_KEY_) return vegZoneItems_().length ? { ok: true } : { off: '暫停供應' };   // 10-21 方便素專區
   if (c.linkType === '分類') return CATALOG[c.linkCat] ? { ok: true } : { off: '暫停供應' };
   const item = (CATALOG[c.linkCat] || []).find(it => it.name === c.linkItem);
   if (!item) return { off: '暫停供應' };
@@ -5338,6 +5402,7 @@ function homeCardState_(c) {
 function homeCardPhoto_(c, item) {
   if (c.photoUrl) return c.photoUrl;
   // 連分類沒上傳圖片：用那個分類第一個有照片的品項
+  if (c.linkType === '分類' && c.linkCat === VEG_CAT_KEY_) { const x = vegZoneItems_().find(v => v.item.photoUrl); return x ? x.item.photoUrl : ''; }
   if (c.linkType === '分類') { const it = (CATALOG[c.linkCat] || []).find(x => x.photoUrl); return it ? it.photoUrl : ''; }
   if (item) return item.photoUrl || (IMG_BASE + encodeURIComponent(shortCatName(c.linkCat)) + '/' + encodeURIComponent(imgSafeName(item.name)) + '.jpg');
   return '';
@@ -5395,6 +5460,7 @@ function onHomeCardClick_(id) {
 // 先回到最上面：好康/新品頁往下滑過再切分頁，瀏覽器會把位置錨到菜單很下面(10-01 實測)，跳分類變成從菜單底部一路往回捲
 function homeJumpTo_(linkType, linkCat, linkItem, softFail) {
   switchHomeTab_('order');
+  if (linkCat === VEG_CAT_KEY_) { if (document.getElementById('cat-veg')) setTimeout(() => goToCategory('veg'), 0); return; }   // 10-21 方便素專區
   const idx = Object.keys(CATALOG).indexOf(linkCat);
   if (idx === -1) return;
   if (linkType === '分類') { setTimeout(() => goToCategory(idx), 0); return; }
@@ -5750,8 +5816,7 @@ function applyItemAvailability(ready) {
     if (rebuildOnlineCatalog_()) rerenderMenu_();   // 狀態比菜單晚到、而且線上看得到的分類/品項有變
     purgeOfflineCartLines_();
     Object.keys(data.items).forEach(name => {
-      const div = document.querySelector(`.item[data-item-name="${CSS.escape(name)}"]`);
-      if (!div) return;
+      document.querySelectorAll(`.item[data-item-name="${CSS.escape(name)}"]`).forEach(div => {   // 10-21 改成全部：方便素專區複本、同名品項都要標
       const status = data.items[name];
       const btn = div.querySelector('.add');
       if (btn) {
@@ -5760,6 +5825,7 @@ function applyItemAvailability(ready) {
         btn.onclick = null;
       }
       div.style.opacity = '0.5';
+      });
     });
     if (HOME_TABS_ON) renderHomeNewPane_();   // 新品卡片標「今日售完」
   }).catch(err => console.warn('讀取品項上下架狀態失敗（不影響點餐，全部視為供應中）', err));
