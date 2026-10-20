@@ -100,6 +100,7 @@
   .new-item-badge { display: inline-block; margin-right: 5px; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.04em; color: #fff; background: var(--brand); border-radius: 4px; padding: 1px 5px; vertical-align: 1px; }
   .item .price { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
   .veg-item-badge { display: inline-block; margin-right: 5px; font-size: 0.66rem; font-weight: 700; color: #2f6b1f; background: #eaf6e2; border: 1px solid #b9dca5; border-radius: 4px; padding: 0 4px; vertical-align: 1px; }
+  .veg-zone-sub { font-size: 0.82rem; font-weight: 700; color: #2f6b1f; margin: 14px 0 6px; padding-left: 8px; border-left: 3px solid #8cc56b; }
   .veg-zone-note { font-size: 0.78rem; color: #2f6b1f; background: #f3faee; border: 1px solid #cfe7c0; border-radius: 8px; padding: 8px 10px; margin: -4px 0 12px; line-height: 1.6; }
   .rank-item-badge { display: inline-block; margin-top: 3px; font-size: 0.7rem; font-weight: 700; color: #b5470b; background: #fff1e6; border: 1px solid #f5c9a8; border-radius: 4px; padding: 0 5px; }
   .item .actions { display: flex; gap: 6px; flex-shrink: 0; }
@@ -2686,7 +2687,18 @@ function renderVegZone_(tabs, menu, catList) {
   const section = document.createElement('section');
   section.className = 'category'; section.id = 'cat-veg';
   section.innerHTML = '<h2>🌱 方便素</h2><div class="veg-zone-note">方便素：餐點不含肉類，但與葷食共用廚具與油鍋，嚴格素食者請斟酌。<br>加料、醬料請選不含肉的。</div>';
-  list.forEach(x => section.appendChild(buildMenuItemCard_(x.cat, x.i, x.item, x.j, true)));
+  // 10-21 老闆實測：品名單獨拉出來看不懂(「玉米起司」是特酥蛋餅、「草莓」是果醬吐司)→依原分類加小標題
+  let lastCat = null;
+  list.forEach(x => {
+    if (x.cat !== lastCat) {
+      lastCat = x.cat;
+      const sub = document.createElement('div');
+      sub.className = 'veg-zone-sub';
+      sub.textContent = shortCatName(x.cat);
+      section.appendChild(sub);
+    }
+    section.appendChild(buildMenuItemCard_(x.cat, x.i, x.item, x.j, true));
+  });
   menu.appendChild(section);
   return true;
 }
