@@ -99,7 +99,7 @@
   .item .name { font-size: 0.92rem; }
   .new-item-badge { display: inline-block; margin-right: 5px; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.04em; color: #fff; background: var(--brand); border-radius: 4px; padding: 1px 5px; vertical-align: 1px; }
   .item .price { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
-  .veg-item-badge { display: inline-block; margin-right: 5px; font-size: 0.66rem; font-weight: 700; color: #2f6b1f; background: #eaf6e2; border: 1px solid #b9dca5; border-radius: 4px; padding: 0 4px; vertical-align: 1px; }
+  .veg-item-badge { display: inline-block; margin-left: 5px; font-size: 0.66rem; font-weight: 700; color: #2f6b1f; background: #eaf6e2; border: 1px solid #b9dca5; border-radius: 4px; padding: 0 4px; vertical-align: 1px; }
   .veg-zone-sub { font-size: 0.82rem; font-weight: 700; color: #2f6b1f; margin: 14px 0 6px; padding-left: 8px; border-left: 3px solid #8cc56b; }
   .veg-zone-note { font-size: 0.78rem; color: #2f6b1f; background: #f3faee; border: 1px solid #cfe7c0; border-radius: 8px; padding: 8px 10px; margin: -4px 0 12px; line-height: 1.6; }
   .rank-item-badge { display: inline-block; margin-top: 3px; font-size: 0.7rem; font-weight: 700; color: #b5470b; background: #fff1e6; border: 1px solid #f5c9a8; border-radius: 4px; padding: 0 5px; }
@@ -2721,7 +2721,7 @@ function buildMenuItemCard_(cat, i, item, j, vegCopy) {
       div.innerHTML = `
         <img class="thumb" src="${item.photoUrl || (IMG_BASE + encodeURIComponent(shortName) + '/' + encodeURIComponent(imgSafeName(item.name)) + '.jpg')}" alt="" loading="lazy" onerror="this.style.display='none'">
         <div class="info">
-          <div class="name">${!vegCopy && item.veg ? '<span class="veg-item-badge">🌱素</span>' : ''}${item.name}</div>
+          <div class="name">${item.name}${!vegCopy && item.veg ? '<span class="veg-item-badge">🌱素</span>' : ''}</div>
           <div class="price">${priceLabel}</div>
         </div>
         <div class="actions">
