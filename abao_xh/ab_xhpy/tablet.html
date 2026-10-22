@@ -218,7 +218,11 @@
   <div class="pos-sheet" style="max-width:460px;text-align:center">
     <h2 style="margin:0 0 4px;font-size:1.15rem">請掃客人的 LINE Pay 付款碼</h2>
     <div id="lp-scan-amount" style="font-size:1.6rem;font-weight:700;color:var(--brand);margin:6px 0"></div>
-    <input id="lp-scan-input" inputmode="numeric" autocomplete="off" placeholder="掃碼器掃描，或手動輸入付款碼後按 Enter" style="width:100%;font-size:1.1rem;padding:10px;box-sizing:border-box;text-align:center" onkeydown="if(event.key==='Enter'){event.preventDefault();lpSubmit_();}">
+    <!-- 包在 form 裡：Android 鍵盤右下角「→／前往」才會觸發送出(10-22 平板實測單純 keydown 收不到) -->
+    <form id="lp-scan-form-el" onsubmit="event.preventDefault();lpSubmit_();" style="display:flex;gap:6px;margin:0">
+      <input id="lp-scan-input" inputmode="numeric" enterkeyhint="go" autocomplete="off" placeholder="掃碼器掃描，或手動輸入付款碼" style="flex:1;min-width:0;font-size:1.1rem;padding:10px;box-sizing:border-box;text-align:center" onkeydown="if(event.key==='Enter'){event.preventDefault();lpSubmit_();}">
+      <button type="submit" id="lp-scan-submit" class="btn btn-primary" style="padding:10px 16px">送出</button>
+    </form>
     <div id="lp-scan-msg" style="min-height:2.6em;margin:10px 0;font-size:0.95rem"></div>
     <div id="lp-scan-btns" style="display:flex;flex-direction:column;gap:6px"></div>
   </div>
@@ -3639,6 +3643,7 @@ function lpScanState_(state, msg) {
   const btn = (label, fn, cls) => `<button type="button" class="btn ${cls || 'btn-secondary'}" style="padding:10px" onclick="${fn}">${label}</button>`;
   const fromCart = !!(lpCtx_ && lpCtx_.payload);
   inp.disabled = state !== 'ready';
+  document.getElementById('lp-scan-submit').disabled = state !== 'ready';
   if (state === 'ready') {
     inp.value = '';
     setTimeout(() => inp.focus(), 50);
