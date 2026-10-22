@@ -1051,13 +1051,14 @@ function loadBoRefundable_() {
       pend.map(p => escapeHtml(p.orderId + '　$' + p.totalAmount + '　(' + p.requestedAt + ' 受理)')).join('<br>') + '</div>' : '';
     if (!d.orders.length) { box.innerHTML = '<div class="ops-meta" style="padding:8px 0;">近3天沒有可退款的訂單</div>' + pendHtml; return; }
     box.innerHTML = d.orders.map(o => `<div class="ops-order"><div><b>${escapeHtml(o.orderId)}</b> <span class="ops-meta">[${escapeHtml(o.channel)}] ${escapeHtml(o.status)}</span>${o.printed ? '<span class="ops-tag printed">🖨已出單</span>' : ''}
-        <div class="ops-meta">$${escapeHtml(o.totalAmount)}　${o.needsManual ? '<span style="color:#a32d2d;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div></div>
+        <div class="ops-meta">$${escapeHtml(o.totalAmount)}　${o.needsManual ? '<span style="color:#a32d2d;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回客人的 LINE Pay)' : o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div></div>
       ${o.needsManual ? '<button class="ops-btn" disabled>無法自動退</button>'
-        : `<button class="ops-btn danger" onclick="boRefund_('${escapeHtml(o.orderId)}', ${Number(o.totalAmount) || 0}, ${o.gateway ? 'true' : 'false'}, ${o.printed ? 'true' : 'false'})">退款</button>`}</div>`).join('') + pendHtml;
+        : `<button class="ops-btn danger" onclick="boRefund_('${escapeHtml(o.orderId)}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.gateway ? 'true' : 'false'}, ${o.printed ? 'true' : 'false'})">退款</button>`}</div>`).join('') + pendHtml;
   }).catch(() => { box.innerHTML = '<div class="ops-meta">網路異常，請稍後再試</div>'; });
 }
 function boRefund_(orderId, amount, viaGateway, printed) {
-  const how = viaGateway ? '線上信用卡單，系統會向藍新退回客人的卡。' : '現場付款單，系統只記錄退款，<b>錢要請店裡當場退給客人</b>。';
+  const how = viaGateway === 'linepay' ? 'LINE Pay 掃碼單，系統會直接退回客人的 LINE Pay，不用退現金。'
+    : viaGateway ? '線上信用卡單，系統會向藍新退回客人的卡。' : '現場付款單，系統只記錄退款，<b>錢要請店裡當場退給客人</b>。';
   const warn = printed ? '<div class="ops-warn">⚠️ 這張已經出單，廚房可能已經在做。<br>請先打電話通知店裡<b>不要交餐</b>，再按確定。</div>' : '';
   openBoOpsPinFor_('refund', '確定要退款「' + orderId + '」$' + amount + ' 嗎？', warn + '<div>' + how + '退款後扣回點數與消費、退回用掉的兌換券，<b>無法復原</b>。紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」。</div>', pin => {
     boOpsPost_({ action: 'refundOrder', orderId: orderId, staffPin: pin }).then(d => {

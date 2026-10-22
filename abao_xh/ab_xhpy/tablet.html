@@ -873,18 +873,19 @@ function loadRefundableOrders() {
       <div class="order-card">
         <div>
           <div><strong>${o.orderId}</strong> <span class="meta">[${o.channel}] ${o.status}</span>${o.printed ? '<span class="tag-printed">🖨已出單</span>' : ''}</div>
-          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div>
+          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回客人的 LINE Pay)' : o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div>
         </div>
         ${o.needsManual
           ? '<button class="btn" disabled style="opacity:.5;">無法自動退</button>'
-          : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.gateway ? 'true' : 'false'})">退款</button>`}
+          : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.gateway ? 'true' : 'false'})">退款</button>`}
       </div>
     `).join('') + pendHtml;
   }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
 }
 
 function doRefund(orderId, amount, viaGateway) {
-  const how = viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回客人的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給客人。';
+  const how = viaGateway === 'linepay' ? '這筆是 LINE Pay 掃碼付款，系統會直接退回客人的 LINE Pay，不用退現金。'
+    : viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回客人的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給客人。';
   if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。')) return;
   withPosPerm_('refund', '退款', (staffName, staffPin) => {
     apiPost({ action: 'refundOrder', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
