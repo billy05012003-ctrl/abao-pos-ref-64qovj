@@ -202,6 +202,27 @@
     <div id="offline-list"></div>
   </div>
 </div>
+<!-- 10-22 LINE Pay 門市反掃：收款未完成紅條＋清單、掃碼視窗 -->
+<div id="lp-banner" class="status-banner" style="display:none;cursor:pointer;background:#b71c1c;color:#fff;font-size:1rem" onclick="lpOpenList_()"></div>
+<div class="pos-overlay" id="lp-overlay" onclick="if(event.target===this)lpCloseList_()">
+  <div class="pos-sheet" style="max-width:560px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+      <h2 style="margin:0;font-size:1.1rem">⚠️ LINE Pay 收款未完成</h2>
+      <button type="button" class="btn btn-secondary" onclick="lpCloseList_()">關閉</button>
+    </div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">這些單還沒確定收到錢，<b>先不要做餐</b>。按「重新查詢」看客人有沒有付款成功；系統每幾分鐘也會自動再查，查到已付款會自動補印出單。</div>
+    <div id="lp-list"></div>
+  </div>
+</div>
+<div class="pos-overlay" id="lp-scan-overlay">
+  <div class="pos-sheet" style="max-width:460px;text-align:center">
+    <h2 style="margin:0 0 4px;font-size:1.15rem">請掃客人的 LINE Pay 付款碼</h2>
+    <div id="lp-scan-amount" style="font-size:1.6rem;font-weight:700;color:var(--brand);margin:6px 0"></div>
+    <input id="lp-scan-input" inputmode="numeric" autocomplete="off" placeholder="掃碼器掃描，或手動輸入付款碼後按 Enter" style="width:100%;font-size:1.1rem;padding:10px;box-sizing:border-box;text-align:center" onkeydown="if(event.key==='Enter'){event.preventDefault();lpSubmit_();}">
+    <div id="lp-scan-msg" style="min-height:2.6em;margin:10px 0;font-size:0.95rem"></div>
+    <div id="lp-scan-btns" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+</div>
 <div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
@@ -229,9 +250,11 @@
     <div id="pos-checkout-panel" style="display:none">
       <div id="pos-checkout-member" style="font-size:0.85rem;margin-bottom:8px;"></div>
       <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">付款方式</label>
-      <input type="hidden" id="pos-payment-method" value="LinePay現場">
+      <input type="hidden" id="pos-payment-method" value="LINEPay mini">
       <div id="pos-payment-method-group" style="display:flex;flex-wrap:wrap;gap:8px;">
-        <button type="button" class="pos-pay-btn active" data-method="LinePay現場" onclick="setPosPaymentMethod_('LinePay現場')">LinePay現場</button>
+        <!-- 10-22 LINE Pay 門市反掃：後台「付款方式設定」開了才出現；斷網反灰 -->
+        <button type="button" class="pos-pay-btn" id="pos-pay-lpscan" data-method="LINE Pay掃碼" style="display:none" onclick="setPosPaymentMethod_('LINE Pay掃碼')">LINE Pay掃碼</button>
+        <button type="button" class="pos-pay-btn active" data-method="LINEPay mini" onclick="setPosPaymentMethod_('LINEPay mini')">LINEPay mini</button>
         <button type="button" class="pos-pay-btn" data-method="現金" onclick="setPosPaymentMethod_('現金')">現金</button>
         <button type="button" class="pos-pay-btn" data-method="其他" onclick="setPosPaymentMethod_('其他')">其他</button>
         <button type="button" class="pos-pay-btn warn" data-method="取餐付款" onclick="setPosPaymentMethod_('取餐付款')">取餐付款</button>
@@ -3243,9 +3266,9 @@ function closePosCartAll() {
   document.getElementById('pos-offline-reprint-btn').style.display = 'none';
   document.getElementById('pos-checkout-btn').style.display = 'block';
   posCheckoutKey_ = null;   // 10-13 新訂單換新的結帳鍵
-  // 每次開始新訂單都重置成安全預設值(LinePay現場、非預約)，避免上一張選的「取餐付款」／指定取餐時間
-  // 殘留設定誤套到下一張現場立即結帳的訂單
-  setPosPaymentMethod_('LinePay現場');
+  // 每次開始新訂單都重置成安全預設值(LINEPay mini、非預約)，避免上一張選的「取餐付款」／指定取餐時間
+  // 殘留設定誤套到下一張現場立即結帳的訂單(10-22「LinePay現場」改名「LINEPay mini」)
+  setPosPaymentMethod_('LINEPay mini');
   setPosScheduleMode_(false);
   document.getElementById('pos-schedule-fields').removeAttribute('data-initialized');
   document.getElementById('pos-pickup-date').value = '';
@@ -3420,6 +3443,13 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
   };
   payload.clientKey = posCheckoutKeyFor_(payload);   // 10-13：卡頓重按/離線補傳時雲端認同一張
   const restoreBtn = () => { btn.disabled = false; btn.textContent = btnOriginalText; };
+  // 10-22 LINE Pay 掃碼(反掃)：開掃碼視窗，掃到付款碼才送(斷網不能用)
+  if (paymentMethod === 'LINE Pay掃碼') {
+    if (posOffline_()) { alert('網路中斷時不能用 LINE Pay 掃碼，請改收現金或用 LINEPay mini'); restoreBtn(); return; }
+    restoreBtn();
+    lpOpenScan_({ payload });
+    return;
+  }
   // 10-13 離線收銀：已判定離線就直接存平板＋直接印(兌換券要雲端核銷，離線不能用)
   if (posOffline_()) {
     if (appliedVouchers.length) { alert('網路中斷時不能用兌換券，請先拿掉兌換券再結帳'); restoreBtn(); return; }
@@ -3520,7 +3550,7 @@ function ocLoad_() {
   if (ocLoading_ || !posDeviceToken_()) return;
   ocLoading_ = true;
   apiGet({ action: 'pendingConfirmOrders', storeId: STORE_ID }).then(d => {
-    if (d && d.status === 'ok') { ocOrders_ = d.orders || []; ocRender_(); }
+    if (d && d.status === 'ok') { ocOrders_ = d.orders || []; ocRender_(); lpPending_ = d.linePayPending || []; lpRender_(); }
   }).catch(() => {}).finally(() => { ocLoading_ = false; });
 }
 function ocRender_() {
@@ -3573,6 +3603,197 @@ function ocConfirm_(orderId, btn) {
 }
 ocLoad_();
 setInterval(ocLoad_, OC_POLL_MS_);
+// ---------------------------------------------------------------
+// 10-22 LINE Pay 門市反掃(規格 LINEPay門市反掃設計_2026-10-22.md)：掃碼視窗、收款未完成紅條／清單。
+// 後端每一步都會先跟 LINE Pay 確認有沒有扣款，這裡只要照回應顯示；「狀態不明」時不讓店員重掃
+// ---------------------------------------------------------------
+let lpScanEnabled_ = false, lpPending_ = [], lpCtx_ = null;
+function loadLinePaySettings_() {
+  return apiGet({ action: 'paymentMethodSettings', storeId: STORE_ID }).then(d => {
+    if (d && d.status === 'ok') { lpScanEnabled_ = !!d.linePayScanEnabled; lpScanBtnRefresh_(); }
+  }).catch(() => {});
+}
+function lpScanBtnRefresh_() {
+  const b = document.getElementById('pos-pay-lpscan');
+  if (!b) return;
+  let off = false;
+  try { off = posOffline_(); } catch (e) {}
+  b.style.display = lpScanEnabled_ ? '' : 'none';
+  b.disabled = off;
+  b.style.opacity = off ? '0.4' : '';
+  b.title = off ? '網路中斷時不能用 LINE Pay 掃碼' : '';
+  if ((!lpScanEnabled_ || off) && document.getElementById('pos-payment-method').value === 'LINE Pay掃碼') setPosPaymentMethod_('LINEPay mini');
+}
+setTimeout(loadLinePaySettings_, 0);
+setInterval(loadLinePaySettings_, 300000);   // 後台改開關，5 分鐘內跟上
+// 掃碼視窗：ctx＝{ payload }(結帳)或 { orderId, total }(紅條清單重掃)
+function lpOpenScan_(ctx) {
+  lpCtx_ = Object.assign({ orderId: null, busy: false, lastKey: '' }, ctx, { total: ctx.payload ? ctx.payload.totalAmount : ctx.total });
+  document.getElementById('lp-scan-amount').textContent = '$' + lpCtx_.total;
+  lpScanState_('ready');
+  document.getElementById('lp-scan-overlay').classList.add('open');
+}
+function lpRetry_() { lpScanState_('ready'); }
+function lpScanState_(state, msg) {
+  const m = document.getElementById('lp-scan-msg'), b = document.getElementById('lp-scan-btns'), inp = document.getElementById('lp-scan-input');
+  const btn = (label, fn, cls) => `<button type="button" class="btn ${cls || 'btn-secondary'}" style="padding:10px" onclick="${fn}">${label}</button>`;
+  const fromCart = !!(lpCtx_ && lpCtx_.payload);
+  inp.disabled = state !== 'ready';
+  if (state === 'ready') {
+    inp.value = '';
+    setTimeout(() => inp.focus(), 50);
+    m.innerHTML = '<span style="color:var(--muted)">掃到付款碼會自動送出</span>';
+    b.innerHTML = (fromCart ? btn('改用其他付款方式', 'lpOther_()') : '') + btn('關閉', 'lpCloseScan_()');
+  } else if (state === 'busy') {
+    m.innerHTML = '<b>收款中，請勿重掃…</b>';
+    b.innerHTML = '';
+  } else if (state === 'failed') {
+    m.innerHTML = `<span style="color:#c0392b">${escapeHtml_(msg || '收款失敗')}</span>`;
+    b.innerHTML = btn('請客人重新整理付款碼再掃', 'lpRetry_()', 'btn-primary') + (fromCart ? btn('改用其他付款方式', 'lpOther_()') : '') + btn('取消這張單', 'lpCancelOrder_()');
+  } else {   // unknown
+    m.innerHTML = `<b style="color:#c0392b">${escapeHtml_(msg || '付款狀態不明，請勿重掃')}</b><div style="font-size:0.8rem;color:var(--muted);margin-top:4px">請看客人手機有沒有扣款。系統會自動再查，這張單會留在上方紅條，先不要做餐。</div>`;
+    b.innerHTML = btn('重新查詢', 'lpRecheckScan_()', 'btn-primary') + btn('先關掉，稍後處理', 'lpCloseScan_(true)');
+  }
+}
+function lpSubmit_() {
+  if (!lpCtx_ || lpCtx_.busy) return;
+  const key = document.getElementById('lp-scan-input').value.replace(/\s/g, '');
+  if (!/^\d{12,24}$/.test(key)) { lpScanState_('failed', '掃到的不是 LINE Pay 付款碼，請再掃一次'); return; }
+  lpCtx_.busy = true;
+  lpCtx_.lastKey = key;
+  lpScanState_('busy');
+  const req = lpCtx_.payload ? Object.assign({}, lpCtx_.payload, { action: 'posLinePayCheckout', oneTimeKey: key })
+    : { action: 'posLinePayCheckout', storeId: STORE_ID, orderId: lpCtx_.orderId, oneTimeKey: key };
+  apiPost(req).then(lpHandleResult_)
+    .catch(() => lpScanState_('unknown', '網路不穩，不知道有沒有收款成功，請勿重掃，按「重新查詢」'))
+    .finally(() => { if (lpCtx_) lpCtx_.busy = false; });
+}
+function lpHandleResult_(d) {
+  if (d && d.orderId && lpCtx_) lpCtx_.orderId = d.orderId;
+  if (d && d.status === 'ok') { lpSuccess_(d); return; }
+  if (d && d.status === 'unknown') { lpScanState_('unknown', d.message); ocLoad_(); return; }
+  lpScanState_('failed', (d && d.message) || '收款失敗，請再試一次');
+  ocLoad_();
+}
+function lpSuccess_(d) {
+  const fromCart = !!(lpCtx_ && lpCtx_.payload);
+  document.getElementById('lp-scan-overlay').classList.remove('open');
+  lpCtx_ = null;
+  ocLoad_();
+  loadRevenue();
+  if (!fromCart) { alert('✅ LINE Pay 收款成功，已出單（' + d.orderId + '）'); return; }
+  document.getElementById('pos-confirm-order-no').textContent = d.orderId;
+  const notes = ['LINE Pay 收款成功'];
+  if (d.pointsEarned) notes.push(`本次消費獲得 ${d.pointsEarned} 點`);
+  document.getElementById('pos-confirm-points').textContent = notes.join('　');
+  document.getElementById('pos-checkout-panel').style.display = 'none';
+  document.getElementById('pos-confirm-panel').style.display = 'block';
+}
+function lpRecheckScan_() {
+  if (!lpCtx_) return;
+  if (!lpCtx_.orderId) {   // 第一次送出就斷線、還不知道訂單號：用同一個付款碼再送一次(後端會先確認有沒有扣過，不會重複扣)
+    if (!lpCtx_.lastKey) { lpScanState_('ready'); return; }
+    document.getElementById('lp-scan-input').value = lpCtx_.lastKey;
+    lpSubmit_();
+    return;
+  }
+  lpScanState_('busy');
+  apiPost({ action: 'posLinePayRecheck', storeId: STORE_ID, orderId: lpCtx_.orderId }).then(d => {
+    if (d && d.status === 'ok' && d.state === 'paid') { lpSuccess_(d); return; }
+    if (d && d.status === 'ok' && d.state === 'notPaid') { lpScanState_('failed', 'LINE Pay 確認沒有扣款，可以請客人重新整理付款碼再掃'); return; }
+    lpScanState_('unknown', (d && d.message) || '還查不到結果，請勿重掃');
+  }).catch(() => lpScanState_('unknown', '網路不穩，請稍後再按「重新查詢」'));
+}
+// 改用其他付款方式：確認 LINE Pay 沒扣款→作廢這張待付款單→回結帳畫面(購物車還在，換一把新的結帳鍵)
+function lpOther_() {
+  if (!lpCtx_) return;
+  const back = () => { document.getElementById('lp-scan-overlay').classList.remove('open'); lpCtx_ = null; posCheckoutKey_ = null; setPosPaymentMethod_('LINEPay mini'); };
+  if (!lpCtx_.orderId) { back(); return; }
+  lpScanState_('busy');
+  apiPost({ action: 'posLinePayCancel', storeId: STORE_ID, orderId: lpCtx_.orderId, reason: 'other' }).then(d => {
+    if (d && d.status === 'ok') { back(); ocLoad_(); alert('已取消 LINE Pay 收款，請選其他付款方式再按一次「確認結帳」'); return; }
+    if (d && d.code === 'paid') { lpRecheckScan_(); return; }
+    lpScanState_(d && d.status === 'unknown' ? 'unknown' : 'failed', (d && d.message) || '取消失敗');
+  }).catch(() => lpScanState_('unknown', '網路不穩，請稍後再試'));
+}
+function lpCancelOrder_() {
+  if (!lpCtx_) return;
+  const fromCart = !!lpCtx_.payload;
+  if (!lpCtx_.orderId) { document.getElementById('lp-scan-overlay').classList.remove('open'); lpCtx_ = null; return; }
+  if (!confirm('確定取消這張單？\n（系統會先確認 LINE Pay 沒有扣款；用掉的兌換券會退回）')) return;
+  lpScanState_('busy');
+  apiPost({ action: 'posLinePayCancel', storeId: STORE_ID, orderId: lpCtx_.orderId, reason: 'cancel' }).then(d => {
+    if (d && d.status === 'ok') {
+      document.getElementById('lp-scan-overlay').classList.remove('open');
+      lpCtx_ = null;
+      ocLoad_();
+      if (fromCart) closePosCartAll();
+      return;
+    }
+    if (d && d.code === 'paid') { lpRecheckScan_(); return; }
+    lpScanState_(d && d.status === 'unknown' ? 'unknown' : 'failed', (d && d.message) || '取消失敗');
+  }).catch(() => lpScanState_('unknown', '網路不穩，請稍後再試'));
+}
+function lpCloseScan_(keep) {
+  if (lpCtx_ && lpCtx_.busy) return;
+  if (lpCtx_ && lpCtx_.orderId && !keep && !confirm('這張單還沒收到款，關掉後會留在上方紅條，之後再處理。確定關掉？')) return;
+  document.getElementById('lp-scan-overlay').classList.remove('open');
+  lpCtx_ = null;
+  ocLoad_();
+}
+// 收款未完成紅條／清單
+function lpRender_() {
+  const b = document.getElementById('lp-banner');
+  if (!b) return;
+  if (document.getElementById('lp-overlay').classList.contains('open')) lpRenderList_();
+  if (!lpPending_.length) { b.style.display = 'none'; return; }
+  b.textContent = `⚠️ 有 ${lpPending_.length} 張 LINE Pay 收款未完成：按這裡處理（先不要做餐）`;
+  b.style.display = 'block';
+}
+function lpRenderList_() {
+  const el = document.getElementById('lp-list');
+  if (!lpPending_.length) { el.innerHTML = '<div class="empty-hint">沒有收款未完成的單 ✅</div>'; return; }
+  el.innerHTML = lpPending_.map(o => {
+    const id = escapeHtml_(o.orderId);
+    const t = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    return `<div style="border:2px solid #e57373;border-radius:10px;padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${id}</b><b>$${Number(o.total) || 0}</b></div>
+      <div style="font-size:0.8rem;color:var(--muted);margin:2px 0 8px">結帳 ${t}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button type="button" class="btn btn-primary" onclick="lpListAct_('recheck','${id}',this)">重新查詢</button>
+        <button type="button" class="btn btn-secondary" onclick="lpListRescan_('${id}')">重掃</button>
+        <button type="button" class="btn btn-secondary" onclick="lpListAct_('cash','${id}',this)">改收現金</button>
+        <button type="button" class="btn btn-danger" onclick="lpListAct_('void','${id}',this)">作廢</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function lpOpenList_() { lpRenderList_(); document.getElementById('lp-overlay').classList.add('open'); ocLoad_(); }
+function lpCloseList_() { document.getElementById('lp-overlay').classList.remove('open'); }
+function lpListRescan_(orderId) {
+  const o = lpPending_.find(x => x.orderId === orderId);
+  if (!o) return;
+  lpCloseList_();
+  lpOpenScan_({ orderId: o.orderId, total: o.total });
+}
+function lpListAct_(kind, orderId, btn) {
+  const o = lpPending_.find(x => x.orderId === orderId) || { total: 0 };
+  if (kind === 'cash' && !confirm(`確認已經收到現金 $${o.total}？\n（系統會先確認 LINE Pay 沒有扣款，才改成現金並出單）`)) return;
+  if (kind === 'void' && !confirm(`確定作廢 ${orderId}？\n（系統會先確認 LINE Pay 沒有扣款；用掉的兌換券會退回）`)) return;
+  const action = { recheck: 'posLinePayRecheck', cash: 'posLinePayToCash', void: 'posLinePayCancel' }[kind];
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '處理中…';
+  apiPost({ action, storeId: STORE_ID, orderId, reason: 'cancel' }).then(d => {
+    if (d && d.status === 'ok') {
+      if (kind === 'recheck') alert(d.state === 'paid' ? '✅ 客人已付款成功，已轉成正式訂單並補印出單' : 'LINE Pay 確認「沒有扣款」。可以按「重掃」請客人重新付款，或改收現金／作廢');
+      else if (kind === 'cash') alert(d.paidByLinePay ? '✅ ' + d.message : '已改成現金收款並出單');
+      else alert('已作廢' + (d.vouchersRestored ? `，退回兌換券 ${d.vouchersRestored} 張` : ''));
+      ocLoad_();
+      loadRevenue();
+    } else alert((d && d.message) || '處理失敗，請再按一次');
+  }).catch(() => alert('網路不穩，請稍後再按一次')).finally(() => { btn.disabled = false; btn.textContent = label; });
+}
 // 離線出單排版(2026-10-13)：下面這段是後端 Code.gs 出單排版(buildTicketLines_)＋飲料杯貼(buildCupLabels_)與小工具原樣搬過來，改一邊要改另一邊；
 // _harness_offline_tmp.js、_harness_label_tmp.js 會比對兩邊排出來一模一樣。包在函式裡，名字不會跟這頁其他程式撞到
 const offlineTicketKit_ = (function () {
@@ -4003,6 +4224,7 @@ function offlineMarkCollected_(clientKey) {
   offlineRenderList_();
 }
 function offlineRender_() {
+  if (typeof lpScanBtnRefresh_ === 'function') lpScanBtnRefresh_();   // 10-22 斷網時 LINE Pay 掃碼反灰(離線測試只載這一段，所以先看有沒有)
   const b = document.getElementById('offline-banner');
   if (!b) return;
   if (document.getElementById('offline-overlay').classList.contains('open')) offlineRenderList_();

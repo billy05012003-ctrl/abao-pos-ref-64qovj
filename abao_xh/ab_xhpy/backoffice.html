@@ -405,6 +405,11 @@
     <div class="empty-hint">尚無項目，之後有串接需求再新增</div>
   </div>
   <div id="pm-subview-offline" style="display:none;">
+    <!-- 10-22 LINE Pay 門市反掃：真的開關(門市平板看這個決定要不要出現「LINE Pay掃碼」) -->
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
+      <div style="font-weight:600;margin-bottom:6px;">LINE Pay 掃碼收款（門市反掃）</div>
+      <div id="lp-scan-form"><div class="empty-hint">載入中...</div></div>
+    </div>
     <p style="font-size:0.8rem;color:var(--muted);">現場實體收款方式（客人手機出示付款碼給店員掃，或反過來）。這些多半是獨立商家帳號，本系統沒有API可以真的控制開關，這裡純粹記錄現場有開放哪些管道，方便之後對照。</p>
     <div id="offline-payment-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" class="mc-add-btn" onclick="offlinePmAdd()">+ 新增線下收款方式</button>
@@ -1722,6 +1727,50 @@ function switchPmSubview(name) {
     offlinePmLoaded = true;
     loadOfflinePaymentMethods();
   }
+  if (name === 'offline') loadLinePayScanSettings();
+}
+// 10-22 LINE Pay 門市反掃開關：存的時候把線上收款那幾個設定原樣帶回去(後端是整列覆蓋)
+function loadLinePayScanSettings() {
+  apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
+    const el = document.getElementById('lp-scan-form');
+    if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
+    el.innerHTML = `
+      <div class="sched-pickup-field"><label>開啟 LINE Pay 掃碼收款</label><input type="checkbox" id="lp-f-scan" ${data.linePayScanEnabled ? 'checked' : ''}></div>
+      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 10px;">
+        開啟後門市平板付款方式會多一顆「LINE Pay掃碼」：店員用掃碼器掃客人手機上的 LINE Pay 付款碼收款，收款成功才出單。
+        斷網時不能用（按鈕會反灰）。原本的「LINEPay mini」（人工收款）照常保留。
+        <b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人使用。</b>
+      </p>
+      <div class="sched-pickup-field"><label>LINE Pay 支付載具</label><input type="checkbox" id="lp-f-carrier" ${data.linePayCarrierEnabled ? 'checked' : ''} ${data.linePayScanEnabled ? '' : 'disabled'}></div>
+      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 10px;">
+        開啟後，客人用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。
+        要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。須先開啟掃碼收款。
+      </p>
+      <button type="button" class="mc-save-btn" onclick="saveLinePayScanSettings()">儲存</button>`;
+    document.getElementById('lp-f-scan').addEventListener('change', function () {
+      const c = document.getElementById('lp-f-carrier');
+      c.disabled = !this.checked;
+      if (!this.checked) c.checked = false;
+    });
+  });
+}
+function saveLinePayScanSettings() {
+  const scan = document.getElementById('lp-f-scan').checked, carrier = scan && document.getElementById('lp-f-carrier').checked;
+  apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(cur => {
+    if (cur.status !== 'ok') { alert('讀取目前設定失敗，沒有儲存'); return; }
+    return apiPost({
+      action: 'updatePaymentMethodSettings',
+      settings: {
+        storeId: SCHED_STORE_ID,
+        payAtPickupEnabled: cur.payAtPickupEnabled, creditEnabled: cur.creditEnabled, applePayEnabled: cur.applePayEnabled,
+        afteeEnabled: cur.afteeEnabled, linePayMode: cur.linePayMode,
+        linePayScanEnabled: scan, linePayCarrierEnabled: carrier
+      }
+    }).then(data => {
+      if (data.status === 'ok') alert('已儲存（門市平板 5 分鐘內會跟上；要馬上生效可在平板重新整理）');
+      else alert('儲存失敗：' + (data.message || ''));
+    });
+  });
 }
 
 function loadPaymentMethodSettings() {
