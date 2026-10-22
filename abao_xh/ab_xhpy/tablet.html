@@ -258,10 +258,7 @@
       <div id="pos-payment-method-group" style="display:flex;flex-wrap:wrap;gap:8px;">
         <!-- 10-22 LINE Pay 門市反掃：後台「付款方式設定」開了才出現；斷網反灰 -->
         <button type="button" class="pos-pay-btn" id="pos-pay-lpscan" data-method="LINE Pay掃碼" style="display:none" onclick="setPosPaymentMethod_('LINE Pay掃碼')">LINE Pay掃碼</button>
-        <button type="button" class="pos-pay-btn active" data-method="LINEPay mini" onclick="setPosPaymentMethod_('LINEPay mini')">LINEPay mini</button>
-        <button type="button" class="pos-pay-btn" data-method="現金" onclick="setPosPaymentMethod_('現金')">現金</button>
-        <button type="button" class="pos-pay-btn" data-method="其他" onclick="setPosPaymentMethod_('其他')">其他</button>
-        <button type="button" class="pos-pay-btn warn" data-method="取餐付款" onclick="setPosPaymentMethod_('取餐付款')">取餐付款</button>
+        <!-- 10-22 其餘按鈕由 posPayBtnsRender_() 依後台「線下收款」清單產生(現金永遠在) -->
       </div>
       <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個客人現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
       <div id="pos-cash-fields" style="display:none;margin-top:8px;">
@@ -3273,7 +3270,7 @@ function closePosCartAll() {
   posCheckoutKey_ = null;   // 10-13 新訂單換新的結帳鍵
   // 每次開始新訂單都重置成安全預設值(LINEPay mini、非預約)，避免上一張選的「取餐付款」／指定取餐時間
   // 殘留設定誤套到下一張現場立即結帳的訂單(10-22「LinePay現場」改名「LINEPay mini」)
-  setPosPaymentMethod_('LINEPay mini');
+  setPosPaymentMethod_(posDefaultPayMethod_());   // 10-22 LINEPay mini 被後台停用就預設現金
   setPosScheduleMode_(false);
   document.getElementById('pos-schedule-fields').removeAttribute('data-initialized');
   document.getElementById('pos-pickup-date').value = '';
@@ -3627,10 +3624,52 @@ function lpScanBtnRefresh_() {
   b.disabled = off;
   b.style.opacity = off ? '0.4' : '';
   b.title = off ? '網路中斷時不能用 LINE Pay 掃碼' : '';
-  if ((!lpScanEnabled_ || off) && document.getElementById('pos-payment-method').value === 'LINE Pay掃碼') setPosPaymentMethod_('LINEPay mini');
+  if ((!lpScanEnabled_ || off) && document.getElementById('pos-payment-method').value === 'LINE Pay掃碼') setPosPaymentMethod_(posDefaultPayMethod_());
 }
 setTimeout(loadLinePaySettings_, 0);
 setInterval(loadLinePaySettings_, 300000);   // 後台改開關，5 分鐘內跟上
+// 10-22 付款按鈕跟著後台「付款方式設定→線下收款」清單：啟用才出現、停用就藏；現金永遠在。
+// 斷網或還沒讀到時用上次存下的清單，從沒讀過就內建三顆(LINEPay mini／其他／取餐付款)全開
+const OFFPM_BUILTIN_ = ['LINEPay mini', '其他', '取餐付款'];
+const OFFPM_CACHE_KEY_ = 'abao_offline_pm_' + STORE_ID;
+let offPm_ = null, offPmShown_ = '';
+try { offPm_ = JSON.parse(localStorage.getItem(OFFPM_CACHE_KEY_) || 'null'); } catch (e) {}
+function offPmList_() { return Array.isArray(offPm_) ? offPm_ : OFFPM_BUILTIN_.map(name => ({ name, status: '啟用' })); }
+function posPayEnabled_(name) { return name === '現金' || offPmList_().some(m => m.name === name && m.status === '啟用'); }
+function posDefaultPayMethod_() { return posPayEnabled_('LINEPay mini') ? 'LINEPay mini' : '現金'; }
+function posPayBtnsRender_() {
+  const on = offPmList_().filter(m => m.status === '啟用').map(m => m.name);
+  const names = (on.indexOf('LINEPay mini') !== -1 ? ['LINEPay mini'] : []).concat(['現金'],
+    on.filter(n => OFFPM_BUILTIN_.indexOf(n) === -1 && n !== '現金' && n !== 'LINE Pay掃碼'),
+    OFFPM_BUILTIN_.slice(1).filter(n => on.indexOf(n) !== -1));
+  if (names.join('|') === offPmShown_) return;   // 沒變就不動，避免結帳到一半按鈕閃
+  offPmShown_ = names.join('|');
+  const g = document.getElementById('pos-payment-method-group');
+  g.querySelectorAll('.pos-pay-btn:not(#pos-pay-lpscan)').forEach(b => b.remove());
+  names.forEach(n => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pos-pay-btn' + (n === '取餐付款' ? ' warn' : '');
+    b.setAttribute('data-method', n);
+    b.textContent = n;
+    b.onclick = () => setPosPaymentMethod_(n);
+    g.appendChild(b);
+  });
+  const cur = document.getElementById('pos-payment-method').value;
+  if (cur === 'LINE Pay掃碼' || posPayEnabled_(cur)) g.querySelectorAll('.pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-method') === cur));
+  else { try { setPosPaymentMethod_(posDefaultPayMethod_()); } catch (e) {} }
+}
+function loadOfflinePayMethods_() {
+  return apiGet({ action: 'offlinePaymentMethods', storeId: STORE_ID }).then(d => {
+    if (!d || d.status !== 'ok' || !Array.isArray(d.methods)) return;
+    offPm_ = d.methods.map(m => ({ name: String(m.name), status: m.status === '停用' ? '停用' : '啟用' }));
+    try { localStorage.setItem(OFFPM_CACHE_KEY_, JSON.stringify(offPm_)); } catch (e) {}
+    posPayBtnsRender_();
+  }).catch(() => {});
+}
+posPayBtnsRender_();
+setTimeout(loadOfflinePayMethods_, 0);
+setInterval(loadOfflinePayMethods_, 300000);
 // 掃碼視窗：ctx＝{ payload }(結帳)或 { orderId, total }(紅條清單重掃)
 function lpOpenScan_(ctx) {
   lpCtx_ = Object.assign({ orderId: null, busy: false, lastKey: '' }, ctx, { total: ctx.payload ? ctx.payload.totalAmount : ctx.total });
@@ -3713,7 +3752,7 @@ function lpRecheckScan_() {
 // 改用其他付款方式：確認 LINE Pay 沒扣款→作廢這張待付款單→回結帳畫面(購物車還在，換一把新的結帳鍵)
 function lpOther_() {
   if (!lpCtx_) return;
-  const back = () => { document.getElementById('lp-scan-overlay').classList.remove('open'); lpCtx_ = null; posCheckoutKey_ = null; setPosPaymentMethod_('LINEPay mini'); };
+  const back = () => { document.getElementById('lp-scan-overlay').classList.remove('open'); lpCtx_ = null; posCheckoutKey_ = null; setPosPaymentMethod_(posDefaultPayMethod_()); };
   if (!lpCtx_.orderId) { back(); return; }
   lpScanState_('busy');
   apiPost({ action: 'posLinePayCancel', storeId: STORE_ID, orderId: lpCtx_.orderId, reason: 'other' }).then(d => {
