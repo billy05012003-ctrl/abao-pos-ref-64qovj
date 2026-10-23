@@ -773,9 +773,63 @@ function apiGet(params) {
   return fetch(`${ORDER_BACKEND_URL}?${qs}`, { cache: 'no-store' }).then(r => r.json());
 }
 function apiPost(payload) {
+  const fb = boFeedbackStart_(payload);
   return fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...withStore_(payload), boToken: boSession ? boSession.token : '', appKey: APP_KEY }) })
     .then(r => r.json())
-    .then(d => { if (d && d.code === 'bo_auth') { boSession = null; saveBoSession_(); showBoLogin_(d.message); } return d; });
+    .then(d => { if (d && d.code === 'bo_auth') { boSession = null; saveBoSession_(); showBoLogin_(d.message); } boFeedbackEnd_(fb, d); return d; },
+      err => { boFeedbackEnd_(fb, null); throw err; });
+}
+
+// ---- 10-23 老闆：按了「儲存」等按鈕要看得出有沒有執行(原本很多按鈕按了沒反應，只能猜) ----
+// 統一在 apiPost 處理，不用每顆按鈕各自改：記下剛剛點的按鈕或勾選框 → 送出期間按鈕變「處理中…」不能連按 →
+// 回來後畫面上方跳「✅ 已儲存／已刪除／已發布…」或「⚠ 沒有成功」。沒有剛點過東西的送出(程式自己送的)不跳提示。
+// 呼叫的地方自己已經把按鈕鎖住(例如「發布中…」)就不動那顆按鈕，只跳提示
+const BO_FEEDBACK_SKIP_ = ['boLogin', 'boLogout', 'boWhoAmI'];
+let boLastClick_ = null;
+document.addEventListener('click', e => {
+  const el = e.target && e.target.closest ? e.target.closest('button, input[type=checkbox], input[type=radio], label') : null;
+  if (el) boLastClick_ = { btn: el.tagName === 'BUTTON' ? el : null, at: Date.now() };
+}, true);
+function boFeedbackStart_(payload) {
+  const c = boLastClick_;
+  // 按鈕：中間可能先跳確認框(客人看完才按確定)，給 60 秒；勾選框這類點了馬上送，給 3 秒
+  if (!payload || BO_FEEDBACK_SKIP_.includes(payload.action) || !c || Date.now() - c.at > (c.btn ? 60000 : 3000)) return null;
+  boLastClick_ = null;   // 一次點擊只算一次(同一下連送好幾筆的，第一筆跳提示)
+  const fb = { action: String(payload.action || '') };
+  const b = c.btn;
+  if (b && !b.disabled && document.body.contains(b)) {
+    fb.btn = b; fb.html = b.innerHTML;
+    b.disabled = true;
+    b.textContent = '處理中…';
+  }
+  return fb;
+}
+function boFeedbackEnd_(fb, d) {
+  if (!fb) return;
+  const b = fb.btn;
+  if (b && b.textContent === '處理中…') { b.innerHTML = fb.html; b.disabled = false; }
+  else if (b) b.disabled = false;
+  if (d && d.code === 'bo_auth') return;   // 登入過期：已經跳登入畫面
+  const a = fb.action;
+  const done = /^delete/.test(a) ? '已刪除' : /^publish/.test(a) ? '已發布' : /^sync/.test(a) ? '已同步' : /^restore/.test(a) ? '已回復'
+    : /^upload/.test(a) ? '已上傳' : /^reorder/.test(a) ? '已更新排序' : '已儲存';
+  if (d && d.status === 'ok') boToast_('✅ ' + done, true);
+  else boToast_('⚠ 沒有成功' + (d && d.message ? '：' + d.message : d ? '' : '（網路異常）'), false);
+}
+function boToast_(text, ok) {
+  let el = document.getElementById('bo-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'bo-toast';
+    el.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:100000;padding:10px 18px;border-radius:999px;font-size:0.95rem;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,0.18);pointer-events:none;transition:opacity .25s;max-width:90vw;text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.style.background = ok ? '#2e7d32' : '#c0392b';
+  el.style.color = '#fff';
+  el.style.opacity = '1';
+  clearTimeout(boToast_.t);
+  boToast_.t = setTimeout(() => { el.style.opacity = '0'; }, ok ? 2000 : 4000);
 }
 
 // ---- POS後台登入(2026-09-25)：閘門之外再用店長/老闆PIN登入，後端發12小時通行證，改資料都要帶著 ----
