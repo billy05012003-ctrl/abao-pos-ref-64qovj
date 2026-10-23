@@ -4255,7 +4255,7 @@ function startMpgPayment(orderId, amount) {
   // 等藍新導回來時原本的JS記憶體狀態已經沒了，要靠這份存檔重建完成畫面
   // 揪團的單記下團號(10-11)：藍新導回的網址沒有 g=，沒付款回來要靠它打開原本那一團(不然揪團畫面一直「載入中」)
   if (pendingOrderContext && pendingOrderContext.groupPay && groupCtx) pendingOrderContext.groupId = groupCtx.groupId;
-  try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(pendingOrderContext)); } catch (e) {}
+  try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(Object.assign({}, pendingOrderContext, { savedAt: Date.now() }))); } catch (e) {}   // savedAt：重新打開點餐頁時找「沒付完的單」用(checkUnfinishedPay_)
   const returnUrl = location.origin + location.pathname + '?mpgreturn=1&orderId=' + encodeURIComponent(orderId);
   apiPost_({ action: 'createMpgPayment', orderId, amount, itemDesc: storeNameForOrder_(), returnUrl, sandbox: MPG_SANDBOX }).then(data => {
     if (data.status !== 'ok') {
@@ -4285,7 +4285,7 @@ function startMpgPayment(orderId, amount) {
 // 建好待付款單 → 後端開付款請求 → 整頁跳到 LINE Pay(手機會開 LINE App)→ 跳回 ?lpreturn=1&lporder=訂單號(取消是 lpreturn=cancel)。
 // 跳回後一律由後端查 LINE Pay、客人已同意才確認收款(不看網址)；等待／成功／沒付款畫面跟藍新共用，訂單摘要一樣存 abao_mpg_pending_訂單號
 function startLinePayOnline_(orderId) {
-  try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(pendingOrderContext)); } catch (e) {}
+  try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(Object.assign({}, pendingOrderContext, { savedAt: Date.now() }))); } catch (e) {}   // savedAt：重新打開點餐頁時找「沒付完的單」用(checkUnfinishedPay_)
   const base = location.origin + location.pathname;
   apiPost_({ action: 'linePayOnlineRequest', orderId, returnUrl: base }).then(data => {
     if (data.status !== 'ok') {
@@ -4318,6 +4318,48 @@ function checkLinePayReturn_() {
 // LINE Pay 的單：查付款狀態前先請後端向 LINE Pay 確認一次(客人可能同意了卻沒跳回來)
 function lpConfirmFirst_(orderId, ctx) {
   return ctx && ctx.linePay ? apiPost_({ action: 'linePayOnlineConfirm', orderId }).catch(() => ({})) : Promise.resolve();
+}
+// 10-23 老闆：客人在付款頁(藍新／LINE Pay)直接把網頁關掉，下次打開點餐頁時問要不要把上一筆的餐點放回購物車。
+// 只看 2 小時內、一般點餐(揪團有自己的「繼續付款」)、現在購物車是空的；先查那張單：其實已付款→顯示訂單完成，沒付款→問客人
+const UNFINISHED_PAY_MS_ = 2 * 3600000;
+var unfinishedPayHandled_ = false;   // var：付款頁按「‹」回來的 pageshow 可能比這行先跑
+function checkUnfinishedPay_() {
+  if (unfinishedPayHandled_) return;
+  try { if (sessionStorage.getItem('abao_mpg_leaving')) return; } catch (e) {}   // 從付款頁按「‹」回來(頁面還在載入)：交給 mpgReturnedByBack_
+  unfinishedPayHandled_ = true;   // 一次載入只問一次
+  const sp = new URLSearchParams(location.search);
+  if (sp.get('mpgreturn') || sp.get('lpreturn') || sp.get('g')) return;
+  let found = null;
+  try {
+    Object.keys(localStorage).filter(k => k.indexOf('abao_mpg_pending_') === 0).forEach(k => {
+      let ctx = null;
+      try { ctx = JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) {}
+      const age = ctx && ctx.savedAt ? Date.now() - ctx.savedAt : Infinity;
+      if (!ctx || age > UNFINISHED_PAY_MS_) { localStorage.removeItem(k); return; }   // 太舊或舊版沒記時間：不問，順便清掉
+      if (ctx.groupPay || !Array.isArray(ctx.cartBackup) || !ctx.cartBackup.length) return;
+      if (!found || ctx.savedAt > found.ctx.savedAt) found = { orderId: k.slice('abao_mpg_pending_'.length), ctx };
+    });
+  } catch (e) { return; }
+  if (!found || cart.length) return;
+  const { orderId, ctx } = found;
+  lpConfirmFirst_(orderId, ctx).then(() => apiGet_({ action: 'orderStatus', orderId })).catch(() => null).then(d => {
+    if (!d || d.status !== 'ok') return;   // 查不到(網路)：這次先不問，下次打開再說
+    if (d.orderStatus === '未取餐' || d.orderStatus === '已取餐') {
+      // 其實已經付好了(例如付完沒跳回來)：直接顯示那筆的訂單完成，不要讓客人重複下單
+      ['checkout-form', 'cart-view', 'confirm-view'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+      document.getElementById('mpg-waiting-view').style.display = 'block';
+      document.getElementById('cart-overlay').classList.add('open');
+      pollMpgOrderStatus_(orderId, ctx, 0);
+      return;
+    }
+    if (d.orderStatus !== '待付款' && d.orderStatus !== '已作廢') { try { localStorage.removeItem('abao_mpg_pending_' + orderId); } catch (e) {} return; }
+    const names = ctx.cartBackup.map(c => '・' + c.name + (c.qty > 1 ? ' ×' + c.qty : '')).join('\n');
+    if (!confirm('上一筆訂單（' + orderId + '）還沒完成付款，要把那時候的餐點放回購物車嗎？\n\n' + names + '\n\n（沒付款的訂單會自動取消，不會扣款）')) {
+      try { localStorage.removeItem('abao_mpg_pending_' + orderId); } catch (e) {}
+      return;
+    }
+    mpgBackToOrder_(orderId, ctx, true);   // 放回購物車＋其他需求／備註／兌換券；再按付款時會先確認上一筆真的沒付(mpgPrevPaidGuard_)
+  });
 }
 
 // 頁面載入時檢查是否剛從藍新付款頁導回來，是的話顯示等待畫面並輪詢付款狀態
@@ -4416,6 +4458,7 @@ window.addEventListener('pageshow', function mpgReturnedByBack_() {
   try { oid = sessionStorage.getItem('abao_mpg_leaving'); sessionStorage.removeItem('abao_mpg_leaving'); } catch (e) {}
   const sp = new URLSearchParams(location.search);
   if (!oid || sp.get('mpgreturn') === '1' || sp.get('lpreturn')) return;   // 「返回商店」導回走 checkMpgReturn；LINE Pay 跳回走 checkLinePayReturn_
+  unfinishedPayHandled_ = true;   // 這裡已經在放回購物車，checkUnfinishedPay_ 不要再問一次
   let ctx = pendingOrderContext && pendingOrderContext.backendOrderId === oid ? pendingOrderContext : null;
   if (!ctx) { try { ctx = JSON.parse(localStorage.getItem('abao_mpg_pending_' + oid) || 'null'); } catch (e) {} }
   hidePayBusy_();
@@ -5848,6 +5891,7 @@ else {
 }
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 checkLinePayReturn_(); // 10-23 從 LINE Pay 跳回來(網址帶 lpreturn)：後端確認收款後一樣輪詢
+setTimeout(checkUnfinishedPay_, 1500); // 10-23 付款頁直接關掉的單：重新打開時問要不要放回購物車(等購物車暫存讀完、頁面畫好)
 initGroupFromUrl_();
 
 function rerenderMenu_() {
