@@ -257,7 +257,7 @@
       <input type="hidden" id="pos-payment-method" value="LINEPay mini">
       <div id="pos-payment-method-group" style="display:flex;flex-wrap:wrap;gap:8px;">
         <!-- 10-22 LINE Pay 門市反掃：後台「付款方式設定」開了才出現；斷網反灰 -->
-        <button type="button" class="pos-pay-btn" id="pos-pay-lpscan" data-method="LINE Pay掃碼" style="display:none" onclick="setPosPaymentMethod_('LINE Pay掃碼')">LINE Pay掃碼</button>
+        <button type="button" class="pos-pay-btn" id="pos-pay-lpscan" data-method="線下LINEPay" style="display:none" onclick="setPosPaymentMethod_('線下LINEPay')">線下LINEPay</button>
         <!-- 10-22 其餘按鈕由 posPayBtnsRender_() 依後台「線下收款」清單產生(現金永遠在) -->
       </div>
       <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個客人現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
@@ -411,7 +411,7 @@
       <h2>訂單退款 <span class="refresh-link" onclick="loadRefundableOrders()">載入／重新整理</span></h2>
       <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
         列出近3天已收款、尚未退款的訂單。退款需要<b>店長以上</b>輸入PIN。線上信用卡單會直接向藍新退回客人的卡（系統先取消授權，已請款則改請退款）；
-        <b>LINE Pay掃碼</b>的單會直接退回客人的 LINE Pay；其他現場單（現金／LINEPay mini）只記錄「現場退還」，請店員當場退給客人。退款後會一併<b>扣回點數與消費</b>、<b>退回這張單用掉的兌換券</b>，並取消還沒印出的單。
+        <b>線下LINEPay</b>的單會直接退回客人的 LINE Pay；其他現場單（現金／LINEPay mini）只記錄「現場退還」，請店員當場退給客人。退款後會一併<b>扣回點數與消費</b>、<b>退回這張單用掉的兌換券</b>，並取消還沒印出的單。
       </div>
       <div id="refund-list"><div class="empty-hint">按上方「載入」查看可退款訂單</div></div>
     </section>
@@ -881,7 +881,7 @@ function loadRefundableOrders() {
 }
 
 function doRefund(orderId, amount, viaGateway) {
-  const how = viaGateway === 'linepay' ? '這筆是 LINE Pay 掃碼付款，系統會直接退回客人的 LINE Pay，不用退現金。'
+  const how = viaGateway === 'linepay' ? '這筆是線下LINEPay 付款，系統會直接退回客人的 LINE Pay，不用退現金。'
     : viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回客人的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給客人。';
   if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。')) return;
   withPosPerm_('refund', '退款', (staffName, staffPin) => {
@@ -953,14 +953,13 @@ function confirmVoidOrder() {
 
 // 「取餐付款」訂單客人到店先結帳的標記(2026-09-16新增)：待收款→未取餐，之後才能按「可以取餐」
 function markCollected(orderId) {
-  if (!confirm('確定「' + orderId + '」這筆訂單客人已經在現場付完款了嗎？')) return;
-  withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
-    apiPost({ action: 'markOrderCollected', orderId: orderId, staffName, staffPin }).then(data => {
+  pickCollectMethod_('「' + orderId + '」客人已經在現場付完款了嗎？', collectMethod => withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
+    apiPost({ action: 'markOrderCollected', orderId: orderId, collectMethod, staffName, staffPin }).then(data => {
       if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
       loadOrders();
       loadRevenue();
     });
-  });
+  }));
 }
 
 // ---- POS管理：開帳／關帳(2026-09-16新增) ----
@@ -2418,7 +2417,7 @@ function goToPosQuickOrderCategory() {
       <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">來源</label>
       <input type="hidden" id="quick-order-source">
       <div id="quick-order-source-group" style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${QUICK_ORDER_SOURCES.map(s => `<button type="button" class="pos-pay-btn" data-value="${s}" onclick="setQuickOrderSource_('${s}')">${s}</button>`).join('')}
+        ${quickSourcesOn_().map(s => `<button type="button" class="pos-pay-btn" data-value="${s}" onclick="setQuickOrderSource_('${s}')">${s}</button>`).join('') || '<span style="font-size:0.8rem;color:#c0392b;">後台「第三方收款」都關了</span>'}
       </div>
       <label style="display:block;font-size:0.8rem;margin:10px 0 4px;color:var(--muted)">總金額</label>
       <input type="number" id="quick-order-amount" inputmode="numeric" min="0" placeholder="顧客實付金額" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
@@ -2441,7 +2440,8 @@ function goToPosQuickOrderCategory() {
     savedSource = localStorage.getItem('abao_last_quick_source') || '';
     savedInvoiceType = localStorage.getItem('abao_last_quick_invoice_type') || '';
   } catch (e) {}
-  setQuickOrderSource_(QUICK_ORDER_SOURCES.includes(savedSource) ? savedSource : QUICK_ORDER_SOURCES[0]);
+  const srcOn = quickSourcesOn_();   // 10-23 後台第三方收款關掉的不列
+  setQuickOrderSource_(srcOn.includes(savedSource) ? savedSource : (srcOn[0] || ''));
   setQuickOrderInvoiceType_(INVOICE_TYPES.includes(savedInvoiceType) ? savedInvoiceType : INVOICE_TYPES[0]);
   loadQuickOrderSummary();
 }
@@ -3446,7 +3446,7 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
   payload.clientKey = posCheckoutKeyFor_(payload);   // 10-13：卡頓重按/離線補傳時雲端認同一張
   const restoreBtn = () => { btn.disabled = false; btn.textContent = btnOriginalText; };
   // 10-22 LINE Pay 掃碼(反掃)：開掃碼視窗，掃到付款碼才送(斷網不能用)
-  if (paymentMethod === 'LINE Pay掃碼') {
+  if (paymentMethod === LP_POS_METHOD_) {
     if (posOffline_()) { alert('網路中斷時不能用 LINE Pay 掃碼，請改收現金或用 LINEPay mini'); restoreBtn(); return; }
     restoreBtn();
     lpOpenScan_({ payload });
@@ -3624,13 +3624,14 @@ function lpScanBtnRefresh_() {
   b.disabled = off;
   b.style.opacity = off ? '0.4' : '';
   b.title = off ? '網路中斷時不能用 LINE Pay 掃碼' : '';
-  if ((!lpScanEnabled_ || off) && document.getElementById('pos-payment-method').value === 'LINE Pay掃碼') setPosPaymentMethod_(posDefaultPayMethod_());
+  if ((!lpScanEnabled_ || off) && document.getElementById('pos-payment-method').value === LP_POS_METHOD_) setPosPaymentMethod_(posDefaultPayMethod_());
 }
 setTimeout(loadLinePaySettings_, 0);
 setInterval(loadLinePaySettings_, 300000);   // 後台改開關，5 分鐘內跟上
 // 10-22 付款按鈕跟著後台「付款方式設定→線下收款」清單：啟用才出現、停用就藏；現金永遠在。
 // 斷網或還沒讀到時用上次存下的清單，從沒讀過就內建三顆(LINEPay mini／其他／取餐付款)全開
 const OFFPM_BUILTIN_ = ['LINEPay mini', '其他', '取餐付款'];
+const LP_POS_METHOD_ = '線下LINEPay';   // 10-23 由「LINE Pay掃碼」改名(付款方式定義表)
 const OFFPM_CACHE_KEY_ = 'abao_offline_pm_' + STORE_ID;
 let offPm_ = null, offPmShown_ = '';
 try { offPm_ = JSON.parse(localStorage.getItem(OFFPM_CACHE_KEY_) || 'null'); } catch (e) {}
@@ -3638,12 +3639,15 @@ function offPmList_() { return Array.isArray(offPm_) ? offPm_ : OFFPM_BUILTIN_.m
 function posPayEnabled_(name) { return name === '現金' || offPmList_().some(m => m.name === name && m.status === '啟用'); }
 function posDefaultPayMethod_() { return posPayEnabled_('LINEPay mini') ? 'LINEPay mini' : '現金'; }
 function posPayBtnsRender_() {
-  const on = offPmList_().filter(m => m.status === '啟用').map(m => m.name);
-  const names = (on.indexOf('LINEPay mini') !== -1 ? ['LINEPay mini'] : []).concat(['現金'],
-    on.filter(n => OFFPM_BUILTIN_.indexOf(n) === -1 && n !== '現金' && n !== 'LINE Pay掃碼'),
+  const list = offPmList_(), on = list.filter(m => m.status === '啟用').map(m => m.name);
+  // 10-23 LINEPay mini 是備援：後台停用時按鈕留著、變灰不能按(店員知道它還在)；其他停用的直接消失
+  const miniOff = !on.includes('LINEPay mini') && list.some(m => m.name === 'LINEPay mini');
+  const names = (on.includes('LINEPay mini') || miniOff ? ['LINEPay mini'] : []).concat(['現金'],
+    on.filter(n => OFFPM_BUILTIN_.indexOf(n) === -1 && n !== '現金' && n !== LP_POS_METHOD_),
     OFFPM_BUILTIN_.slice(1).filter(n => on.indexOf(n) !== -1));
-  if (names.join('|') === offPmShown_) return;   // 沒變就不動，避免結帳到一半按鈕閃
-  offPmShown_ = names.join('|');
+  const key = names.join('|') + (miniOff ? '|mini-off' : '');
+  if (key === offPmShown_) return;   // 沒變就不動，避免結帳到一半按鈕閃
+  offPmShown_ = key;
   const g = document.getElementById('pos-payment-method-group');
   g.querySelectorAll('.pos-pay-btn:not(#pos-pay-lpscan)').forEach(b => b.remove());
   names.forEach(n => {
@@ -3652,20 +3656,56 @@ function posPayBtnsRender_() {
     b.className = 'pos-pay-btn' + (n === '取餐付款' ? ' warn' : '');
     b.setAttribute('data-method', n);
     b.textContent = n;
-    b.onclick = () => setPosPaymentMethod_(n);
+    if (n === 'LINEPay mini' && miniOff) {
+      b.disabled = true;
+      b.style.opacity = '0.4';
+      b.title = '備援：後台「線下收款」打開才能用';
+    } else b.onclick = () => setPosPaymentMethod_(n);
     g.appendChild(b);
   });
   const cur = document.getElementById('pos-payment-method').value;
-  if (cur === 'LINE Pay掃碼' || posPayEnabled_(cur)) g.querySelectorAll('.pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-method') === cur));
+  if (cur === LP_POS_METHOD_ || posPayEnabled_(cur)) g.querySelectorAll('.pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-method') === cur));
   else { try { setPosPaymentMethod_(posDefaultPayMethod_()); } catch (e) {} }
 }
+// 10-23 第三方收款(快速出單的外送平台)：後台「第三方收款」關掉的不出現；沒讀過就三個全開
+const TPPM_CACHE_KEY_ = 'abao_thirdparty_pm_' + STORE_ID;
+let tpPm_ = null;
+try { tpPm_ = JSON.parse(localStorage.getItem(TPPM_CACHE_KEY_) || 'null'); } catch (e) {}
+function quickSourcesOn_() {
+  return QUICK_ORDER_SOURCES.filter(s => !Array.isArray(tpPm_) || tpPm_.some(m => m.name === s && m.status === '啟用'));
+}
 function loadOfflinePayMethods_() {
-  return apiGet({ action: 'offlinePaymentMethods', storeId: STORE_ID }).then(d => {
-    if (!d || d.status !== 'ok' || !Array.isArray(d.methods)) return;
-    offPm_ = d.methods.map(m => ({ name: String(m.name), status: m.status === '停用' ? '停用' : '啟用' }));
-    try { localStorage.setItem(OFFPM_CACHE_KEY_, JSON.stringify(offPm_)); } catch (e) {}
-    posPayBtnsRender_();
-  }).catch(() => {});
+  const keep = (d, set) => d && d.status === 'ok' && Array.isArray(d.methods) && set(d.methods.map(m => ({ name: String(m.name), status: m.status === '停用' ? '停用' : '啟用' })));
+  return Promise.all([
+    apiGet({ action: 'offlinePaymentMethods', storeId: STORE_ID }).then(d => keep(d, l => {
+      offPm_ = l;
+      try { localStorage.setItem(OFFPM_CACHE_KEY_, JSON.stringify(l)); } catch (e) {}
+      posPayBtnsRender_();
+    })).catch(() => {}),
+    apiGet({ action: 'offlinePaymentMethods', storeId: STORE_ID, kind: 'thirdparty' }).then(d => keep(d, l => {
+      tpPm_ = l;
+      try { localStorage.setItem(TPPM_CACHE_KEY_, JSON.stringify(l)); } catch (e) {}
+    })).catch(() => {})
+  ]);
+}
+// 10-23 取餐付款「已收款」要選錢實際怎麼收的(報表照這個歸線上／線下)：現金＋後台線下收款有開的人工收款(不含取餐付款)
+function pickCollectMethod_(title, cb) {
+  const opts = ['現金'].concat(offPmList_().filter(m => m.status === '啟用' && m.name !== '取餐付款').map(m => m.name));
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML = `<div style="background:#fff;border-radius:12px;padding:16px;max-width:360px;width:100%;">
+    <div style="font-weight:600;margin-bottom:6px;">${escapeHtml_(title)}</div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">客人怎麼付的？</div>
+    <div class="cm-opts" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+    <button type="button" class="btn btn-secondary cm-cancel" style="width:100%;margin-top:12px;padding:10px;">取消</button></div>`;
+  opts.forEach(n => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pos-pay-btn'; b.textContent = n;
+    b.onclick = () => { ov.remove(); cb(n); };
+    ov.querySelector('.cm-opts').appendChild(b);
+  });
+  ov.querySelector('.cm-cancel').onclick = () => ov.remove();
+  document.body.appendChild(ov);
 }
 posPayBtnsRender_();
 setTimeout(loadOfflinePayMethods_, 0);
@@ -4197,7 +4237,7 @@ async function offlineSync_() {
       if (d && d.status === 'ok') {
         it.syncedAt = Date.now(); it.cloudId = d.orderId; synced++;
         // 上傳途中店員才按已收款：雲端那張還是待收款 → 補按雲端的「已收款」(失敗就留給店員在待取餐訂單按)
-        if (it.collected && !o.collected && !d.duplicate) apiPost({ action: 'markOrderCollected', orderId: d.orderId, storeId: STORE_ID }).catch(() => {});
+        if (it.collected && !o.collected && !d.duplicate) apiPost({ action: 'markOrderCollected', orderId: d.orderId, collectMethod: it.collectMethod, storeId: STORE_ID }).catch(() => {});
       }
       else it.failed = (d && d.message) || '上傳失敗';
       offlineSaveAll_(q);
@@ -4263,10 +4303,13 @@ async function offlineReprint_(clientKey, btn) {
 function offlineMarkCollected_(clientKey) {
   const q = offlineLoad_(), o = q.find(x => x.clientKey === clientKey);
   if (!o || o.syncedAt) { alert('這張已經上傳到雲端了，請到「待取餐訂單」按已收款'); offlineRenderList_(); return; }
-  if (!confirm(`${o.orderId}：確定已經跟客人收到 $${o.totalAmount} 嗎？`)) return;
-  o.collected = true; o.collectedAt = Date.now();
-  offlineSaveAll_(q);
-  offlineRenderList_();
+  pickCollectMethod_(`${o.orderId}：確定已經跟客人收到 $${o.totalAmount} 嗎？`, collectMethod => {
+    const q2 = offlineLoad_(), o2 = q2.find(x => x.clientKey === clientKey);
+    if (!o2 || o2.syncedAt) { alert('這張已經上傳到雲端了，請到「待取餐訂單」按已收款'); offlineRenderList_(); return; }
+    o2.collected = true; o2.collectedAt = Date.now(); o2.collectMethod = collectMethod;
+    offlineSaveAll_(q2);
+    offlineRenderList_();
+  });
 }
 function offlineRender_() {
   if (typeof lpScanBtnRefresh_ === 'function') lpScanBtnRefresh_();   // 10-22 斷網時 LINE Pay 掃碼反灰(離線測試只載這一段，所以先看有沒有)

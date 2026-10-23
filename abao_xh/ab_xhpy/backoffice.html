@@ -401,16 +401,16 @@
     <div id="payment-method-form"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pm-subview-thirdparty" style="display:none;">
-    <p style="font-size:0.8rem;color:var(--muted);">外送平台（例如UberEats/foodpanda）串接後的對帳/結算設定。目前沒有串接任何外送平台，尚無項目。</p>
-    <div class="empty-hint">尚無項目，之後有串接需求再新增</div>
+    <p style="font-size:0.8rem;color:var(--muted);">外送平台的訂單：門市平板「快速出單」用的來源。這裡<b>啟用</b>的才會出現在快速出單（改完 5 分鐘內平板會跟上）。營收不算進日報表的「線上點餐」「線下結帳」，對應平台業績。以後真的串接外送平台也放這裡。</p>
+    <div id="thirdparty-pm-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pm-subview-offline" style="display:none;">
-    <!-- 10-22 LINE Pay 門市反掃：真的開關(門市平板看這個決定要不要出現「LINE Pay掃碼」) -->
+    <!-- 10-22 LINE Pay 門市反掃：真的開關(門市平板看這個決定要不要出現「線下LINEPay」；10-23 由 LINE Pay掃碼 改名) -->
     <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;">
-      <div style="font-weight:600;margin-bottom:6px;">LINE Pay 掃碼收款（門市反掃）</div>
+      <div style="font-weight:600;margin-bottom:6px;">線下LINEPay（門市反掃，系統串接）</div>
       <div id="lp-scan-form"><div class="empty-hint">載入中...</div></div>
     </div>
-    <p style="font-size:0.8rem;color:var(--muted);">門市平板的付款按鈕：這裡<b>啟用</b>的才會出現在平板上，<b>停用</b>就藏起來（改完 5 分鐘內平板會跟上，斷網時平板沿用上次的設定）。「現金」永遠都在，不用設定。內建的 LINEPay mini／其他／取餐付款不能改名或刪除，不用就改成停用；自己新增的（例如全支付）啟用後平板會多一顆按鈕，跟 LINEPay mini 一樣只做記錄，店員用那家的 App 收款。</p>
+    <p style="font-size:0.8rem;color:var(--muted);">門市平板的付款按鈕：這裡<b>啟用</b>的才會出現在平板上，<b>停用</b>就藏起來（改完 5 分鐘內平板會跟上，斷網時平板沿用上次的設定）。「現金」永遠都在，不用設定。內建的 LINEPay mini／其他／取餐付款不能改名或刪除，不用就改成停用（<b>LINEPay mini 是備援：停用時平板上變灰色、不能按</b>；<b>取餐付款停用時，線上點餐的取餐付款也跟著關</b>）；自己新增的（例如全支付）啟用後平板會多一顆按鈕，跟 LINEPay mini 一樣只做記錄，店員用那家的 App 收款。</p>
     <div id="offline-payment-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" class="mc-add-btn" onclick="offlinePmAdd()">+ 新增線下收款方式</button>
     <div id="offline-pm-form" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;">
@@ -1058,7 +1058,7 @@ function loadBoRefundable_() {
   }).catch(() => { box.innerHTML = '<div class="ops-meta">網路異常，請稍後再試</div>'; });
 }
 function boRefund_(orderId, amount, viaGateway, printed) {
-  const how = viaGateway === 'linepay' ? 'LINE Pay 掃碼單，系統會直接退回客人的 LINE Pay，不用退現金。'
+  const how = viaGateway === 'linepay' ? '線下LINEPay 的單，系統會直接退回客人的 LINE Pay，不用退現金。'
     : viaGateway ? '線上信用卡單，系統會向藍新退回客人的卡。' : '現場付款單，系統只記錄退款，<b>錢要請店裡當場退給客人</b>。';
   const warn = printed ? '<div class="ops-warn">⚠️ 這張已經出單，廚房可能已經在做。<br>請先打電話通知店裡<b>不要交餐</b>，再按確定。</div>' : '';
   openBoOpsPinFor_('refund', '確定要退款「' + orderId + '」$' + amount + ' 嗎？', warn + '<div>' + how + '退款後扣回點數與消費、退回用掉的兌換券，<b>無法復原</b>。紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」。</div>', pin => {
@@ -1730,6 +1730,7 @@ function switchPmSubview(name) {
     loadOfflinePaymentMethods();
   }
   if (name === 'offline') loadLinePayScanSettings();
+  if (name === 'thirdparty') loadPmList_('thirdparty');
 }
 // 10-22 LINE Pay 門市反掃開關：存的時候把線上收款那幾個設定原樣帶回去(後端是整列覆蓋)
 function loadLinePayScanSettings() {
@@ -1737,10 +1738,10 @@ function loadLinePayScanSettings() {
     const el = document.getElementById('lp-scan-form');
     if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
     el.innerHTML = `
-      <div class="sched-pickup-field"><label>開啟 LINE Pay 掃碼收款</label><input type="checkbox" id="lp-f-scan" ${data.linePayScanEnabled ? 'checked' : ''}></div>
+      <div class="sched-pickup-field"><label>開啟 線下LINEPay</label><input type="checkbox" id="lp-f-scan" ${data.linePayScanEnabled ? 'checked' : ''}></div>
       <p style="font-size:0.76rem;color:var(--muted);margin:0 0 10px;">
-        開啟後門市平板付款方式會多一顆「LINE Pay掃碼」：店員用掃碼器掃客人手機上的 LINE Pay 付款碼收款，收款成功才出單。
-        斷網時不能用（按鈕會反灰）。原本的「LINEPay mini」（人工收款）照常保留。
+        開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃客人手機上的 LINE Pay 付款碼收款，收款成功才出單。
+        斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。
         <b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人使用。</b>
       </p>
       <div class="sched-pickup-field"><label>LINE Pay 支付載具</label><input type="checkbox" id="lp-f-carrier" ${data.linePayCarrierEnabled ? 'checked' : ''} ${data.linePayScanEnabled ? '' : 'disabled'}></div>
@@ -1782,7 +1783,8 @@ function loadPaymentMethodSettings() {
       return;
     }
     document.getElementById('payment-method-form').innerHTML = `
-      <div class="sched-pickup-field"><label>取餐付款</label><input type="checkbox" id="pm-f-payatpickup" ${data.payAtPickupEnabled ? 'checked' : ''}></div>
+      <div class="sched-pickup-field"><label>取餐付款</label><input type="checkbox" id="pm-f-payatpickup" ${data.payAtPickupEnabled ? 'checked' : ''} ${data.payAtPickupStoreOff ? 'disabled' : ''}></div>
+      ${data.payAtPickupStoreOff ? '<p style="font-size:0.76rem;color:#c0392b;margin:0 0 6px;">門市「線下收款」的取餐付款關著，線上也不能開（客人線上選了，門市沒地方標已收款）。要開請先到「線下收款」打開。</p>' : ''}
       <p style="font-size:0.76rem;color:var(--muted);margin:0 0 12px;">
         開啟後客人結帳頁會顯示「取餐現場付款」——訂單直接成立、不走線上金流，到店要先在雲端平板標記已收款才能取餐。
       </p>
@@ -1798,7 +1800,7 @@ function loadPaymentMethodSettings() {
       <div style="margin:14px 0 6px;font-size:0.85rem;font-weight:600;">LinePay（三選一，不是各自獨立的開關）</div>
       <p style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
         客人結帳頁只會看到一個LinePay按鈕，背後只能導去其中一條路，不能兩條同時開。
-        <b>門市的「LINEPay mini」用的是實體商店帳號(abao82416619)，「LINE Pay 掃碼收款」在「線下收款」分頁另外開關，都不受這裡影響</b>。
+        <b>門市的「LINEPay mini」用的是實體商店帳號(abao82416619)，「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響</b>。
       </p>
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">
         <label><input type="radio" name="pm-linepay-mode" value="藍新MPG" ${data.linePayMode === '藍新MPG' ? 'checked' : ''}> 藍新MPG電子錢包（已做好，可以選）</label>
@@ -1838,23 +1840,38 @@ function savePaymentMethodSettings() {
 
 // ---- 線下收款方式清單 ----
 let offlinePmLoaded = false;
-function loadOfflinePaymentMethods() {
-  apiGet({ action: 'offlinePaymentMethods', storeId: SCHED_STORE_ID }).then(data => {
+function loadOfflinePaymentMethods() { loadPmList_('offline'); }
+// 10-23 線下／第三方收款清單：每列右側開關點一下就存(像大麥)；線下另有編輯(備註、自訂名稱)與刪除
+const pmListRows_ = { offline: [], thirdparty: [] };
+function loadPmList_(kind) {
+  const elId = kind === 'thirdparty' ? 'thirdparty-pm-list' : 'offline-payment-list';
+  apiGet({ action: 'offlinePaymentMethods', storeId: SCHED_STORE_ID, kind }).then(data => {
     if (data.status !== 'ok') {
-      document.getElementById('offline-payment-list').innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>';
+      document.getElementById(elId).innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>';
       return;
     }
-    document.getElementById('offline-payment-list').innerHTML = data.methods.length === 0
+    pmListRows_[kind] = data.methods;
+    document.getElementById(elId).innerHTML = data.methods.length === 0
       ? '<div class="empty-hint">尚無項目</div>'
-      : data.methods.map(m => `
+      : data.methods.map((m, i) => `
         <div class="sched-special-row">
           <b>${escapeHtml(m.name)}</b>${m.builtin ? '<span style="font-size:0.72rem;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:0 4px;">內建</span>' : ''}
-          <span>${m.status === '啟用' ? '🟢' : '🔴'} ${escapeHtml(m.status)}</span>
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;"><input type="checkbox" ${m.status === '啟用' ? 'checked' : ''} onchange="pmToggle_('${kind}', ${i}, this)">${m.status === '啟用' ? '🟢 啟用' : '🔴 停用'}</label>
           ${m.note ? `<span style="color:var(--muted);">（${escapeHtml(m.note)}）</span>` : ''}
-          <button type="button" onclick="offlinePmEdit('${escapeHtml(m.name).replace(/'/g, "\\'")}', '${m.status}', '${escapeHtml(m.note).replace(/'/g, "\\'")}', ${m.builtin ? 'true' : 'false'})" style="margin-left:auto;border:none;background:none;color:var(--brand);cursor:pointer;">編輯</button>
-          ${m.builtin ? '' : `<button type="button" onclick="offlinePmDelete('${escapeHtml(m.name).replace(/'/g, "\\'")}')" style="border:none;background:none;color:var(--brand);cursor:pointer;">刪除</button>`}
+          ${kind === 'thirdparty' ? '' : `<button type="button" onclick="offlinePmEdit('${escapeHtml(m.name).replace(/'/g, "\\'")}', '${m.status}', '${escapeHtml(m.note).replace(/'/g, "\\'")}', ${m.builtin ? 'true' : 'false'})" style="margin-left:auto;border:none;background:none;color:var(--brand);cursor:pointer;">編輯</button>
+          ${m.builtin ? '' : `<button type="button" onclick="offlinePmDelete('${escapeHtml(m.name).replace(/'/g, "\\'")}')" style="border:none;background:none;color:var(--brand);cursor:pointer;">刪除</button>`}`}
         </div>`).join('');
   });
+}
+function pmToggle_(kind, i, el) {
+  const m = pmListRows_[kind][i];
+  if (!m) return;
+  const status = el.checked ? '啟用' : '停用';
+  el.disabled = true;
+  apiPost({ action: 'upsertOfflinePaymentMethod', method: { storeId: SCHED_STORE_ID, kind, name: m.name, originalName: m.name, status, note: m.note || '' } }).then(data => {
+    if (data.status !== 'ok') { el.checked = !el.checked; el.disabled = false; alert('儲存失敗：' + (data.message || '')); return; }
+    loadPmList_(kind);
+  }).catch(() => { el.checked = !el.checked; el.disabled = false; alert('網路異常，沒有儲存'); });
 }
 let offlinePmEditingName = null; // null=新增，非null=編輯中的原始名稱
 
