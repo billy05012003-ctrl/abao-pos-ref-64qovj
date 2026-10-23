@@ -2709,9 +2709,8 @@ function renderPosOptionGroup(container, gKey) {
   const sizeForFilter = (currentPosModal.comboDrinkSize != null && currentPosModal.comboDrinkSize !== '') ? currentPosModal.comboDrinkSize.toUpperCase() : currentPosModal.size;
   const visibleOptions = g.options.filter(opt => {
     if (opt.priceM === undefined && opt.priceL === undefined) return true;
-    if (sizeForFilter === 'M') return opt.priceM != null;
-    if (sizeForFilter === 'L') return opt.priceL != null;
-    return true;
+    // 10-23 老闆：茶珠只有大杯、中杯不能選。沒有尺寸跟計價一樣當中杯(calcPosModalUnitPrice 不是 L 就用中杯價)
+    return sizeForFilter === 'L' ? opt.priceL != null : opt.priceM != null;
   });
   // 老闆反饋(2026-08-31)：欄數依名稱長度動態判斷會讓不同品項的客製化選單忽1忽2忽3欄、看起來跳來跳去，
   // 且醬料類群組固定3欄時，混進4個字的長選項（如"不醬只胡"）會被拆成2行跟旁邊1行的選項對不齊。
@@ -2986,9 +2985,9 @@ function calcPosModalUnitPrice() {
     currentPosModal.groups[gKey].forEach(name => {
       const opt = g.options.find(o => o.name === name);
       if (!opt) return;
-      if (opt.priceM != null) {
+      if (opt.priceM != null || opt.priceL != null) {   // 10-23：只有大杯價的(茶珠)原本走到下面 opt.price(沒有值)→ $NaN
         const sizeForPricing = (currentPosModal.comboDrinkSize != null && currentPosModal.comboDrinkSize !== '') ? currentPosModal.comboDrinkSize.toUpperCase() : currentPosModal.size;
-        price += (sizeForPricing === 'L' ? opt.priceL : opt.priceM);
+        price += Number(sizeForPricing === 'L' ? opt.priceL : opt.priceM) || 0;   // 這個尺寸沒賣的選項畫面上選不到(renderPosOptionGroup 過濾)
       }
       else price += opt.price;
     });

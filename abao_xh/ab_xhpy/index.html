@@ -1322,6 +1322,14 @@ function loadCartSession() {
     const raw = sessionStorage.getItem(CART_SESSION_KEY);
     if (raw) cart = JSON.parse(raw);
   } catch (e) {}
+  // 10-23：價格算壞的品項(例如之前中杯選到只有大杯的茶珠＝$NaN，存起來會變成空值、重新整理後顯示 $0)拿掉，請客人重選
+  if (!Array.isArray(cart)) cart = [];
+  const bad = cart.filter(c => !c || c.price === null || c.price === undefined || c.price === '' || !isFinite(Number(c.price)));
+  if (bad.length) {
+    cart = cart.filter(c => bad.indexOf(c) === -1);
+    try { sessionStorage.setItem(CART_SESSION_KEY, JSON.stringify(cart)); } catch (e) {}
+    setTimeout(() => alert('購物車裡有 ' + bad.length + ' 項餐點的價格需要重新計算，已先移除：\n' + bad.map(c => '・' + c.name).join('\n') + '\n\n請重新點一次，謝謝！'), 0);
+  }
 }
 
 function goToCategory(i) {
@@ -2896,9 +2904,9 @@ function renderOptionGroup(container, gKey) {
     // 這種選項在線上點餐頁直接濾掉不給選；POS功能(雲端平板_美寶美食館.html)不套用這個過濾，永遠顯示全部
     if (opt.onlineVisible === false) return false;
     if (opt.priceM === undefined && opt.priceL === undefined) return true;
-    if (sizeForFilter === 'M') return opt.priceM != null;
-    if (sizeForFilter === 'L') return opt.priceL != null;
-    return true;
+    // 10-23 老闆：茶珠只有大杯、中杯不能選。沒有尺寸(現沏等單一定價飲料)跟計價一樣當中杯(calcModalUnitPrice 不是 L 就用中杯價)，
+    // 原本沒尺寸時全部顯示 → 中杯選得到茶珠、價格變 $NaN
+    return sizeForFilter === 'L' ? opt.priceL != null : opt.priceM != null;
   });
   // 老闆反饋(2026-08-31)：欄數依名稱長度動態判斷會讓不同品項的客製化選單忽1忽2忽3欄、看起來跳來跳去，
   // 且醬料類群組固定3欄時，混進4個字的長選項（如"不醬只胡"）會被拆成2行跟旁邊1行的選項對不齊。
@@ -3149,10 +3157,10 @@ function calcModalUnitPrice() {
     currentModal.groups[gKey].forEach(name => {
       const opt = g.options.find(o => o.name === name);
       if (!opt) return;
-      if (opt.priceM != null) {
+      if (opt.priceM != null || opt.priceL != null) {   // 10-23：只有大杯價的(茶珠)原本走到下面 opt.price(沒有值)→ $NaN
         // 套餐內選飲料時用該杯飲料自己的份量(comboDrinkSize)，否則用主品項的size
         const sizeForPricing = (currentModal.comboDrinkSize != null && currentModal.comboDrinkSize !== '') ? currentModal.comboDrinkSize.toUpperCase() : currentModal.size;
-        price += (sizeForPricing === 'L' ? opt.priceL : opt.priceM);
+        price += Number(sizeForPricing === 'L' ? opt.priceL : opt.priceM) || 0;   // 這個尺寸沒賣的選項畫面上選不到(renderOptionGroup 過濾)
       }
       else price += opt.price;
     });
