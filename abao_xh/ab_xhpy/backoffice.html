@@ -416,9 +416,7 @@
     <div id="offline-pm-form" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;">
       <h4 id="offline-pm-form-title" style="margin-top:0;">新增線下收款方式</h4>
       <label class="mc-field">收款方式名稱<input id="offline-pm-f-name" placeholder="例如：全支付"></label>
-      <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
-        <input type="checkbox" id="offline-pm-f-enabled" checked> 啟用（門市平板會出現這個付款按鈕）
-      </label>
+      <div style="font-size:0.75rem;color:var(--muted);">新增的預設啟用；要開關請用上面清單每一列的勾勾</div>
       <div id="offline-pm-f-builtin-hint" style="display:none;font-size:0.75rem;color:var(--muted);">內建項目不能改名</div>
       <label class="mc-field">備註(選填，例如帳號資訊)<input id="offline-pm-f-note"></label>
       <div style="margin-top:10px;">
@@ -1873,17 +1871,17 @@ function offlinePmAdd() {
   document.getElementById('offline-pm-f-name').value = '';
   document.getElementById('offline-pm-f-name').disabled = false;
   document.getElementById('offline-pm-f-builtin-hint').style.display = 'none';
-  document.getElementById('offline-pm-f-enabled').checked = true;
   document.getElementById('offline-pm-f-note').value = '';
   document.getElementById('offline-pm-form').style.display = 'block';
 }
+let offlinePmEditingStatus = '啟用';
 function offlinePmEdit(name, currentStatus, currentNote, builtin) {
   offlinePmEditingName = name;
+  offlinePmEditingStatus = currentStatus;
   document.getElementById('offline-pm-form-title').textContent = '編輯線下收款方式';
   document.getElementById('offline-pm-f-name').value = name;
   document.getElementById('offline-pm-f-name').disabled = !!builtin;   // 10-22 內建項目不能改名(改名會讓報表拆成兩種)
   document.getElementById('offline-pm-f-builtin-hint').style.display = builtin ? 'block' : 'none';
-  document.getElementById('offline-pm-f-enabled').checked = currentStatus === '啟用';
   document.getElementById('offline-pm-f-note').value = currentNote;
   document.getElementById('offline-pm-form').style.display = 'block';
 }
@@ -1894,9 +1892,10 @@ function offlinePmCancelForm() {
 function offlinePmSave() {
   const name = document.getElementById('offline-pm-f-name').value.trim();
   if (!name) { alert('請輸入收款方式名稱'); return; }
-  const enabled = document.getElementById('offline-pm-f-enabled').checked;
+  // 10-23 開關只在清單每一列(pmToggle_)：新增一律啟用；編輯沿用清單上「現在」的狀態(編輯框開著時在清單切過開關，也不會被蓋回去)
+  const cur = offlinePmEditingName ? pmListRows_.offline.find(m => m.name === offlinePmEditingName) : null;
   const note = document.getElementById('offline-pm-f-note').value.trim();
-  const payload = { storeId: SCHED_STORE_ID, name, status: enabled ? '啟用' : '停用', note };
+  const payload = { storeId: SCHED_STORE_ID, name, status: cur ? cur.status : offlinePmEditingName ? offlinePmEditingStatus : '啟用', note };
   if (offlinePmEditingName) payload.originalName = offlinePmEditingName;
   apiPost({ action: 'upsertOfflinePaymentMethod', method: payload }).then(data => {
     if (data.status === 'ok') { offlinePmCancelForm(); loadOfflinePaymentMethods(); }
