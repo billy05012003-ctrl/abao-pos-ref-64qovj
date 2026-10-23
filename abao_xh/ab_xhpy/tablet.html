@@ -411,7 +411,7 @@
       <h2>訂單退款 <span class="refresh-link" onclick="loadRefundableOrders()">載入／重新整理</span></h2>
       <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
         列出近3天已收款、尚未退款的訂單。退款需要<b>店長以上</b>輸入PIN。線上信用卡單會直接向藍新退回客人的卡（系統先取消授權，已請款則改請退款）；
-        <b>線下LINEPay</b>的單會直接退回客人的 LINE Pay；其他現場單（現金／LINEPay mini）只記錄「現場退還」，請店員當場退給客人。退款後會一併<b>扣回點數與消費</b>、<b>退回這張單用掉的兌換券</b>，並取消還沒印出的單。
+        <b>LINE Pay</b>（線上、線下）的單會直接退回客人的 LINE Pay；其他現場單（現金／LINEPay mini）只記錄「現場退還」，請店員當場退給客人。退款後會一併<b>扣回點數與消費</b>、<b>退回這張單用掉的兌換券</b>，並取消還沒印出的單。
       </div>
       <div id="refund-list"><div class="empty-hint">按上方「載入」查看可退款訂單</div></div>
     </section>
@@ -881,7 +881,7 @@ function loadRefundableOrders() {
 }
 
 function doRefund(orderId, amount, viaGateway) {
-  const how = viaGateway === 'linepay' ? '這筆是線下LINEPay 付款，系統會直接退回客人的 LINE Pay，不用退現金。'
+  const how = viaGateway === 'linepay' ? '這筆是 LINE Pay 付款，系統會直接退回客人的 LINE Pay，不用退現金。'   // 10-23 線上LINEPay 也走這裡，不寫線下
     : viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回客人的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給客人。';
   if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。')) return;
   withPosPerm_('refund', '退款', (staffName, staffPin) => {

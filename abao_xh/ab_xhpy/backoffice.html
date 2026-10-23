@@ -1056,7 +1056,7 @@ function loadBoRefundable_() {
   }).catch(() => { box.innerHTML = '<div class="ops-meta">網路異常，請稍後再試</div>'; });
 }
 function boRefund_(orderId, amount, viaGateway, printed) {
-  const how = viaGateway === 'linepay' ? '線下LINEPay 的單，系統會直接退回客人的 LINE Pay，不用退現金。'
+  const how = viaGateway === 'linepay' ? 'LINE Pay 付款的單，系統會直接退回客人的 LINE Pay，不用退現金。'   // 10-23 線上LINEPay 也走這裡，不寫線下
     : viaGateway ? '線上信用卡單，系統會向藍新退回客人的卡。' : '現場付款單，系統只記錄退款，<b>錢要請店裡當場退給客人</b>。';
   const warn = printed ? '<div class="ops-warn">⚠️ 這張已經出單，廚房可能已經在做。<br>請先打電話通知店裡<b>不要交餐</b>，再按確定。</div>' : '';
   openBoOpsPinFor_('refund', '確定要退款「' + orderId + '」$' + amount + ' 嗎？', warn + '<div>' + how + '退款後扣回點數與消費、退回用掉的兌換券，<b>無法復原</b>。紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」。</div>', pin => {
