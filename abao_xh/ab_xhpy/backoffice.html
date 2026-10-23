@@ -1795,9 +1795,9 @@ function loadPaymentMethodSettings() {
       <p style="font-size:0.76rem;color:var(--muted);margin:0 0 14px;">
         藍新帳號尚未申請開通此功能，這裡先記錄設定意向，開通＋後端串接完成前不會真的出現在客人結帳頁。
       </p>
-      <div class="sched-pickup-field"><label>線上LINEPay（直接串 LINE Pay）</label><input type="checkbox" id="pm-f-linepay-online" ${data.linePayMode === 'LinePayAPI' ? 'checked' : ''} disabled></div>
+      <div class="sched-pickup-field"><label>線上LINEPay（直接串 LINE Pay）</label><input type="checkbox" id="pm-f-linepay-online" ${data.linePayMode === 'LinePayAPI' ? 'checked' : ''}></div>
       <p style="font-size:0.76rem;color:var(--muted);margin:0 0 14px;">
-        客人在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單。<b>開發中（付款方式第 2 段），做好、測過才能打開</b>。
+        客人在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。<b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人開放；測完記得關掉</b>。
         LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。
       </p>
       <button type="button" class="mc-save-btn" onclick="savePaymentMethodSettings()">儲存</button>
@@ -1811,7 +1811,7 @@ function loadPaymentMethodSettings() {
   });
 }
 function savePaymentMethodSettings() {
-  const mode = document.getElementById('pm-f-linepay-online').checked ? 'LinePayAPI' : '不開放';   // 10-23 線上LINEPay 單一開關(開發中先鎖住)
+  const mode = document.getElementById('pm-f-linepay-online').checked ? 'LinePayAPI' : '不開放';   // 10-23 線上LINEPay 單一開關(第 2 段後半做好後解鎖)
   apiPost({
     action: 'updatePaymentMethodSettings',
     settings: {

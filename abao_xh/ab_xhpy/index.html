@@ -578,6 +578,7 @@
       <select id="checkout-payment-method" style="display:none;">
         <option value="取餐付款">取餐現場付款</option>
         <option value="online">線上付款（信用卡）</option>
+        <option value="linepay" hidden>LINE Pay</option>
       </select>
       <!-- 2026-09-30 老闆：同意條款提前到「我的訂單」頁，跟「前往付款」按鈕一起顯示(揪團朋友走自己的同意框) -->
       <label id="agree-terms-row" style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:0.85rem; line-height:1.5; cursor:pointer; color:var(--text);">
@@ -602,7 +603,7 @@
 
     <div id="mpg-waiting-view" style="display:none; text-align:center; padding:10px 0;">
       <h2>確認付款中…</h2>
-      <p style="color:#888; font-size:0.9rem;">已從藍新付款頁返回，正在確認付款結果，請稍候不要關閉視窗。</p>
+      <p style="color:#888; font-size:0.9rem;">已從付款頁返回，正在確認付款結果，請稍候不要關閉視窗。</p>
     </div>
 
     <div id="confirm-view">
@@ -1126,21 +1127,30 @@ const scheduleSettingsReady = loadScheduleSettings();
 // 維持跟現行行為完全一致(顧客只看得到既有的線上付款流程)，不像商店時段設定那樣需要
 // 本地快取兜底(付款方式不影響能不能點餐，讀不到就先不顯示這個選項，客人一樣能正常送單)
 let PAY_AT_PICKUP_ENABLED = false;
+let LINEPAY_ONLINE_ENABLED = false;   // 10-23 線上LINEPay(後台「線上LINEPay」開＝linePayMode LinePayAPI)；讀不到一律不顯示
 function loadPaymentMethodSettings_() {
   return apiGet_({ action: 'paymentMethodSettings', storeId: STORE_ID }).then(resp => {
     if (!resp || resp.status !== 'ok') throw new Error('paymentMethodSettings回傳格式異常');
     PAY_AT_PICKUP_ENABLED = !!resp.payAtPickupEnabled;
+    LINEPAY_ONLINE_ENABLED = resp.linePayMode === 'LinePayAPI';
   }).catch(err => {
     console.warn('付款方式設定讀取失敗，「取餐現場付款」選項預設不顯示(維持現行行為)', err);
     PAY_AT_PICKUP_ENABLED = false;
-  }).then(() => {
-    const label = document.getElementById('checkout-paymethod-label');
-    const select = document.getElementById('checkout-payment-method');
-    if (label && select) {
-      label.style.display = PAY_AT_PICKUP_ENABLED ? 'block' : 'none';
-      select.style.display = PAY_AT_PICKUP_ENABLED ? 'block' : 'none';
-    }
-  });
+    LINEPAY_ONLINE_ENABLED = false;
+  }).then(payMethodSelectRefresh_);
+}
+// 付款方式選單：只有「取餐付款」或「LINE Pay」有開才出現(只剩信用卡就不用選)；揪團(請客)結帳不給選 LINE Pay(第一版照舊走藍新)
+function payMethodSelectRefresh_() {
+  const label = document.getElementById('checkout-paymethod-label');
+  const select = document.getElementById('checkout-payment-method');
+  if (!label || !select) return;
+  const lpOn = LINEPAY_ONLINE_ENABLED && !groupCheckoutMode;
+  select.querySelector('option[value="取餐付款"]').hidden = !PAY_AT_PICKUP_ENABLED;
+  select.querySelector('option[value="linepay"]').hidden = !lpOn;
+  if ((select.value === '取餐付款' && !PAY_AT_PICKUP_ENABLED) || (select.value === 'linepay' && !lpOn)) select.value = 'online';
+  const show = PAY_AT_PICKUP_ENABLED || lpOn;
+  label.style.display = show ? 'block' : 'none';
+  select.style.display = show ? 'block' : 'none';
 }
 loadPaymentMethodSettings_();
 
@@ -3855,6 +3865,7 @@ function backToCart() {
 function closeAll() {
   document.getElementById('cart-overlay').classList.remove('open');
   groupCheckoutMode = false;
+  payMethodSelectRefresh_();
   cart = [];
   checkoutMemberVouchers = [];
   checkoutSelectedVouchers = [];
@@ -3905,12 +3916,14 @@ function submitOrder(e) {
   // 「取餐現場付款」只有PAY_AT_PICKUP_ENABLED開啟時欄位才會顯示，關閉時select維持隱藏，
   // 這裡讀不到值就當作沒選(走原本的線上付款流程)，跟目前行為完全一致
   const payAtPickupChosen = PAY_AT_PICKUP_ENABLED && document.getElementById('checkout-payment-method').value === '取餐付款';
+  const linePayChosen = LINEPAY_ONLINE_ENABLED && !groupCheckoutMode && document.getElementById('checkout-payment-method').value === 'linepay';   // 10-23 線上LINEPay
 
   const lines = cart.map(c => `- ${c.who ? '['+c.who+'] ' : ''}${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
   const discountLine = (groupAct ? `揪團活動優惠：-$${groupAct}\n` : '') + (perks.total ? `會員權益（${verifiedMember.tier}）：${tierPerkText_(perks)}\n` : '') + (voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '')
     + (otherNeeds.length ? `其他需求：${otherNeeds.map(a => a.name + (a.amount ? '(' + otherNeedPriceText_(a.amount) + ')' : '')).join('、')}\n` : '');
   const paymentNote = payAtPickupChosen
     ? '（已選擇取餐現場付款，請於取餐時完成付款）'
+    : linePayChosen ? '（已完成 LINE Pay 付款，取餐時請出示此訂單編號）'
     : '（已完成線上信用卡付款，取餐時請出示此訂單編號）';
   const summary = `【${storeNameForOrder_()}】線上點餐訂單\n訂單編號：${orderNo}\n姓名：${name}　電話：${phone}\n取餐時間：${time}\n---\n${lines}\n---\n${discountLine}總計：$${total}\n備註：${note || '無'}\n${paymentNote}`;
 
@@ -3924,7 +3937,7 @@ function submitOrder(e) {
   const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓客人重選時段
   // voucherIds/phone先存著，等藍新付款成功那一步才由後端核銷，
   // 避免客人填完折抵資訊卻棄單，兌換券卻已經被扣掉的情況
-  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, cartBackup: cartBackup, groupPay: groupCheckoutMode && groupCtx ? 'host' : '',
+  pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, linePay: linePayChosen, cartBackup: cartBackup, groupPay: groupCheckoutMode && groupCtx ? 'host' : '',
     needsBackup: { sel: otherNeedsSel.slice(), none: otherNeedsNone, note },   // 10-11：藍新沒付款就返回時，其他需求/備註跟品項一起放回
     voucherBackup: checkoutSelectedVouchers.filter(v => !v.auto).map(v => ({ voucherId: v.voucherId, type: v.type })) };   // 客人手動選的兌換券(活動券/等級優惠會自動重套)
   cart = [];
@@ -3942,7 +3955,7 @@ function submitOrder(e) {
     memberPhone: phone,
     voucherIds: appliedVoucherIds,
     otherNeeds: otherNeeds.map(a => a.name),   // 只送名稱，金額由後端照後台正式版重算
-    paymentMethod: payAtPickupChosen ? '取餐付款' : undefined,
+    paymentMethod: payAtPickupChosen ? '取餐付款' : linePayChosen ? '線上LINEPay' : undefined,
     // 揪團結帳：後端改用揪團明細建單(不信任這裡的items)，並把訂單掛回揪團
     groupId: groupCheckoutMode && groupCtx ? groupCtx.groupId : undefined,
     hostToken: groupCheckoutMode && groupCtx ? groupCtx.hostToken : undefined,
@@ -3956,6 +3969,7 @@ function submitOrder(e) {
         completeOrderConfirmation_(pendingOrderContext, true);
         return;
       }
+      if (linePayChosen) { startLinePayOnline_(data.orderId); return; }
       startMpgPayment(data.orderId, pendingOrderContext.total);
     } else {
       // 後端拒絕(例如該時段剛好被別人搶滿) - 還原購物車讓客人重新選時段，不能假裝訂單成立
@@ -4259,6 +4273,45 @@ function startMpgPayment(orderId, amount) {
   });
 }
 
+// ---- 線上LINEPay(10-23，規格 付款方式定義與線上LINEPay設計_2026-10-23.md 第五節) ----
+// 建好待付款單 → 後端開付款請求 → 整頁跳到 LINE Pay(手機會開 LINE App)→ 跳回 ?lpreturn=1&lporder=訂單號(取消是 lpreturn=cancel)。
+// 跳回後一律由後端查 LINE Pay、客人已同意才確認收款(不看網址)；等待／成功／沒付款畫面跟藍新共用，訂單摘要一樣存 abao_mpg_pending_訂單號
+function startLinePayOnline_(orderId) {
+  try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(pendingOrderContext)); } catch (e) {}
+  const base = location.origin + location.pathname;
+  apiPost_({ action: 'linePayOnlineRequest', orderId, returnUrl: base }).then(data => {
+    if (data.status !== 'ok') {
+      payFailed_('目前無法使用 LINE Pay 付款，請稍後再試，或改用信用卡付款。' + (data.message ? '\n（' + data.message + '）' : ''));
+      return;
+    }
+    if (data.paid) { location.replace(base + '?lpreturn=1&lporder=' + encodeURIComponent(orderId)); return; }   // 上一次其實已經付好了
+    try { sessionStorage.setItem('abao_mpg_leaving', orderId); } catch (e) {}   // 從 LINE Pay 按「‹」回來時認得是哪張單(見 mpgReturnedByBack_)
+    location.href = data.paymentUrl;
+  }).catch(err => {
+    console.warn('建立 LINE Pay 付款請求失敗（網路問題）', err);
+    payFailed_('付款連線失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。');
+  });
+}
+function checkLinePayReturn_() {
+  const params = new URLSearchParams(location.search);
+  const mode = params.get('lpreturn'), orderId = params.get('lporder');
+  if (!mode || !orderId) return;
+  let ctx = null;
+  try { ctx = JSON.parse(localStorage.getItem('abao_mpg_pending_' + orderId) || 'null'); } catch (e) {}
+  if (ctx) ctx.linePay = true;
+  ['checkout-form', 'cart-view', 'confirm-view'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+  const view = document.getElementById('mpg-waiting-view');
+  view.innerHTML = '<h2>確認付款中…</h2><p style="color:#888; font-size:0.9rem;">已從 LINE Pay 返回，正在確認付款結果，請稍候不要關閉視窗。</p>';
+  view.style.display = 'block';
+  document.getElementById('cart-overlay').classList.add('open');
+  if (mode === 'cancel') { mpgBackToOrder_(orderId, ctx || { linePay: true }); return; }   // 在 LINE Pay 按取消：放回購物車(還是先查一次)
+  apiPost_({ action: 'linePayOnlineConfirm', orderId }).catch(() => ({})).then(() => pollMpgOrderStatus_(orderId, ctx, 0));
+}
+// LINE Pay 的單：查付款狀態前先請後端向 LINE Pay 確認一次(客人可能同意了卻沒跳回來)
+function lpConfirmFirst_(orderId, ctx) {
+  return ctx && ctx.linePay ? apiPost_({ action: 'linePayOnlineConfirm', orderId }).catch(() => ({})) : Promise.resolve();
+}
+
 // 頁面載入時檢查是否剛從藍新付款頁導回來，是的話顯示等待畫面並輪詢付款狀態
 // (真正的付款確認是藍新NotifyURL非同步呼叫後端完成的，這裡只是前端等著看確認到了沒)
 function checkMpgReturn() {
@@ -4282,8 +4335,7 @@ function checkMpgReturn() {
 // 逾時還沒確認到的情況不拿掉，客人照提示重新整理時才能再查一次
 function clearMpgReturnParams_() {
   const u = new URL(location.href);
-  u.searchParams.delete('mpgreturn');
-  u.searchParams.delete('orderId');
+  ['mpgreturn', 'orderId', 'lpreturn', 'lporder', 'transactionId'].forEach(k => u.searchParams.delete(k));   // 10-23 LINE Pay 跳回會自己加 transactionId、orderId
   navReplaceUrl_(u.toString());
 }
 // 已退款/已作廢/找不到的單：不能卡在「確認付款中」，說明狀況並讓客人回到點餐
@@ -4354,7 +4406,8 @@ function showMpgNotPaid_(orderId, ctx) {
 window.addEventListener('pageshow', function mpgReturnedByBack_() {
   let oid = null;
   try { oid = sessionStorage.getItem('abao_mpg_leaving'); sessionStorage.removeItem('abao_mpg_leaving'); } catch (e) {}
-  if (!oid || new URLSearchParams(location.search).get('mpgreturn') === '1') return;   // 「返回商店」導回走 checkMpgReturn
+  const sp = new URLSearchParams(location.search);
+  if (!oid || sp.get('mpgreturn') === '1' || sp.get('lpreturn')) return;   // 「返回商店」導回走 checkMpgReturn；LINE Pay 跳回走 checkLinePayReturn_
   let ctx = pendingOrderContext && pendingOrderContext.backendOrderId === oid ? pendingOrderContext : null;
   if (!ctx) { try { ctx = JSON.parse(localStorage.getItem('abao_mpg_pending_' + oid) || 'null'); } catch (e) {} }
   hidePayBusy_();
@@ -4369,7 +4422,7 @@ function mpgPrevPaidGuard_() {
   try { prev = JSON.parse(sessionStorage.getItem('abao_mpg_prev') || 'null'); } catch (e) {}
   if (!prev || !prev.orderId) return false;
   showPayBusy_('確認上一筆付款狀態…');
-  apiGet_({ action: 'orderStatus', orderId: prev.orderId }).catch(() => ({})).then(d => {
+  lpConfirmFirst_(prev.orderId, prev.ctx).then(() => apiGet_({ action: 'orderStatus', orderId: prev.orderId })).catch(() => ({})).then(d => {
     hidePayBusy_();
     try { sessionStorage.removeItem('abao_mpg_prev'); } catch (e) {}
     if (d && d.status === 'ok' && (d.orderStatus === '未取餐' || d.orderStatus === '已取餐')) {
@@ -4389,7 +4442,7 @@ function mpgPrevPaidGuard_() {
 function mpgBackToOrder_(orderId, ctx, guardPrev) {
   const btn = document.getElementById('mpg-back-btn');
   if (btn) { btn.disabled = true; btn.textContent = '確認中…'; }
-  apiGet_({ action: 'orderStatus', orderId }).catch(() => ({})).then(data => {
+  lpConfirmFirst_(orderId, ctx).then(() => apiGet_({ action: 'orderStatus', orderId })).catch(() => ({})).then(data => {
     if (data && data.status === 'ok' && (data.orderStatus === '未取餐' || data.orderStatus === '已取餐')) {
       try { sessionStorage.removeItem('abao_mpg_waited_' + orderId); } catch (e) {}
       pollMpgOrderStatus_(orderId, ctx, 0);   // 走原本的付款成功流程(顯示訂單完成)
@@ -4399,7 +4452,7 @@ function mpgBackToOrder_(orderId, ctx, guardPrev) {
     try { localStorage.removeItem('abao_mpg_pending_' + orderId); sessionStorage.removeItem('abao_mpg_waited_' + orderId); } catch (e) {}
     const view = document.getElementById('mpg-waiting-view');
     view.style.display = 'none';
-    view.innerHTML = '<h2>確認付款中…</h2><p style="color:#888; font-size:0.9rem;">已從藍新付款頁返回，正在確認付款結果，請稍候不要關閉視窗。</p>';
+    view.innerHTML = '<h2>確認付款中…</h2><p style="color:#888; font-size:0.9rem;">已從付款頁返回，正在確認付款結果，請稍候不要關閉視窗。</p>';
     if (ctx && !ctx.groupPay && Array.isArray(ctx.cartBackup) && ctx.cartBackup.length) {
       cart = ctx.cartBackup;
       const nb = ctx.needsBackup;
@@ -5119,6 +5172,7 @@ function startGroupCheckout() {
     // groupActUsed：這一列被那個人自己的活動券折掉的件數(10-04，後端算好)，團主的券/等級優惠不再算這幾件
     g.members.forEach(m => m.items.forEach((it, i) => cart.push(Object.assign({}, it, { lineKey: m.memberId + '|' + i + '|' + it.lineKey, who: m.name, groupActUsed: Number((m.actUsed || [])[i]) || 0 }))));
     groupCheckoutMode = true;
+    payMethodSelectRefresh_();   // 10-23 請客結帳不給選 LINE Pay
     checkoutSelectedVouchers = [];
     if (verifiedMember) loadCheckoutVouchers();   // 團主結帳只能再用集點兌換券等(活動券已在送出餐點時存好)
     updateCartBar();
@@ -5128,6 +5182,7 @@ function startGroupCheckout() {
 }
 function exitGroupCheckout_() {
   groupCheckoutMode = false;
+  payMethodSelectRefresh_();
   cart = groupCartBackup_ || [];
   groupCartBackup_ = null;
   checkoutSelectedVouchers = [];
@@ -5784,6 +5839,7 @@ else {
   }
 }
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
+checkLinePayReturn_(); // 10-23 從 LINE Pay 跳回來(網址帶 lpreturn)：後端確認收款後一樣輪詢
 initGroupFromUrl_();
 
 function rerenderMenu_() {
