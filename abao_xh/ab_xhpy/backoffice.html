@@ -888,7 +888,7 @@ function applyBoRoleUi_() {
   document.querySelectorAll('#perm-list select').forEach(sel => sel.disabled = !owner);
   const payNote = document.getElementById('bo-owner-only-payment');
   if (payNote) payNote.style.display = owner ? 'none' : 'block';
-  document.querySelectorAll('#view-payment button, #view-payment input, #view-payment select').forEach(el => el.disabled = !owner);
+  document.querySelectorAll('#view-payment button, #view-payment input, #view-payment select').forEach(el => el.disabled = !owner || el.dataset.lock === '1');   // data-lock：本來就鎖住的開關(例如 Apple Pay 要先開信用卡)，老闆登入也不解開
 }
 
 // 2026-09-12品牌菜單多店架構：「菜單管理」頁籤現在可以切換編輯對象——自己的門市(meibao)草稿，
@@ -1784,101 +1784,68 @@ function switchPmSubview(name) {
   if (name === 'offline') loadLinePayScanSettings();
   if (name === 'thirdparty') loadPmList_('thirdparty');
 }
-// 10-22 LINE Pay 門市反掃開關：存的時候把線上收款那幾個設定原樣帶回去(後端是整列覆蓋)
+// 10-23 老闆：線上收款、線下LINEPay 也改成跟線下／第三方收款一樣——每列一個開關，點一下就存(原本是勾選＋最下面「儲存」，勾了容易忘記存)。
+// 這些都在「付款方式設定」同一列，後端整列覆蓋 → 每次點開關都先重讀最新設定、只改那一項再存(線上、線下互不蓋掉)
+function pmSettingRow_(key, name, on, lock, desc, warn) {
+  return `<div class="sched-special-row">
+      <b>${name}</b>
+      <label style="display:flex;align-items:center;gap:4px;cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled data-lock="1"' : ''} onchange="pmSettingToggle_('${key}', this)">${on ? '🟢 啟用' : '🔴 停用'}</label>
+      <div style="flex-basis:100%;font-size:0.76rem;color:${warn ? '#c0392b' : 'var(--muted)'};line-height:1.5;">${desc}</div>
+    </div>`;
+}
+function pmSettingToggle_(key, el) {
+  const on = el.checked;
+  el.disabled = true;
+  apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(cur => {
+    if (cur.status !== 'ok') throw new Error('讀取目前設定失敗');
+    const s = {
+      storeId: SCHED_STORE_ID,
+      payAtPickupEnabled: !!cur.payAtPickupEnabled, creditEnabled: !!cur.creditEnabled, applePayEnabled: !!cur.applePayEnabled,
+      afteeEnabled: !!cur.afteeEnabled, linePayMode: cur.linePayMode === 'LinePayAPI' ? 'LinePayAPI' : '不開放',
+      linePayScanEnabled: !!cur.linePayScanEnabled, linePayCarrierEnabled: !!cur.linePayCarrierEnabled
+    };
+    if (key === 'payAtPickup') s.payAtPickupEnabled = on;
+    if (key === 'credit') { s.creditEnabled = on; if (!on) s.applePayEnabled = false; }   // Apple Pay 相依信用卡
+    if (key === 'applePay') s.applePayEnabled = on;
+    if (key === 'linePayOnline') s.linePayMode = on ? 'LinePayAPI' : '不開放';
+    if (key === 'linePayScan') { s.linePayScanEnabled = on; if (!on) s.linePayCarrierEnabled = false; }   // 支付載具相依掃碼收款
+    if (key === 'linePayCarrier') s.linePayCarrierEnabled = on;
+    return apiPost({ action: 'updatePaymentMethodSettings', settings: s });
+  }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    if (key === 'linePayScan' || key === 'linePayCarrier') loadLinePayScanSettings(); else loadPaymentMethodSettings();
+  }).catch(err => { el.checked = !on; el.disabled = false; alert('沒有儲存：' + (err.message || '網路異常')); });
+}
+// 10-22 LINE Pay 門市反掃開關(線下收款分頁上方)
 function loadLinePayScanSettings() {
   apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
     const el = document.getElementById('lp-scan-form');
     if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
-    el.innerHTML = `
-      <div class="sched-pickup-field"><label>開啟 線下LINEPay</label><input type="checkbox" id="lp-f-scan" ${data.linePayScanEnabled ? 'checked' : ''}></div>
-      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 10px;">
-        開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃客人手機上的 LINE Pay 付款碼收款，收款成功才出單。
-        斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。
-        <b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人使用。</b>
-      </p>
-      <div class="sched-pickup-field"><label>LINE Pay 支付載具</label><input type="checkbox" id="lp-f-carrier" ${data.linePayCarrierEnabled ? 'checked' : ''} ${data.linePayScanEnabled ? '' : 'disabled'}></div>
-      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 10px;">
-        開啟後，客人用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。
-        要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。須先開啟掃碼收款。
-      </p>
-      <button type="button" class="mc-save-btn" onclick="saveLinePayScanSettings()">儲存</button>`;
-    document.getElementById('lp-f-scan').addEventListener('change', function () {
-      const c = document.getElementById('lp-f-carrier');
-      c.disabled = !this.checked;
-      if (!this.checked) c.checked = false;
-    });
-  });
-}
-function saveLinePayScanSettings() {
-  const scan = document.getElementById('lp-f-scan').checked, carrier = scan && document.getElementById('lp-f-carrier').checked;
-  apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(cur => {
-    if (cur.status !== 'ok') { alert('讀取目前設定失敗，沒有儲存'); return; }
-    return apiPost({
-      action: 'updatePaymentMethodSettings',
-      settings: {
-        storeId: SCHED_STORE_ID,
-        payAtPickupEnabled: cur.payAtPickupEnabled, creditEnabled: cur.creditEnabled, applePayEnabled: cur.applePayEnabled,
-        afteeEnabled: cur.afteeEnabled, linePayMode: cur.linePayMode,
-        linePayScanEnabled: scan, linePayCarrierEnabled: carrier
-      }
-    }).then(data => {
-      if (data.status === 'ok') alert('已儲存（門市平板 5 分鐘內會跟上；要馬上生效可在平板重新整理）');
-      else alert('儲存失敗：' + (data.message || ''));
-    });
+    el.innerHTML =
+      pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, false,
+        '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃客人手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。<b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人使用。</b>改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。') +
+      pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
+        (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，客人用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。');
   });
 }
 
 function loadPaymentMethodSettings() {
   apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
-    if (data.status !== 'ok') {
-      document.getElementById('payment-method-form').innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>';
-      return;
-    }
-    document.getElementById('payment-method-form').innerHTML = `
-      <div class="sched-pickup-field"><label>取餐付款</label><input type="checkbox" id="pm-f-payatpickup" ${data.payAtPickupEnabled ? 'checked' : ''} ${data.payAtPickupStoreOff ? 'disabled' : ''}></div>
-      ${data.payAtPickupStoreOff ? '<p style="font-size:0.76rem;color:#c0392b;margin:0 0 6px;">門市「線下收款」的取餐付款關著，線上也不能開（客人線上選了，門市沒地方標已收款）。要開請先到「線下收款」打開。</p>' : ''}
-      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 12px;">
-        開啟後客人結帳頁會顯示「取餐現場付款」——訂單直接成立、不走線上金流，到店要先在雲端平板標記已收款才能取餐。
-      </p>
-      <div class="sched-pickup-field"><label>線上信用卡（藍新，一次付清）</label><input type="checkbox" id="pm-f-credit" ${data.creditEnabled ? 'checked' : ''}></div>
-      <div class="sched-pickup-field"><label>線上Apple Pay（藍新）</label><input type="checkbox" id="pm-f-applepay" ${data.applePayEnabled ? 'checked' : ''} ${data.creditEnabled ? '' : 'disabled'}></div>
-      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 12px;">
-        須先開啟「線上信用卡」才能開啟——跟信用卡走同一條藍新結帳頁，裝置/瀏覽器支援時會自動顯示Apple Pay按鈕，沒有獨立的付款流程。
-      </p>
-      <div class="sched-pickup-field"><label>AFTEE先享後付</label><input type="checkbox" id="pm-f-aftee" ${data.afteeEnabled ? 'checked' : ''}></div>
-      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 14px;">
-        藍新帳號尚未申請開通此功能，這裡先記錄設定意向，開通＋後端串接完成前不會真的出現在客人結帳頁。
-      </p>
-      <div class="sched-pickup-field"><label>線上LINEPay（直接串 LINE Pay）</label><input type="checkbox" id="pm-f-linepay-online" ${data.linePayMode === 'LinePayAPI' ? 'checked' : ''}></div>
-      <p style="font-size:0.76rem;color:var(--muted);margin:0 0 14px;">
-        客人在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。<b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人開放；測完記得關掉</b>。
-        LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。
-      </p>
-      <button type="button" class="mc-save-btn" onclick="savePaymentMethodSettings()">儲存</button>
-    `;
-    // Apple Pay相依信用卡一次付清：信用卡取消勾選時同步鎖住+取消勾選Apple Pay，避免存出矛盾狀態
-    document.getElementById('pm-f-credit').addEventListener('change', function() {
-      const applePayEl = document.getElementById('pm-f-applepay');
-      applePayEl.disabled = !this.checked;
-      if (!this.checked) applePayEl.checked = false;
-    });
-  });
-}
-function savePaymentMethodSettings() {
-  const mode = document.getElementById('pm-f-linepay-online').checked ? 'LinePayAPI' : '不開放';   // 10-23 線上LINEPay 單一開關(第 2 段後半做好後解鎖)
-  apiPost({
-    action: 'updatePaymentMethodSettings',
-    settings: {
-      storeId: SCHED_STORE_ID,
-      payAtPickupEnabled: document.getElementById('pm-f-payatpickup').checked,
-      creditEnabled: document.getElementById('pm-f-credit').checked,
-      applePayEnabled: document.getElementById('pm-f-applepay').checked,
-      afteeEnabled: document.getElementById('pm-f-aftee').checked,
-      linePayMode: mode
-    }
-  }).then(data => {
-    if (data.status === 'ok') alert('已儲存');
-    else alert('儲存失敗：' + (data.message || ''));
+    const el = document.getElementById('payment-method-form');
+    if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
+    el.innerHTML =
+      pmSettingRow_('payAtPickup', '取餐付款', data.payAtPickupEnabled, data.payAtPickupStoreOff,
+        data.payAtPickupStoreOff
+          ? '門市「線下收款」的取餐付款關著，線上也不能開（客人線上選了，門市沒地方標已收款）。要開請先到「線下收款」打開。'
+          : '開啟後客人結帳頁會顯示「取餐現場付款」——訂單直接成立、不走線上金流，到店要先在雲端平板標記已收款才能取餐。', data.payAtPickupStoreOff) +
+      pmSettingRow_('credit', '線上信用卡（藍新，一次付清）', data.creditEnabled, false,
+        '關掉的話線上Apple Pay 也會跟著關（同一條藍新結帳頁）。') +
+      pmSettingRow_('applePay', '線上Apple Pay（藍新）', data.applePayEnabled, !data.creditEnabled,
+        (data.creditEnabled ? '' : '<b>須先開啟「線上信用卡」。</b>') + '跟信用卡走同一條藍新結帳頁，裝置/瀏覽器支援時會自動顯示 Apple Pay 按鈕，沒有獨立的付款流程。') +
+      pmSettingRow_('aftee', 'AFTEE先享後付', data.afteeEnabled, true,
+        '藍新帳號尚未申請開通此功能，開通＋後端串接完成前不能開（不會出現在客人結帳頁）。') +
+      pmSettingRow_('linePayOnline', '線上LINEPay（直接串 LINE Pay）', data.linePayMode === 'LinePayAPI', false,
+        '客人在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。<b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人開放；測完記得關掉</b>。LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。');
   });
 }
 
