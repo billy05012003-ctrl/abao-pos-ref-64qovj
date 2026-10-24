@@ -1844,6 +1844,12 @@ function pmSettingToggle_(key, el) {
     if (key === 'linePayScan' || key === 'linePayCarrier') loadLinePayScanSettings(); else loadPaymentMethodSettings();
   }).catch(err => { el.checked = !on; el.disabled = false; alert('沒有儲存：' + (err.message || '網路異常')); });
 }
+// 10-24 LINE Pay 開關說明照後端實際環境顯示(指令碼屬性 LINEPAY_ENV)，原本寫死「測試環境」，10-24 切正式後就不對了
+function lpEnvNote_(data) {
+  if (data.linePayEnv === 'prod') return '<b style="color:#a32d2d;">目前接的是 LINE Pay 正式環境：開了就會真的收錢，退款也是真的退。</b>';
+  if (data.linePayEnv === 'sandbox') return '<b>目前接的是 LINE Pay 測試環境（不會真的收錢），正式上線前不要對客人使用。</b>';
+  return '';
+}
 // 10-22 LINE Pay 門市反掃開關(線下收款分頁上方)
 function loadLinePayScanSettings() {
   apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
@@ -1851,7 +1857,7 @@ function loadLinePayScanSettings() {
     if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
     el.innerHTML =
       pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, false,
-        '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃客人手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。<b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人使用。</b>改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。') +
+        '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃客人手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。') +
       pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
         (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，客人用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。');
   });
@@ -1873,7 +1879,7 @@ function loadPaymentMethodSettings() {
       pmSettingRow_('aftee', 'AFTEE先享後付', data.afteeEnabled, true,
         '藍新帳號尚未申請開通此功能，開通＋後端串接完成前不能開（不會出現在客人結帳頁）。') +
       pmSettingRow_('linePayOnline', '線上LINEPay（直接串 LINE Pay）', data.linePayMode === 'LinePayAPI', false,
-        '客人在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。<b>目前接的是 LINE Pay 測試環境，正式上線前不要對客人開放；測完記得關掉</b>。LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。');
+        '客人在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。' + lpEnvNote_(data) + 'LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。');
   });
 }
 
