@@ -884,6 +884,10 @@ function renderBoUser_() {
   box.style.display = boSession ? 'block' : 'none';
   if (boSession) document.getElementById('bo-user-text').textContent = '登入：' + boSession.name + '（' + boSession.role + '）';
   applyBoRoleUi_();
+  // 10-24 老闆實測：停在「會員 LINE 綁定」直接換店長登入，畫面還留著老闆看到的內容(後端照樣擋，但畫面不該給看)→登入／登出時重跑身分檢查
+  const lb = document.getElementById('pmg-subview-linebind');
+  if (lb && lb.style.display === 'block') loadBoLineBind_();
+  if (!isBoOwner_()) { const badge = document.getElementById('bo-linebind-badge'); if (badge) badge.textContent = ''; }
 }
 // 店長登入時：只有老闆能改的地方改成唯讀並說明(後端也會擋，這裡是讓畫面不誤導)
 function applyBoRoleUi_() {
