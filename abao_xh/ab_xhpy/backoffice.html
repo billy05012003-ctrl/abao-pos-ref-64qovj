@@ -318,12 +318,12 @@
   </div>
   <div class="ops-card" id="bo-ops-stuck-card" style="display:none;">
     <h3>⚠️ 卡住的待付款訂單（超過10分鐘） <span class="ops-refresh" onclick="loadBoStuck_()">重新整理</span></h3>
-    <div class="ops-meta">標記已付款前，請先到藍新商店後台「查詢交易紀錄」核對客人的卡真的扣款成功。</div>
+    <div class="ops-meta">標記已付款前，請先到藍新商店後台「查詢交易紀錄」核對顧客的卡真的扣款成功。</div>
     <div id="bo-ops-stuck"></div>
   </div>
   <div class="ops-card">
     <h3>訂單退款 <span class="ops-refresh" onclick="loadBoRefundable_()">載入／重新整理</span></h3>
-    <div class="ops-meta">近3天已收款、尚未退款的訂單。要不要輸入 PIN 照「角色權限設定」，紀錄會註明「後台」。線上信用卡單會退回客人的卡；現場單只記錄，錢請店裡當場退給客人。</div>
+    <div class="ops-meta">近3天已收款、尚未退款的訂單。要不要輸入 PIN 照「角色權限設定」，紀錄會註明「後台」。線上信用卡單會退回顧客的卡；現場單只記錄，錢請店裡當場退給顧客。</div>
     <div id="bo-ops-refund"><div class="ops-meta" style="padding:8px 0;">按上方「載入」查看可退款訂單</div></div>
   </div>
   <h3 style="font-size:1rem;margin:18px 0 6px;border-top:2px solid #eee;padding-top:12px;">品項上下架</h3>
@@ -345,7 +345,7 @@
     <input type="text" id="si-f-address" maxlength="80" style="width:100%;padding:8px;box-sizing:border-box;">
     <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">電話</label>
     <input type="text" id="si-f-phone" maxlength="20" style="width:100%;padding:8px;box-sizing:border-box;">
-    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">自取規則（一行一條，客人結帳前要勾選同意）</label>
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">自取規則（一行一條，顧客結帳前要勾選同意）</label>
     <textarea id="si-f-rules" rows="6" maxlength="500" style="width:100%;padding:8px;box-sizing:border-box;font-family:inherit;"></textarea>
     <button type="button" class="mc-add-btn" style="width:auto;padding:8px 20px;margin-top:10px;" onclick="saveStoreInfo()">儲存店家資訊</button>
   </div>
@@ -366,7 +366,7 @@
     <div id="sched-hours-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="sched-subview-order" style="display:none;">
-    <p style="font-size:0.78rem;color:var(--muted);">這組決定「現在這個時間點客人能不能送出訂單」，<b>跟營業時間分開設定</b>——例如可以設晚上21:00~23:00也開放下單，訂隔天的餐。跟營業時間沒有關聯，不會互相限制。</p>
+    <p style="font-size:0.78rem;color:var(--muted);">這組決定「現在這個時間點顧客能不能送出訂單」，<b>跟營業時間分開設定</b>——例如可以設晚上21:00~23:00也開放下單，訂隔天的餐。跟營業時間沒有關聯，不會互相限制。</p>
     <div id="sched-order-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="sched-subview-pickup" style="display:none;">
@@ -429,7 +429,7 @@
     </div>
   </div>
   <div id="pm-subview-tablescan" style="display:none;">
-    <p style="font-size:0.8rem;color:var(--muted);">客人在桌邊自己掃碼點餐+付款。目前Abao沒有這種桌邊點餐模式，尚無項目。</p>
+    <p style="font-size:0.8rem;color:var(--muted);">顧客在桌邊自己掃碼點餐+付款。目前Abao沒有這種桌邊點餐模式，尚無項目。</p>
     <div class="empty-hint">尚無項目，之後有這個需求再開發</div>
   </div>
 </div>
@@ -571,7 +571,7 @@
   </div>
   <div id="mb-subview-blocks" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      線上點餐頁底部三個分頁「新品推薦／會員好康／線上點餐」的內容。跟優惠券同一套：改的是<b>草稿</b>，按「發布到正式版」客人才看得到（優惠券、集點禮、加價購、區塊配置一起發布）。
+      線上點餐頁底部三個分頁「新品推薦／會員好康／線上點餐」的內容。跟優惠券同一套：改的是<b>草稿</b>，按「發布到正式版」顧客才看得到（優惠券、集點禮、加價購、區塊配置一起發布）。
       <br>第一波只做顯示：新品卡片、活動看板（今天的活動大圖、即將到來小卡）；領券與自動折抵第二、三波才開放。
     </p>
     <div id="hb-domain-controls"></div>
@@ -649,7 +649,7 @@
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('printer')"><span class="ic">🖨️</span>門市平板（出單方式）</button>
     </div>
   </div>
-  <!-- 10-16 會員 LINE 綁定(限老闆)：換了新 LINE 的客人登入被擋時自動留申請，老闆回撥會員手機確認本人後換綁；也能只解除 -->
+  <!-- 10-16 會員 LINE 綁定(限老闆)：換了新 LINE 的顧客登入被擋時自動留申請，老闆回撥會員手機確認本人後換綁；也能只解除 -->
   <div id="pmg-subview-linebind" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 會員 LINE 綁定 <span class="ops-refresh" onclick="loadBoLineBind_()">重新整理</span></div>
     <div id="bo-pmg-linebind"><div class="empty-hint">載入中...</div></div>
@@ -795,7 +795,7 @@ document.addEventListener('click', e => {
 }, true);
 function boFeedbackStart_(payload) {
   const c = boLastClick_;
-  // 按鈕：中間可能先跳確認框(客人看完才按確定)，給 60 秒；勾選框這類點了馬上送，給 3 秒
+  // 按鈕：中間可能先跳確認框(顧客看完才按確定)，給 60 秒；勾選框這類點了馬上送，給 3 秒
   if (!payload || BO_FEEDBACK_SKIP_.includes(payload.action) || !c || Date.now() - c.at > (c.btn ? 60000 : 3000)) return null;
   boLastClick_ = null;   // 一次點擊只算一次(同一下連送好幾筆的，第一筆跳提示)
   const fb = { action: String(payload.action || '') };
@@ -992,7 +992,7 @@ function loadPosManageLog() {
 
 // ---- 上下架管理同步(10-10，規格 上下架管理與POS管理調整設計_2026-10-09.md) ----
 // 跟門市平板讀同一份資料。營業狀態/標記已付款/退款都要輸 PIN(名字＝登入的人)，送 via:'bo'，後端會在紀錄標「後台」。
-// 待取餐訂單只看不放按鈕(可以取餐/已收款/作廢要在店裡看到客人才按)
+// 待取餐訂單只看不放按鈕(可以取餐/已收款/作廢要在店裡看到顧客才按)
 const BO_OPS_STORE = BO_HOME_STORE_;
 let boStoreStatus_ = {};
 function boHm_(iso) { const d = new Date(iso); return isNaN(d) ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
@@ -1091,7 +1091,7 @@ function loadBoStuck_() {
   }).catch(() => {});
 }
 function boConfirmPayment_(orderId) {
-  openBoOpsPinFor_('confirmPayment', '標記已付款：' + orderId, '<div class="ops-warn">請先到藍新商店後台「查詢交易紀錄」核對客人的卡真的扣款成功再標記。標記後客人可以直接取餐。</div>', pin => {
+  openBoOpsPinFor_('confirmPayment', '標記已付款：' + orderId, '<div class="ops-warn">請先到藍新商店後台「查詢交易紀錄」核對顧客的卡真的扣款成功再標記。標記後顧客可以直接取餐。</div>', pin => {
     boOpsPost_({ action: 'staffConfirmPayment', orderId: orderId, staffPin: pin }).then(d => {
       if (d.status !== 'ok') { alert('標記失敗：' + (d.message || '')); return; }
       alert('已標記已付款');
@@ -1109,20 +1109,20 @@ function loadBoRefundable_() {
       pend.map(p => escapeHtml(p.orderId + '　$' + p.totalAmount + '　(' + p.requestedAt + ' 受理)')).join('<br>') + '</div>' : '';
     if (!d.orders.length) { box.innerHTML = '<div class="ops-meta" style="padding:8px 0;">近3天沒有可退款的訂單</div>' + pendHtml; return; }
     box.innerHTML = d.orders.map(o => `<div class="ops-order"><div><b>${escapeHtml(o.orderId)}</b> <span class="ops-meta">[${escapeHtml(o.channel)}] ${escapeHtml(o.status)}</span>${o.printed ? '<span class="ops-tag printed">🖨已出單</span>' : ''}
-        <div class="ops-meta">$${escapeHtml(o.totalAmount)}　${o.needsManual ? '<span style="color:#a32d2d;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回客人的 LINE Pay)' : o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div></div>
+        <div class="ops-meta">$${escapeHtml(o.totalAmount)}　${o.needsManual ? '<span style="color:#a32d2d;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div></div>
       ${o.needsManual ? '<button class="ops-btn" disabled>無法自動退</button>'
         : `<button class="ops-btn danger" onclick="boRefund_('${escapeHtml(o.orderId)}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.gateway ? 'true' : 'false'}, ${o.printed ? 'true' : 'false'})">退款</button>`}</div>`).join('') + pendHtml;
   }).catch(() => { box.innerHTML = '<div class="ops-meta">網路異常，請稍後再試</div>'; });
 }
 function boRefund_(orderId, amount, viaGateway, printed) {
-  const how = viaGateway === 'linepay' ? 'LINE Pay 付款的單，系統會直接退回客人的 LINE Pay，不用退現金。'   // 10-23 線上LINEPay 也走這裡，不寫線下
-    : viaGateway ? '線上信用卡單，系統會向藍新退回客人的卡。' : '現場付款單，系統只記錄退款，<b>錢要請店裡當場退給客人</b>。';
+  const how = viaGateway === 'linepay' ? 'LINE Pay 付款的單，系統會直接退回顧客的 LINE Pay，不用退現金。'   // 10-23 線上LINEPay 也走這裡，不寫線下
+    : viaGateway ? '線上信用卡單，系統會向藍新退回顧客的卡。' : '現場付款單，系統只記錄退款，<b>錢要請店裡當場退給顧客</b>。';
   const warn = printed ? '<div class="ops-warn">⚠️ 這張已經出單，廚房可能已經在做。<br>請先打電話通知店裡<b>不要交餐</b>，再按確定。</div>' : '';
   openBoOpsPinFor_('refund', '確定要退款「' + orderId + '」$' + amount + ' 嗎？', warn + '<div>' + how + '退款後扣回點數與消費、退回用掉的兌換券，<b>無法復原</b>。紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」。</div>', pin => {
     boOpsPost_({ action: 'refundOrder', orderId: orderId, staffPin: pin }).then(d => {
       if (d.status !== 'ok') { alert('退款失敗：' + (d.message || '')); loadBoRefundable_(); return; }
       if (d.pending) {
-        alert('退款已受理（還沒退到客人的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。系統已先扣回點數與消費、退回兌換券，之後會自動退款，請勿重複按退款。\n金額：$' + d.amount);
+        alert('退款已受理（還沒退到顧客的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。系統已先扣回點數與消費、退回兌換券，之後會自動退款，請勿重複按退款。\n金額：$' + d.amount);
       } else {
         alert('退款完成\n方式：' + d.mode + '\n金額：$' + d.amount + '\n扣回點數：' + (d.pointsReverted || 0) + '　退回兌換券：' + (d.vouchersRestored || 0) + ' 張');
       }
@@ -1185,7 +1185,7 @@ function loadBoLineBind_() {
       const kind = !r.isMember ? '⚠️ 查無這支手機的會員' : r.paused ? '綁定已解除，等重新綁定' : r.currentBound ? (r.sameLine ? '已經綁這個 LINE' : '換綁：原本綁別的 LINE') : '第一次綁 LINE';
       return `<div class="ops-order" style="align-items:flex-start;"><div style="flex:1;">
           <b>${escapeHtml(r.phone)}</b>　會員：${escapeHtml(r.memberName || '—')}　<span style="color:#a3620a;">${kind}</span>
-          <div class="ops-meta">${boFmtMs_(r.time)} 申請｜新 LINE 名稱：${escapeHtml(r.lineName || '—')}｜客人填的姓名：${escapeHtml(r.filledName || '—')}</div>
+          <div class="ops-meta">${boFmtMs_(r.time)} 申請｜新 LINE 名稱：${escapeHtml(r.lineName || '—')}｜顧客填的姓名：${escapeHtml(r.filledName || '—')}</div>
           <input type="text" id="lb-note-${i}" maxlength="60" placeholder="確認方式(必填)，例：已回撥 ${maskPhone(r.phone)}，本人確認、問了生日" style="width:100%;margin-top:6px;padding:6px;border:1px solid var(--border);border-radius:6px;font-size:0.85rem;">
         </div><div style="display:flex;flex-direction:column;gap:6px;margin-left:8px;">
           <button type="button" class="mc-add-btn" style="width:auto;padding:6px 12px;margin:0;" ${r.isMember ? '' : 'disabled'} onclick="boLineBindApprove_(${i})">換綁到這個 LINE</button>
@@ -1196,7 +1196,7 @@ function loadBoLineBind_() {
       <span style="color:var(--muted);">${l.oldId ? '舊 ' + escapeHtml(l.oldId) + ' → ' : ''}${l.newId ? '新 ' + escapeHtml(l.newId) + (l.newName ? '（' + escapeHtml(l.newName) + '）' : '') : ''}｜${escapeHtml(l.by)}${l.note ? '｜' + escapeHtml(l.note) : ''}</span></div>`).join('');
     box.innerHTML = `
       <div class="ops-card"><h3>待處理的綁定申請</h3>
-        <div class="ops-meta" style="margin-bottom:6px;">客人換了新的 LINE、登入點餐頁時被擋下，系統會自動留在這裡。<b>處理前請回撥「會員資料上的手機號碼」</b>(不是客人另外給的號碼)，接通後再問一題只有本人知道的(生日、最近點了什麼)，確認是本人才按「換綁」。換綁後舊 LINE 立刻失去會員身分；點數、券、等級全部跟著。</div>
+        <div class="ops-meta" style="margin-bottom:6px;">顧客換了新的 LINE、登入點餐頁時被擋下，系統會自動留在這裡。<b>處理前請回撥「會員資料上的手機號碼」</b>(不是顧客另外給的號碼)，接通後再問一題只有本人知道的(生日、最近點了什麼)，確認是本人才按「換綁」。換綁後舊 LINE 立刻失去會員身分；點數、券、等級全部跟著。</div>
         ${reqHtml || '<div class="ops-meta" style="padding:6px 0;">目前沒有待處理的申請</div>'}
       </div>
       <div class="ops-card" style="margin-top:12px;"><h3>只解除綁定</h3>
@@ -1220,7 +1220,7 @@ function boLineBindApprove_(i) {
   if (!confirm(`確定把會員 ${r.phone}（${r.memberName || '—'}）換綁到新 LINE「${r.lineName || '—'}」？\n\n舊 LINE 會立刻失去會員身分，點數、券、等級都跟著新 LINE。`)) return;
   apiPost({ action: 'lineBindApprove', storeId: SCHED_STORE_ID, row: r.row, note }).then(d => {
     if (d.status !== 'ok') { alert(d.message || '換綁失敗'); return; }
-    alert('完成：' + d.type + '。請客人重新整理點餐頁。');
+    alert('完成：' + d.type + '。請顧客重新整理點餐頁。');
     loadBoLineBind_();
   }).catch(() => alert('網路異常，請稍後再試'));
 }
@@ -1847,7 +1847,7 @@ function pmSettingToggle_(key, el) {
 // 10-24 LINE Pay 開關說明照後端實際環境顯示(指令碼屬性 LINEPAY_ENV)，原本寫死「測試環境」，10-24 切正式後就不對了
 function lpEnvNote_(data) {
   if (data.linePayEnv === 'prod') return '<b style="color:#a32d2d;">目前接的是 LINE Pay 正式環境：開了就會真的收錢，退款也是真的退。</b>';
-  if (data.linePayEnv === 'sandbox') return '<b>目前接的是 LINE Pay 測試環境（不會真的收錢），正式上線前不要對客人使用。</b>';
+  if (data.linePayEnv === 'sandbox') return '<b>目前接的是 LINE Pay 測試環境（不會真的收錢），正式上線前不要對顧客使用。</b>';
   return '';
 }
 // 10-22 LINE Pay 門市反掃開關(線下收款分頁上方)
@@ -1857,9 +1857,9 @@ function loadLinePayScanSettings() {
     if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
     el.innerHTML =
       pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, false,
-        '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃客人手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。') +
+        '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。') +
       pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
-        (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，客人用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。');
+        (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，顧客用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。');
   });
 }
 
@@ -1870,16 +1870,16 @@ function loadPaymentMethodSettings() {
     el.innerHTML =
       pmSettingRow_('payAtPickup', '取餐付款', data.payAtPickupEnabled, data.payAtPickupStoreOff,
         data.payAtPickupStoreOff
-          ? '門市「線下收款」的取餐付款關著，線上也不能開（客人線上選了，門市沒地方標已收款）。要開請先到「線下收款」打開。'
-          : '開啟後客人結帳頁會顯示「取餐現場付款」——訂單直接成立、不走線上金流，到店要先在雲端平板標記已收款才能取餐。', data.payAtPickupStoreOff) +
+          ? '門市「線下收款」的取餐付款關著，線上也不能開（顧客線上選了，門市沒地方標已收款）。要開請先到「線下收款」打開。'
+          : '開啟後顧客結帳頁會顯示「取餐現場付款」——訂單直接成立、不走線上金流，到店要先在雲端平板標記已收款才能取餐。', data.payAtPickupStoreOff) +
       pmSettingRow_('credit', '線上信用卡（藍新，一次付清）', data.creditEnabled, false,
         '關掉的話線上Apple Pay 也會跟著關（同一條藍新結帳頁）。') +
       pmSettingRow_('applePay', '線上Apple Pay（藍新）', data.applePayEnabled, !data.creditEnabled,
         (data.creditEnabled ? '' : '<b>須先開啟「線上信用卡」。</b>') + '跟信用卡走同一條藍新結帳頁，裝置/瀏覽器支援時會自動顯示 Apple Pay 按鈕，沒有獨立的付款流程。') +
       pmSettingRow_('aftee', 'AFTEE先享後付', data.afteeEnabled, true,
-        '藍新帳號尚未申請開通此功能，開通＋後端串接完成前不能開（不會出現在客人結帳頁）。') +
+        '藍新帳號尚未申請開通此功能，開通＋後端串接完成前不能開（不會出現在顧客結帳頁）。') +
       pmSettingRow_('linePayOnline', '線上LINEPay（直接串 LINE Pay）', data.linePayMode === 'LinePayAPI', false,
-        '客人在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。' + lpEnvNote_(data) + 'LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。');
+        '顧客在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。' + lpEnvNote_(data) + 'LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。');
   });
 }
 
@@ -2264,16 +2264,16 @@ function monthReminderItems_(today, promos, acts, cards, ctx) {
       items.push({ red: false, go: 'promo', text: `「${p.name}」${mrMd_(p.endDate)} 到期，下個月要換飲品（改名稱、適用品項、生效日／到期日）` });
     }
   });
-  // ③新品開賣日(10-04 老闆要求)：「只展示」卡片到了開賣日還沒改成連單一品項，客人只能看介紹點不到；前一天先提醒當晚上菜單
+  // ③新品開賣日(10-04 老闆要求)：「只展示」卡片到了開賣日還沒改成連單一品項，顧客只能看介紹點不到；前一天先提醒當晚上菜單
   (cards || []).forEach(c => {
     if (c.status === '停用' || c.linkType !== '只展示' || !c.saleDate || (c.endDate && c.endDate < today)) return;
     if (c.saleDate <= today) {
-      items.push({ red: true, go: 'blocks', text: `新品「${c.title}」${mrMd_(c.saleDate)} 開賣，卡片還是「只展示」，客人點不到：品項加進菜單並發布後，把卡片改成「連單一品項」再發布` });
+      items.push({ red: true, go: 'blocks', text: `新品「${c.title}」${mrMd_(c.saleDate)} 開賣，卡片還是「只展示」，顧客點不到：品項加進菜單並發布後，把卡片改成「連單一品項」再發布` });
     } else if (c.saleDate === mrAddDays_(today, 1)) {
       items.push({ red: false, go: 'blocks', text: `新品「${c.title}」明天(${mrMd_(c.saleDate)})開賣：今天收店後把品項加進菜單並發布，再把卡片改成「連單一品項」發布，門市平板重新整理` });
     }
   });
-  // ④新品卡片連單一品項，但那道餐線上看不到(10-04：美18 先設永久下架等 10/6 開賣、或菜單還沒發布)→客人看到暫停供應
+  // ④新品卡片連單一品項，但那道餐線上看不到(10-04：美18 先設永久下架等 10/6 開賣、或菜單還沒發布)→顧客看到暫停供應
   const cat = ctx && ctx.catalog, sts = ctx && ctx.statuses;
   (cards || []).forEach(c => {
     if (c.status === '停用' || c.linkType !== '品項' || !c.linkItem || (c.endDate && c.endDate < today) || (c.startDate && c.startDate > today)) return;
@@ -2286,7 +2286,7 @@ function monthReminderItems_(today, promos, acts, cards, ctx) {
     let why = '';
     if (cat && !(cat[c.linkCat] || []).some(it => it.name === c.linkItem)) why = '還沒發布到正式菜單（到「菜單管理」按發布）';
     else if (sts && sts[c.linkItem] === '永久下架') why = '線上設成永久下架（開賣了就到「品項上下架」改回供應中，POS 也要一起改）';
-    if (why) items.push({ red: true, go: 'blocks', text: `新品「${c.title}」卡片連到的「${c.linkItem}」${why}，客人現在看到「暫停供應」` });
+    if (why) items.push({ red: true, go: 'blocks', text: `新品「${c.title}」卡片連到的「${c.linkItem}」${why}，顧客現在看到「暫停供應」` });
   });
   return items;
 }
@@ -2879,7 +2879,7 @@ function renderMcComboGroupTagsHtml(item) {
   return `
     <div class="mc-section">
       <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">套餐限定客製化選項掛載</h4>
-      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">這個品項有「套餐$${item.price_set}」的定價，這裡掛的選項只有客人選「套餐」才會出現，選「單點」不會看到。</p>
+      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">這個品項有「套餐$${item.price_set}」的定價，這裡掛的選項只有顧客選「套餐」才會出現，選「單點」不會看到。</p>
       <div class="mc-tags" id="mc-combo-tags">${tagsHtml}</div>
       <div class="mc-field-row">
         <select id="mc-add-combo-group-select"><option value="">+ 掛上套餐限定選項群組...</option>${optionsHtml}</select>
@@ -3160,7 +3160,7 @@ function renderMcOptionValuesHtml(g) {
   return `
     <div class="mc-section">
       <h4 style="margin:0 0 8px;font-size:0.85rem;color:var(--muted);">選項值</h4>
-      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">「線上點餐」沒打勾的話，代表線上點餐不顯示這個選項，只有POS功能看得到，線上點餐頁的客人選不到、也看不到。</p>
+      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 8px;">「線上點餐」沒打勾的話，代表線上點餐不顯示這個選項，只有POS功能看得到，線上點餐頁的顧客選不到、也看不到。</p>
       <div id="mc-value-list">${rows}</div>
       <div class="mc-value-row">
         <input class="mc-v-name" id="mc-newv-name" placeholder="新選項名稱">
@@ -3811,7 +3811,7 @@ function hbLinkCatOptions_(sel, allowVeg) {
 }
 function hbStaffCatWarnHtml_(d) {
   if ((d.linkType !== '品項' && d.linkType !== '分類') || !hbIsStaffCat_(d.linkCat)) return '';
-  return `<div style="font-size:0.78rem;background:#fff6d6;border:1px solid #f0c040;color:#7a5a00;border-radius:6px;padding:6px 8px;margin-top:6px;">⚠ 「${escapeHtml(mcShortCatName(d.linkCat))}」是店員用的分類，線上點餐看不到，客人按了會找不到。請把品項移到線上看得到的分類，或改選其他分類。</div>`;
+  return `<div style="font-size:0.78rem;background:#fff6d6;border:1px solid #f0c040;color:#7a5a00;border-radius:6px;padding:6px 8px;margin-top:6px;">⚠ 「${escapeHtml(mcShortCatName(d.linkCat))}」是店員用的分類，線上點餐看不到，顧客按了會找不到。請把品項移到線上看得到的分類，或改選其他分類。</div>`;
 }
 function hbPeriodTag_(x) { return pmPeriodTag_(x); }
 
@@ -3925,7 +3925,7 @@ function renderHbCardEditor_(el) {
       <label class="mc-field" style="max-width:180px;">開賣日（選填）<input type="date" value="${escapeHtml(d.saleDate || '')}" onchange="hbDraft.saleDate=this.value"></label>
       <div style="flex:1;font-size:0.75rem;color:var(--muted);align-self:center;">還沒開賣的新品可以先連品項、填開賣日：開賣前卡片顯示「X/X 開賣」只看介紹，到了開賣日自動變成「立即點餐」。品項開賣前先在「品項上下架」設永久下架(線上＋POS)，開賣日改回供應中。</div>
     </div>` : ''}` : `
-    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">客人點了只會放大看圖跟說明，沒有點餐按鈕。<b>開賣那天回來把這張改成「連單一品項」再發布</b>（忘了改也不會出錯，只是一直停在展示）。</div>
+    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">顧客點了只會放大看圖跟說明，沒有點餐按鈕。<b>開賣那天回來把這張改成「連單一品項」再發布</b>（忘了改也不會出錯，只是一直停在展示）。</div>
     <div class="mc-field-row">
       <label class="mc-field" style="max-width:160px;">價格（選填）<input type="number" min="0" step="1" value="${d.price === '' ? '' : d.price}" oninput="hbDraft.price=this.value"></label>
       <label class="mc-field" style="max-width:180px;">開賣日（選填）<input type="date" value="${escapeHtml(d.saleDate || '')}" onchange="hbDraft.saleDate=this.value"></label>
@@ -4155,7 +4155,7 @@ function renderHbActEditor_(el) {
           </select>
         </label>
       </div>
-      <div style="font-size:0.72rem;color:var(--muted);">線上（10-02 第三波）：活動日取餐的訂單，會員點了符合的餐點，系統自動發券並套用，客人不用按「領券」；只能用在活動日取餐的訂單。每人限領＝每人每個活動日最多幾組（空白＝1；雞塊日一張券就是點幾份送幾份）。每天限量＝算已付款的組數，退款會還名額，空白＝不限。優惠券效果在「優惠券」那頁設定（週二：打5折＋適用分類茶拿鐵；週四：全額免費＋適用品項雞塊＋需搭配分類定食；買一送一／六折／加一元多一件／雞塊日看那頁的「配對方式」）。沒綁券＝只在看板顯示。</div>
+      <div style="font-size:0.72rem;color:var(--muted);">線上（10-02 第三波）：活動日取餐的訂單，會員點了符合的餐點，系統自動發券並套用，顧客不用按「領券」；只能用在活動日取餐的訂單。每人限領＝每人每個活動日最多幾組（空白＝1；雞塊日一張券就是點幾份送幾份）。每天限量＝算已付款的組數，退款會還名額，空白＝不限。優惠券效果在「優惠券」那頁設定（週二：打5折＋適用分類茶拿鐵；週四：全額免費＋適用品項雞塊＋需搭配分類定食；買一送一／六折／加一元多一件／雞塊日看那頁的「配對方式」）。沒綁券＝只在看板顯示。</div>
     </div>
     ${hbActLinkHtml_(d)}
     ${hbStatusLockHtml_(d)}
@@ -4197,7 +4197,7 @@ function hbActLinkFromPromo_(name) {
     const c = Object.keys(cat).find(k => !hbIsStaffCat_(k) && has(k)) || Object.keys(cat).find(has);   // 優先找線上看得到的分類
     return c ? { linkType: '品項', linkCat: c, linkItem: n } : null;
   };
-  // 每份送一份(雞塊日，10-02 修)：客人要點的是「需搭配品項」(定10)，送的雞塊不用點
+  // 每份送一份(雞塊日，10-02 修)：顧客要點的是「需搭配品項」(定10)，送的雞塊不用點
   if (p.pairMode === '每份送一份' && p.requireItem) return itemLink(p.requireItem);
   if (p.requireCat) return { linkType: '分類', linkCat: p.requireCat, linkItem: '' };
   if (p.targetCat) return { linkType: '分類', linkCat: p.targetCat, linkItem: '' };
@@ -4228,7 +4228,7 @@ function hbActLinkHtml_(d) {
   const itemOpts = `<option value="">請選品項</option>` + items.map(it => `<option value="${escapeHtml(it.name)}" ${it.name === d.linkItem ? 'selected' : ''}>${escapeHtml(it.name)}</option>`).join('')
     + (d.linkItem && !items.some(it => it.name === d.linkItem) ? `<option value="${escapeHtml(d.linkItem)}" selected>${escapeHtml(d.linkItem)}（菜單已沒有）</option>` : '');
   const warn = hbActLinkMismatch_(d);
-  return `<div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">客人按「去點餐」要做什麼
+  return `<div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">顧客按「去點餐」要做什麼
       <div class="hb-chk" style="margin-top:4px;">
         ${['品項', '分類', '只展示'].map(t => `<label><input type="radio" name="hb-act-linktype" ${d.linkType === t ? 'checked' : ''} onchange="hbDraft.linkType='${t}';renderHbEditor();"> ${t === '品項' ? '連單一品項（直接開那道餐）' : t === '分類' ? '連整個分類（跳到那個分類）' : '只展示（不顯示「去點餐」按鈕）'}</label>`).join('')}
       </div>
@@ -4621,7 +4621,7 @@ function renderPmEditor() {
         <tr><th>同款同客製化</th><td>例：買一送一、加一元多一件｜品名、客製化、份量都一樣才算一組；加一元多一件線上會自動多加一份、第二份基本價 $1</td></tr>
         <tr><th>每份送一份</th><td>例：雞塊日｜適用品項＝送什麼、需搭配品項＝點什麼；生效日～到期日設當期，沒改到下一期就不會送</td></tr>
         <tr><th>每滿額折一份</th><td>例：2026 冬至玉米濃湯｜效果「折 $N」每份折 20＋配對「每滿額折一份」＋每滿 100＋適用品項玉米濃湯：玉米濃湯以外(其他需求不算)的點餐原價每滿 $100 折一杯，不管其他折扣。綁一個自己的活動(不要動八大節氣)；門市用「20元兌換券」按鈕手動</td></tr>
-        <tr><th>節氣升級加碼</th><td>例：立春｜全額免費＋配對「每份送一份」＋需搭配品項＝當月美X＋限定選項按「豪華升級」＋適用品項、適用品項2＝贈品二選一（飲料選適用份量 M）；線上客人自己選、另印一行節氣贈品。門市照舊用 POS 按鈕手動</td></tr>
+        <tr><th>節氣升級加碼</th><td>例：立春｜全額免費＋配對「每份送一份」＋需搭配品項＝當月美X＋限定選項按「豪華升級」＋適用品項、適用品項2＝贈品二選一（飲料選適用份量 M）；線上顧客自己選、另印一行節氣贈品。門市照舊用 POS 按鈕手動</td></tr>
         <tr><th>不併用</th><td>線上同一張單不能再用其他券（會員等級權益照常）</td></tr>
       </table>
     </details>
@@ -4644,7 +4644,7 @@ function renderPmEditor() {
       <label class="mc-field">生效日(選填)<input id="pm-f-start" type="date" value="${escapeHtml(p.startDate || '')}"></label>
       <label class="mc-field">到期日(選填)<input id="pm-f-end" type="date" value="${escapeHtml(p.endDate || '')}"></label>
     </div>
-    <div class="pm-tip" style="margin:-6px 0 10px;">期間外不顯示 POS 按鈕、不自動套用、不能贈送或兌換；客人已拿到的券照常可用。不填＝永久</div>
+    <div class="pm-tip" style="margin:-6px 0 10px;">期間外不顯示 POS 按鈕、不自動套用、不能贈送或兌換；顧客已拿到的券照常可用。不填＝永久</div>
     <div class="pm-grid2">
       <label class="mc-field">最低適用等級
         <select id="pm-f-mintier" onchange="pmMinTierChanged()">
@@ -4683,7 +4683,7 @@ function savePromo() {
   const effect = mode === 'item' ? document.getElementById('pm-f-effect').value : '';
   const usesPct = mode === 'order' || effect === 'pct';
   let amount = mode === 'fixed' ? document.getElementById('pm-f-amount').value : '';
-  // 等級優惠(2026-09-25)：按鈕＋不可贈送＋有最低適用等級 的品項優惠，一定要選適用品項(系統才知道要送哪個品項，客人選錯也擋得住)
+  // 等級優惠(2026-09-25)：按鈕＋不可贈送＋有最低適用等級 的品項優惠，一定要選適用品項(系統才知道要送哪個品項，顧客選錯也擋得住)
   if (mode === 'item' && document.getElementById('pm-f-showbtn').checked && !document.getElementById('pm-f-grantable').checked
       && document.getElementById('pm-f-mintier').value && !document.getElementById('pm-f-target').value) {
     alert('這張有「最低適用等級」、是POS按鈕、不可贈送，會當成等級優惠自動套用，請選「適用品項」(例如本月的檸檬紅茶)');
@@ -4837,8 +4837,8 @@ function renderAdEditor() {
   el.innerHTML = `
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增' : '編輯'}${isX1 ? '加購價商品（×1）' : '其他需求（×2）'}</h3>
     <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 10px;">${isX1
-      ? '客人點套餐時，在「加價購」那一步看到（單選＋無須加價購）；選了以後接「醬料選擇」頁。單點、單點飲品不會出現。「✕ 無須加價購」系統會自動加在最後，不用新增。'
-      : '客人結帳時看到一次（可複選＋無須加價購），名稱請寫客人看得懂的說法，例如「我有帶環保杯」。「✕ 無須加價購」系統會自動加在最後，不用新增。'}</div>
+      ? '顧客點套餐時，在「加價購」那一步看到（單選＋無須加價購）；選了以後接「醬料選擇」頁。單點、單點飲品不會出現。「✕ 無須加價購」系統會自動加在最後，不用新增。'
+      : '顧客結帳時看到一次（可複選＋無須加價購），名稱請寫顧客看得懂的說法，例如「我有帶環保杯」。「✕ 無須加價購」系統會自動加在最後，不用新增。'}</div>
     <label class="mc-field">名稱<input id="ad-f-name" value="${escapeHtml(a.name)}" placeholder="${isX1 ? '例：雞塊(6入)' : '例：我有帶環保杯'}"></label>
     <label class="mc-field" style="max-width:220px;">${isX1 ? '加購價（顧客看到「+$金額」）' : '金額（0＝免費，負數＝折錢）'}<input id="ad-f-amount" type="number" step="1" value="${a.amount === '' ? '' : a.amount}"></label>
     ${isX1 ? `
@@ -4853,7 +4853,7 @@ function renderAdEditor() {
       </div>
     </div>
     <div class="mc-field">醬料（選填，全部免費）
-      <div style="font-size:0.75rem;color:var(--muted);margin:2px 0 4px;">可以分組：兩樣東西組成的加購品(例如脆薯和雞塊)就設「脆薯醬料」「雞塊醬料」兩組。客人每組一頁、可複選，每頁都有「無須加價購」。沒設醬料＝不會跳醬料頁。</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin:2px 0 4px;">可以分組：兩樣東西組成的加購品(例如脆薯和雞塊)就設「脆薯醬料」「雞塊醬料」兩組。顧客每組一頁、可複選，每頁都有「無須加價購」。沒設醬料＝不會跳醬料頁。</div>
       ${adSauceDraft.map((g, gi) => `
       <div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin:6px 0;background:#fffdfb;">
         <div style="display:flex;gap:6px;align-items:center;">
@@ -4883,7 +4883,7 @@ function renderAdEditor() {
         ${otherX2.length ? otherX2.map(x => `<label style="display:flex;align-items:center;gap:4px;"><input type="checkbox" class="ad-f-exclude" value="${escapeHtml(x.name)}" ${a.excludes.indexOf(x.name) !== -1 ? 'checked' : ''}> ${escapeHtml(x.name)}</label>`).join('')
                          : '<span style="color:var(--muted);">目前沒有其他「其他需求」項目</span>'}
       </div>
-      <div style="font-size:0.75rem;color:var(--muted);margin-top:4px;">例：「不需要餐具」勾竹筷、竹叉 → 客人勾了不需要餐具，竹筷竹叉就變灰；反過來也一樣(系統會自動雙向設定)。</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:4px;">例：「不需要餐具」勾竹筷、竹叉 → 顧客勾了不需要餐具，竹筷竹叉就變灰；反過來也一樣(系統會自動雙向設定)。</div>
     </div>`}
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="ad-f-status">
@@ -4895,7 +4895,7 @@ function renderAdEditor() {
       <label class="mc-field" style="max-width:180px;">生效日(選填)<input id="ad-f-start" type="date" value="${escapeHtml(a.startDate || '')}"></label>
       <label class="mc-field" style="max-width:180px;">到期日(選填)<input id="ad-f-end" type="date" value="${escapeHtml(a.endDate || '')}"></label>
     </div>
-    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">期間外客人看不到。當天賣完請用平板「上下架管理 → 加價購（線上點餐）」設本日售完，不用改這裡。</div>
+    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">期間外顧客看不到。當天賣完請用平板「上下架管理 → 加價購（線上點餐）」設本日售完，不用改這裡。</div>
     ${MC_STORE_ID !== '__brand__' ? `
     <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;"><input id="ad-f-locked" type="checkbox" ${a.locked ? 'checked' : ''}> 鎖定，不被品牌同步覆蓋</label>` : ''}
     <div style="margin:14px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -4917,7 +4917,7 @@ function adReadForm_() {
 
 const AD_SAUCE_FORBIDDEN_RE_ = /[=；\/、:：]/;   // 跟後端serializeSauceGroups_一致(這些符號是試算表/出單的分隔字)
 // 防呆(2026-09-27老闆同意)：「✕ 無須加價購」是點餐頁自動接在每一頁最後的選項，不是一筆資料；
-// 在名稱、醬料、醬料組名填這幾個字就擋下，不然客人會看到兩個
+// 在名稱、醬料、醬料組名填這幾個字就擋下，不然顧客會看到兩個
 const AD_NONE_RE_ = /無須加價購|不需加價購/;
 const AD_NONE_MSG_ = '「無須加價購」不用新增：點餐頁的加價購、每一組醬料、其他需求，最後都會自動多一個「✕ 無須加價購」。';
 function adAddSauce(gi) {
@@ -4996,7 +4996,7 @@ function saveAddon(btn) {
 }
 
 function deleteAddon() {
-  if (!confirm('確定要刪除「' + adCurrentName + '」這個加價購項目嗎？（刪的是草稿，要按「發布到正式版」客人那邊才會消失）')) return;
+  if (!confirm('確定要刪除「' + adCurrentName + '」這個加價購項目嗎？（刪的是草稿，要按「發布到正式版」顧客那邊才會消失）')) return;
   apiPost({ action: 'deleteAddon', name: adCurrentName, storeId: MC_STORE_ID, version: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     adCurrentName = null; pmEditorMode = 'promo';
@@ -5335,14 +5335,14 @@ function renderDuEditor() {
     return;
   }
   // 2026-09-13再次改版：來源分類不再限定飲料分類，任何菜單分類都能當來源——
-  // 選飲料分類＝針對「客人直接點這杯飲料」升級；選餐點分類(例如某個套餐)＝針對「這個套餐內建的飲料」升級，
-  // 不管客人在該套餐裡實際選了哪一種飲料都適用同一條規則
+  // 選飲料分類＝針對「顧客直接點這杯飲料」升級；選餐點分類(例如某個套餐)＝針對「這個套餐內建的飲料」升級，
+  // 不管顧客在該套餐裡實際選了哪一種飲料都適用同一條規則
   const catOptions = Object.keys(mcCatalog).map(cat =>
     `<option value="${escapeHtml(cat)}" ${cat === r.sourceCategory ? 'selected' : ''}>${escapeHtml(mcShortCatName(cat))}</option>`
   ).join('');
   el.innerHTML = `
     <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增升級規則' : '編輯升級規則'}</h3>
-    <label class="mc-field">來源分類(客人點這個分類底下的飲品時可以升級)<select id="du-f-source">${catOptions}</select></label>
+    <label class="mc-field">來源分類(顧客點這個分類底下的飲品時可以升級)<select id="du-f-source">${catOptions}</select></label>
     <label class="mc-field">目標品項(升級後會換成這個)<select id="du-f-target" onchange="onDuTargetItemChange_()">${drinkTargetItemOptions_(r.targetItem)}</select></label>
     <div class="mc-field-row">
       <label class="mc-field" id="du-amount-m-wrap" style="max-width:160px;">加價金額(M)<input id="du-f-amount-m" type="number" value="${r.amountM ?? ''}"></label>

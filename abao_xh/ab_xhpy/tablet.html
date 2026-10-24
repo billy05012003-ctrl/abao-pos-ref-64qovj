@@ -198,7 +198,7 @@
       <h2 style="margin:0;font-size:1.1rem">📴 離線單（還沒上傳到雲端）</h2>
       <button type="button" class="btn btn-secondary" onclick="closeOfflineList_()">關閉</button>
     </div>
-    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">網路恢復後會自動上傳。取餐付款的單，客人來付錢時按「已收款」。</div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">網路恢復後會自動上傳。取餐付款的單，顧客來付錢時按「已收款」。</div>
     <div id="offline-list"></div>
   </div>
 </div>
@@ -210,13 +210,13 @@
       <h2 style="margin:0;font-size:1.1rem">⚠️ LINE Pay 收款未完成</h2>
       <button type="button" class="btn btn-secondary" onclick="lpCloseList_()">關閉</button>
     </div>
-    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">這些單還沒確定收到錢，<b>先不要做餐</b>。按「重新查詢」看客人有沒有付款成功；系統每幾分鐘也會自動再查，查到已付款會自動補印出單。</div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">這些單還沒確定收到錢，<b>先不要做餐</b>。按「重新查詢」看顧客有沒有付款成功；系統每幾分鐘也會自動再查，查到已付款會自動補印出單。</div>
     <div id="lp-list"></div>
   </div>
 </div>
 <div class="pos-overlay" id="lp-scan-overlay">
   <div class="pos-sheet" style="max-width:460px;text-align:center">
-    <h2 style="margin:0 0 4px;font-size:1.15rem">請掃客人的 LINE Pay 付款碼</h2>
+    <h2 style="margin:0 0 4px;font-size:1.15rem">請掃顧客的 LINE Pay 付款碼</h2>
     <div id="lp-scan-amount" style="font-size:1.6rem;font-weight:700;color:var(--brand);margin:6px 0"></div>
     <!-- 包在 form 裡：Android 鍵盤右下角「→／前往」才會觸發送出(10-22 平板實測單純 keydown 收不到) -->
     <form id="lp-scan-form-el" onsubmit="event.preventDefault();lpSubmit_();" style="display:flex;gap:6px;margin:0">
@@ -260,11 +260,11 @@
         <button type="button" class="pos-pay-btn" id="pos-pay-lpscan" data-method="線下LINEPay" style="display:none" onclick="setPosPaymentMethod_('線下LINEPay')">線下LINEPay</button>
         <!-- 10-22 其餘按鈕由 posPayBtnsRender_() 依後台「線下收款」清單產生(現金永遠在) -->
       </div>
-      <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個客人現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
+      <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個顧客現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
       <div id="pos-cash-fields" style="display:none;margin-top:8px;">
         <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">實收金額（必填）</label>
         <div id="pos-cash-quick" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;"></div>
-        <input type="number" id="pos-cash-received" inputmode="numeric" min="0" placeholder="輸入客人給的金額" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:1rem;" oninput="updatePosCashChange_()">
+        <input type="number" id="pos-cash-received" inputmode="numeric" min="0" placeholder="輸入顧客給的金額" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:1rem;" oninput="updatePosCashChange_()">
         <div id="pos-cash-change-result" style="margin-top:6px;font-size:1.05rem;font-weight:700;"></div>
       </div>
 
@@ -401,8 +401,8 @@
     <section style="margin:0 0 12px;display:none;" id="stuck-payment-section">
       <h2>⚠️待付款訂單(卡住超過10分鐘) <span class="refresh-link" onclick="loadStuckPaymentOrders()">重新整理</span></h2>
       <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
-        這裡列的是線上點餐送出後，超過10分鐘還沒收到藍新付款確認的訂單，多半是客人真的沒付款、或系統確認出問題。
-        <b>標記已付款前，請先去藍新商店後台「查詢交易紀錄」核對客人的卡真的有扣款成功</b>，避免誤把沒付款的訂單放行。
+        這裡列的是線上點餐送出後，超過10分鐘還沒收到藍新付款確認的訂單，多半是顧客真的沒付款、或系統確認出問題。
+        <b>標記已付款前，請先去藍新商店後台「查詢交易紀錄」核對顧客的卡真的有扣款成功</b>，避免誤把沒付款的訂單放行。
       </div>
       <div id="stuck-payment-list"><div class="empty-hint">載入中...</div></div>
     </section>
@@ -410,8 +410,8 @@
     <section style="margin:0 0 12px;">
       <h2>訂單退款 <span class="refresh-link" onclick="loadRefundableOrders()">載入／重新整理</span></h2>
       <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">
-        列出近3天已收款、尚未退款的訂單。退款需要<b>店長以上</b>輸入PIN。線上信用卡單會直接向藍新退回客人的卡（系統先取消授權，已請款則改請退款）；
-        <b>LINE Pay</b>（線上、線下）的單會直接退回客人的 LINE Pay；其他現場單（現金／LINEPay mini）只記錄「現場退還」，請店員當場退給客人。退款後會一併<b>扣回點數與消費</b>、<b>退回這張單用掉的兌換券</b>，並取消還沒印出的單。
+        列出近3天已收款、尚未退款的訂單。退款需要<b>店長以上</b>輸入PIN。線上信用卡單會直接向藍新退回顧客的卡（系統先取消授權，已請款則改請退款）；
+        <b>LINE Pay</b>（線上、線下）的單會直接退回顧客的 LINE Pay；其他現場單（現金／LINEPay mini）只記錄「現場退還」，請店員當場退給顧客。退款後會一併<b>扣回點數與消費</b>、<b>退回這張單用掉的兌換券</b>，並取消還沒印出的單。
       </div>
       <div id="refund-list"><div class="empty-hint">按上方「載入」查看可退款訂單</div></div>
     </section>
@@ -541,7 +541,7 @@
     <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">作廢原因（必填）</label>
     <div id="pos-void-reasons" style="display:flex;gap:6px;flex-wrap:wrap;">
       <label style="display:flex;align-items:center;gap:4px;font-size:0.9rem;"><input type="radio" name="pos-void-reason" value="點錯單">點錯單</label>
-      <label style="display:flex;align-items:center;gap:4px;font-size:0.9rem;"><input type="radio" name="pos-void-reason" value="客人取消">客人取消</label>
+      <label style="display:flex;align-items:center;gap:4px;font-size:0.9rem;"><input type="radio" name="pos-void-reason" value="顧客取消">顧客取消</label>
       <label style="display:flex;align-items:center;gap:4px;font-size:0.9rem;"><input type="radio" name="pos-void-reason" value="其他">其他</label>
     </div>
     <input type="text" id="pos-void-note" maxlength="60" placeholder="選「其他」請填寫原因" style="width:100%;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
@@ -870,7 +870,7 @@ function loadRefundableOrders() {
       <div class="order-card">
         <div>
           <div><strong>${o.orderId}</strong> <span class="meta">[${o.channel}] ${o.status}</span>${o.printed ? '<span class="tag-printed">🖨已出單</span>' : ''}</div>
-          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回客人的 LINE Pay)' : o.gateway ? '信用卡(退回客人的卡)' : '現場退還')}</div>
+          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>
         </div>
         ${o.needsManual
           ? '<button class="btn" disabled style="opacity:.5;">無法自動退</button>'
@@ -881,14 +881,14 @@ function loadRefundableOrders() {
 }
 
 function doRefund(orderId, amount, viaGateway) {
-  const how = viaGateway === 'linepay' ? '這筆是 LINE Pay 付款，系統會直接退回客人的 LINE Pay，不用退現金。'   // 10-23 線上LINEPay 也走這裡，不寫線下
-    : viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回客人的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給客人。';
+  const how = viaGateway === 'linepay' ? '這筆是 LINE Pay 付款，系統會直接退回顧客的 LINE Pay，不用退現金。'   // 10-23 線上LINEPay 也走這裡，不寫線下
+    : viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回顧客的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給顧客。';
   if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。')) return;
   withPosPerm_('refund', '退款', (staffName, staffPin) => {
     apiPost({ action: 'refundOrder', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
       if (data.status !== 'ok') { alert('退款失敗：' + (data.message || '')); loadRefundableOrders(); return; }
       if (data.pending) {
-        alert('退款已受理（還沒退到客人的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。\n系統已先扣回點數與消費、退回兌換券，之後會自動退款，不用再操作，也請勿重複按退款。\n金額：$' + data.amount +
+        alert('退款已受理（還沒退到顧客的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。\n系統已先扣回點數與消費、退回兌換券，之後會自動退款，不用再操作，也請勿重複按退款。\n金額：$' + data.amount +
               '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張');
       } else {
         alert('退款完成\n方式：' + data.mode + '\n金額：$' + data.amount +
@@ -900,7 +900,7 @@ function doRefund(orderId, amount, viaGateway) {
 }
 
 function manualConfirmPayment(orderId) {
-  if (!confirm('確定「' + orderId + '」這筆訂單客人真的已經付款成功嗎？\n\n請先去藍新商店後台核對過交易紀錄再標記，標記後客人可以直接來取餐。')) return;
+  if (!confirm('確定「' + orderId + '」這筆訂單顧客真的已經付款成功嗎？\n\n請先去藍新商店後台核對過交易紀錄再標記，標記後顧客可以直接來取餐。')) return;
   // 2026-09-19：改成需要店長以上PIN(後端staffConfirmPayment)，原本任何人都能呼叫的confirmPayment已關閉
   withPosPerm_('confirmPayment', '人工標記已付款', (staffName, staffPin) => {
     apiPost({ action: 'staffConfirmPayment', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
@@ -951,9 +951,9 @@ function confirmVoidOrder() {
   });
 }
 
-// 「取餐付款」訂單客人到店先結帳的標記(2026-09-16新增)：待收款→未取餐，之後才能按「可以取餐」
+// 「取餐付款」訂單顧客到店先結帳的標記(2026-09-16新增)：待收款→未取餐，之後才能按「可以取餐」
 function markCollected(orderId) {
-  pickCollectMethod_('「' + orderId + '」客人已經在現場付完款了嗎？', collectMethod => withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
+  pickCollectMethod_('「' + orderId + '」顧客已經在現場付完款了嗎？', collectMethod => withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
     apiPost({ action: 'markOrderCollected', orderId: orderId, collectMethod, staffName, staffPin }).then(data => {
       if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
       loadOrders();
@@ -1495,7 +1495,7 @@ const memberTiersReady = loadMemberTiers();
 // ②等級優惠(優惠券：按鈕＋不可贈送＋最低適用等級＋適用品項，例如「金寶限定：本月檸檬紅茶買一送一」)＝
 //   適用品項同份量數量達最低件數，對其中1件本體價(basePrice，加料照收)套用效果，每張單每種限一次；不同份量都符合套在價格低的
 // 優惠券期間(2026-09-26)：今天在生效日～到期日之間(含頭尾，沒填的那端不限)；期間外視同停用(不顯示按鈕/不自動套用/不能兌換)，
-// 但客人手上已經拿到的兌換券照常可用，所以VOUCHER_BEHAVIOR(套用持有的券)不看期間
+// 但顧客手上已經拿到的兌換券照常可用，所以VOUCHER_BEHAVIOR(套用持有的券)不看期間
 function todayYmd_() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function isPromoInPeriod_(p) { const t = todayYmd_(); return !(p && ((p.startDate && t < p.startDate) || (p.endDate && t > p.endDate))); }
 function isTierPerkPromo_(p) {
@@ -1589,7 +1589,7 @@ function lookupMember() {
       selectedMember = null;
       renderPosCart();
       el.innerHTML = `
-        <div>查無此會員。請客人用手機掃下面的 QR，用 <b>LINE</b> 註冊會員（免費），註冊好再重新查詢。</div>
+        <div>查無此會員。請顧客用手機掃下面的 QR，用 <b>LINE</b> 註冊會員（免費），註冊好再重新查詢。</div>
         <div id="member-line-qr" style="margin-top:8px;display:inline-block;padding:8px;background:#fff;border:1px solid #ddd;border-radius:8px;"></div>`;
       showLineRegisterQr_();
     } else if (data.status === 'not_found') {
@@ -1613,7 +1613,7 @@ function lookupMember() {
   });
 }
 
-// 2026-09-29 LINE 登入(設計見 LINE登入設計_2026-09-28.md)：老闆定案門市不再用手機直接建會員，改請客人掃 QR 用 LINE 註冊。
+// 2026-09-29 LINE 登入(設計見 LINE登入設計_2026-09-28.md)：老闆定案門市不再用手機直接建會員，改請顧客掃 QR 用 LINE 註冊。
 // 正式上線(點餐頁 LINE_LOGIN_OPEN、後端 LINE_LOGIN_REQUIRED_ 一起)時改 true；之前照舊用手機建會員
 const LINE_MEMBER_REGISTER = true;
 const LINE_REGISTER_URL = 'https://liff.line.me/2011773510-WG4YyKFL';
@@ -1628,7 +1628,7 @@ function showLineRegisterQr_() {
   const s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
   s.onload = draw;
-  s.onerror = () => { const box = document.getElementById('member-line-qr'); if (box) box.textContent = 'QR 載入失敗，請客人加 LINE 好友 @056bofyb 後從選單註冊'; };
+  s.onerror = () => { const box = document.getElementById('member-line-qr'); if (box) box.textContent = 'QR 載入失敗，請顧客加 LINE 好友 @056bofyb 後從選單註冊'; };
   document.head.appendChild(s);
 }
 
@@ -1714,7 +1714,7 @@ function renderMemberVoucherPanel() {
     <div style="margin-top:8px;padding:6px 8px;border-radius:8px;background:#fff4e5;">
       <div style="font-size:0.8rem;font-weight:600;color:#a35b00;margin-bottom:4px;">店員贈送（店家成本，不扣會員點數）</div>
       ${grantHtml}
-      <div class="soon-card" style="margin-top:8px;padding:6px 8px;border-radius:8px;font-size:0.8rem;"><b>＋ 快速發點</b> <span class="pmg-soon">準備中</span><div style="color:var(--muted);font-size:0.74rem;">客人說剛才沒集到點時，店長以上手動補點數</div></div>
+      <div class="soon-card" style="margin-top:8px;padding:6px 8px;border-radius:8px;font-size:0.8rem;"><b>＋ 快速發點</b> <span class="pmg-soon">準備中</span><div style="color:var(--muted);font-size:0.74rem;">顧客說剛才沒集到點時，店長以上手動補點數</div></div>
     </div>
     </details>
   `;
@@ -1848,7 +1848,7 @@ function applyVoucherToLine(lineKey) {
     return;
   }
 
-  // 折抵只算基準價(客人選單點/升級套餐當下的整組價)，客製化加價一律不打折
+  // 折抵只算基準價(顧客選單點/升級套餐當下的整組價)，客製化加價一律不打折
   const base = line.basePrice != null ? line.basePrice : line.price;
   let discountAmount = 0;
   if (v.effect === 'free') {
@@ -1898,7 +1898,7 @@ function comboDrinkOwnAddOn_(name, size) {
 
 let pendingDrinkUpgradeOptions = [];
 // 2026-09-13再次改版：套餐已經加入購物車後(line.comboDrinkName有值)，改用主餐自己的分類(line.cat)
-// 比對規則，不用管客人選的哪杯飲料；獨立飲品列維持原本用DRINK_ITEM_CATEGORY查自己分類的邏輯
+// 比對規則，不用管顧客選的哪杯飲料；獨立飲品列維持原本用DRINK_ITEM_CATEGORY查自己分類的邏輯
 // 2026-09-13再追加：老闆反饋升級應該能自己選M或L(不是照抄目前那杯飲料的份量)，改成每條規則都列
 // M、L兩個選項各自的加價金額，店員自己挑要升級成哪個份量
 function showDrinkUpgradePicker() {
@@ -1942,7 +1942,7 @@ function applyDrinkUpgradeOption_(idx) {
     const newLabel = o.rule.targetItem + ' ' + o.size;
     line.name = line.name.replace(oldLabel, newLabel);
     // 2026-09-18修正：先扣掉原本那杯飲料自己的加價，只收升級費這一項——原本這裡直接line.price+=amount，
-    // 如果客人一開始選的飲料本身就要加價(例如現沏茶+$10)，這裡會沒扣掉舊加價就疊加升級費，多收一筆錢
+    // 如果顧客一開始選的飲料本身就要加價(例如現沏茶+$10)，這裡會沒扣掉舊加價就疊加升級費，多收一筆錢
     // (跟套餐客製化畫面內建的飲品升級同一種bug，這裡是購物車已加入後另外套用的「活動飲品升級」路徑)
     const oldAddOn = comboDrinkOwnAddOn_(line.comboDrinkName, line.comboDrinkSize);
     line.price = line.price - oldAddOn + amount;
@@ -2118,7 +2118,7 @@ function applyDirectDiscountEffect_(type, effect, lineKey) {
     }
   }
 
-  // 折抵只算基準價(客人選單點/升級套餐當下的整組價)，客製化加價一律不打折
+  // 折抵只算基準價(顧客選單點/升級套餐當下的整組價)，客製化加價一律不打折
   const base = line.basePrice != null ? line.basePrice : line.price;
   let discountAmount = 0;
   if (effect === 'free') {
@@ -2878,8 +2878,8 @@ function openPosDrinkCustom(drinkName) {
 // 套餐內建飲品的升級(2026-09-13新增)：套餐飲料存在currentPosModal.comboDrinkName/comboDrinkPrice，
 // 不是獨立購物車列，所以用不到showDrinkUpgradePicker那套(那個是掃posCart的列)，這裡另外做一套
 // 針對「目前彈窗裡選的這杯套餐飲料」直接套用升級規則：換名稱、加價金額疊加在原本的comboDrinkPrice上
-// 2026-09-13再次改版：比對依據從「客人選的那杯飲料屬於哪個飲料分類」改成「這份套餐主餐本身的分類」
-// (currentPosModal.cat)，這樣後台可以設「點OO套餐，附贈飲料都能加$X換成YY」，不用管客人實際選哪杯飲料
+// 2026-09-13再次改版：比對依據從「顧客選的那杯飲料屬於哪個飲料分類」改成「這份套餐主餐本身的分類」
+// (currentPosModal.cat)，這樣後台可以設「點OO套餐，附贈飲料都能加$X換成YY」，不用管顧客實際選哪杯飲料
 function renderComboDrinkUpgradeSection() {
   const el = document.getElementById('pos-drink-upgrade-section');
   if (!el || !currentPosModal || !currentPosModal.comboDrinkName) return;
@@ -2904,7 +2904,7 @@ function applyComboDrinkUpgrade(idx) {
   const amount = pickUpgradeAmount_(rule, currentPosModal.comboDrinkSize);
   currentPosModal.comboDrinkName = rule.targetItem;
   // 2026-09-18修正：升級費是「換成這杯飲品最終要多收的錢」，不是疊加在原本那杯飲料的加價上面——
-  // 之前comboDrinkPrice=base+升級費，如果客人一開始選的飲料本身就要加價(例如現沏茶+$10)，
+  // 之前comboDrinkPrice=base+升級費，如果顧客一開始選的飲料本身就要加價(例如現沏茶+$10)，
   // 升級後會被多收一筆原飲料的加價(這次抓到的真實案例：129+10+7=146，多收了10元)。
   // 修正後base歸零、只收升級費這一項；appliedUpgradeRule記住套用的規則，供之後重選M/L份量時
   // 重新查對應金額用(見openPosDrinkCustom的份量onchange)
@@ -3097,7 +3097,7 @@ function confirmAddToPosCart() {
   const existing = posCart.find(c => c.lineKey === lineKey);
   if (existing) { existing.qty += currentPosModal.qty; existing.edit = Object.assign({}, editSnap, { qty: existing.qty }); }
   // baseName/basePrice供「第二件六折」等折抵套用：baseName不含客製化(用來跨列合併同品項數量判斷資格)，
-  // basePrice是客人選單點或升級套餐當下的整組價(客製化加價之前)，折抵只算這個金額，加購一律不打折
+  // basePrice是顧客選單點或升級套餐當下的整組價(客製化加價之前)，折抵只算這個金額，加購一律不打折
   // cat/comboDrinkName/comboDrinkSize(2026-09-13新增)：讓套餐已經加入購物車後，「活動飲品升級」
   // 頂部按鈕也能回頭找到裡面的飲料——比對依據是主餐自己的分類(cat)，不是飲料本身
   else {
@@ -3462,7 +3462,7 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     document.getElementById('pos-confirm-order-no').textContent = data.orderId;
     const notes = [];
     if (data.pointsEarned) notes.push(`本次消費獲得 ${data.pointsEarned} 點`);
-    if (paymentMethod === '取餐付款') notes.push('⚠️客人尚未付款，取餐前請先在「待取餐訂單」標記已收款');
+    if (paymentMethod === '取餐付款') notes.push('⚠️顧客尚未付款，取餐前請先在「待取餐訂單」標記已收款');
     document.getElementById('pos-confirm-points').textContent = notes.join('　');
     document.getElementById('pos-checkout-panel').style.display = 'none';
     document.getElementById('pos-confirm-panel').style.display = 'block';
@@ -3694,7 +3694,7 @@ function pickCollectMethod_(title, cb) {
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.innerHTML = `<div style="background:#fff;border-radius:12px;padding:16px;max-width:360px;width:100%;">
     <div style="font-weight:600;margin-bottom:6px;">${escapeHtml_(title)}</div>
-    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">客人怎麼付的？</div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">顧客怎麼付的？</div>
     <div class="cm-opts" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
     <button type="button" class="btn btn-secondary cm-cancel" style="width:100%;margin-top:12px;padding:10px;">取消</button></div>`;
   opts.forEach(n => {
@@ -3733,9 +3733,9 @@ function lpScanState_(state, msg) {
     b.innerHTML = '';
   } else if (state === 'failed') {
     m.innerHTML = `<span style="color:#c0392b">${escapeHtml_(msg || '收款失敗')}</span>`;
-    b.innerHTML = btn('請客人重新整理付款碼再掃', 'lpRetry_()', 'btn-primary') + (fromCart ? btn('改用其他付款方式', 'lpOther_()') : '') + btn('取消這張單', 'lpCancelOrder_()');
+    b.innerHTML = btn('請顧客重新整理付款碼再掃', 'lpRetry_()', 'btn-primary') + (fromCart ? btn('改用其他付款方式', 'lpOther_()') : '') + btn('取消這張單', 'lpCancelOrder_()');
   } else {   // unknown
-    m.innerHTML = `<b style="color:#c0392b">${escapeHtml_(msg || '付款狀態不明，請勿重掃')}</b><div style="font-size:0.8rem;color:var(--muted);margin-top:4px">請看客人手機有沒有扣款。系統會自動再查，這張單會留在上方紅條，先不要做餐。</div>`;
+    m.innerHTML = `<b style="color:#c0392b">${escapeHtml_(msg || '付款狀態不明，請勿重掃')}</b><div style="font-size:0.8rem;color:var(--muted);margin-top:4px">請看顧客手機有沒有扣款。系統會自動再查，這張單會留在上方紅條，先不要做餐。</div>`;
     b.innerHTML = btn('重新查詢', 'lpRecheckScan_()', 'btn-primary') + btn('先關掉，稍後處理', 'lpCloseScan_(true)');
   }
 }
@@ -3784,7 +3784,7 @@ function lpRecheckScan_() {
   lpScanState_('busy');
   apiPost({ action: 'posLinePayRecheck', storeId: STORE_ID, orderId: lpCtx_.orderId }).then(d => {
     if (d && d.status === 'ok' && d.state === 'paid') { lpSuccess_(d); return; }
-    if (d && d.status === 'ok' && d.state === 'notPaid') { lpScanState_('failed', 'LINE Pay 確認沒有扣款，可以請客人重新整理付款碼再掃'); return; }
+    if (d && d.status === 'ok' && d.state === 'notPaid') { lpScanState_('failed', 'LINE Pay 確認沒有扣款，可以請顧客重新整理付款碼再掃'); return; }
     lpScanState_('unknown', (d && d.message) || '還查不到結果，請勿重掃');
   }).catch(() => lpScanState_('unknown', '網路不穩，請稍後再按「重新查詢」'));
 }
@@ -3870,7 +3870,7 @@ function lpListAct_(kind, orderId, btn) {
   btn.textContent = '處理中…';
   apiPost({ action, storeId: STORE_ID, orderId, reason: 'cancel' }).then(d => {
     if (d && d.status === 'ok') {
-      if (kind === 'recheck') alert(d.state === 'paid' ? '✅ 客人已付款成功，已轉成正式訂單並補印出單' : 'LINE Pay 確認「沒有扣款」。可以按「重掃」請客人重新付款，或改收現金／作廢');
+      if (kind === 'recheck') alert(d.state === 'paid' ? '✅ 顧客已付款成功，已轉成正式訂單並補印出單' : 'LINE Pay 確認「沒有扣款」。可以按「重掃」請顧客重新付款，或改收現金／作廢');
       else if (kind === 'cash') alert(d.paidByLinePay ? '✅ ' + d.message : '已改成現金收款並出單');
       else alert('已作廢' + (d.vouchersRestored ? `，退回兌換券 ${d.vouchersRestored} 張` : ''));
       ocLoad_();
@@ -3979,7 +3979,7 @@ function buildTicketLines_(r, printCount) {
     whoOrder.forEach(function (w) { byWho[w].forEach(function (it) { items.push(it); }); });
     lines.push(eachHost ? '★ ' + eachHost + '的揪團(各付各的)' : '★ 揪團 ' + whoOrder.length + '人');
   }
-  if (parsed.name) lines.push((isGroup && !eachHost ? '團主：' : '客人：') + parsed.name);
+  if (parsed.name) lines.push((isGroup && !eachHost ? '團主：' : '顧客：') + parsed.name);
   lines.push(new Array(W + 1).join('-'));
   var lastWho = null;
   for (var i = 0; i < items.length; i++) {
@@ -4211,7 +4211,7 @@ function offlineShowDone_(o) {
   document.getElementById('pos-confirm-order-no').textContent = o.orderId;
   const notes = ['📴 離線單：網路恢復後自動上傳'];
   if (o.memberPhone) notes.push('會員點數上傳時補發');
-  if (o.paymentMethod === '取餐付款') notes.push('⚠️客人尚未付款：來付錢時點上方紅條→離線單→按「已收款」');
+  if (o.paymentMethod === '取餐付款') notes.push('⚠️顧客尚未付款：來付錢時點上方紅條→離線單→按「已收款」');
   if (!o.printed) notes.push('⚠️出單機沒有印出來：按下面「重印」，或手寫這張單給廚房');
   document.getElementById('pos-confirm-points').textContent = notes.join('　');
   const rb = document.getElementById('pos-offline-reprint-btn');
@@ -4262,7 +4262,7 @@ function offlineRetryFailed_() {
   offlineRenderList_();
 }
 
-// 離線單清單(點紅條打開)：還沒上傳的單，可以重印；取餐付款的單客人來付錢時按「已收款」
+// 離線單清單(點紅條打開)：還沒上傳的單，可以重印；取餐付款的單顧客來付錢時按「已收款」
 function openOfflineList_() { offlineRenderList_(); document.getElementById('offline-overlay').classList.add('open'); }
 function closeOfflineList_() { document.getElementById('offline-overlay').classList.remove('open'); }
 function offlineRenderList_() {
@@ -4302,7 +4302,7 @@ async function offlineReprint_(clientKey, btn) {
 function offlineMarkCollected_(clientKey) {
   const q = offlineLoad_(), o = q.find(x => x.clientKey === clientKey);
   if (!o || o.syncedAt) { alert('這張已經上傳到雲端了，請到「待取餐訂單」按已收款'); offlineRenderList_(); return; }
-  pickCollectMethod_(`${o.orderId}：確定已經跟客人收到 $${o.totalAmount} 嗎？`, collectMethod => {
+  pickCollectMethod_(`${o.orderId}：確定已經跟顧客收到 $${o.totalAmount} 嗎？`, collectMethod => {
     const q2 = offlineLoad_(), o2 = q2.find(x => x.clientKey === clientKey);
     if (!o2 || o2.syncedAt) { alert('這張已經上傳到雲端了，請到「待取餐訂單」按已收款'); offlineRenderList_(); return; }
     o2.collected = true; o2.collectedAt = Date.now(); o2.collectMethod = collectMethod;

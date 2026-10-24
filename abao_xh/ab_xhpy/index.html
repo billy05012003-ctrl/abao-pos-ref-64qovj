@@ -753,7 +753,7 @@ const LINE_LOGIN_ON = LINE_LOGIN_OPEN || /\/line_test\.html$/.test(location.path
 var lineSession_ = '';   // var：apiGet_/apiPost_ 可能在這行之前就被呼叫
 // 底部三分頁「新品推薦／會員好康／線上點餐」(2026-09-30 第一波)：正式開放前只有網址加 ?tabstest=1 看得到，
 // 老闆測過沒問題再把 HOME_TABS_OPEN 改成 true。var：會員列/購物車等函式可能在後面宣告前就被叫到
-var HOME_TABS_OPEN = true;   // 09-30 老闆說「打開開關」，所有客人都看到底部三分頁
+var HOME_TABS_OPEN = true;   // 09-30 老闆說「打開開關」，所有顧客都看到底部三分頁
 var HOME_TABS_ON = HOME_TABS_OPEN || new URLSearchParams(location.search).get('tabstest') === '1';
 var lineExpiredShown_ = false;
 function lineSessionCheck_(data) {
@@ -839,7 +839,7 @@ async function initLineLogin_() {
   }
   if (!liff.isLoggedIn()) {
     // 10-16 老闆：先點餐、結帳才登入——不再一打開就自動跳 LINE 登入(原本第一次整頁跳走、2 分鐘內再開只顯示登入列，
-    // 客人看到的畫面不一致)。想先登入的按上方登入列；沒登入按「前往付款」才帶去登入，跳走前先存好購物車(saveLoginResume_)
+    // 顧客看到的畫面不一致)。想先登入的按上方登入列；沒登入按「前往付款」才帶去登入，跳走前先存好購物車(saveLoginResume_)
     renderLineLoginButton_();
     return;
   }
@@ -869,7 +869,7 @@ async function initLineLogin_() {
   else renderLineRegister_(data.lineName || '');
   if (homeTab_ === 'mine') loadMyOrders_(true);   // 我的訂單(10-08)：停在我的訂單時登入完成就讀
 }
-// 訂單完成提醒加好友(10-16 老闆)：紙本菜單 QR 直接進點餐頁、不經官方帳號，第一次 LINE 登入沒勾「加入好友」的客人在這裡補一次；
+// 訂單完成提醒加好友(10-16 老闆)：紙本菜單 QR 直接進點餐頁、不經官方帳號，第一次 LINE 登入沒勾「加入好友」的顧客在這裡補一次；
 // 已經是好友就不顯示(liff.getFriendship)，查不到好友狀態時照樣顯示
 function showFriendPromo_() {
   const el = document.getElementById('confirm-friend');
@@ -924,20 +924,20 @@ function submitLineRegister_() {
       return;
     }
     applyLineMember_(data.member);
-    // 10-16 門市老會員第一次用 LINE 登入自動綁定：告訴客人原本的點數等級都帶進來了
+    // 10-16 門市老會員第一次用 LINE 登入自動綁定：告訴顧客原本的點數等級都帶進來了
     if (data.autoBound) alert('已找到您在門市的會員資料，點數、等級、兌換券都已帶入，之後用這個 LINE 登入就可以了。');
   }).catch(() => { msg.textContent = '建立會員失敗，請確認網路連線後再試'; btn.disabled = false; });
 }
 // ---------------------------------------------------------------
 // 顧客自助兌換券系統（2026-09-03新增）：跟POS功能共用同一套後端API(getMember/getMemberVouchers/
-// redeemPoints/redeemVoucher)，客人名下能有的券只會是「贈送/註冊禮/生日禮/集點兌換」這幾種來源，
+// redeemPoints/redeemVoucher)，顧客名下能有的券只會是「贈送/註冊禮/生日禮/集點兌換」這幾種來源，
 // 對應的效果只有mode:'fixed'(20/50元)跟mode:'item',effect:'free'(食物券)兩種，
 // 不會有第二件六折/五折這類POS專屬促銷券(那些只走POS按鈕即時折抵，不會贈送成持久記錄)
 // ---------------------------------------------------------------
 // 2026-09-13 CMS化：VOUCHER_BEHAVIOR/POINT_REDEMPTION_CATALOG原本寫死在這裡，現在改成頁面載入時
 // 向雲端「優惠券定義」「集點禮」表讀取(見下方loadPromoSettings)，POS後台可以直接新增/編輯/刪除。
-// 客人這邊只收「顯示為優惠券按鈕=否」或「可手動贈送=是」的項目(對應原本這份清單的篩選邏輯)——
-// 第二件六折/買一送一等POS專屬即時折抵按鈕不會出現在這裡，因為那些不會贈送成客人名下的持久兌換券
+// 顧客這邊只收「顯示為優惠券按鈕=否」或「可手動贈送=是」的項目(對應原本這份清單的篩選邏輯)——
+// 第二件六折/買一送一等POS專屬即時折抵按鈕不會出現在這裡，因為那些不會贈送成顧客名下的持久兌換券
 let VOUCHER_BEHAVIOR = {};
 let POINT_REDEMPTION_CATALOG = [];
 // 2026-09-16會員等級說明頁新增：保留一份原始promos陣列(含minTier/allowNonMember)，
@@ -953,7 +953,7 @@ function applyPromoSettings_(data) {
   refreshNewBadges_();
   HOME_ACTS = data.homeActs || [];     // 會員好康活動(含後端算好的接下來活動日 dates)
   // 自訂折數(整張訂單打折mode:'order'／單品effect:'pct'，2026-09-25新增)老闆定案先只在POS用，線上不列出
-  // (客人名下若有這種券，線上結帳清單會自動略過，要到門市POS使用)
+  // (顧客名下若有這種券，線上結帳清單會自動略過，要到門市POS使用)
   // 第三波(10-02)多帶：適用品項2/需搭配品項/配對方式/限定選項/不併用(後端 validateOnlineOrder_ 同一套)
   const itemBehavior_ = p => ({ mode: 'item', effect: p.effect, minQty: p.minQty, targetItem: p.targetItem || '', targetSize: p.targetSize || '', targetCat: p.targetCat || '', requireCat: p.requireCat || '',
     targetItem2: p.targetItem2 || '', requireItem: p.requireItem || '', pairMode: p.pairMode || '', requireOpts: p.requireOpts || '', exclusive: !!p.exclusive,
@@ -1042,7 +1042,7 @@ function getBusinessRangesForOffset_(offsetDays) {
   return BUSINESS_HOURS_BY_WEEKDAY[getWeekdayForOffset_(offsetDays)] || [];
 }
 // isOrderingOpen()代表「今天」這個取餐日期現在這個時間點還能不能被選——只看「顧客下單時間」的區間，
-// 跟「營業時間」是分開的兩組設定(老闆確認：下單時間是給客人預訂用，不用卡在當天營業時間內，
+// 跟「營業時間」是分開的兩組設定(老闆確認：下單時間是給顧客預訂用，不用卡在當天營業時間內，
 // 例如晚上21:00~23:00也能下單訂隔天早餐)。預設的接單時間從00:00算起，等於沒有下限，
 // 保留原本「凌晨也能先預訂今天稍晚時段」的規則(2026-08-27老闆糾正過)。
 function isOrderingOpen() {
@@ -1125,7 +1125,7 @@ const scheduleSettingsReady = loadScheduleSettings();
 
 // 付款方式設定(2026-09-16新增)：只用來決定要不要顯示「取餐現場付款」選項，讀取失敗一律預設關閉，
 // 維持跟現行行為完全一致(顧客只看得到既有的線上付款流程)，不像商店時段設定那樣需要
-// 本地快取兜底(付款方式不影響能不能點餐，讀不到就先不顯示這個選項，客人一樣能正常送單)
+// 本地快取兜底(付款方式不影響能不能點餐，讀不到就先不顯示這個選項，顧客一樣能正常送單)
 let PAY_AT_PICKUP_ENABLED = false;
 let LINEPAY_ONLINE_ENABLED = false;   // 10-23 線上LINEPay(後台「線上LINEPay」開＝linePayMode LinePayAPI)；讀不到一律不顯示
 function loadPaymentMethodSettings_() {
@@ -1322,7 +1322,7 @@ function loadCartSession() {
     const raw = sessionStorage.getItem(CART_SESSION_KEY);
     if (raw) cart = JSON.parse(raw);
   } catch (e) {}
-  // 10-23：價格算壞的品項(例如之前中杯選到只有大杯的茶珠＝$NaN，存起來會變成空值、重新整理後顯示 $0)拿掉，請客人重選
+  // 10-23：價格算壞的品項(例如之前中杯選到只有大杯的茶珠＝$NaN，存起來會變成空值、重新整理後顯示 $0)拿掉，請顧客重選
   if (!Array.isArray(cart)) cart = [];
   const bad = cart.filter(c => !c || c.price === null || c.price === undefined || c.price === '' || !isFinite(Number(c.price)));
   if (bad.length) {
@@ -1348,7 +1348,7 @@ function isValidPhone_(phone) {
 }
 
 // 記住最近一次輸入的手機號碼(2026-09-17新增，09-27拿掉「我的兌換券」後只預填會員手機欄)，
-// 記住後互相預填，客人不用打兩次。只存在客人自己的瀏覽器localStorage，不會上傳到雲端
+// 記住後互相預填，顧客不用打兩次。只存在顧客自己的瀏覽器localStorage，不會上傳到雲端
 function rememberPhone_(phone) {
   if (!isValidPhone_(phone)) return;
   try { localStorage.setItem('abao_last_phone', phone); } catch (e) {}
@@ -1369,9 +1369,9 @@ function updateItemModalNoteCount_() {
 }
 
 // ---------------------------------------------------------------
-// 結帳頁自助套用兌換券（2026-09-03新增）：客人填手機後查自己的可用券，勾選套用折抵訂單金額，
+// 結帳頁自助套用兌換券（2026-09-03新增）：顧客填手機後查自己的可用券，勾選套用折抵訂單金額，
 // 不用等現場店員操作。食物類兌換券用關鍵字自動比對購物車品項(自動配對，沒有對應品項就不能用，
-// 不讓客人自己選要折哪一項)，跟POS功能一樣只免基準價(客製化加購仍要收錢)
+// 不讓顧客自己選要折哪一項)，跟POS功能一樣只免基準價(客製化加購仍要收錢)
 // ---------------------------------------------------------------
 let checkoutMemberVouchers = []; // 查回來的可用券清單
 let checkoutSelectedVouchers = []; // 已勾選要套用的：[{voucherId, type, discountAmount, targetLineKey}]
@@ -1383,7 +1383,7 @@ function voucherTargetText_(type) {
   return b && b.targetItem ? b.targetItem + (b.targetSize ? ' ' + b.targetSize : '') : '';
 }
 // 用券點餐(2026-09-30，老闆選 B)：按了直接打開對應品項(有設份量就固定那個份量)，加入購物車時自動套用這張券；
-// 美式狂想乙套兌換券跳到美式狂想分類讓客人挑一款。還沒套上之前(例如開了又取消)記號會留著，之後加入對應品項一樣自動套
+// 美式狂想乙套兌換券跳到美式狂想分類讓顧客挑一款。還沒套上之前(例如開了又取消)記號會留著，之後加入對應品項一樣自動套
 let pendingVoucherUse_ = null;   // {voucherId, type}
 function useVoucherToOrder_(voucherId, type) {
   const b = VOUCHER_BEHAVIOR[type] || {};
@@ -1461,9 +1461,9 @@ function goToVoucherCat_(cat) {
   const idx = Object.keys(CATALOG).indexOf(cat);
   if (idx >= 0) setTimeout(() => goToCategory(idx), 0);
 }
-// 活動券自動套用(2026-09-30 老闆定案「有定食就自動送，客人不用按券」)：
+// 活動券自動套用(2026-09-30 老闆定案「有定食就自動送，顧客不用按券」)：
 // 週四雞塊(適用品項＋需搭配分類)＝取餐日對、購物車有定食，就自動加一份「贈品」雞塊並用券折成 $0；定食拿掉贈品也拿掉；
-// 週二茶拿鐵(適用分類)＝取餐日對、同分類兩杯以上就自動折。客人手動把贈品刪掉就記住不再自動加(可在兌換券視窗加回)
+// 週二茶拿鐵(適用分類)＝取餐日對、同分類兩杯以上就自動折。顧客手動把贈品刪掉就記住不再自動加(可在兌換券視窗加回)
 var declinedGifts_ = new Set();
 function giftKey_(voucherId) { return 'gift|' + voucherId; }
 // 冬至(10-06，老闆定案 1a/2b/3a)：每滿額折一份——適用品項本身、其他需求不算，其他品項的點餐原價(含加料)每滿 N 元折一份適用品項，
@@ -1490,12 +1490,12 @@ function spendActHint_() {
   return '';
 }
 // 節氣升級加碼(10-04，老闆定案)：每份送一份＋有「適用品項2」＝贈品二選一。當月美X加豪華經濟升級餐，每份送一份，
-// 客人自己選(飲料照一般流程選冰塊甜度，份量固定)；每選一份另外一行「節氣贈品」，用券折成 $0(出單另印一行，老闆選 3b)
+// 顧客自己選(飲料照一般流程選冰塊甜度，份量固定)；每選一份另外一行「節氣贈品」，用券折成 $0(出單另印一行，老闆選 3b)
 function isPickGift_(b) { return !!(b && b.pairMode === '每份送一份' && b.targetItem2); }
 function giftPicksOf_(voucherId) { return cart.filter(c => c.gift && c.gift.pick && c.gift.voucherId === voucherId); }
 var giftPickPending_ = null;   // syncActGifts_ 算出還有幾份沒選 {voucherId, type, left}
-var pendingGiftPick_ = null;   // 客人在二選一點了某一樣、正在客製化畫面 {voucherId, type, item}
-var giftPickPromptKey_ = '';   // 同一個狀態只自動跳一次(客人關掉就不一直跳，購物車/券視窗可以再選)
+var pendingGiftPick_ = null;   // 顧客在二選一點了某一樣、正在客製化畫面 {voucherId, type, item}
+var giftPickPromptKey_ = '';   // 同一個狀態只自動跳一次(顧客關掉就不一直跳，購物車/券視窗可以再選)
 function scheduleGiftPickPrompt_() {
   const p = giftPickPending_;
   if (!p) return;
@@ -1573,7 +1573,7 @@ function catalogItemByName_(name) {
   for (const k of Object.keys(CATALOG)) { const it = (CATALOG[k] || []).find(x => x.name === name); if (it) return it; }
   return null;
 }
-// 贈品狀態：ok / needCat(還沒點要搭配的分類) / soldout / missing(菜單沒有) / declined(客人刪掉了)
+// 贈品狀態：ok / needCat(還沒點要搭配的分類) / soldout / missing(菜單沒有) / declined(顧客刪掉了)
 function actGiftState_(v) {
   const b = VOUCHER_BEHAVIOR[v.type] || {};
   if (declinedGifts_.has(v.voucherId)) return 'declined';
@@ -1658,7 +1658,7 @@ function syncActGifts_() {
       changed = true;
       return;
     }
-    // 節氣贈品二選一：客人選好的贈品留到可以送的份數(套餐刪掉/改份數就拿掉多的)，還沒選完的記起來請客人選
+    // 節氣贈品二選一：顧客選好的贈品留到可以送的份數(套餐刪掉/改份數就拿掉多的)，還沒選完的記起來請顧客選
     if (isPickGift_(b)) {
       const n = perUnitGiftQty_(b), picks = giftPicksOf_(v.voucherId);
       picks.slice(0, n).forEach(c => want.add(c.lineKey));
@@ -1686,7 +1686,7 @@ function syncActGifts_() {
   if (giftPickPending_) scheduleGiftPickPrompt_();   // 節氣贈品還沒選：跳出二選一
   return changed;
 }
-// 自動領券(第三波，老闆定案 Y：線上全部用券但客人不用按)：取餐日是今天/明天的活動日、購物車有用得到的品項、
+// 自動領券(第三波，老闆定案 Y：線上全部用券但顧客不用按)：取餐日是今天/明天的活動日、購物車有用得到的品項、
 // 手上的券還沒到每人上限，就請後端補發；發好重新讀券，recalcVoucherDiscounts_ 會自動套用
 var autoClaimTried_ = new Set(), autoClaimTimer_ = null;
 function maybeAutoClaim_() {
@@ -1760,7 +1760,7 @@ function recalcVoucherDiscounts_() {
       return;
     }
     if (v.giftPick) {
-      // 節氣贈品：客人選的每一份折基本價(加料照收；份量已固定，後端同一套)
+      // 節氣贈品：顧客選的每一份折基本價(加料照收；份量已固定，後端同一套)
       let amt = 0;
       giftPicksOf_(v.voucherId).forEach(c => {
         if ((used[c.lineKey] || 0) >= c.qty) return;
@@ -1853,7 +1853,7 @@ function voucherDiscountTotal_() {
   return checkoutSelectedVouchers.reduce((s, v) => s + v.discountAmount, 0);
 }
 
-// 兌換券選擇現在發生在「我的訂單」畫面(購物車還沒鎖定)，客人可能選完券又回頭改購物車數量，
+// 兌換券選擇現在發生在「我的訂單」畫面(購物車還沒鎖定)，顧客可能選完券又回頭改購物車數量，
 // 導致品項券的targetLineKey對不到東西——每次購物車異動都清掉這種已經失效的選擇，避免結帳時折抵錯誤
 function pruneStaleVoucherSelections_() {
   checkoutSelectedVouchers = checkoutSelectedVouchers.filter(v =>
@@ -2015,7 +2015,7 @@ function renderMemberNotFound_(phone) {
 }
 
 // 手機欄位輸入時即時處理(2026-09-17新增)：號碼跟已驗證的會員不一致就先清掉驗證狀態(避免改號後帶著舊會員身份送出訂單)，
-// 輸滿10碼合法格式就自動觸發驗證，不用等客人自己按「驗證會員」按鈕
+// 輸滿10碼合法格式就自動觸發驗證，不用等顧客自己按「驗證會員」按鈕
 function onCustPhoneInput_() {
   const phone = document.getElementById('cust-phone').value.trim();
   if (verifiedMember && verifiedMember.phone !== phone) {
@@ -2147,7 +2147,7 @@ function renderTierBenefits() {
 }
 
 var vouchersLoadedAt_ = 0;   // 上次讀到會員兌換券的時間(openCart 判斷要不要重讀)
-// 藍新沒付款返回(10-11)：把客人原本手動選的兌換券放回。會員券還沒讀到就先記著，loadCheckoutVouchers 讀到時再套
+// 藍新沒付款返回(10-11)：把顧客原本手動選的兌換券放回。會員券還沒讀到就先記著，loadCheckoutVouchers 讀到時再套
 var pendingVoucherRestore_ = null;
 function applyVoucherRestore_() {
   if (!pendingVoucherRestore_ || !vouchersLoadedAt_) return;
@@ -2278,7 +2278,7 @@ function voucherCountText_() { const u = upcomingVouchers_().length; return chec
 function renderCheckoutVoucherList() {
   const listEl = document.getElementById('checkout-voucher-list');
   updateWalletPills_();
-  // 還沒到生效日的券(例如註冊禮設「發放後第1天生效」)灰色列在最後、標幾號起可用，客人才知道有拿到(2026-10-15 老闆要求)；
+  // 還沒到生效日的券(例如註冊禮設「發放後第1天生效」)灰色列在最後、標幾號起可用，顧客才知道有拿到(2026-10-15 老闆要求)；
   // 不能套用；張數另外寫成「券 1＋2」(voucherCountText_)
   const upcomingHtml = upcomingVouchers_().map(v =>
     `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.5;"><span>${escapeHtml_(v.type)}</span><span style="color:var(--muted);font-size:0.74rem;flex:none;">${/^\d{4}-\d{2}-\d{2}$/.test(v.effectiveDate) ? homeMd_(v.effectiveDate) + '（' + homeWd_(v.effectiveDate) + '）起可用' : '尚未生效'}</span></div>`).join('');
@@ -2294,7 +2294,7 @@ function renderCheckoutVoucherList() {
     const behavior = VOUCHER_BEHAVIOR[v.type];
     // 線上不能用的券(自訂折數、POS 專用、已停用的舊券)也列出來，會員卡上的張數才對得上(2026-09-30)
     if (!behavior) return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.82rem;opacity:0.55;"><span>${escapeHtml_(v.type)}</span><span style="color:var(--muted);font-size:0.74rem;">限門市使用</span></div>`;
-    // 活動券(2026-09-30 老闆定案：自動套用，客人不用按)：只顯示目前狀態
+    // 活動券(2026-09-30 老闆定案：自動套用，顧客不用按)：只顯示目前狀態
     if (v.actDate) return actVoucherRow_(v, behavior, pick);
     // 適用品項線上看不到(線上點餐顯示開關，10-03)：不出「用券點餐」，改標線上暫不提供
     if (behavior.mode === 'item' && behavior.targetItem && !findCartLineForVoucher(v.type) && !onlineItemNameOk_(behavior.targetItem)) {
@@ -2411,7 +2411,7 @@ function toggleCheckoutVoucher(voucherId, type, quiet) {
       const base = line.basePrice != null ? line.basePrice : line.price;
       checkoutSelectedVouchers.push({ voucherId, type, discountAmount: base, targetLineKey: line.lineKey });
     }
-    // 不併用(第三波)：剛選的券如果因為不能併用被拿掉(其他券比較划算)，跟客人說一聲，不然看起來像沒反應
+    // 不併用(第三波)：剛選的券如果因為不能併用被拿掉(其他券比較划算)，跟顧客說一聲，不然看起來像沒反應
     recalcVoucherDiscounts_();
     if (!checkoutSelectedVouchers.some(v => v.voucherId === voucherId) && exclusiveNote_) alert(exclusiveNote_);
   }
@@ -2435,7 +2435,7 @@ function loadShopMemberTiers_() {
   }).catch(err => console.warn('會員分級讀取失敗(等級權益暫不顯示，結帳金額以後端為準)', err));
 }
 // 優惠券期間(2026-09-26)：今天在生效日～到期日之間(含頭尾，沒填的那端不限)；期間外視同停用(不顯示按鈕/不自動套用/不能兌換)，
-// 但客人手上已經拿到的兌換券照常可用，所以VOUCHER_BEHAVIOR(套用持有的券)不看期間
+// 但顧客手上已經拿到的兌換券照常可用，所以VOUCHER_BEHAVIOR(套用持有的券)不看期間
 function todayYmd_() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 function isPromoInPeriod_(p) { const t = todayYmd_(); return !(p && ((p.startDate && t < p.startDate) || (p.endDate && t > p.endDate))); }
 function isTierPerkPromo_(p) {
@@ -2775,7 +2775,7 @@ function refreshRankBadges_() {
 apiGet_({ action: 'salesRank', storeId: STORE_ID }).then(d => {
   if (d && d.status === 'ok' && Array.isArray(d.names)) { SALES_RANK_NAMES_ = d.names; refreshRankBadges_(); }
 }).catch(() => {});
-// 菜單 NEW 標籤(2026-10-04 老闆定案：不另建「新品上市」分類，新品放在它原本的分類，靠新品推薦卡片＋菜單 NEW 標籤告訴客人)：
+// 菜單 NEW 標籤(2026-10-04 老闆定案：不另建「新品上市」分類，新品放在它原本的分類，靠新品推薦卡片＋菜單 NEW 標籤告訴顧客)：
 // 「新品上市」卡片(啟用、期間內、連單一品項)連到的那道餐，菜單品名前貼 NEW；卡片到期/停用/改成只展示就自動消失，不用另外設定
 function refreshNewBadges_() {
   document.querySelectorAll('.new-item-badge').forEach(el => el.remove());
@@ -2820,7 +2820,7 @@ function openItemModal(cat, key, item) {
       updateItemModalTotal();
     });
   } else if (item.price_m || item.price_l) {
-    // 只有單一尺寸（限M或限L），標示清楚避免客人以為還能選另一種尺寸
+    // 只有單一尺寸（限M或限L），標示清楚避免顧客以為還能選另一種尺寸
     const onlySize = item.price_m ? 'M' : 'L';
     sizeEl.innerHTML = `<div style="font-size:0.8rem;color:var(--muted);">限${onlySize} $${item.price_m || item.price_l}</div>`;
   } else if (item.price_alt) {
@@ -3471,7 +3471,7 @@ function wizRender_() {
     nav.innerHTML = `<button type="button" class="btn-primary" id="wiz-next-btn" onclick="wizNext_()">${w.fromConfirm ? '完成變更' : '下一步：' + escapeHtml_(w.steps[w.idx + 1].title)}</button>`;
   } else nav.innerHTML = '';
   wizRefresh_();
-  navSync_();   // 套餐每一步＝瀏覽器 ‹ 的一格(客人點「下一步」的當下墊好，見 navSync_)
+  navSync_();   // 套餐每一步＝瀏覽器 ‹ 的一格(顧客點「下一步」的當下墊好，見 navSync_)
 }
 
 function wizRefresh_() {
@@ -3771,7 +3771,7 @@ function renderCart() {
 function changeQty(lineKey, delta) {
   const idx = cart.findIndex(c => c.lineKey === lineKey);
   if (idx === -1) return;
-  // 活動贈品：只能拿掉(客人不要)，記住不再自動加，兌換券視窗可以加回來
+  // 活動贈品：只能拿掉(顧客不要)，記住不再自動加，兌換券視窗可以加回來
   if (cart[idx].gift) {
     if (delta > 0 || !confirm(cart[idx].gift.addOne ? '確定不要這份「加一元多一件」嗎？（之後可以在「🎟 券」加回來）' : '確定不要這份活動贈品嗎？（之後可以在「🎟 券」加回來）')) return;
     declinedGifts_.add(cart[idx].gift.voucherId);
@@ -3821,7 +3821,7 @@ function goToPayment_() {
   checkOrderWindow(); // 只更新提示文字，不阻擋結帳
   // 請客團主結帳(10-04)：取餐時間用開團時定的(後端也以揪團為準)，要改請回揪團畫面
   if (!groupFixedPickup_()) {
-    // 頁面開很久時，原本選的時段可能已經過了：重新整理一次，時間被改掉就停下來請客人確認，不能讓客人付了錢才發現時間不對
+    // 頁面開很久時，原本選的時段可能已經過了：重新整理一次，時間被改掉就停下來請顧客確認，不能讓顧客付了錢才發現時間不對
     const prevD = document.getElementById('pickup-date').value, prevT = document.getElementById('pickup-time').value;
     restoreCheckoutPickup_();
     const nowD = document.getElementById('pickup-date').value, nowT = document.getElementById('pickup-time').value;
@@ -3917,7 +3917,7 @@ function submitOrder(e) {
   const total = Math.max(0, Math.max(0, rawTotal - voucherDiscount - groupAct - perks.total) + otherNeedsSum);
   const appliedVoucherIds = checkoutSelectedVouchers.map(v => v.voucherId);
   const orderNo = 'MB' + Date.now().toString().slice(-8);
-  // 2026-09-19：補送品項備註(note)，出單機廚房單會印在該品項下面；之前只送name/size/qty/price，客人寫的「少蔥」等會遺失
+  // 2026-09-19：補送品項備註(note)，出單機廚房單會印在該品項下面；之前只送name/size/qty/price，顧客寫的「少蔥」等會遺失
   const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '', x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined,
     edit: c.edit && !c.gift ? c.edit : undefined }));   // x1＝套餐加購價，後端照後台價驗證並記在訂單；edit＝點餐選擇快照(我的訂單「再點一次」用，後端只存不算錢)
 
@@ -3942,12 +3942,12 @@ function submitOrder(e) {
     localStorage.setItem('abao_orders_' + STORE_ID, JSON.stringify(log));
   } catch (err) {}
 
-  const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓客人重選時段
+  const cartBackup = cart.slice(); // 留一份備份，若時段額滿要把購物車內容還原讓顧客重選時段
   // voucherIds/phone先存著，等藍新付款成功那一步才由後端核銷，
-  // 避免客人填完折抵資訊卻棄單，兌換券卻已經被扣掉的情況
+  // 避免顧客填完折抵資訊卻棄單，兌換券卻已經被扣掉的情況
   pendingOrderContext = { orderNo, summary, total, backendOrderId: null, voucherIds: appliedVoucherIds, voucherPhone: phone, payAtPickup: payAtPickupChosen, linePay: linePayChosen, cartBackup: cartBackup, groupPay: groupCheckoutMode && groupCtx ? 'host' : '',
     needsBackup: { sel: otherNeedsSel.slice(), none: otherNeedsNone, note },   // 10-11：藍新沒付款就返回時，其他需求/備註跟品項一起放回
-    voucherBackup: checkoutSelectedVouchers.filter(v => !v.auto).map(v => ({ voucherId: v.voucherId, type: v.type })) };   // 客人手動選的兌換券(活動券/等級優惠會自動重套)
+    voucherBackup: checkoutSelectedVouchers.filter(v => !v.auto).map(v => ({ voucherId: v.voucherId, type: v.type })) };   // 顧客手動選的兌換券(活動券/等級優惠會自動重套)
   cart = [];
   saveCartSession(); // 訂單送出後清空購物車暫存，避免下次進頁面殘留舊訂單內容
   document.getElementById('cart-view').style.display = 'none';
@@ -3980,8 +3980,8 @@ function submitOrder(e) {
       if (linePayChosen) { startLinePayOnline_(data.orderId); return; }
       startMpgPayment(data.orderId, pendingOrderContext.total);
     } else {
-      // 後端拒絕(例如該時段剛好被別人搶滿) - 還原購物車讓客人重新選時段，不能假裝訂單成立
-      // 活動限量額滿(第三波)：這次把有限量的活動券拿掉(不然會自動再套上去、一直送不出去)，客人照原價再送一次
+      // 後端拒絕(例如該時段剛好被別人搶滿) - 還原購物車讓顧客重新選時段，不能假裝訂單成立
+      // 活動限量額滿(第三波)：這次把有限量的活動券拿掉(不然會自動再套上去、一直送不出去)，顧客照原價再送一次
       hidePayBusy_();
       const full = /名額已經滿了/.test(data.message || '');
       if (full) actVouchersForPickup_().forEach(v => { const a = HOME_ACTS.find(x => x.id === v.actId); if (a && Number(a.limit) > 0) actFullBlocked_.add(v.voucherId); });
@@ -3992,7 +3992,7 @@ function submitOrder(e) {
       openCart();
     }
   }).catch(err => {
-    // 正式版：建單失敗(網路問題)不能讓客人以為訂單成立，還原購物車並提示重試
+    // 正式版：建單失敗(網路問題)不能讓顧客以為訂單成立，還原購物車並提示重試
     console.warn('建立訂單失敗（網路問題）', err);
     payFailed_('訂單送出失敗（網路異常），您的餐點已保留，請檢查網路後再試一次。');   // 請客團主：後端慢時單可能其實已建好
   });
@@ -4006,7 +4006,7 @@ function submitOrder(e) {
 // submitOrder)，傳true代表只需要核銷兌換券+顯示完成畫面，不能呼叫confirmPayment誤標成已付款
 function completeOrderConfirmation_(ctx, skipConfirmPayment) {
   const finish = () => {
-    // 2026-09-29：客人畫面改顯示後端正式編號(出單/平板上的 20260929-0001)，原本顯示前端暫編的 MBxxxxxxxx，店員對不到單
+    // 2026-09-29：顧客畫面改顯示後端正式編號(出單/平板上的 20260929-0001)，原本顯示前端暫編的 MBxxxxxxxx，店員對不到單
     const shownNo = ctx.backendOrderId || ctx.orderNo;
     document.getElementById('order-no').textContent = shownNo;
     document.getElementById('order-summary').textContent = String(ctx.summary || '').split(ctx.orderNo).join(shownNo);
@@ -4015,7 +4015,7 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
     document.getElementById('confirm-view').style.display = 'block';
     showFriendPromo_();
   };
-  // 核銷失敗不擋訂單完成流程(客人已經看到折抵後金額，不應該卡在這裡)，只記log供事後排查
+  // 核銷失敗不擋訂單完成流程(顧客已經看到折抵後金額，不應該卡在這裡)，只記log供事後排查
   const redeemAppliedVouchers = () => {
     if (!ctx || !ctx.voucherIds || !ctx.voucherIds.length) return Promise.resolve();
     return Promise.all(ctx.voucherIds.map(voucherId =>
@@ -4024,11 +4024,11 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
       }).catch(err => console.warn('兌換券核銷失敗(不影響訂單完成，可能網路問題)', voucherId, err))
     ));
   };
-  // 2026-09-19起兌換券改由後端在付款成功(取餐付款則下單當下)核銷，這裡不再由頁面核銷，避免客人付完款直接關頁導致券沒被核銷
+  // 2026-09-19起兌換券改由後端在付款成功(取餐付款則下單當下)核銷，這裡不再由頁面核銷，避免顧客付完款直接關頁導致券沒被核銷
   return Promise.resolve().then(() => {
     if (ctx && ctx.backendOrderId && !skipConfirmPayment) {
       return confirmPaymentOnBackend(ctx.backendOrderId).then(res => {
-        // 2026-09-19：後端拒絕(res.status非ok)時，不能讓客人看到「訂單完成」卻其實沒付款
+        // 2026-09-19：後端拒絕(res.status非ok)時，不能讓顧客看到「訂單完成」卻其實沒付款
         if (res && res.status !== 'ok') { alert(res.message || '付款確認失敗，請改用線上信用卡付款'); return; }
         finish();
       }).catch(finish);
@@ -4039,7 +4039,7 @@ function completeOrderConfirmation_(ctx, skipConfirmPayment) {
   });
 }
 
-// 付款請求或建單失敗：不能假裝成功。把購物車還原、重新打開訂單畫面，讓客人可以再試一次
+// 付款請求或建單失敗：不能假裝成功。把購物車還原、重新打開訂單畫面，讓顧客可以再試一次
 // (後端已建立的「待付款」訂單若沒付款，30分鐘後會自動作廢，不會佔用時段)
 function restoreCartAfterFailure_(message) {
   hidePayBusy_();
@@ -4074,10 +4074,10 @@ function hidePayBusy_() { const el = document.getElementById('pay-busy'); if (el
 window.addEventListener('pageshow', e => { if (e.persisted) hidePayBusy_(); });
 
 // ---------- 瀏覽器「‹」／Android 返回鍵／iPhone 左滑返回(10-11 D18-1，規格 點餐頁返回鍵設計_2026-10-11.md) ----------
-// 10-12 改版(老闆用 Android 平板實測：首頁提醒、兩層視窗都直接離開點餐頁)：Android Chrome 會跳過「客人剛剛沒點畫面時」
+// 10-12 改版(老闆用 Android 平板實測：首頁提醒、兩層視窗都直接離開點餐頁)：Android Chrome 會跳過「顧客剛剛沒點畫面時」
 // 網頁自己加的歷史紀錄。原本按 ‹ 之後才「再墊一格」，那時沒有點畫面 → 被跳過。改成「一層一格」：
-// 開視窗／套餐往下一步／購物車放進東西，都是客人點畫面的當下，就把需要的格數一次墊好 {abaoNav: 第幾格}；
-// 按 ‹ 只是一格一格往回退、執行最上層的「←／✕」，按完之後絕不補格(要補也等客人下次點畫面)。
+// 開視窗／套餐往下一步／購物車放進東西，都是顧客點畫面的當下，就把需要的格數一次墊好 {abaoNav: 第幾格}；
+// 按 ‹ 只是一格一格往回退、執行最上層的「←／✕」，按完之後絕不補格(要補也等顧客下次點畫面)。
 // 格數＝購物車有東西(首頁提醒)1 格＋每個開著的視窗 1 格(套餐視窗＝還能按幾次 ← 就幾格)。
 // 老闆定案：「›」不支援(前進回來直接退回去)；底部分頁切換不算一步；首頁購物車有東西先提醒「再按一次離開點餐頁」。
 // 這裡用 var：saveCartSession 在頁面載入初期就會被呼叫，那時下面這幾行還沒跑到
@@ -4090,7 +4090,7 @@ function navReplaceUrl_(url) {
   history.replaceState(history.state, '', url);
 }
 function navDepthOf_(st) { return (st && st.abaoNav) || 0; }
-// 客人剛點過畫面(幾秒內)才墊格子；Android Chrome、iPhone Safari 都是看這個
+// 顧客剛點過畫面(幾秒內)才墊格子；Android Chrome、iPhone Safari 都是看這個
 function navUserActive_() { return navigator.userActivation ? navigator.userActivation.isActive : true; }
 function navTopLayer_() {
   navStack_ = navStack_.filter(id => { const el = document.getElementById(id); return el && el.classList.contains('open'); });
@@ -4120,11 +4120,11 @@ function navSync_() {
   const D = navDesired_(), A = navDepthOf_(history.state);
   navLastA_ = A;
   if (D > A) {
-    if (!navUserActive_()) return;   // 不是客人剛點畫面：先不墊，等下次點畫面(click 監聽會再叫一次)
+    if (!navUserActive_()) return;   // 不是顧客剛點畫面：先不墊，等下次點畫面(click 監聽會再叫一次)
     for (let k = A + 1; k <= D; k++) history.pushState({ abaoNav: k }, '');
     navLastA_ = D;
   } else if (D < A) {
-    navGo_(D - A);   // 客人自己按 ✕／加入購物車關掉了：多的格子收回，下次按 ‹ 不用多按
+    navGo_(D - A);   // 顧客自己按 ✕／加入購物車關掉了：多的格子收回，下次按 ‹ 不用多按
   }
 }
 function navToast_(text) {
@@ -4172,7 +4172,7 @@ function navBackOnce_() {
   const top = navTopLayer_();
   if (top) { navBackLayer_(top); return true; }
   if (cart.length > 0 && !navHomeWarned_) {
-    // 3 秒內再按一次「‹」就離開；3 秒後客人點一下畫面就重新保護(不能自己補格，見最上面說明)
+    // 3 秒內再按一次「‹」就離開；3 秒後顧客點一下畫面就重新保護(不能自己補格，見最上面說明)
     navHomeWarned_ = true;
     navToast_('再按一次離開點餐頁');
     setTimeout(() => { navHomeWarned_ = false; }, 3000);
@@ -4201,7 +4201,7 @@ window.addEventListener('popstate', e => {
     }
   } finally { navInPop_ = false; }
   const D = navDesired_();
-  if (D < newA) navGo_(D - newA);   // 做完比格子少(例如套餐退到第一頁又關掉)：多的收回；比格子多就等客人下次點畫面再墊
+  if (D < newA) navGo_(D - newA);   // 做完比格子少(例如套餐退到第一頁又關掉)：多的收回；比格子多就等顧客下次點畫面再墊
 });
 (function navInit_() {
   navLastA_ = navDepthOf_(history.state);
@@ -4217,7 +4217,7 @@ window.addEventListener('popstate', e => {
     }
     if (hit) navSync_();
   }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
-  // 頁面一打開就自己開的視窗(付款回來的訂單完成、揪團連結)：等客人第一次點畫面再墊
+  // 頁面一打開就自己開的視窗(付款回來的訂單完成、揪團連結)：等顧客第一次點畫面再墊
   document.addEventListener('click', () => setTimeout(navSync_, 0), true);
   // 從藍新付款頁按上一頁、或重新整理後還停在墊的格子上：重新判斷(多的收回)
   window.addEventListener('pageshow', () => setTimeout(navSync_, 0));
@@ -4225,7 +4225,7 @@ window.addEventListener('popstate', e => {
 })();
 
 // 前往付款失敗(網路/後端慢、建付款失敗)：揪團單(pendingOrderContext.groupPay)如果訂單其實已經建好(付款中)，
-// 餐點不放回購物車(再按送出會被「你已經送出付款」擋、繞圈)，改打開揪團畫面請客人按「繼續付款」；
+// 餐點不放回購物車(再按送出會被「你已經送出付款」擋、繞圈)，改打開揪團畫面請顧客按「繼續付款」；
 // 訂單沒建起來才照舊放回購物車重送。一般點餐照舊放回購物車(舊的待付款單 30 分鐘自動作廢)
 function payFailed_(message) {
   const ctx = pendingOrderContext || {};
@@ -4283,7 +4283,7 @@ function startMpgPayment(orderId, amount) {
 
 // ---- 線上LINEPay(10-23，規格 付款方式定義與線上LINEPay設計_2026-10-23.md 第五節) ----
 // 建好待付款單 → 後端開付款請求 → 整頁跳到 LINE Pay(手機會開 LINE App)→ 跳回 ?lpreturn=1&lporder=訂單號(取消是 lpreturn=cancel)。
-// 跳回後一律由後端查 LINE Pay、客人已同意才確認收款(不看網址)；等待／成功／沒付款畫面跟藍新共用，訂單摘要一樣存 abao_mpg_pending_訂單號
+// 跳回後一律由後端查 LINE Pay、顧客已同意才確認收款(不看網址)；等待／成功／沒付款畫面跟藍新共用，訂單摘要一樣存 abao_mpg_pending_訂單號
 function startLinePayOnline_(orderId) {
   try { localStorage.setItem('abao_mpg_pending_' + orderId, JSON.stringify(Object.assign({}, pendingOrderContext, { savedAt: Date.now() }))); } catch (e) {}   // savedAt：重新打開點餐頁時找「沒付完的單」用(checkUnfinishedPay_)
   const base = location.origin + location.pathname;
@@ -4315,12 +4315,12 @@ function checkLinePayReturn_() {
   if (mode === 'cancel') { mpgBackToOrder_(orderId, ctx || { linePay: true }); return; }   // 在 LINE Pay 按取消：放回購物車(還是先查一次)
   apiPost_({ action: 'linePayOnlineConfirm', orderId }).catch(() => ({})).then(() => pollMpgOrderStatus_(orderId, ctx, 0));
 }
-// LINE Pay 的單：查付款狀態前先請後端向 LINE Pay 確認一次(客人可能同意了卻沒跳回來)
+// LINE Pay 的單：查付款狀態前先請後端向 LINE Pay 確認一次(顧客可能同意了卻沒跳回來)
 function lpConfirmFirst_(orderId, ctx) {
   return ctx && ctx.linePay ? apiPost_({ action: 'linePayOnlineConfirm', orderId }).catch(() => ({})) : Promise.resolve();
 }
-// 10-23 老闆：客人在付款頁(藍新／LINE Pay)直接把網頁關掉，下次打開點餐頁時問要不要把上一筆的餐點放回購物車。
-// 只看 2 小時內、一般點餐(揪團有自己的「繼續付款」)、現在購物車是空的；先查那張單：其實已付款→顯示訂單完成，沒付款→問客人
+// 10-23 老闆：顧客在付款頁(藍新／LINE Pay)直接把網頁關掉，下次打開點餐頁時問要不要把上一筆的餐點放回購物車。
+// 只看 2 小時內、一般點餐(揪團有自己的「繼續付款」)、現在購物車是空的；先查那張單：其實已付款→顯示訂單完成，沒付款→問顧客
 const UNFINISHED_PAY_MS_ = 2 * 3600000;
 var unfinishedPayHandled_ = false;   // var：付款頁按「‹」回來的 pageshow 可能比這行先跑
 function checkUnfinishedPay_() {
@@ -4345,7 +4345,7 @@ function checkUnfinishedPay_() {
   lpConfirmFirst_(orderId, ctx).then(() => apiGet_({ action: 'orderStatus', orderId })).catch(() => null).then(d => {
     if (!d || d.status !== 'ok') return;   // 查不到(網路)：這次先不問，下次打開再說
     if (d.orderStatus === '未取餐' || d.orderStatus === '已取餐') {
-      // 其實已經付好了(例如付完沒跳回來)：直接顯示那筆的訂單完成，不要讓客人重複下單
+      // 其實已經付好了(例如付完沒跳回來)：直接顯示那筆的訂單完成，不要讓顧客重複下單
       ['checkout-form', 'cart-view', 'confirm-view'].forEach(id => { document.getElementById(id).style.display = 'none'; });
       document.getElementById('mpg-waiting-view').style.display = 'block';
       document.getElementById('cart-overlay').classList.add('open');
@@ -4376,19 +4376,19 @@ function checkMpgReturn() {
   document.getElementById('confirm-view').style.display = 'none';
   document.getElementById('mpg-waiting-view').style.display = 'block';
   // 2026-09-28(T7實測)：等待/完成畫面都在購物車視窗裡，導回後是新載入的頁面、視窗預設關著，
-  // 原本沒打開=客人付完款回來只看到菜單、看不到訂單編號
+  // 原本沒打開=顧客付完款回來只看到菜單、看不到訂單編號
   document.getElementById('cart-overlay').classList.add('open');
   pollMpgOrderStatus_(orderId, ctx, 0);
 }
 // 2026-09-28(T7實測)：導回網址的mpgreturn/orderId有結果後就從網址拿掉(保留mpgtest/grouptest等其他參數)，
 // 不然重新整理、從歷史紀錄/書籤打開、把網址傳到LINE，都會一直跳回那張舊單的畫面；
-// 逾時還沒確認到的情況不拿掉，客人照提示重新整理時才能再查一次
+// 逾時還沒確認到的情況不拿掉，顧客照提示重新整理時才能再查一次
 function clearMpgReturnParams_() {
   const u = new URL(location.href);
   ['mpgreturn', 'orderId', 'lpreturn', 'lporder', 'transactionId'].forEach(k => u.searchParams.delete(k));   // 10-23 LINE Pay 跳回會自己加 transactionId、orderId
   navReplaceUrl_(u.toString());
 }
-// 已退款/已作廢/找不到的單：不能卡在「確認付款中」，說明狀況並讓客人回到點餐
+// 已退款/已作廢/找不到的單：不能卡在「確認付款中」，說明狀況並讓顧客回到點餐
 function showMpgReturnEnded_(orderId, text) {
   clearMpgReturnParams_();
   const view = document.getElementById('mpg-waiting-view');
@@ -4412,7 +4412,7 @@ function pollMpgOrderStatus_(orderId, ctx, attempt) {
         // 藍新付款已由NotifyURL在後端確認過，不能再呼叫confirmPayment(已停用，且不需要)
         completeOrderConfirmation_(ctx, true);
       } else {
-        // localStorage剛好被清過或跨裝置導回，摘要內容還原不了，至少讓客人知道訂單編號跟成功狀態
+        // localStorage剛好被清過或跨裝置導回，摘要內容還原不了，至少讓顧客知道訂單編號跟成功狀態
         document.getElementById('order-no').textContent = orderId;
         document.getElementById('order-summary').textContent = '付款已完成，取餐時請至現場出示此畫面。';
         document.getElementById('confirm-view').style.display = 'block';
@@ -4466,8 +4466,8 @@ window.addEventListener('pageshow', function mpgReturnedByBack_() {
   document.getElementById('cart-overlay').classList.add('open');   // 剛好已付款時要顯示訂單完成
   mpgBackToOrder_(oid, ctx, true);
 });
-// 10-12 防重複下單：從藍新按 ‹ 回來時藍新通知可能還沒到(客人其實付了)，購物車先放回，
-// 等客人再按付款時才確認上一筆(那時通常已過十幾秒，通知早到了)：已付→顯示那筆的訂單完成，不建新單；沒付→照常付款
+// 10-12 防重複下單：從藍新按 ‹ 回來時藍新通知可能還沒到(顧客其實付了)，購物車先放回，
+// 等顧客再按付款時才確認上一筆(那時通常已過十幾秒，通知早到了)：已付→顯示那筆的訂單完成，不建新單；沒付→照常付款
 function mpgPrevPaidGuard_() {
   let prev = null;
   try { prev = JSON.parse(sessionStorage.getItem('abao_mpg_prev') || 'null'); } catch (e) {}
@@ -4553,7 +4553,7 @@ function populatePickupDate(ids) {
 }
 
 // 取餐時間改用按鈕格子取代下拉選單(2026-09-18改版)：原本15分鐘一格的下拉選單在手機上要滑很久，
-// 改成一眼能看到多個時段的格子按鈕；預設自動選最接近現在的時段(清單第一個一定最早)，多數客人
+// 改成一眼能看到多個時段的格子按鈕；預設自動選最接近現在的時段(清單第一個一定最早)，多數顧客
 // 不用自己選，看到預設時間對就能直接送出
 function populatePickupTime(dateValue, ids) {
   ids = ids || PICKUP_IDS_;
@@ -4607,7 +4607,7 @@ function selectPickupTime_(value, ids) {
 }
 
 // 讀取該取餐日期各時段目前已訂張數，額滿(達MAX_SLOT_CAPACITY)的時段從格子裡disable掉，避免同一時段塞爆備餐量。
-// 這只是前端體驗優化(避免客人選到已滿時段)，真正防止超賣的判斷在後端createPendingOrder_做，
+// 這只是前端體驗優化(避免顧客選到已滿時段)，真正防止超賣的判斷在後端createPendingOrder_做，
 // 失敗就當作沒有容量限制、不擋顧客選時段，不能因為網路問題擋單
 function applySlotCapacity(dateValue, ids) {
   ids = ids || PICKUP_IDS_;
@@ -5398,7 +5398,7 @@ function openMyGroup_(gid) {
   location.href = location.pathname + '?g=' + encodeURIComponent(gid) + (MPG_SANDBOX ? '&mpgtest=1' : '');
 }
 // 再點一次：每一項用點餐選擇快照，照「購物車變更」同一套還原到客製化畫面，用現在的菜單價格算好再加入購物車；
-// 不在菜單、售完、選項已經沒有的跳過，最後告訴客人哪幾樣沒放進去。活動贈品不帶(結帳時照當天活動自動送)
+// 不在菜單、售完、選項已經沒有的跳過，最後告訴顧客哪幾樣沒放進去。活動贈品不帶(結帳時照當天活動自動送)
 function reorderMyOrder_(orderId) {
   const o = ((myOrdersData_ || {}).orders || []).find(x => x.orderId === orderId);
   if (!o) return;
@@ -5742,7 +5742,7 @@ function homeActSub_(a) {
   return [a.memberOnly ? '會員限定' : '會員、非會員都可以', a.channels.indexOf('線上') === -1 ? '限門市' : a.channels.indexOf('門市') === -1 ? '限線上點餐' : null,
     homeActClaimable_(a) ? '線上結帳自動套用' : null].filter(Boolean).join('・');
 }
-// 第三波(10-02 老闆定案 Y)：線上全部用券但客人不用按——購物車有符合的餐點時自動領券套用(maybeAutoClaim_)，
+// 第三波(10-02 老闆定案 Y)：線上全部用券但顧客不用按——購物車有符合的餐點時自動領券套用(maybeAutoClaim_)，
 // 看板不再有「領券」按鈕；沒登入的顯示「登入享優惠」，這天的券都用完顯示「已使用」
 function homeActClaimable_(a) { return !!a.promo && (a.channels || []).indexOf('線上') !== -1; }
 function homeActPerPerson_(a) { return Number(a.perPerson) > 0 ? Number(a.perPerson) : 1; }
@@ -5884,7 +5884,7 @@ if (LINE_LOGIN_ON) initLineLogin_();
 else {
   prefillRememberedPhone_();
   // 2026-09-29：LINE 登入完/從 liff.line.me 進來時，LINE 一律先回到 LIFF 設定的網址(本頁)並帶 liff.state=要去的頁；
-  // 正式頁還沒開 LINE 登入時也要交給 LIFF 處理登入結果並轉過去(測試頁 line_test.html)，不然會停在這裡。一般客人網址沒有 liff.state，不受影響
+  // 正式頁還沒開 LINE 登入時也要交給 LIFF 處理登入結果並轉過去(測試頁 line_test.html)，不然會停在這裡。一般顧客網址沒有 liff.state，不受影響
   if (new URLSearchParams(location.search).has('liff.state')) {
     loadLiffSdk_().then(() => liff.init({ liffId: LIFF_ID })).catch(e => console.warn('LIFF 轉址失敗', e));
   }
@@ -5898,7 +5898,7 @@ function rerenderMenu_() {
   ['tabs', 'menu', 'category-list'].forEach(id => { document.getElementById(id).innerHTML = ''; });
   renderMenu();
 }
-// 購物車裡線上已經看不到的品項(剛被永久下架/分類設不顯示)自動拿掉並告訴客人；揪團朋友的、其他需求不動(送出時後端會擋並說是哪一項)
+// 購物車裡線上已經看不到的品項(剛被永久下架/分類設不顯示)自動拿掉並告訴顧客；揪團朋友的、其他需求不動(送出時後端會擋並說是哪一項)
 function purgeOfflineCartLines_() {
   const gone = [];
   cart = cart.filter(l => {
@@ -5916,7 +5916,7 @@ function purgeOfflineCartLines_() {
   alert(`「${gone.join('」「')}」目前線上不提供，已從購物車移除`);
 }
 // 讀取雲端平板設定的品項上下架狀態，同步反映到點餐頁（本日售完/永久下架→擋掉加入按鈕）；
-// 順便讀暫停接單/設為忙碌狀態，顯示非阻斷式提示（真正擋單是送出訂單時後端做，這裡只是提早讓客人知道）
+// 順便讀暫停接單/設為忙碌狀態，顯示非阻斷式提示（真正擋單是送出訂單時後端做，這裡只是提早讓顧客知道）
 // 失敗就當作全部品項供應中、正常接單，不擋顧客點餐
 function applyItemAvailability(ready) {
   (ready || apiGet_({ action: 'storeStatus', storeId: STORE_ID })).then(data => {
