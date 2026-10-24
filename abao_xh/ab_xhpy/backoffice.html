@@ -787,7 +787,7 @@ function apiPost(payload) {
 // 統一在 apiPost 處理，不用每顆按鈕各自改：記下剛剛點的按鈕或勾選框 → 送出期間按鈕變「處理中…」不能連按 →
 // 回來後畫面上方跳「✅ 已儲存／已刪除／已發布…」或「⚠ 沒有成功」。沒有剛點過東西的送出(程式自己送的)不跳提示。
 // 呼叫的地方自己已經把按鈕鎖住(例如「發布中…」)就不動那顆按鈕，只跳提示
-const BO_FEEDBACK_SKIP_ = ['boLogin', 'boLogout', 'boWhoAmI'];
+const BO_FEEDBACK_SKIP_ = ['boLogin', 'boLogout', 'boWhoAmI', 'lineBindAdmin'];   // 10-24 lineBindAdmin 是讀資料(用 POST 帶登入)，不是存檔，不跳「已儲存」
 let boLastClick_ = null;
 document.addEventListener('click', e => {
   const el = e.target && e.target.closest ? e.target.closest('button, input[type=checkbox], input[type=radio], label') : null;
