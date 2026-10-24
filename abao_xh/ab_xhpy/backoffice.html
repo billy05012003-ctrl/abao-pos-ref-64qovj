@@ -38,6 +38,8 @@
   #month-remind li.mr-red { color:#a32d2d; }
   #month-remind .mr-go { margin-left:6px; background:none; border:1px solid currentColor; border-radius:6px; padding:1px 8px; font-size:0.78rem; color:inherit; cursor:pointer; }
   #month-remind .mr-foot { padding:0 12px 9px; font-size:0.75rem; color:var(--muted); }
+  #backup-warn { margin:12px 16px 0; background:#fdecea; border:1px solid #e0a19c; border-radius:10px; padding:9px 12px; font-size:0.85rem; color:#a32d2d; line-height:1.5; }
+  #backup-warn button { margin-left:6px; background:none; border:1px solid currentColor; border-radius:6px; padding:1px 8px; font-size:0.78rem; color:inherit; cursor:pointer; }
   @media (max-width: 640px) {
     .app-shell { flex-direction:column; }
     .sidebar { flex-direction:row; width:100%; flex:none; border-right:none; border-bottom:1px solid #eee; overflow-x:auto; position:static; }
@@ -290,6 +292,7 @@
   </div>
 </nav>
 <main class="main-content">
+<div id="backup-warn" style="display:none;"></div>
 <div id="month-remind" style="display:none;"></div>
 <div id="view-availability" class="view">
   <!-- 10-10 上下架管理同步：跟門市平板「上下架管理」讀同一份資料；營業狀態/標記已付款/退款要輸 PIN，紀錄會註明「後台」 -->
@@ -640,7 +643,7 @@
     </div>
     <div class="pmg-grp">系統</div>
     <div class="pmg-grid">
-      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('ver')"><span class="ic">🔄</span>資料版本</button>
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('ver')"><span class="ic">🔄</span>資料版本／備份</button>
       <button type="button" class="pmg-tile" disabled><span class="ic">🧾</span>電子發票設定<br><span class="pmg-soon">準備中</span></button>
       <!-- 10-13 每台門市平板用哪種出單方式(藍牙／網路＋IP)，只看不改(設定在平板 POS管理→出單機設定) -->
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('printer')"><span class="ic">🖨️</span>門市平板（出單方式）</button>
@@ -656,7 +659,7 @@
     <div id="bo-pmg-printer"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pmg-subview-ver" style="display:none;">
-    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 資料版本 <span class="ops-refresh" onclick="loadBoCfgStatus_()">重新整理</span></div>
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 資料版本／備份 <span class="ops-refresh" onclick="loadBoCfgStatus_()">重新整理</span></div>
     <div id="bo-pmg-ver"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pmg-subview-log">
@@ -865,12 +868,14 @@ function boLogin() {
     document.getElementById('bo-login-overlay').style.display = 'none';
     renderBoUser_();
     loadBoRevenue_(); loadBoOrders_(); loadBoStuck_();   // 10-10 上下架管理同步
+    checkBackupWarn_();
   }).catch(() => { err.textContent = '網路異常，請稍後再試'; });
 }
 function boLogout() {
   if (!confirm('確定要登出後台？')) return;
   const t = boSession && boSession.token;
   boSession = null; saveBoSession_(); renderBoUser_();
+  document.getElementById('backup-warn').style.display = 'none';
   if (t) fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify(withStore_({ action: 'boLogout', boToken: t, appKey: APP_KEY })) }).catch(() => {});
   showBoLogin_();
 }
@@ -1240,6 +1245,22 @@ function boLineUnbind_() {
     loadBoLineBind_();
   }).catch(() => alert('網路異常，請稍後再試'));
 }
+// 10-24 13d 上次自動備份：資料版本頁顯示；超過 26 小時(每天凌晨跑一次＋緩衝)沒更新，老闆登入後台最上面紅條提醒
+const BACKUP_STALE_HOURS_ = 26;
+function backupState_(d) {
+  return { bad: !d.backupAt || Date.now() - d.backupAt > BACKUP_STALE_HOURS_ * 3600000 };
+}
+function checkBackupWarn_() {
+  const box = document.getElementById('backup-warn');
+  if (!isBoOwner_()) { box.style.display = 'none'; return; }
+  apiGet({ action: 'cfgStatus', storeId: SCHED_STORE_ID }).then(d => {
+    if (d.status !== 'ok' || !backupState_(d).bad) { box.style.display = 'none'; return; }
+    const hrs = d.backupAt ? Math.floor((Date.now() - d.backupAt) / 3600000) : 0;
+    box.innerHTML = '⚠ ' + (d.backupAt ? `自動備份已經 ${hrs} 小時沒跑了（上次 ${boFmtMs_(d.backupAt)}）` : '還沒有自動備份紀錄') +
+      '。觸發器可能被刪掉或停用：到 Apps Script 編輯器左邊「觸發條件」確認 nightlyMaintenance 還在。<button type="button" onclick="switchPosManageSubview(\'ver\')">去看</button>';
+    box.style.display = 'block';
+  }).catch(() => {});
+}
 function loadBoCfgStatus_() {
   const box = document.getElementById('bo-pmg-ver');
   box.innerHTML = '<div class="empty-hint">載入中...</div>';
@@ -1264,7 +1285,14 @@ function loadBoCfgStatus_() {
       return `<div class="ops-order"><div><b>門市平板</b><div class="ops-meta">${boFmtMs_(v.created).split(' ')[0]} 由 ${escapeHtml(v.by)} 啟用${detail ? '<br>' + detail : ''}</div></div><div style="font-size:0.85rem;text-align:right;">${st}</div></div>`;
     }).join('');
     const notYet = '今天起開始記錄，下次發布後顯示';
-    box.innerHTML = `<div class="ops-card">
+    const bk = backupState_(d);
+    box.innerHTML = `<div class="ops-card"><h3>自動備份</h3>
+        <div class="pmg-kv">
+          <div>上次備份</div><div style="${bk.bad ? 'color:#a32d2d;' : 'color:#1f7a3d;'}">${d.backupAt ? (bk.bad ? '⚠️ ' : '✅ ') + boFmtMs_(d.backupAt) + '（' + ago(d.backupAt) + '）' : '⚠️ 還沒有備份紀錄'}</div>
+          <div>檔名</div><div>${escapeHtml(d.backupName || '—')}</div>
+        </div>
+        <div class="ops-meta" style="margin-top:6px;">每天凌晨 3～4 點自動把整份試算表複製到雲端硬碟「Abao雲端POS_備份」(最近 14 天每天一份＋每月一份留 12 個月)。超過 ${BACKUP_STALE_HOURS_} 小時沒更新＝觸發器可能被刪掉或停用(Google 不會寄信)：到 Apps Script 編輯器左邊「觸發條件」確認 nightlyMaintenance 還在。</div></div>
+      <div class="ops-card">
         <div class="ops-meta" style="margin-bottom:6px;">後台最後一次發布到正式版的時間</div>
         <div class="pmg-kv">
           <div>菜單</div><div>${d.menuPublishedAt ? boFmtMs_(d.menuPublishedAt) + ' 發布' : notYet}</div>
@@ -1976,7 +2004,7 @@ let mcCurrentGroupCode = null; // 'NEW'代表正在新增群組
 
 function loadAvailability() {
   document.getElementById('availability-list').innerHTML = '<div class="empty-hint">載入中...</div>';
-  if (boSession) { loadBoRevenue_(); loadBoOrders_(); loadBoStuck_(); }   // 10-10 上下架管理同步(要後台登入才讀得到)
+  if (boSession) { loadBoRevenue_(); loadBoOrders_(); loadBoStuck_(); checkBackupWarn_(); }   // 10-10 上下架管理同步(要後台登入才讀得到)
   return Promise.all([
     apiGet({ action: 'storeStatus', storeId: BO_HOME_STORE_ }),
     apiGet({ action: 'posItemStatus' }),
