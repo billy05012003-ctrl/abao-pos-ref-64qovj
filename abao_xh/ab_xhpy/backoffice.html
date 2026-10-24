@@ -2723,7 +2723,7 @@ function renderMcItemEditor() {
     <label class="mc-field">備註<textarea id="mc-f-note" rows="2">${escapeHtml(item.note || '')}</textarea></label>
     <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin:8px 0;">
       <input type="checkbox" id="mc-f-veg" ${item.veg ? 'checked' : ''}>
-      🌱 方便素（線上點餐最前面的「方便素」專區會列出，原分類也會貼 🌱；不含肉、但跟葷食共用廚具）
+      🌱 方便素（線上點餐最前面的「方便素」專區會列出，原分類也會貼 🌱；會跟葷食共用煎台和油鍋）
     </label>
     ${MC_STORE_ID !== '__brand__' ? `
     <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin:8px 0;">
