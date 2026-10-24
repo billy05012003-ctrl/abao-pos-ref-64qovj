@@ -316,7 +316,12 @@
   .hp-mcard.mini .top { justify-content: flex-start; align-items: center; gap: 8px; }
   .hp-mcard.mini .nm { font-size: 1rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hp-mcard.mini .tr { margin-top: 0; flex: none; }
-  .hp-mcard.mini .lk { margin-left: auto; flex: none; display: flex; gap: 10px; }
+  .hp-mcard.mini .pt { flex: none; background: rgba(255,255,255,0.6); border: none; border-radius: 999px; padding: 6px 7px; min-height: 28px; font-size: 0.8rem; font-weight: 700; color: inherit; font-family: inherit; cursor: pointer; white-space: nowrap; }
+  .hp-mcard.mini .pt.on { background: #e3f3d6; color: #2f6b12; }
+  .hp-mcard.mini .top { gap: 5px; flex-wrap: wrap; row-gap: 4px; }
+  .hp-mcard.mini .top .nm { min-width: 3.1em; flex: 0 1 auto; }   /* 名字至少 3 個字；太窄的手機改讓「會員資料」換到第二行，不切掉任何按鈕 */
+  .hp-mcard.mini .tr { padding: 2px 7px; }
+  .hp-mcard.mini .lk { margin-left: auto; flex: none; display: flex; gap: 8px; }
   .hp-mcard.mini .lk button { border: none; background: none; padding: 2px 0; font-size: 0.74rem; color: inherit; opacity: 0.8; text-decoration: underline; font-family: inherit; cursor: pointer; }
   .hp-mcard.mini .pg { position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.74rem; white-space: nowrap; }
   .hp-mcard.mini .pg .tbar { flex: 1; margin-top: 0; }
@@ -745,6 +750,19 @@ function apiPost_(payload) {
 // 會員手機仍放在原本的 #cust-phone(隱藏)，後面結帳/揪團/兌換券的既有流程都照舊讀它，不用各自改
 // ---------------------------------------------------------------
 const LIFF_ID = '2011773510-WG4YyKFL';
+// 10-24 紙本菜單 QR(已送印，內容固定 ?src=menu)：手機相機掃到會用 Safari／Chrome 開，底部多一格瀏覽器工具列、還要另外登入 LINE →
+// 不是在 LINE 裡打開就改走跟圖文選單同一個 LIFF 網址，進 LINE 內建瀏覽器。記號換成 src=menuline、同一分頁只轉一次：
+// 沒裝 LINE 的手機 LIFF 會把人送回本頁(src≠menu)，照常用瀏覽器點餐，不會來回跳
+const QR_TO_LINE_ = (function () {
+  try {
+    const p = new URLSearchParams(location.search);
+    if (p.get('src') !== 'menu' || /\bLine\//i.test(navigator.userAgent)) return false;
+    if (sessionStorage.getItem('abao_qr2line') === '1') return false;
+    sessionStorage.setItem('abao_qr2line', '1');
+    location.replace('https://liff.line.me/' + LIFF_ID + '?src=menuline');
+    return true;
+  } catch (e) { return false; }
+})();
 const LINE_OA_ID_ = '@056bofyb';   // 官方帳號 A-Bao溪湖直營(訂單完成「加入 LINE 好友」按鈕用)
 // 正式上線時改 true(同時後端 LINE_LOGIN_REQUIRED_ 改 true、LINE Login 頻道要先 Publish)；
 // 上線前只有測試頁 line_test.html(或網址加 ?linetest=1)走 LINE 登入
@@ -5639,14 +5657,11 @@ function renderMemberCard_() {
     <div class="top">
       <div class="nm">${escapeHtml_(m.name || '')}</div>
       <button type="button" class="tr" onclick="openTierOverlay()">👑 ${escapeHtml_(tierName)} ›</button>
-      <div class="lk"><button type="button" onclick="openProfile_()">會員資料</button><button type="button" onclick="lineLogout_()">登出</button></div>
+      <button type="button" class="pt" aria-label="點數 ${Number(m.points) || 0}" onclick="openWallet_('points')">⭐ ${Number(m.points) || 0}</button>
+      <button type="button" class="pt${used ? ' on' : ''}" aria-label="${used ? '已套用 ' + used + ' 張兌換券' : '兌換券 ' + voucherCountText_()}" onclick="openWallet_('voucher')">${used ? '✓ ' + used : '🎟 ' + voucherCountText_()}</button>
+      <div class="lk"><button type="button" onclick="openProfile_()">會員資料</button></div>
     </div>
-    ${bar ? `<div class="pg">${bar}${gap ? `<span>${gap}</span>` : ''}</div>` : ''}
-    <div class="stats">
-      <button type="button" onclick="openWallet_('points')"><b>${Number(m.points) || 0}</b>⭐ 點數</button>
-      <button type="button" onclick="openWallet_('voucher')"><b>${used ? used : voucherCountText_()}</b>🎟 ${used ? '已套用' : '兌換券'}</button>
-      <button type="button" onclick="openTierOverlay()">👑 等級好禮 ›</button>
-    </div>`;
+    ${bar ? `<div class="pg">${bar}${gap ? `<span>${gap}</span>` : ''}</div>` : ''}`;   // 10-24 老闆：「等級好禮」跟「金寶會員 ›」是同一頁→拿掉；點數／兌換券改小圓鈕放第一排(原本下面三格)；卡片上的「登出」拿掉(會員資料頁最下面本來就有)
 }
 function tierKeepText_(m) { const x = /^(\d{4})-(\d{2})-(\d{2})$/.exec(m && m.tierKeepUntil || ''); return x ? x[1] + '/' + Number(x[2]) + '/' + Number(x[3]) : ''; }
 // 進度條後面的「還差 $X」：有下一級＝離升級；最高級＝離續等(保護期內改寫「保留到 YYYY/M/D」)；已達門檻就不寫
@@ -5681,7 +5696,6 @@ function openProfile_() {
   if (!m) return;
   const ph = String(m.phone || '');
   const masked = ph.length === 10 ? ph.slice(0, 4) + '-***-' + ph.slice(7) : ph;
-  const tierName = m.tier ? (m.tier.endsWith('會員') ? m.tier : m.tier + '會員') : '';
   const row = (k, v) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:0.9rem;"><span style="color:var(--muted);">${k}</span><span style="text-align:right;">${v}</span></div>`;
   const hasBd = !!(m.birthday && /^\d{4}-\d{2}-\d{2}$/.test(m.birthday));
   const today = todayYmd_();
@@ -5694,8 +5708,7 @@ function openProfile_() {
     <div id="pf-msg" style="font-size:0.8rem;color:#c0392b;min-height:1.2em;margin-top:6px;"></div>
     <button type="button" class="btn-primary" id="pf-save" style="margin-top:2px;" onclick="saveProfile_()">儲存</button>
     <div style="margin-top:10px;">
-    ${row('手機', escapeHtml_(masked))}${row('會員等級', escapeHtml_(tierName) + (m.tierKeepUntil ? `<div style="font-size:0.76rem;color:var(--muted);">保留到 ${tierKeepText_(m)}</div>` : ''))}
-    ${row('點數', (Number(m.points) || 0) + ' 點')}${row('登入方式', 'LINE')}</div>
+    ${row('手機', escapeHtml_(masked))}${row('登入方式', 'LINE')}</div>
     <div style="font-size:0.78rem;color:var(--muted);margin-top:10px;line-height:1.5;">手機${hasBd ? '、生日' : ''}需要修改，請洽門市或${escapeHtml_(svcText_())}。</div>`;
   document.getElementById('profile-overlay').classList.add('open');
 }
@@ -5880,7 +5893,8 @@ if (loginResume_ && !cart.length && Array.isArray(loginResume_.cart) && loginRes
   saveCartSession();
 }
 updateCartBar();
-if (LINE_LOGIN_ON) initLineLogin_();
+if (QR_TO_LINE_) { /* 10-24 紙本 QR 正在轉進 LINE，這頁不初始化登入 */ }
+else if (LINE_LOGIN_ON) initLineLogin_();
 else {
   prefillRememberedPhone_();
   // 2026-09-29：LINE 登入完/從 liff.line.me 進來時，LINE 一律先回到 LIFF 設定的網址(本頁)並帶 liff.state=要去的頁；
