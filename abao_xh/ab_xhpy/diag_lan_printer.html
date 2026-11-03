@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>區網找出單機（測試）</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1f2933; --muted:#6b7280; --border:#d9dde3; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --primary:#0e7490; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, "Noto Sans TC", "Microsoft JhengHei", sans-serif; font-size:15px; }
+  main { max-width:640px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.2rem; margin:4px 0 4px; }
+  .sub { color:var(--muted); font-size:0.82rem; margin:0 0 14px; line-height:1.6; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:12px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+  .row label { font-size:0.8rem; color:var(--muted); min-width:84px; }
+  input, select { padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.95rem; }
+  input.w-net { width:150px; } input.w-num { width:80px; }
+  button { padding:10px 14px; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:0.95rem; cursor:pointer; }
+  button.primary { background:var(--primary); color:#fff; border-color:var(--primary); width:100%; font-weight:600; }
+  button:disabled { opacity:0.5; }
+  .kv { font-size:0.85rem; line-height:1.8; }
+  .kv b { display:inline-block; min-width:110px; color:var(--muted); font-weight:500; }
+  .bar { height:8px; background:#e5e7eb; border-radius:4px; overflow:hidden; margin:8px 0 4px; }
+  .bar > div { height:100%; width:0; background:var(--primary); transition:width .2s; }
+  .found { border-left:4px solid var(--ok); padding:8px 10px; margin:8px 0; background:#f0fdf4; border-radius:6px; }
+  .found .ip { font-size:1.1rem; font-weight:700; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); } .muted { color:var(--muted); }
+  #log { font-family: ui-monospace, Consolas, monospace; font-size:0.75rem; white-space:pre-wrap; max-height:260px; overflow:auto; background:#111827; color:#e5e7eb; border-radius:8px; padding:8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🔎 區網找出單機（測試頁）</h1>
+  <p class="sub">2026-11-03 實測用：在這台平板連的 Wi-Fi 網段裡，逐一試每個號碼，找出 Epson 網路出單機（ePOS-Print），並記下每一輪花多久。<b>只讀、不改這台平板的出單設定</b>；按「印測試單」才會真的印一張英文測試單。<br>要在 <b>Fully</b> 開（Fully 設定已開「Ignore SSL Errors」），一般瀏覽器會被出單機的自簽憑證擋住、找不到。</p>
+
+  <div class="card kv" id="env"></div>
+
+  <div class="card">
+    <div class="row"><label>掃描網段</label><input class="w-net" id="net" placeholder="192.168.0"> <span class="muted">.1 ～ .254</span></div>
+    <div class="row"><label>每個號碼等</label><input class="w-num" id="to" type="number" value="3000" min="300" step="100"> <span class="muted">毫秒</span></div>
+    <div class="row"><label>同時試</label><input class="w-num" id="conc" type="number" value="32" min="1" max="128"> <span class="muted">個號碼</span></div>
+    <div class="row"><label>連線方式</label><select id="proto"><option value="https">https（真出單機）</option><option value="http">http（本機假出單機）</option></select> <label style="min-width:auto">埠號</label><input class="w-num" id="port" placeholder="不填" inputmode="numeric"></div>
+    <button class="primary" id="go" onclick="scan_()">開始搜尋</button>
+    <div class="bar"><div id="prog"></div></div>
+    <div id="stat" class="muted" style="font-size:0.82rem">還沒開始</div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:600">找到的出單機</div>
+    <div id="found"><div class="muted" style="font-size:0.85rem;margin-top:6px">（還沒找到）</div></div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:6px">紀錄（截圖給 Claude 看這一塊就好）</div>
+    <div id="log"></div>
+  </div>
+</main>
+<script>
+// 測試頁：區網逐一打 ePOS-Print 的狀態查詢(空 <epos-print>，跟出單頁 5 秒一次的連線檢查同一個請求)，有回 <response> 的就是出單機。
+// 沒回應的號碼分兩種：很快失敗(有設備但不是出單機／被拒絕)、等到逾時(多半沒有設備)，順便數出來當參考。
+const EPOS_NS = 'http://www.epson-pos.com/schemas/2011/03/epos-print';
+const EPOS_ERR_TEXT = { EPTR_COVER_OPEN: '上蓋打開', EPTR_REC_EMPTY: '沒紙了', EPTR_AUTOMATICAL: '切刀卡住', EPTR_MECHANICAL: '機構錯誤', EPTR_UNRECOVERABLE: '印表機故障', EX_TIMEOUT: '印表機沒回應', DeviceNotFound: '找不到印表機' };
+const FAST_FAIL_MS = 600;   // 這麼快就失敗＝那個號碼上有東西回了「拒絕」，不是沒人
+function $(id) { return document.getElementById(id); }
+function log(s, cls) { const t = new Date().toTimeString().slice(0, 8); $('log').textContent += t + '  ' + s + '\n'; $('log').scrollTop = 1e9; }
+function savedCfg_() { try { return { mode: localStorage.getItem('abao_print_mode') || '（沒設過＝藍牙）', ip: localStorage.getItem('abao_print_ip') || '' }; } catch (e) { return { mode: '讀不到', ip: '' }; } }
+function fullyCall_(fn) { try { return (typeof fully !== 'undefined' && typeof fully[fn] === 'function') ? String(fully[fn]() || '') : ''; } catch (e) { return ''; } }
+
+// ---------- 這台平板的網路資訊(Fully 才讀得到) ----------
+const ENV = { inFully: typeof fully !== 'undefined', ip4: fullyCall_('getIp4Address'), ssid: fullyCall_('getWifiSsid'), saved: savedCfg_() };
+(function showEnv_() {
+  const lines = [
+    ['在 Fully 裡', ENV.inFully ? '<span class="ok">是</span>' : '<span class="warn">否（一般瀏覽器）</span>'],
+    ['這台平板 IP', ENV.ip4 || '<span class="muted">讀不到</span>'],
+    ['連的 Wi-Fi', ENV.ssid ? ENV.ssid.replace(/^"|"$/g, '') : '<span class="muted">讀不到</span>'],
+    ['目前出單設定', (ENV.saved.mode === 'net' ? '網路出單機 ' : ENV.saved.mode === 'bt' ? '藍牙 ' : ENV.saved.mode + ' ') + (ENV.saved.ip || '')]
+  ];
+  $('env').innerHTML = lines.map(([k, v]) => '<div><b>' + k + '</b>' + v + '</div>').join('');
+  const m = ENV.ip4.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
+  const savedNet = (ENV.saved.ip.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\./) || [])[1];
+  $('net').value = m ? m[1] : (savedNet || '192.168.0');
+  log('開啟測試頁：Fully=' + ENV.inFully + '，平板 IP=' + (ENV.ip4 || '讀不到') + '，Wi-Fi=' + (ENV.ssid || '讀不到') + '，目前設定=' + ENV.saved.mode + ' ' + ENV.saved.ip);
+  log('瀏覽器：' + navigator.userAgent);
+})();
+
+function target_(host) {
+  const port = $('port').value.trim();
+  return $('proto').value + '://' + host + (port ? ':' + port : '');
+}
+// 回 { kind: 'printer'|'fast'|'timeout'|'error', ms, code, why }
+async function probe_(host, timeoutMs) {
+  const body = '<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>' +
+    '<epos-print xmlns="' + EPOS_NS + '"></epos-print></s:Body></s:Envelope>';
+  const ac = new AbortController(), t0 = performance.now();
+  const to = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const r = await fetch(target_(host) + '/cgi-bin/epos/service.cgi?devid=local_printer&timeout=3000', {
+      method: 'POST', body, signal: ac.signal,
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT', 'SOAPAction': '""' }
+    });
+    const xml = await r.text();
+    const ms = Math.round(performance.now() - t0);
+    const m = xml.match(/<response\b[^>]*>/);
+    if (!m) return { kind: 'fast', ms, why: '有回應但不是出單機（HTTP ' + r.status + '）' };
+    const attr = n => { const a = m[0].match(new RegExp('\\b' + n + '="([^"]*)"')); return a ? a[1] : ''; };
+    const ok = attr('success') === 'true', code = attr('code');
+    return { kind: 'printer', ms, ok, code, why: ok ? '正常' : (EPOS_ERR_TEXT[code] || code || '狀態異常') };
+  } catch (e) {
+    const ms = Math.round(performance.now() - t0);
+    if (ac.signal.aborted) return { kind: 'timeout', ms };
+    return { kind: ms < FAST_FAIL_MS ? 'fast' : 'error', ms, why: String(e && e.message || e) };
+  } finally { clearTimeout(to); }
+}
+
+let scanning = false;
+async function scan_() {
+  if (scanning) return;
+  const net = $('net').value.trim().replace(/\.$/, '');
+  if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(net)) { alert('網段要像 192.168.0 這樣（前三段）'); return; }
+  const timeoutMs = Math.max(300, Number($('to').value) || 3000);
+  const conc = Math.min(128, Math.max(1, Number($('conc').value) || 32));
+  scanning = true; $('go').disabled = true;
+  $('found').innerHTML = '<div class="muted" style="font-size:0.85rem;margin-top:6px">（搜尋中…）</div>';
+  const hosts = [];
+  // 目前設定的 IP 先試(平常最可能就在那)，再掃其他號碼
+  const savedIp = ENV.saved.ip.split(':')[0];
+  if (savedIp.startsWith(net + '.')) hosts.push(savedIp);
+  for (let i = 1; i <= 254; i++) { const h = net + '.' + i; if (h !== ENV.ip4 && h !== savedIp) hosts.push(h); }
+  log('開始搜尋 ' + net + '.1～254（' + hosts.length + ' 個號碼，每個等 ' + timeoutMs + 'ms，同時 ' + conc + ' 個，' + $('proto').value + (($('port').value.trim()) ? ' 埠 ' + $('port').value.trim() : '') + '）');
+  const t0 = performance.now();
+  const found = [], counts = { fast: 0, timeout: 0, error: 0 };
+  let next = 0, done = 0, firstFoundMs = 0;
+  async function worker_() {
+    while (next < hosts.length) {
+      const h = hosts[next++];
+      const r = await probe_(h, timeoutMs);
+      done++;
+      if (r.kind === 'printer') {
+        if (!firstFoundMs) firstFoundMs = Math.round(performance.now() - t0);
+        found.push({ host: h, r });
+        log('★ 找到出單機 ' + h + '（' + r.ms + 'ms，狀態：' + r.why + '）');
+        renderFound_(found);
+      } else {
+        counts[r.kind]++;
+        if (r.kind === 'fast') log('  ' + h + '：有設備但不是出單機（' + r.ms + 'ms）');
+      }
+      $('prog').style.width = Math.round(done / hosts.length * 100) + '%';
+      $('stat').textContent = '已試 ' + done + ' / ' + hosts.length + '，' + ((performance.now() - t0) / 1000).toFixed(1) + ' 秒';
+    }
+  }
+  await Promise.all(Array.from({ length: conc }, worker_));
+  const total = ((performance.now() - t0) / 1000).toFixed(1);
+  const summary = '搜尋完成：共 ' + total + ' 秒；找到出單機 ' + found.length + ' 台' + (firstFoundMs ? '（第一台在 ' + (firstFoundMs / 1000).toFixed(1) + ' 秒找到）' : '') +
+    '；有設備但不是出單機 ' + counts.fast + '、慢速失敗 ' + counts.error + '、逾時沒回應 ' + counts.timeout;
+  log(summary);
+  $('stat').textContent = summary;
+  if (!found.length) $('found').innerHTML = '<div class="bad" style="font-size:0.85rem;margin-top:6px">沒找到。請確認出單機開機、網路線接在同一台 Wi-Fi 機、這台平板連的是店裡 Wi-Fi；也可以把「每個號碼等」調長再試一次。</div>';
+  scanning = false; $('go').disabled = false;
+}
+
+function renderFound_(found) {
+  $('found').innerHTML = found.map((f, i) => {
+    const same = ENV.saved.ip.split(':')[0] === f.host;
+    return '<div class="found"><div class="ip">' + f.host + '</div>' +
+      '<div style="font-size:0.82rem">狀態：<span class="' + (f.r.ok ? 'ok' : 'warn') + '">' + f.r.why + '</span>　回應 ' + f.r.ms + 'ms　' +
+      (same ? '<span class="ok">＝這台平板目前設定的 IP</span>' : '<span class="warn">跟這台平板目前設定的 IP 不同</span>') + '</div>' +
+      '<button style="margin-top:6px" onclick="printTest_(\'' + f.host + '\')">🖨 印測試單</button></div>';
+  }).join('');
+}
+
+// 測試單只用英文＋數字(不用載入 Big5 字表)；版面：初始化→文字→走紙→切紙
+async function printTest_(host) {
+  const now = new Date();
+  const text = 'ABAO LAN PRINTER TEST\nIP: ' + host + '\nTablet: ' + (ENV.ip4 || '-') + '\n' + now.toLocaleString('sv-SE') + '\n';
+  const bytes = [0x1b, 0x40, ...Array.from(new TextEncoder().encode(text)), 0x1b, 0x64, 0x04, 0x1d, 0x56, 0x42, 0x00];
+  const hex = bytes.map(b => b.toString(16).padStart(2, '0')).join('');
+  const body = '<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>' +
+    '<epos-print xmlns="' + EPOS_NS + '"><command>' + hex + '</command></epos-print></s:Body></s:Envelope>';
+  try {
+    const r = await fetch(target_(host) + '/cgi-bin/epos/service.cgi?devid=local_printer&timeout=10000', {
+      method: 'POST', body,
+      headers: { 'Content-Type': 'text/xml; charset=utf-8', 'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT', 'SOAPAction': '""' }
+    });
+    const xml = await r.text();
+    const ok = /<response\b[^>]*\bsuccess="true"/.test(xml);
+    log((ok ? '✅ 測試單已送出 ' : '❌ 測試單失敗 ') + host + (ok ? '' : '：' + xml.slice(0, 200)));
+    alert(ok ? '測試單已送出，請看出單機有沒有印出來' : '測試單失敗，請看下面紀錄');
+  } catch (e) {
+    log('❌ 測試單送不出去 ' + host + '：' + (e && e.message || e));
+    alert('測試單送不出去');
+  }
+}
+</script>
+</body>
+</html>
