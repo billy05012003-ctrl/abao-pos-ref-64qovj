@@ -483,8 +483,14 @@
         <button type="button" class="pos-pay-btn" id="prn-mode-bt" onclick="prnPickMode_('bt')">📶 藍牙</button>
       </div>
       <div id="prn-ip-row">
-        <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">出單機 IP（路由器替出單機設的固定 IP）</label>
-        <input type="text" id="prn-ip" inputmode="decimal" placeholder="例如 192.168.1.50" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;box-sizing:border-box;">
+        <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">出單機 IP（不知道號碼就按「🔎 自動搜尋」）</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="prn-ip" inputmode="decimal" placeholder="例如 192.168.1.50" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;box-sizing:border-box;">
+          <button type="button" class="btn btn-secondary" id="prn-scan-btn" style="flex:none;padding:8px 12px" onclick="prnScan_()">🔎 自動搜尋</button>
+        </div>
+        <div id="prn-scan-res" style="display:none;font-size:0.82rem;margin-top:6px;line-height:1.6"></div>
+        <!-- 11-03 區網自動找出單機：出單機整台連不到超過 15 秒就在店裡 Wi-Fi 找，只找到 1 台才自動改 IP -->
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin-top:8px"><input type="checkbox" id="prn-autofind" checked> 連不上時自動找出單機（Wi-Fi 機重開、出單機換了號碼會自己接回）</label>
       </div>
       <div style="font-size:0.85rem;font-weight:600;margin:14px 0 6px">飲料杯貼標籤機</div>
       <div style="display:flex;gap:8px;margin-bottom:8px">
@@ -998,6 +1004,8 @@ function prnLoad_() {
   const c = prnCfg_();
   prnPickMode_(c ? c.mode : 'net');
   document.getElementById('prn-ip').value = c && c.ip ? c.ip : '';
+  document.getElementById('prn-autofind').checked = !c || c.autoFind !== false;
+  document.getElementById('prn-scan-res').style.display = 'none';
   lblPickMode_(c && c.labelMode === 'bt' ? 'bt' : 'off');
   document.getElementById('lbl-bt').value = c && c.labelBt ? c.labelBt : '';
   document.getElementById('lbl-preview').style.display = 'none';
@@ -1028,6 +1036,8 @@ function prnRenderStatus_() {
   const mode = c.mode === 'net' ? '網路出單機 ' + (c.ip || '（還沒設定 IP）') : '藍牙';
   el.innerHTML = '目前：<b>' + escapeHtml_(mode) + '</b>｜' + (c.linkUp ? '<span style="color:#2e7d32">✅ 已連線</span>' : '<span style="color:#c62828">⚠️ 沒連上</span>') +
     (c.running ? '' : '｜<span style="color:#c62828">接單列印還沒開始</span>') +
+    (c.mode === 'net' && c.multi && c.multi.length ? '<br><span style="color:#c62828">⚠️ 自動找到 ' + c.multi.length + ' 台出單機（' + escapeHtml_(c.multi.join('、')) + '），請按「🔎 自動搜尋」選一台後儲存</span>' : '') +
+    (c.mode === 'net' && c.autoFindLast && c.autoFindLast.to === c.ip ? '<br><span style="color:var(--muted)">上次自動改 IP：' + escapeHtml_(new Date(c.autoFindLast.at).toLocaleString('zh-TW', { hour12: false })) + '　' + escapeHtml_(c.autoFindLast.from) + ' → ' + escapeHtml_(c.autoFindLast.to) + '</span>' : '') +
     '<br>杯貼：<b>' + (c.labelMode === 'bt' ? '藍牙 ' + escapeHtml_(c.labelBt || '（沒填名稱）') : '不使用') + '</b>';
 }
 function prnPickMode_(m) {
@@ -1048,12 +1058,42 @@ function prnSave_() {
   withPosPerm_('printSettings', '出單機設定', async (staffName) => {
     document.getElementById('prn-status').textContent = '儲存並連線中…';
     let r = null;
-    try { r = await w.printSetCfg_({ mode: prnPickedMode_, ip, labelMode: lblPickedMode_, labelBt: lblBt, by: staffName }); } catch (e) {}
+    try { r = await w.printSetCfg_({ mode: prnPickedMode_, ip, autoFind: document.getElementById('prn-autofind').checked, labelMode: lblPickedMode_, labelBt: lblBt, by: staffName }); } catch (e) {}
     prnRenderStatus_();
     checkCfgVersion_();   // 馬上回報後台
     if (r && r.ok) alert('已儲存，出單機連線正常');
     else alert('已儲存，但出單機連不上：請確認出單機電源、' + (prnPickedMode_ === 'net' ? '網路線、IP 是否正確（第一次要在 Fully 開「Ignore SSL Errors」）' : '藍牙配對'));
   });
+}
+// 11-03 🔎 自動搜尋：在這台平板連的 Wi-Fi 網段找出單機，找到就填進 IP 欄(只填不存，店長按「儲存並連線」才生效)
+async function prnScan_() {
+  const w = prnFrame_();
+  if (!w || typeof w.printScan_ !== 'function') { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
+  const b = document.getElementById('prn-scan-btn'), res = document.getElementById('prn-scan-res');
+  b.disabled = true; b.textContent = '搜尋中…';
+  res.style.display = ''; res.innerHTML = '<span style="color:var(--muted)">正在店裡 Wi-Fi 找出單機，約 20 秒…</span>';
+  let r = null;
+  try { r = await w.printScan_(); } catch (e) {}
+  b.disabled = false; b.textContent = '🔎 自動搜尋';
+  const found = r && r.found ? r.found : [];
+  if (!found.length) {
+    res.innerHTML = '<span style="color:#c62828">沒找到出單機。請確認出單機電源已開、網路線接在店裡的 Wi-Fi 機、這台平板連的是店裡 Wi-Fi' +
+      (r && r.nets && r.nets.length ? '（找過 ' + escapeHtml_(r.nets.map(n => n + '.x').join('、')) + '）' : '') + '。</span>';
+    return;
+  }
+  if (found.length === 1) {
+    prnPickMode_('net');
+    document.getElementById('prn-ip').value = found[0];
+    res.innerHTML = '<span style="color:#2e7d32">✅ 找到出單機 <b>' + escapeHtml_(found[0]) + '</b>，已填入，請按「儲存並連線」。</span>';
+    return;
+  }
+  res.innerHTML = '找到 ' + found.length + ' 台出單機，請點要用的那台（可以先各印一張測試單確認）：<br>' +
+    found.map(ip => '<button type="button" class="btn btn-secondary" style="margin:4px 6px 0 0;padding:6px 12px" onclick="prnPickFound_(\'' + escapeHtml_(ip) + '\')">' + escapeHtml_(ip) + '</button>').join('');
+}
+function prnPickFound_(ip) {
+  prnPickMode_('net');
+  document.getElementById('prn-ip').value = ip;
+  document.getElementById('prn-scan-res').innerHTML = '<span style="color:#2e7d32">已選 <b>' + escapeHtml_(ip) + '</b>，請按「儲存並連線」。</span>';
 }
 async function prnTest_() {
   const w = prnFrame_();
