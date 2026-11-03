@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>區網找出單機（測試）</title>
+<title>到店網路檢查</title>
 <style>
   :root { --bg:#f6f7f9; --card:#fff; --text:#1f2933; --muted:#6b7280; --border:#d9dde3; --ok:#15803d; --bad:#b91c1c; --warn:#b45309; --primary:#0e7490; }
   * { box-sizing: border-box; }
@@ -31,10 +31,19 @@
 </head>
 <body>
 <main>
-  <h1>🔎 區網找出單機（測試頁）</h1>
-  <p class="sub">2026-11-03 實測用：在這台平板連的 Wi-Fi 網段裡，逐一試每個號碼，找出 Epson 網路出單機（ePOS-Print），並記下每一輪花多久。<b>只讀、不改這台平板的出單設定</b>；按「印測試單」才會真的印一張英文測試單。<br>要在 <b>Fully</b> 開（Fully 設定已開「Ignore SSL Errors」），一般瀏覽器會被出單機的自簽憑證擋住、找不到。</p>
+  <h1>🔎 到店網路檢查（內網出單機＋外網 IP）</h1>
+  <p class="sub">到門市一頁看完兩件事（說明見 <code>01_SOP/門市網路設定_打卡與POS共用.md</code>）：<b>外網</b>＝這間店對外的 IP，要跟打卡「門市設定」的對外 IP 一樣；<b>內網</b>＝在這台平板連的 Wi-Fi 網段裡找 Epson 網路出單機。<b>只讀、不改這台平板的出單設定</b>；按「印測試單」才會真的印一張英文測試單。<br>要在 <b>Fully</b> 開（Fully 設定已開「Ignore SSL Errors」），一般瀏覽器會被出單機的自簽憑證擋住、找不到出單機。</p>
 
   <div class="card kv" id="env"></div>
+
+  <!-- 11-03 外網：打卡靠「連店裡 Wi-Fi 時的對外 IP」認門市；這裡查平板現在的對外 IP，跟門市設定比 -->
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:6px">🌐 外網（打卡用）</div>
+    <div class="kv" id="wan-now"><div class="muted">查詢中…</div></div>
+    <div class="row"><label>門市設定的對外 IP</label><input class="w-net" id="wan-expect" inputmode="decimal" placeholder="例如 59.126.221.74" oninput="wanCompare_()"></div>
+    <div id="wan-result" style="font-size:0.88rem;line-height:1.6"></div>
+    <button style="margin-top:8px" onclick="wanCheck_()">重新查外網 IP</button>
+  </div>
 
   <div class="card">
     <div class="row"><label>掃描網段</label><input class="w-net" id="net" placeholder="192.168.0"> <span class="muted">.1 ～ .254</span></div>
@@ -83,6 +92,36 @@ const ENV = { inFully: typeof fully !== 'undefined', ip4: fullyCall_('getIp4Addr
   log('開啟測試頁：Fully=' + ENV.inFully + '，平板 IP=' + (ENV.ip4 || '讀不到') + '，Wi-Fi=' + (ENV.ssid || '讀不到') + '，目前設定=' + ENV.saved.mode + ' ' + ENV.saved.ip);
   log('瀏覽器：' + navigator.userAgent);
 })();
+
+// ---------- 外網 IP（11-03）：跟打卡同一個查法(api.ipify.org)；平板走 4G、或路由器沒用固定 IP 帳號撥號，這裡就對不上 ----------
+const WAN_EXPECT_KEY = 'abao_diag_wan_expect';   // 只是這台平板記住上次填的門市 IP，方便下次比對
+let wanIp = '';
+function fullyBool_(fn) { try { return (typeof fully !== 'undefined' && typeof fully[fn] === 'function') ? !!fully[fn]() : null; } catch (e) { return null; } }
+async function wanCheck_() {
+  const box = $('wan-now');
+  box.innerHTML = '<div class="muted">查詢中…</div>';
+  const wifi = fullyBool_('isWifiConnected');
+  const ac = new AbortController(), to = setTimeout(() => ac.abort(), 8000), t0 = performance.now();
+  try {
+    const r = await fetch('https://api.ipify.org?format=json', { signal: ac.signal, cache: 'no-store' });
+    wanIp = String((await r.json()).ip || '');
+  } catch (e) { wanIp = ''; }
+  finally { clearTimeout(to); }
+  const ms = Math.round(performance.now() - t0);
+  box.innerHTML = '<div><b>現在的對外 IP</b>' + (wanIp ? '<span style="font-weight:700">' + wanIp + '</span>' : '<span class="bad">查不到（外網斷了？）</span>') + '</div>' +
+    '<div><b>平板連線方式</b>' + (wifi === true ? '<span class="ok">Wi-Fi</span>' : wifi === false ? '<span class="bad">不是 Wi-Fi（可能在用 4G，查到的不是店的 IP）</span>' : '<span class="muted">讀不到</span>') + '</div>';
+  log('外網 IP：' + (wanIp || '查不到') + '（' + ms + 'ms，Wi-Fi=' + (wifi === null ? '讀不到' : wifi) + '）');
+  wanCompare_();
+}
+function wanCompare_() {
+  const exp = $('wan-expect').value.trim(), el = $('wan-result');
+  try { localStorage.setItem(WAN_EXPECT_KEY, exp); } catch (e) {}
+  if (!exp) { el.innerHTML = '<span class="muted">填上打卡「門市設定」這間店的對外 IP，就會自動比對。</span>'; return; }
+  if (!wanIp) { el.innerHTML = '<span class="bad">❌ 查不到外網 IP，沒辦法比對：外網斷了的話，打卡走 Wi-Fi 那條一定不通（改行動數據靠 GPS）。</span>'; return; }
+  if (wanIp === exp) { el.innerHTML = '<span class="ok">✅ 一致：在這裡連店裡 Wi-Fi 打卡，系統認得出這間店。</span>'; return; }
+  el.innerHTML = '<span class="bad">❌ 不一致（現在 ' + wanIp + '，門市設定 ' + exp + '）</span><br><span class="muted">常見原因：①路由器外網還沒改用中華電信固定 IP 帳號撥號 ②平板（或手機）現在走 4G 不是 Wi-Fi ③門市設定填錯。</span>';
+}
+(function () { try { $('wan-expect').value = localStorage.getItem(WAN_EXPECT_KEY) || ''; } catch (e) {} wanCheck_(); })();
 
 function target_(host) {
   const port = $('port').value.trim();
