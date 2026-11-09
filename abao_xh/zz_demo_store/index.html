@@ -206,9 +206,9 @@
   /* 麥當勞式「變更」鈕放最右側(2026-09-27)；不能改的列用隱形佔位，讓數量鈕上下對齊 */
   .cart-line .chg-btn { border: 1px solid #777; background: #fff; color: var(--text, #333); border-radius: 999px; padding: 4px 12px; font-size: 0.85rem; white-space: nowrap; cursor: pointer; }
   .cart-total { display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold; padding: 12px 0; }
-  form#checkout-form label, #cart-view label { display: block; font-size: 0.85rem; margin: 10px 0 4px; color: var(--muted); }
+  form#checkout-form label, #cart-view label, #reg-body label { display: block; font-size: 0.85rem; margin: 10px 0 4px; color: var(--muted); }
   form#checkout-form input, form#checkout-form select, form#checkout-form textarea,
-  #cart-view input, #cart-view select, #cart-view textarea {
+  #cart-view input, #cart-view select, #cart-view textarea, #reg-body input {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem;
   }
   .btn-primary {
@@ -473,6 +473,16 @@
     </div>
     <div id="profile-body"></div>
     <button type="button" class="btn-secondary" onclick="lineLogout_()" style="margin-top:12px;">登出</button>
+  </div>
+</div>
+<!-- 11-09 老闆選方式一：LINE 登入回來還不是會員 → 直接跳這個小視窗建會員(原本表單藏在購物車最下面，首頁看不出下一步) -->
+<div class="overlay" id="reg-overlay" style="z-index:30;">
+  <div class="sheet">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+      <h2 style="margin:0;">歡迎！還差一步</h2>
+      <button type="button" onclick="closeLineRegister_()" aria-label="稍後再說" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <div id="reg-body"></div>
   </div>
 </div>
 <div class="overlay" id="pickup-overlay" style="z-index:26;">
@@ -941,18 +951,62 @@ function applyLineMember_(member) {
   loadCheckoutVouchers();
   if (GIFT_TOKEN_FROM_URL) openGiftClaim_();
 }
+// 11-09 老闆選方式一「登入就彈窗」：LINE 登入回來還不是會員 → 馬上跳小視窗(reg-overlay)，姓名先帶取餐資訊填的或 LINE 名字，通常只要填手機；
+// 按「稍後再說」關掉的，首頁上方留一條提示、購物車裡留一顆按鈕，點了再跳出來；結帳途中登入的，建好會員直接接著付款
+let lineRegPending_ = false, lineRegName_ = '', regThenPay_ = false;
 function renderLineRegister_(lineName) {
+  lineRegPending_ = true;
+  lineRegName_ = lineName || '';
+  regThenPay_ = !!(loginResume_ && loginResume_.reason === 'checkout');
   lineStatusHtml_(`
     <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;">
-      <div style="color:var(--brand);font-weight:600;">歡迎加入會員（免費，立即生效）</div>
-      <div style="color:var(--muted);font-size:0.8rem;margin:2px 0 8px;">第一次用 LINE 點餐，請填手機與姓名，之後就自動認得你；在門市辦過會員的，填同一支手機會自動帶入點數與等級</div>
-      <label style="margin-top:0;">手機</label>
-      <input type="tel" id="line-reg-phone" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="09xxxxxxxx">
-      <label>姓名</label>
-      <input type="text" id="line-reg-name" maxlength="20" autocomplete="name" value="${escapeHtml_(lineName)}">
-      <div id="line-reg-msg" style="color:#a30000;font-size:0.82rem;margin-top:6px;"></div>
-      <button type="button" class="btn-primary" id="line-reg-btn" onclick="submitLineRegister_()">建立會員</button>
+      <div style="color:var(--brand);font-weight:600;">還差一步：填手機完成會員註冊（免費，立即生效）</div>
+      <button type="button" class="btn-primary" onclick="openLineRegister_()">完成會員註冊</button>
     </div>`);
+  showLineRegBar_();
+  openLineRegister_();
+}
+function showLineRegBar_() {
+  if (document.getElementById('line-reg-bar')) return;
+  document.body.insertAdjacentHTML('afterbegin', `
+    <div id="line-reg-bar" style="background:#06C755;color:#fff;padding:8px 12px;display:flex;align-items:center;gap:10px;font-size:0.82rem;">
+      <span style="flex:1;line-height:1.4;">還差一步：填手機完成會員註冊，就能累積點數、使用優惠券</span>
+      <button type="button" onclick="openLineRegister_()" style="flex:none;background:#fff;color:#06C755;border:none;border-radius:6px;padding:6px 12px;font-weight:700;">完成註冊</button>
+    </div>`);
+}
+function openLineRegister_() {
+  if (!lineRegPending_) return;
+  const nmEl = document.getElementById('cust-name');
+  const name = (nmEl && nmEl.value.trim()) || lineRegName_;
+  document.getElementById('reg-body').innerHTML = `
+    <div style="color:var(--muted);font-size:0.84rem;margin:0 0 10px;line-height:1.5;">填好手機就完成（免費，立即生效），之後用這個 LINE 點餐都會自動認得你，還能累積點數、使用優惠券。<b style="color:var(--text);">在門市辦過會員的，填同一支手機會自動帶入點數與等級。</b></div>
+    <label style="margin-top:0;">手機</label>
+    <input type="tel" id="line-reg-phone" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="09xxxxxxxx">
+    <label>姓名（取餐時叫號用）</label>
+    <input type="text" id="line-reg-name" maxlength="20" autocomplete="name" value="${escapeHtml_(name)}">
+    <div id="line-reg-msg" style="color:#a30000;font-size:0.82rem;margin-top:6px;"></div>
+    <button type="button" class="btn-primary" id="line-reg-btn" onclick="submitLineRegister_()">${regThenPay_ && cart.length ? '完成註冊，繼續付款' : '完成註冊'}</button>
+    <button type="button" class="btn-secondary" onclick="closeLineRegister_()" style="margin-top:8px;">稍後再說</button>`;
+  document.getElementById('reg-overlay').classList.add('open');
+  setTimeout(() => { const p = document.getElementById('line-reg-phone'); if (p) p.focus(); }, 300);
+}
+function closeLineRegister_() {
+  regThenPay_ = false;   // 自己關掉的就不自動接著付款，之後在購物車按付款會再跳出來
+  document.getElementById('reg-overlay').classList.remove('open');
+}
+// 建好會員：結帳途中登入的直接接著付款；還沒勾同意條款就捲到同意框提醒，不跳警告
+function continueToPayAfterReg_() {
+  if (!cart.length) return;
+  if (!document.getElementById('cart-overlay').classList.contains('open')) openCart();
+  setTimeout(() => {
+    const agree = document.getElementById('agree-terms');
+    if (agree && agree.checked) { goToPayment_(); return; }
+    const row = document.getElementById('agree-terms-row');
+    if (!row) return;
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    row.style.transition = 'background 0.3s'; row.style.background = '#fff4d6'; row.style.borderRadius = '8px';
+    setTimeout(() => { row.style.background = ''; }, 2500);
+  }, 350);
 }
 function submitLineRegister_() {
   const phone = document.getElementById('line-reg-phone').value.trim();
@@ -969,9 +1023,16 @@ function submitLineRegister_() {
       btn.disabled = false;
       return;
     }
+    lineRegPending_ = false;
+    const thenPay = regThenPay_;
+    regThenPay_ = false;
+    document.getElementById('reg-overlay').classList.remove('open');
+    const bar = document.getElementById('line-reg-bar'); if (bar) bar.remove();
+    const nmEl = document.getElementById('cust-name'); if (nmEl && !nmEl.value.trim()) nmEl.value = name;
     applyLineMember_(data.member);
     // 10-16 門市老會員第一次用 LINE 登入自動綁定：告訴顧客原本的點數等級都帶進來了
     if (data.autoBound) alert('已找到您在門市的會員資料，點數、等級、兌換券都已帶入，之後用這個 LINE 登入就可以了。');
+    if (thenPay) continueToPayAfterReg_();
   }).catch(() => { msg.textContent = '建立會員失敗，請確認網路連線後再試'; btn.disabled = false; });
 }
 // ---------------------------------------------------------------
@@ -3859,6 +3920,7 @@ function goToPayment_() {
       return;
     }
     if (LINE_LOGIN_ON && !lineReady) { alert('LINE 登入元件還在載入，請稍等幾秒再按一次'); return; }
+    if (lineRegPending_) { regThenPay_ = true; openLineRegister_(); return; }   // 11-09 已登入還沒建會員：跳建會員小視窗，建好接著付款
     alert('請先完成會員驗證，才能送出訂單');
     return;
   }
@@ -5775,6 +5837,7 @@ function lineLogout_() {
 function onHomeMemberLogin_() {
   // 已登入 LINE 但還沒建會員：註冊表單在「我的訂單」裡；還沒登入 LINE 就直接去登入
   if (LINE_LOGIN_ON && window.liff && typeof liff.isLoggedIn === 'function' && !liff.isLoggedIn()) { lineLoginRedirect_(); return; }
+  if (lineRegPending_) { openLineRegister_(); return; }   // 11-09 已登入還沒建會員：直接跳建會員小視窗
   switchHomeTab_('order', true);
   openCart();
 }
