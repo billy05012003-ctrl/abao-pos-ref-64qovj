@@ -174,7 +174,12 @@
 
 <script>
 (function () {
-  const BACKEND = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
+  // 後端網址(2026-11-08 前端切換準備)：切換日用 05_腳本/切換後端.mjs 一次改 8 個檔(new 新後端／old 退回舊後端／check 檢查)，不要手改下面這行網址
+  const BACKEND_URL_SET_ = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec"; // @@後端網址@@
+  // 本機預覽測試口：只有在本機(localhost／直接開檔)網址加 ?api=new 才改打新後端、加 ?store=店代號 改測別間店(例 zz_demo_store)；正式網域一律忽略這兩個參數
+  const DEV_QS_ = (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) ? new URLSearchParams(location.search) : new URLSearchParams();
+  const BACKEND = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy05012003.workers.dev/' : BACKEND_URL_SET_;
+  const NEW_API_ = BACKEND.indexOf('workers.dev') >= 0;   // 打新後端才出現的功能(金流告警、照片縮圖、登入頁文字)都看這個
   const APP_KEY = "abao-meibao-2026";
   // 多店化第 3 段(2026-10-17)：看網址決定是哪間店(…/abao_xh/<網址路徑>/info.html；培英 ab_xhpy＝歷史店代號 meibao，其他店網址路徑＝店代號；
   // 正式網域對不到就留空不猜培英)。店名、登記名稱、統編、地址、電話、信箱換成門市資料(後端 storeProfile，存在本機)；HTML 裡寫的是培英
@@ -182,7 +187,7 @@
   const STORE_ID = (function () {
     const m = location.pathname.match(/[/]abao_xh[/]([A-Za-z0-9_]+)[/]/);
     if (m) return STORE_PATH_ALIAS_[m[1]] || m[1];
-    return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : 'meibao';
+    return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : (DEV_QS_.get('store') || 'meibao');
   })();
   const PROFILE_KEY = 'abao_store_profile_' + STORE_ID;
   let profile = null;

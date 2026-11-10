@@ -245,7 +245,7 @@
     <input type="password" id="bo-login-pin" inputmode="numeric" maxlength="4" placeholder="4碼數字" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:0.95rem;" onkeydown="if(event.key==='Enter')boLogin()">
     <div id="bo-login-err" style="font-size:0.8rem;color:#a32d2d;min-height:18px;margin:6px 0;"></div>
     <button type="button" onclick="boLogin()" style="width:100%;background:#e8632c;color:#fff;border:none;border-radius:8px;padding:10px;font-size:0.95rem;cursor:pointer;">登入</button>
-    <div style="font-size:0.75rem;color:#aaa;margin-top:12px;">忘記PIN：請老闆幫你重設；老闆自己忘記請到Google試算表「POS夥伴」分頁修改</div>
+    <div id="bo-login-forgot" style="font-size:0.75rem;color:#aaa;margin-top:12px;">忘記PIN：請老闆幫你重設；老闆自己忘記請到Google試算表「POS夥伴」分頁修改</div>
   </div>
 </div>
 <div class="app-shell">
@@ -258,6 +258,7 @@
     <button class="sub-item" id="mch-sub-btn-storeinfo" onclick="switchMerchantSubview('storeinfo')">店家資訊</button>
     <button class="sub-item" id="mch-sub-btn-schedule" onclick="switchMerchantSubview('schedule')">商店時段設定</button>
     <button class="sub-item" id="mch-sub-btn-payment" onclick="switchMerchantSubview('payment')">付款方式設定</button>
+    <button class="sub-item" id="mch-sub-btn-payalert" style="display:none;" onclick="switchMerchantSubview('payalert')">金流告警 <span id="bo-payalert-badge" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span></button>
   </div>
   <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
     <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
@@ -432,6 +433,13 @@
     <p style="font-size:0.8rem;color:var(--muted);">顧客在桌邊自己掃碼點餐+付款。目前Abao沒有這種桌邊點餐模式，尚無項目。</p>
     <div class="empty-hint">尚無項目，之後有這個需求再開發</div>
   </div>
+</div>
+<!-- 11-08 前端切換準備：金流告警(只有打新後端時選單才出現；讀 paymentAlerts、按 resolvePaymentAlert) -->
+<div id="view-payalert" class="view" style="display:none;">
+  <p style="font-size:0.8rem;color:var(--muted);">線上刷卡、LINE Pay、退款過程中系統自己處理不了、需要人工看一下的狀況，例如付款金額不符、訂單作廢後顧客才付款、同一張單付了兩次、店員人工標記已付款、退款帳務沒寫成功。看完、到藍新／LINE Pay 商家後台核對處理好之後，按「標記已處理」收起來。</p>
+  <div id="bo-owner-only-payalert" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">只有老闆可以標記已處理，目前是唯讀。</div>
+  <div style="margin-bottom:10px;"><button type="button" class="mc-add-btn" style="width:auto;padding:6px 16px;" onclick="loadPayAlerts_()">重新整理</button></div>
+  <div id="payalert-list"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-menucms" class="view" style="display:none;">
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
@@ -740,7 +748,12 @@
 </div>
 
 <script>
-const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
+// 後端網址(2026-11-08 前端切換準備)：切換日用 05_腳本/切換後端.mjs 一次改 8 個檔(new 新後端／old 退回舊後端／check 檢查)，不要手改下面這行網址
+const BACKEND_URL_SET_ = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec"; // @@後端網址@@
+// 本機預覽測試口：只有在本機(localhost／直接開檔)網址加 ?api=new 才改打新後端、加 ?store=店代號 改測別間店(例 zz_demo_store)；正式網域一律忽略這兩個參數
+const DEV_QS_ = (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) ? new URLSearchParams(location.search) : new URLSearchParams();
+const ORDER_BACKEND_URL = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy05012003.workers.dev/' : BACKEND_URL_SET_;
+const NEW_API_ = ORDER_BACKEND_URL.indexOf('workers.dev') >= 0;   // 打新後端才出現的功能(金流告警、照片縮圖、登入頁文字)都看這個
 const APP_KEY = 'abao-meibao-2026';
 // 這份後台所屬的門市(切到品牌範本時各呼叫會明確帶 storeId)。多店化第 3 段(2026-10-17)：看網址決定(…/abao_xh/<網址路徑>/backoffice.html)；
 // 培英網址 ab_xhpy＝歷史店代號 meibao，其他店網址路徑＝店代號；正式網域對不到就留空(後端記錄／擋)不猜培英，本機預覽才當培英
@@ -748,7 +761,7 @@ const STORE_PATH_ALIAS_ = { ab_xhpy: 'meibao' };
 const BO_HOME_STORE_ = (function () {
   const m = location.pathname.match(/[/]abao_xh[/]([A-Za-z0-9_]+)[/]/);
   if (m) return STORE_PATH_ALIAS_[m[1]] || m[1];
-  return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : 'meibao';
+  return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : (DEV_QS_.get('store') || 'meibao');
 })();
 // 門市資料(後端 storeProfile，存在本機)：標 data-store 的地方換成本店的；培英 HTML 本來就寫培英，看起來不變
 let BO_STORE_PROFILE_ = null;
@@ -814,7 +827,7 @@ function boFeedbackEnd_(fb, d) {
   else if (b) b.disabled = false;
   if (d && d.code === 'bo_auth') return;   // 登入過期：已經跳登入畫面
   const a = fb.action;
-  const done = /^delete/.test(a) ? '已刪除' : /^publish/.test(a) ? '已發布' : /^sync/.test(a) ? '已同步' : /^restore/.test(a) ? '已回復'
+  const done = /^resolve/.test(a) ? '已處理' : /^delete/.test(a) ? '已刪除' : /^publish/.test(a) ? '已發布' : /^sync/.test(a) ? '已同步' : /^restore/.test(a) ? '已回復'
     : /^upload/.test(a) ? '已上傳' : /^reorder/.test(a) ? '已更新排序' : '已儲存';
   if (d && d.status === 'ok') boToast_('✅ ' + done, true);
   else boToast_('⚠ 沒有成功' + (d && d.message ? '：' + d.message : d ? '' : '（網路異常）'), false);
@@ -897,6 +910,10 @@ function applyBoRoleUi_() {
   document.querySelectorAll('#perm-list select').forEach(sel => sel.disabled = !owner);
   const payNote = document.getElementById('bo-owner-only-payment');
   if (payNote) payNote.style.display = owner ? 'none' : 'block';
+  const paNote = document.getElementById('bo-owner-only-payalert');
+  if (paNote) paNote.style.display = owner ? 'none' : 'block';
+  const pa = document.getElementById('view-payalert');
+  if (pa && pa.style.display === 'block') loadPayAlerts_();   // 換帳號登入：按鈕能不能按跟著身分重畫
   document.querySelectorAll('#view-payment button, #view-payment input, #view-payment select').forEach(el => el.disabled = !owner || el.dataset.lock === '1');   // data-lock：本來就鎖住的開關(例如 Apple Pay 要先開信用卡)，老闆登入也不解開
 }
 
@@ -1256,6 +1273,7 @@ function backupState_(d) {
 }
 function checkBackupWarn_() {
   const box = document.getElementById('backup-warn');
+  if (NEW_API_) { checkPayAlertWarn_(); return; }   // 新後端：備份改 GitHub 每晚自動跑(失敗 GitHub 寄信)，cfgStatus 不回備份時間 → 這條紅條改用來提醒金流告警
   if (!isBoOwner_()) { box.style.display = 'none'; return; }
   apiGet({ action: 'cfgStatus', storeId: SCHED_STORE_ID }).then(d => {
     if (d.status !== 'ok' || !backupState_(d).bad) { box.style.display = 'none'; return; }
@@ -1263,6 +1281,68 @@ function checkBackupWarn_() {
     box.innerHTML = '⚠ ' + (d.backupAt ? `自動備份已經 ${hrs} 小時沒跑了（上次 ${boFmtMs_(d.backupAt)}）` : '還沒有自動備份紀錄') +
       '。觸發器可能被刪掉或停用：到 Apps Script 編輯器左邊「觸發條件」確認 nightlyMaintenance 還在。<button type="button" onclick="switchPosManageSubview(\'ver\')">去看</button>';
     box.style.display = 'block';
+  }).catch(() => {});
+}
+// ---- 11-08 前端切換準備：金流告警(只有打新後端才有；舊後端告警是寄信，這些都不會執行) ----
+const PAY_ALERT_KIND_ = {
+  amount_mismatch: '付款金額不符', late_payment: '訂單作廢後才付款', duplicate_payment: '同一張單付了兩次', store_mismatch: '付款通知的門市不符',
+  not_found: '付款通知找不到訂單', voucher_failed: '兌換券核銷失敗', points_failed: '給點失敗', refund_book_failed: '退款成功但帳務沒寫成功',
+  refund_retry_failed: '退款重試到上限仍失敗', sha_mismatch: '付款通知簽章不對', decrypt_failed: '付款通知解不開', manual_confirm: '店員人工標記已付款'
+};
+if (NEW_API_) {
+  const b = document.getElementById('mch-sub-btn-payalert'); if (b) b.style.display = '';
+  // 新後端沒有試算表，「POS夥伴」分頁那條路不在了(PIN 存雜湊，只能由另一個老闆帳號或系統管理員重設)
+  const fg = document.getElementById('bo-login-forgot'); if (fg) fg.textContent = '忘記PIN：請老闆幫你重設；老闆自己忘記請另一位老闆重設，或聯絡系統管理員（小保）';
+}
+function payAlertTime_(v) { const ms = typeof v === 'number' ? v : Date.parse(v); return isNaN(ms) ? '—' : boFmtMs_(ms); }
+function setPayAlertBadge_(n) {
+  const el = document.getElementById('bo-payalert-badge');
+  if (!el) return;
+  el.textContent = n > 99 ? '99+' : String(n);
+  el.style.display = n > 0 ? '' : 'none';
+}
+// 老闆登入後：有沒處理的告警就在最上面跳紅條(沿用原本備份紅條的位置)，選單也顯示數字
+function checkPayAlertWarn_() {
+  const box = document.getElementById('backup-warn');
+  if (!NEW_API_ || !boSession) { box.style.display = 'none'; return; }
+  apiGet({ action: 'paymentAlerts', storeId: BO_HOME_STORE_ }).then(d => {
+    const n = d && d.status === 'ok' ? (d.alerts || []).length : 0;
+    setPayAlertBadge_(n);
+    if (!n || !isBoOwner_()) { box.style.display = 'none'; return; }
+    box.innerHTML = `⚠ 有 ${n} 筆金流告警還沒處理（付款或退款需要人工核對）。<button type="button" onclick="switchMerchantSubview('payalert')">去看</button>`;
+    box.style.display = 'block';
+  }).catch(() => {});
+}
+function loadPayAlerts_() {
+  const box = document.getElementById('payalert-list');
+  if (!box) return;
+  if (!NEW_API_) { box.innerHTML = '<div class="empty-hint">目前的後端沒有這個功能</div>'; return; }
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'paymentAlerts', storeId: BO_HOME_STORE_ }).then(d => {
+    if (d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml(d.message || '讀取失敗') + '</div>'; return; }
+    const list = d.alerts || [];
+    setPayAlertBadge_(list.length);
+    if (isBoOwner_() && !list.length) document.getElementById('backup-warn').style.display = 'none';
+    if (!list.length) { box.innerHTML = '<div class="empty-hint">✅ 目前沒有需要處理的金流告警</div>'; return; }
+    const owner = isBoOwner_();
+    box.innerHTML = list.map(a => {
+      const det = a.detail && typeof a.detail === 'object' ? Object.keys(a.detail) : [];
+      const detHtml = det.length ? `<details style="margin-top:4px;"><summary class="ops-meta" style="cursor:pointer;">明細</summary><div class="ops-meta" style="word-break:break-all;">${det.map(k => escapeHtml(k) + '：' + escapeHtml(typeof a.detail[k] === 'object' ? JSON.stringify(a.detail[k]) : String(a.detail[k]))).join('<br>')}</div></details>` : '';
+      return `<div class="ops-card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;">
+          <div style="min-width:0;"><b style="color:#a32d2d;">${escapeHtml(PAY_ALERT_KIND_[a.kind] || a.kind || '告警')}</b>
+            <div class="ops-meta">${payAlertTime_(a.createdAt)}${a.orderId ? '　訂單 ' + escapeHtml(a.orderId) : ''}</div>
+            <div style="font-size:0.85rem;margin-top:4px;">${escapeHtml(a.message || '')}</div>${detHtml}</div>
+          <button type="button" class="mc-save-btn" style="padding:6px 12px;flex:0 0 auto;" ${owner ? '' : 'disabled title="只有老闆可以標記已處理"'} onclick="resolvePayAlert_(${Number(a.id)})">標記已處理</button>
+        </div></div>`;
+    }).join('');
+  }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+}
+function resolvePayAlert_(id) {
+  if (!isBoOwner_()) { alert('只有老闆可以標記已處理'); return; }
+  if (!confirm('確定這筆告警已經核對處理好了？標記後會從清單收起來。')) return;
+  apiPost({ action: 'resolvePaymentAlert', storeId: BO_HOME_STORE_, alertId: id }).then(d => {
+    if (d.status !== 'ok') return;
+    loadPayAlerts_();
   }).catch(() => {});
 }
 function loadBoCfgStatus_() {
@@ -1290,7 +1370,9 @@ function loadBoCfgStatus_() {
     }).join('');
     const notYet = '今天起開始記錄，下次發布後顯示';
     const bk = backupState_(d);
-    box.innerHTML = `<div class="ops-card"><h3>自動備份</h3>
+    // 11-08 前端切換準備：新後端的備份改成每晚台北 03:30 自動備份到 GitHub(還原演練＋加密)，失敗 GitHub 會寄信，這裡不顯示時間
+    const bkNew = `<div class="ops-card"><h3>自動備份</h3><div class="ops-meta">資料庫每晚台北 03:30 自動備份（備份完會自動做一次還原演練、加密保存；每晚的留 30 天、每月 1 號的永久保留）。失敗時 GitHub 會寄信通知老闆。</div></div>`;
+    box.innerHTML = (NEW_API_ ? bkNew : '') + `<div class="ops-card" style="${NEW_API_ ? 'display:none;' : ''}"><h3>自動備份</h3>
         <div class="pmg-kv">
           <div>上次備份</div><div style="${bk.bad ? 'color:#a32d2d;' : 'color:#1f7a3d;'}">${d.backupAt ? (bk.bad ? '⚠️ ' : '✅ ') + boFmtMs_(d.backupAt) + '（' + ago(d.backupAt) + '）' : '⚠️ 還沒有備份紀錄'}</div>
           <div>檔名</div><div>${escapeHtml(d.backupName || '—')}</div>
@@ -1451,7 +1533,8 @@ function savePosStaffRow() {
     status: document.getElementById('ps-f-status').value,
     storeId: SCHED_STORE_ID
   };
-  apiPost({ action: 'upsertPosStaff', staff: payload }).then(data => {
+  // 11-09 前端切換準備：新後端 upsertPosStaff 讀攤平的欄位(舊後端讀 data.staff)→ 打新後端時兩種一起送，舊後端行為不變
+  apiPost({ action: 'upsertPosStaff', staff: payload, ...(NEW_API_ ? payload : {}) }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     psCurrentName = name;
     return loadPosStaffList();
@@ -1479,6 +1562,7 @@ function switchBackofficeTab(name) {
   document.getElementById('view-storeinfo').style.display = (name === 'merchant' && currentMerchantSubview === 'storeinfo') ? 'block' : 'none';
   document.getElementById('view-schedule').style.display = (name === 'merchant' && currentMerchantSubview === 'schedule') ? 'block' : 'none';
   document.getElementById('view-payment').style.display = (name === 'merchant' && currentMerchantSubview === 'payment') ? 'block' : 'none';
+  document.getElementById('view-payalert').style.display = (name === 'merchant' && currentMerchantSubview === 'payalert') ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
   document.getElementById('view-member').style.display = name === 'member' ? 'block' : 'none';
   document.getElementById('view-posmanage').style.display = name === 'posmanage' ? 'block' : 'none';
@@ -1512,6 +1596,8 @@ function switchBackofficeTab(name) {
   document.getElementById('mch-sub-btn-storeinfo').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'storeinfo');
   document.getElementById('mch-sub-btn-schedule').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'schedule');
   document.getElementById('mch-sub-btn-payment').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'payment');
+  document.getElementById('mch-sub-btn-payalert').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'payalert');
+  if (name === 'merchant' && currentMerchantSubview === 'payalert') loadPayAlerts_();
   if (name === 'merchant') {
     document.getElementById('merchant-sublist').classList.add('open');
     document.getElementById('merchant-caret').classList.add('open');
@@ -2761,6 +2847,29 @@ function renderMcPhotoHtml(item) {
   `;
 }
 
+// 11-08 前端切換準備：照片上傳前縮成寬最多 1000 的 jpg(新後端單張上限 1.5 MB、只收 jpg／png／webp；手機原圖常常 3～5 MB)。
+// 小於 1000 寬不放大；透明背景補白色；縮完還太大就把品質從 0.85 降到 0.7。只在打新後端時縮，舊後端照舊傳原圖(行為不變)
+function shrinkPhotoForUpload_(dataUrl, mimeType) {
+  const raw = { imageBase64: String(dataUrl).split(',')[1], mimeType: mimeType || 'image/jpeg' };   // data:image/xxx;base64,XXXX 只取逗號後面
+  if (!NEW_API_) return Promise.resolve(raw);
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onerror = () => reject(new Error('這個檔案打不開，請改用 jpg 或 png 照片'));
+    img.onload = () => {
+      const w = Math.min(1000, img.naturalWidth || 1000), h = Math.max(1, Math.round((img.naturalHeight || w) * w / (img.naturalWidth || w)));
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      let url = cv.toDataURL('image/jpeg', 0.85);
+      if (url.length * 0.75 > 1.4 * 1024 * 1024) url = cv.toDataURL('image/jpeg', 0.7);
+      resolve({ imageBase64: url.split(',')[1], mimeType: 'image/jpeg' });
+    };
+    img.src = dataUrl;
+  });
+}
+
 function onMcPhotoFileSelected() {
   const input = document.getElementById('mc-photo-input');
   const file = input.files && input.files[0];
@@ -2769,11 +2878,10 @@ function onMcPhotoFileSelected() {
   statusEl.textContent = '上傳中…';
   const reader = new FileReader();
   reader.onload = () => {
-    const b64 = reader.result.split(',')[1]; // data:image/xxx;base64,XXXX 只取逗號後面的部分
-    apiPost({
+    shrinkPhotoForUpload_(reader.result, file.type).then(p => apiPost({
       action: 'uploadItemPhoto',
-      photo: { category: mcCurrentItem.category, name: mcCurrentItem.name, imageBase64: b64, mimeType: file.type || 'image/jpeg', storeId: MC_STORE_ID, status: MC_STATUS }
-    }).then(data => {
+      photo: { category: mcCurrentItem.category, name: mcCurrentItem.name, imageBase64: p.imageBase64, mimeType: p.mimeType, storeId: MC_STORE_ID, status: MC_STATUS }
+    })).then(data => {
       if (data.status !== 'ok') throw new Error(data.message || '上傳失敗');
       return loadMenuCms().then(() => renderMcItemEditor());
     }).catch(err => {
@@ -4001,7 +4109,7 @@ function onHbPhotoSelected() {
   statusEl.textContent = '上傳中…';
   const reader = new FileReader();
   reader.onload = () => {
-    apiPost({ action: 'uploadHomePhoto', photo: { name: hbDraft.title || '未命名', imageBase64: reader.result.split(',')[1], mimeType: file.type || 'image/jpeg' } }).then(data => {
+    shrinkPhotoForUpload_(reader.result, file.type).then(p => apiPost({ action: 'uploadHomePhoto', photo: { name: hbDraft.title || '未命名', imageBase64: p.imageBase64, mimeType: p.mimeType } })).then(data => {
       if (data.status !== 'ok') throw new Error(data.message || '上傳失敗');
       hbDraft.photoUrl = data.url;
       renderHbEditor();
@@ -4944,7 +5052,7 @@ function onAdPhotoSelected() {
   statusEl.textContent = '上傳中…';
   const reader = new FileReader();
   reader.onload = () => {
-    apiPost({ action: 'uploadAddonPhoto', photo: { name, imageBase64: reader.result.split(',')[1], mimeType: file.type || 'image/jpeg' } }).then(data => {
+    shrinkPhotoForUpload_(reader.result, file.type).then(p => apiPost({ action: 'uploadAddonPhoto', photo: { name, imageBase64: p.imageBase64, mimeType: p.mimeType } })).then(data => {
       if (data.status !== 'ok') throw new Error(data.message || '上傳失敗');
       adPendingPhotoUrl = data.url;
       renderAdEditor();

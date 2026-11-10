@@ -66,7 +66,12 @@
 <script>
 'use strict';
 // ---------- 設定 ----------
-const ORDER_BACKEND_URL = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec";
+// 後端網址(2026-11-08 前端切換準備)：切換日用 05_腳本/切換後端.mjs 一次改 8 個檔(new 新後端／old 退回舊後端／check 檢查)，不要手改下面這行網址
+const BACKEND_URL_SET_ = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec"; // @@後端網址@@
+// 本機預覽測試口：只有在本機(localhost／直接開檔)網址加 ?api=new 才改打新後端、加 ?store=店代號 改測別間店(例 zz_demo_store)；正式網域一律忽略這兩個參數
+const DEV_QS_ = (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) ? new URLSearchParams(location.search) : new URLSearchParams();
+const ORDER_BACKEND_URL = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy05012003.workers.dev/' : BACKEND_URL_SET_;
+const NEW_API_ = ORDER_BACKEND_URL.indexOf('workers.dev') >= 0;   // 打新後端才出現的功能(金流告警、照片縮圖、登入頁文字)都看這個
 const APP_KEY = 'abao-meibao-2026';
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
 function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = STORE_ID; return p; }
@@ -76,7 +81,7 @@ const STORE_PATH_ALIAS_ = { ab_xhpy: 'meibao' };
 const STORE_ID = (function () {
   const m = location.pathname.match(/[/]abao_xh[/]([A-Za-z0-9_]+)[/]/);
   if (m) return STORE_PATH_ALIAS_[m[1]] || m[1];
-  return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : 'meibao';
+  return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : (DEV_QS_.get('store') || 'meibao');
 })();
 let STORE_LABEL = (function () { try { const p = JSON.parse(localStorage.getItem('abao_store_profile_' + STORE_ID) || 'null'); if (p && p.shortName) return p.shortName; } catch (e) {} return STORE_ID === 'meibao' ? '溪湖培英店' : STORE_ID; })();
 const DEFAULT_BT_NAME = 'TM-m10-HIP6666';
