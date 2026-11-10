@@ -57,7 +57,7 @@
 'use strict';
 // ---------- 設定 ----------
 // 後端網址(2026-11-08 前端切換準備)：切換日用 05_腳本/切換後端.mjs 一次改 8 個檔(new 新後端／old 退回舊後端／check 檢查)，不要手改下面這行網址
-const BACKEND_URL_SET_ = "https://script.google.com/macros/s/AKfycbxTTE-Br6T3Re8JbiQf1e1UYTGE5dnbhgrVJt2nnuvOzd_udHj9v72dKta-1Dt09qsNXg/exec"; // @@後端網址@@
+const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/"; // @@後端網址@@
 // 本機預覽測試口：只有在本機(localhost／直接開檔)網址加 ?api=new 才改打新後端、加 ?store=店代號 改測別間店(例 zz_demo_store)；正式網域一律忽略這兩個參數
 const DEV_QS_ = (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) ? new URLSearchParams(location.search) : new URLSearchParams();
 const ORDER_BACKEND_URL = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy05012003.workers.dev/' : BACKEND_URL_SET_;
