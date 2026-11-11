@@ -690,7 +690,7 @@
   </div>
   <div id="pmg-subview-partner" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 夥伴帳號管理</div>
-    <p style="font-size:0.8rem;color:var(--muted);">
+    <p id="ps-intro" style="font-size:0.8rem;color:var(--muted);">
       3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>店長只能管理夥伴帳號</b>，店長／老闆帳號只有老闆能改。
       建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設，老闆忘記請到Google試算表「POS夥伴」分頁修改。用4碼PIN碼識別身份，
       <b>哪些功能要什麼角色，到「角色權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
@@ -700,7 +700,7 @@
       <div class="mc-col" style="max-height:none;">
         <h4>夥伴清單</h4>
         <div id="ps-list"><div class="empty-hint">載入中...</div></div>
-        <button type="button" class="mc-add-btn" onclick="psCurrentName=null;renderPsEditor();">+ 新增夥伴</button>
+        <button type="button" class="mc-add-btn" id="ps-add-btn" onclick="psCurrentName=null;renderPsEditor();">+ 新增夥伴</button>
       </div>
       <div class="mc-col mc-col-wide" style="max-height:none;">
         <h4>編輯夥伴</h4>
@@ -1293,7 +1293,15 @@ if (NEW_API_) {
   const b = document.getElementById('mch-sub-btn-payalert'); if (b) b.style.display = '';
   // 新後端沒有試算表，「POS夥伴」分頁那條路不在了(PIN 存雜湊，只能由另一個老闆帳號或系統管理員重設)
   const fg = document.getElementById('bo-login-forgot'); if (fg) fg.textContent = '忘記PIN：請老闆幫你重設；老闆自己忘記請另一位老闆重設，或聯絡系統管理員（小保）';
+  // 11-11 老闆定：夥伴帳號(含PIN)只有老闆能新增或修改，店長不能幫別人改(新後端 upsertPosStaff 也擋)
+  const pi = document.getElementById('ps-intro'); if (pi) pi.innerHTML =
+    '3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>夥伴帳號（含PIN碼）只有老闆能新增或修改</b>，店長只能看名單。' +
+    '建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設（點名字 →「修改PIN碼」填新的4碼 → 儲存，不用輸入舊PIN）；老闆自己忘記請另一位老闆重設，或聯絡系統管理員（小保）。' +
+    '<b>哪些功能要什麼角色，到「角色權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。' +
+    '<b>還沒建立任何夥伴之前，權限不會生效</b>(退款、人工標記已付款除外，這兩項一定要先建店長/老闆)。';
 }
+// 打新後端時夥伴帳號只限老闆改：店長登入後台看得到名單，但不能新增、不能編輯(舊後端照舊：店長可管夥伴)
+function psOwnerOnly_() { return NEW_API_ && !isBoOwner_(); }
 function payAlertTime_(v) { const ms = typeof v === 'number' ? v : Date.parse(v); return isNaN(ms) ? '—' : boFmtMs_(ms); }
 function setPayAlertBadge_(n) {
   const el = document.getElementById('bo-payalert-badge');
@@ -1481,6 +1489,7 @@ function loadPosStaffList() {
 }
 function renderPsList() {
   const el = document.getElementById('ps-list');
+  const addBtn = document.getElementById('ps-add-btn'); if (addBtn) addBtn.style.display = psOwnerOnly_() ? 'none' : '';
   if (!posStaffList.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何夥伴</div>'; return; }
   el.innerHTML = posStaffList.map(s => `
     <div class="mc-item-row${s.name === psCurrentName ? ' active' : ''}" onclick="psCurrentName='${escapeHtml(s.name).replace(/'/g, "\\'")}';renderPsList();renderPsEditor();">
@@ -1492,6 +1501,7 @@ function renderPsEditor() {
   const isNew = psCurrentName === null;
   const s = isNew ? {} : (posStaffList.find(x => x.name === psCurrentName) || {});
   if (!isNew && !posStaffList.find(x => x.name === psCurrentName)) { el.innerHTML = '<div class="empty-hint">選一位來編輯，或點「新增夥伴」</div>'; return; }
+  if (psOwnerOnly_()) { el.innerHTML = '<div class="empty-hint">夥伴帳號（含PIN碼）只有老闆可以新增或修改，請老闆登入後台處理</div>'; return; }
   // 店長只能新增/修改夥伴；店長/老闆帳號只有老闆能改(後端也會擋)
   if (!isBoOwner_() && !isNew && s.role !== '夥伴') { el.innerHTML = '<div class="empty-hint">「' + escapeHtml(s.name) + '」是' + escapeHtml(s.role) + '帳號，只有老闆可以修改</div>'; return; }
   const roleOptions = isBoOwner_() ? ['夥伴', '店長', '老闆'] : ['夥伴'];
@@ -1504,8 +1514,8 @@ function renderPsEditor() {
           ${roleOptions.map(r => `<option value="${r}" ${(s.role || '夥伴') === r ? 'selected' : ''}>${r}</option>`).join('')}
         </select>
       </label>
-      <label class="mc-field">PIN碼(4碼數字)<input id="ps-f-pin" type="text" inputmode="numeric" maxlength="4" placeholder="${isNew ? '必填' : '留空＝不更改'}"></label>
     </div>
+    <label class="mc-field" style="max-width:240px;">${isNew ? 'PIN碼（4碼數字，必填）' : '修改PIN碼（填新的4碼；留空＝不更改）'}<input id="ps-f-pin" type="text" inputmode="numeric" maxlength="4" placeholder="${isNew ? '必填' : '留空＝不更改'}"></label>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="ps-f-status">
         <option value="啟用" ${(s.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
@@ -1533,8 +1543,8 @@ function savePosStaffRow() {
     status: document.getElementById('ps-f-status').value,
     storeId: SCHED_STORE_ID
   };
-  // 11-09 前端切換準備：新後端 upsertPosStaff 讀攤平的欄位(舊後端讀 data.staff)→ 打新後端時兩種一起送，舊後端行為不變
-  apiPost({ action: 'upsertPosStaff', staff: payload, ...(NEW_API_ ? payload : {}) }).then(data => {
+  // 11-11 拿掉 11-09 的暫時補救(多送一份攤平欄位)：新後端 11-11 起也收巢狀 staff（Worker 60a3cdac）
+  apiPost({ action: 'upsertPosStaff', staff: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     psCurrentName = name;
     return loadPosStaffList();
