@@ -1088,7 +1088,7 @@ const RPT_COLS_ = [['net', '銷售淨額'], ['disc', '折扣淨額'], ['voidAmt'
 const RPT_MONEY_ = new Set(['net', 'disc', 'voidAmt', 'refAmt', 'gross', 'avg']);
 const RPT_ONLINE_ = ['線上信用卡', '線上Apple Pay', '線上Google Pay', '線上LINEPay'];
 const RPT_OFFLINE_FIRST_ = ['現金', '線下LINEPay', 'LINEPay mini', '其他'];
-const RPT_CH_NAME_ = { '門市': '門市 POS', '線上': '線上點餐', '揪團': '揪團' };
+const RPT_CH_NAME_ = { 'POS': '門市 POS', '門市': '門市 POS', '線上': '線上點餐（含揪團）', '揪團': '揪團' };   // 實際通路值：POS／線上（揪團單也記線上）／熊貓／581／日系
 const RPT_WD_ = ['日', '一', '二', '三', '四', '五', '六'];
 const rptMoney_ = v => '$' + Math.round(v).toLocaleString('en-US');
 const rptPad_ = n => String(n).padStart(2, '0');
@@ -1233,7 +1233,7 @@ function renderRptHbars_() {
     }).join('') : '<div class="empty-hint">沒有資料</div>';
   };
   draw('rpt-bar-src', r => r.src, ['門市現場', '線上自取', '外送平台'], k => k);
-  draw('rpt-bar-ch', r => r.ch, ['門市', '線上', '揪團', ...quick], k => RPT_CH_NAME_[k] || k);
+  draw('rpt-bar-ch', r => r.ch, ['POS', '門市', '線上', '揪團', ...quick], k => RPT_CH_NAME_[k] || k);
 }
 function rptSalesTableData_() {
   const { rows, from, to } = rptData_, v = rptState_.view.sales;
