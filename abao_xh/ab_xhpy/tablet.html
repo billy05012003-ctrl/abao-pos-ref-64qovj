@@ -119,6 +119,12 @@
   .pmg-tile:disabled { background:#f2f2f2; color:#999; border-style:dashed; cursor:default; }
   .pmg-soon { display:inline-block; font-size:0.68rem; background:#ddd; color:#666; padding:1px 6px; border-radius:6px; margin-top:4px; }
   .pmg-sub { display:none; margin:8px 0 0; padding:0; box-shadow:none; }
+  /* 11-13 今日報表 */
+  .tr-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .tr-card { border:1px solid var(--border); border-radius:8px; padding:8px; } .tr-card .t { font-size:0.72rem; color:var(--muted); } .tr-card .v { font-size:1.1rem; font-weight:700; }
+  .tr-h { font-size:0.85rem; font-weight:600; margin:12px 0 4px; }
+  .tr-table { width:100%; border-collapse:collapse; font-size:0.82rem; } .tr-table th { text-align:right; color:var(--muted); font-weight:400; padding:3px 4px; border-bottom:1px solid var(--border); }
+  .tr-table td { text-align:right; padding:3px 4px; border-bottom:1px solid #f2f2f2; } .tr-table td:first-child, .tr-table th:first-child { text-align:left; }
   .pmg-kv { display:grid; grid-template-columns:110px 1fr; gap:6px 8px; font-size:0.86rem; }
   .pmg-kv div:nth-child(odd) { color:var(--muted); }
   .soon-card { opacity:.6; border:1px dashed #ccc; }
@@ -441,7 +447,7 @@
       </div>
       <div class="pmg-grp">帳務</div>
       <div class="pmg-grid">
-        <button type="button" class="pmg-tile" disabled><span class="ic">📊</span>報表<br><span class="pmg-soon">準備中</span></button>
+        <button type="button" class="pmg-tile" onclick="openTabReport_()"><span class="ic">📊</span>報表</button>
         <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
       </div>
       <div class="pmg-grp">系統</div>
@@ -473,6 +479,12 @@
     <section class="pmg-sub" id="pmg-sub-ver">
       <div style="text-align:right;margin-bottom:6px;"><span class="refresh-link" onclick="loadPmgCfgStatus_()">重新整理</span></div>
       <div id="pmg-ver-body"><div class="empty-hint">載入中...</div></div>
+    </section>
+
+    <!-- 11-13 今日報表：平板只看今天、不匯出；完整的營業銷售／收款方式報表在後台 POS管理 → 報表 -->
+    <section class="pmg-sub" id="pmg-sub-report">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span id="tr-date" style="font-size:0.78rem;color:var(--muted)"></span><span class="refresh-link" onclick="loadTabReport_()">重新整理</span></div>
+      <div id="tr-body"><div class="empty-hint">載入中...</div></div>
     </section>
 
     <section class="pmg-sub" id="pmg-sub-printer">
@@ -641,7 +653,7 @@ function apiPost(payload) {
 // ---- POS權限設定(2026-09-25)：每個功能的最低角色由POS後台「POS管理→權限設定」決定 ----
 // 設成「夥伴」=不用PIN直接做；店長/老闆=先選人輸入PIN(後端也會再驗一次)。讀不到設定時用預設值(敏感功能預設店長，偏安全)
 const POS_ROLE_RANK_ = { '夥伴': 1, '店長': 2, '老闆': 3 };
-const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', voidOrder: '店長', closeRegister: '店長', printSettings: '店長' };
+const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', voidOrder: '店長', closeRegister: '店長', printSettings: '店長', reportView: '店長' };
 // 碰錢的動作每次都要輸入PIN；其他日常動作輸入一次後5分鐘內不用再輸(櫃台操作才不會一直被打斷)
 const POS_PERM_ALWAYS_ASK_ = ['refund', 'voidOrder', 'confirmPayment', 'grantVoucher', 'closeRegister'];
 const POS_PERM_SESSION_MS_ = 5 * 60000;
@@ -987,7 +999,7 @@ function closePosManageOverlay() {
   document.getElementById('pos-manage-overlay').classList.remove('open');
 }
 // 10-10 分組按鈕格：name=null 回按鈕格首頁；子頁面左上 ← 回首頁，首頁 ← 關閉
-const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', staff: '夥伴帳號說明', printer: '出單機設定' };
+const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', staff: '夥伴帳號說明', printer: '出單機設定', report: '今日報表' };
 let pmgCurrent_ = null;
 function pmgOpen_(name) {
   pmgCurrent_ = name;
@@ -997,6 +1009,47 @@ function pmgOpen_(name) {
   if (name === 'log') loadRegisterLog();
   if (name === 'ver') loadPmgCfgStatus_();
   if (name === 'printer') prnLoad_();
+  if (name === 'report') loadTabReport_();
+}
+// ---------- 11-13 今日報表(規格 報表設計_2026-11-13.md)：要「查看報表」權限(reportView，預設店長，純畫面控制)；只看今天、不匯出 ----------
+// 跟後台報表同一支 GET reportRows／reportItems；營業日＝取餐日，待付款、待收款、沒付成就作廢的單不算進營收
+function openTabReport_() { withPosPerm_('reportView', '查看報表', () => pmgOpen_('report')); }
+function loadTabReport_() {
+  const body = document.getElementById('tr-body');
+  body.innerHTML = '<div class="empty-hint">載入中...</div>';
+  Promise.all([apiGet({ action: 'reportRows', storeId: STORE_ID }), apiGet({ action: 'reportItems', storeId: STORE_ID })]).then(([a, b]) => {
+    if (!a || a.status !== 'ok') { body.innerHTML = '<div class="empty-hint">' + escapeHtml_((a && a.message) || '讀取失敗') + '</div>'; return; }
+    document.getElementById('tr-date').textContent = a.from + '（取餐日）';
+    const $ = v => '$' + Math.round(v).toLocaleString('en-US');
+    const s = { net: 0, disc: 0, n: 0, voidAmt: 0, voidN: 0, refAmt: 0, refN: 0, unsAmt: 0, unsN: 0 }, hours = {}, srcs = {};
+    a.rows.forEach(r => {
+      if (r.k === 'sale') {
+        s.net += r.total; s.disc += r.disc; s.n += r.n;
+        const h = hours[r.h] || (hours[r.h] = { net: 0, n: 0 }); h.net += r.total; h.n += r.n;
+        const g = srcs[r.src] || (srcs[r.src] = { net: 0, n: 0 }); g.net += r.total; g.n += r.n;
+      } else if (r.k === 'void') { s.voidAmt += r.total; s.voidN += r.n; }
+      else if (r.k === 'refund') { s.refAmt += r.refunded; s.refN += r.n; }
+      else if (r.k === 'unsettled') { s.unsAmt += r.total; s.unsN += r.n; }
+    });
+    const card = (t, v) => `<div class="tr-card"><div class="t">${t}</div><div class="v">${v}</div></div>`;
+    let h = '<div class="tr-cards">' + card('銷售淨額', $(s.net)) + card('結帳單量', s.n) + card('平均單價', $(s.n ? s.net / s.n : 0))
+      + card('折扣金額', $(s.disc)) + card('作廢 ' + s.voidN + ' 張', $(s.voidAmt)) + card('退款 ' + s.refN + ' 張', $(s.refAmt)) + '</div>';
+    if (s.unsN) h += `<div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">待收款 ${s.unsN} 張 ${$(s.unsAmt)}（取餐付款還沒收，未算入）</div>`;
+    const srcRow = ['門市現場', '線上自取', '外送平台'].filter(k => srcs[k]).map(k => `${k} ${$(srcs[k].net)}／${srcs[k].n} 張`).join('　');
+    if (srcRow) h += `<div style="font-size:0.8rem;margin-top:6px;">${srcRow}</div>`;
+    const hs = Object.keys(hours).map(Number).sort((p, q) => p - q);
+    if (hs.length) {
+      const pad = n => String(n).padStart(2, '0');
+      h += '<div class="tr-h">每小時（下單時間）</div><table class="tr-table"><tr><th>時段</th><th>銷售淨額</th><th>單量</th></tr>'
+        + hs.map(x => `<tr><td>${pad(x)}:00-${pad(x + 1)}:00</td><td>${$(hours[x].net)}</td><td>${hours[x].n}</td></tr>`).join('') + '</table>';
+    }
+    const items = (b && b.status === 'ok' ? b.items : []).slice(0, 10);
+    if (items.length) h += '<div class="tr-h">人氣排行（前 10）</div><table class="tr-table"><tr><th>品項</th><th>份數</th><th>金額</th></tr>'
+      + items.map((i, n) => `<tr><td>${n + 1}. ${escapeHtml_(i.name)}${i.size ? ' ' + escapeHtml_(i.size) : ''}</td><td>${i.qty}</td><td>${$(i.amount)}</td></tr>`).join('') + '</table>';
+    if (!s.n && !s.voidN && !s.refN && !s.unsN) h += '<div class="empty-hint" style="margin-top:8px;">今天還沒有營收</div>';
+    h += '<div style="font-size:0.74rem;color:var(--muted);margin-top:10px;">看其他日期、收款方式報表、匯出 Excel → 後台「POS管理 → 報表」</div>';
+    body.innerHTML = h;
+  }).catch(() => { body.innerHTML = '<div class="empty-hint">連線失敗，請稍後再試</div>'; });
 }
 // ---------- 出單機設定(10-13)：每台平板自己選藍牙／網路出單機(填 IP)；設定存在這台平板，出單模組(iframe)照著送 ----------
 let prnPickedMode_ = 'net', lblPickedMode_ = 'off';

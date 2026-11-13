@@ -184,6 +184,33 @@
   .pmg-tile:disabled { background:#f2f2f2; color:#999; border-style:dashed; cursor:default; }
   .pmg-soon { display:inline-block; font-size:0.68rem; background:#ddd; color:#666; padding:1px 6px; border-radius:6px; margin-top:4px; }
   .pmg-crumb { font-size:0.9rem; margin:0 0 10px; }
+  /* 11-13 報表 */
+  .rpt-bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0 10px; font-size:0.9rem; }
+  .rpt-bar input[type=date], .rpt-bar select { padding:5px 6px; border:1px solid var(--border); border-radius:6px; font-family:inherit; }
+  .rpt-presets button, .rpt-seg button, .rpt-tabs button { border:1px solid var(--border); background:#fff; padding:5px 10px; font-family:inherit; cursor:pointer; font-size:0.85rem; }
+  .rpt-presets button.active, .rpt-seg button.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .rpt-go { background:var(--brand); color:#fff; border:0; border-radius:6px; padding:6px 16px; cursor:pointer; font-family:inherit; }
+  .rpt-tabs { display:flex; gap:6px; margin:4px 0 10px; }
+  .rpt-tabs button { border-radius:8px; padding:8px 16px; font-size:0.95rem; }
+  .rpt-tabs button.active { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; }
+  .rpt-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(115px,1fr)); gap:10px; margin-top:8px; }
+  .rpt-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .rpt-card .t { font-size:0.8rem; color:var(--muted); } .rpt-card .v { font-size:1.4rem; font-weight:700; margin-top:4px; }
+  .rpt-box { background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px; margin:10px 0; }
+  .rpt-box-h { font-weight:700; margin-bottom:8px; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  .rpt-two { display:grid; grid-template-columns:1fr 1fr; gap:10px; } @media (max-width:760px) { .rpt-two { grid-template-columns:1fr; } }
+  .rpt-rank-row { display:grid; grid-template-columns:26px 1fr auto; gap:8px; align-items:center; padding:4px 0; font-size:0.88rem; }
+  .rpt-rank-no { width:22px; height:22px; border-radius:50%; background:#999; color:#fff; text-align:center; line-height:22px; font-size:0.8rem; }
+  .rpt-bar-track { height:6px; background:#eee; border-radius:3px; margin-top:3px; } .rpt-bar-fill { height:6px; background:var(--brand); border-radius:3px; }
+  .rpt-hbar { display:grid; grid-template-columns:90px 1fr 130px; gap:8px; align-items:center; font-size:0.85rem; padding:4px 0; }
+  .rpt-cols { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:0.8rem; color:#555; margin-bottom:6px; } .rpt-cols label { cursor:pointer; white-space:nowrap; }
+  .rpt-table-wrap { overflow-x:auto; }
+  .rpt-table { border-collapse:collapse; width:100%; font-size:0.85rem; white-space:nowrap; }
+  .rpt-table th { background:#343a40; color:#fff; padding:7px 9px; font-weight:600; border:1px solid #4a5056; } .rpt-table td { padding:6px 9px; border-bottom:1px solid #eee; text-align:right; }
+  .rpt-table td:first-child { text-align:center; } .rpt-table tr.total td { font-weight:700; background:#fdf3ec; }
+  .rpt-table th.grp { background:#5a6268; }
+  .rpt-export { margin-left:auto; background:#343a40; color:#fff; border:0; border-radius:6px; padding:5px 12px; cursor:pointer; font-family:inherit; font-weight:400; }
+  .rpt-more { display:block; margin:6px auto 0; background:none; border:1px solid var(--border); border-radius:6px; padding:4px 14px; cursor:pointer; font-family:inherit; }
   .pmg-crumb a { color:var(--brand); cursor:pointer; text-decoration:none; font-weight:600; }
   .pmg-kv { display:grid; grid-template-columns:120px 1fr; gap:6px 8px; font-size:0.88rem; }
   .pmg-kv div:nth-child(odd) { color:var(--muted); }
@@ -311,6 +338,7 @@
       <h3>當日營收 <span class="ops-refresh" onclick="loadBoRevenue_()">重新整理</span></h3>
       <div class="ops-money" id="bo-ops-revenue">—</div>
       <div class="ops-meta" id="bo-ops-revenue-count"></div>
+      <div class="ops-meta" style="margin-top:4px;"><a style="color:var(--brand);cursor:pointer;font-weight:600;" onclick="rptOpenToday_()">看詳細 →</a></div>
     </div>
   </div>
   <div class="ops-card">
@@ -640,7 +668,7 @@
     </div>
     <div class="pmg-grp">帳務</div>
     <div class="pmg-grid">
-      <button type="button" class="pmg-tile" disabled><span class="ic">📊</span>報表<br><span class="pmg-soon">準備中</span></button>
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('report')"><span class="ic">📊</span>報表</button>
       <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
     </div>
     <div class="pmg-grp">帳號與權限</div>
@@ -676,6 +704,46 @@
       POS功能「開帳／關帳」的歷史記錄，唯讀。實際操作(開帳/關帳按鈕)在POS功能那邊，這裡只是給老闆/店長事後查看。
     </p>
     <div id="pmg-log-list"><div class="empty-hint">載入中...</div></div>
+  </div>
+  <!-- 11-13 報表（規格 報表設計_2026-11-13.md）：營業銷售報表＋收款方式報表，照大麥版面；營業日＝取餐日、待收款不算、作廢退款分開 -->
+  <div id="pmg-subview-report" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 報表</div>
+    <div class="rpt-bar">
+      <span class="rpt-presets"><button type="button" data-p="today" onclick="rptPreset_('today')">今天</button><button type="button" data-p="yday" onclick="rptPreset_('yday')">昨天</button><button type="button" data-p="week" onclick="rptPreset_('week')">本週</button><button type="button" data-p="month" onclick="rptPreset_('month')">本月</button><button type="button" data-p="lmonth" onclick="rptPreset_('lmonth')">上個月</button></span>
+      <input type="date" id="rpt-from" onchange="rptDatesEdited_()"> ～ <input type="date" id="rpt-to" onchange="rptDatesEdited_()">
+      <button type="button" class="rpt-go" onclick="loadReport_()">查詢</button>
+    </div>
+    <div class="rpt-tabs"><button type="button" id="rpt-tab-sales" class="active" onclick="rptTab_('sales')">營業銷售報表</button><button type="button" id="rpt-tab-pay" onclick="rptTab_('pay')">收款方式報表</button></div>
+    <div id="rpt-msg" class="ops-meta"></div>
+    <div id="rpt-sales">
+      <div class="rpt-cards" id="rpt-cards"></div>
+      <div class="ops-meta" id="rpt-cards-note" style="margin-top:4px;"></div>
+      <div class="rpt-box"><div class="rpt-box-h">銷售概況</div><div id="rpt-chart"></div></div>
+      <div class="rpt-two">
+        <div class="rpt-box"><div class="rpt-box-h">人氣排行 <span class="rpt-seg"><button type="button" class="active" onclick="rptRankKind_('qty',false,this)">餐點</button><button type="button" onclick="rptRankKind_('qty',true,this)">套餐</button></span></div><div id="rpt-rank-qty"></div></div>
+        <div class="rpt-box"><div class="rpt-box-h">銷售額排行 <span class="rpt-seg"><button type="button" class="active" onclick="rptRankKind_('amount',false,this)">餐點</button><button type="button" onclick="rptRankKind_('amount',true,this)">套餐</button></span></div><div id="rpt-rank-amount"></div></div>
+      </div>
+      <div class="rpt-two">
+        <div class="rpt-box"><div class="rpt-box-h">取餐方式銷售淨額 <span class="ops-meta">（先用通路代替）</span></div><div id="rpt-bar-src"></div></div>
+        <div class="rpt-box"><div class="rpt-box-h">結帳單來源銷售淨額</div><div id="rpt-bar-ch"></div></div>
+      </div>
+      <div class="rpt-box">
+        <div class="rpt-box-h">營業銷售明細 <span class="rpt-seg"><button type="button" class="active" onclick="rptView_('sales','hour',this)">時段</button><button type="button" onclick="rptView_('sales','day',this)">日期</button><button type="button" onclick="rptView_('sales','month',this)">月份</button></span>
+          <button type="button" class="rpt-export" onclick="rptExport_('sales')">匯出</button></div>
+        <div id="rpt-sales-cols" class="rpt-cols"></div>
+        <div class="rpt-table-wrap" id="rpt-sales-table"></div>
+      </div>
+    </div>
+    <div id="rpt-pay" style="display:none;">
+      <div class="rpt-bar">取餐方式 <select id="rpt-pay-src" onchange="renderRptPay_()"><option value="">所有取餐方式</option><option>門市現場</option><option>線上自取</option><option>外送平台</option></select></div>
+      <div id="rpt-pay-methods" class="rpt-cols"></div>
+      <div class="ops-meta">整段都沒有金額的收款方式不會出現；取餐付款的單照到店實際收的方式算；佔比＝佔該列銷售淨額。</div>
+      <div class="rpt-box">
+        <div class="rpt-box-h">收款方式報表 <span class="rpt-seg"><button type="button" class="active" onclick="rptView_('pay','hour',this)">時段</button><button type="button" onclick="rptView_('pay','day',this)">日期</button><button type="button" onclick="rptView_('pay','month',this)">月份</button></span>
+          <button type="button" class="rpt-export" onclick="rptExport_('pay')">匯出</button></div>
+        <div class="rpt-table-wrap" id="rpt-pay-table"></div>
+      </div>
+    </div>
   </div>
   <div id="pmg-subview-perm" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 角色權限設定</div>
@@ -1009,6 +1077,242 @@ function loadPosManageLog() {
         ${l.note ? `<span style="color:var(--muted);">（${escapeHtml(l.note)}）</span>` : ''}
       </div>`).join('');
   });
+}
+
+// ---- 11-13 報表（規格 報表設計_2026-11-13.md；後端 GET reportRows／reportItems，SQL 37）----
+// 後端只回彙總數字（取餐日×下單小時×收款方式×通路×種類），這裡組成「營業銷售報表」「收款方式報表」；CSV 也在這裡產生。
+// 規則（老闆 11-13 定）：營業日＝取餐日；時段＝下單時間；待收款不算進營收、另外列；作廢和退款分兩欄；取餐方式先用通路代替
+let rptLoadedOnce_ = false, rptData_ = null, rptItems_ = [], rptSeq_ = 0;
+const rptState_ = { view: { sales: 'hour', pay: 'hour' }, combo: { qty: false, amount: false }, more: { qty: false, amount: false }, cols: null, payOff: new Set() };
+const RPT_COLS_ = [['net', '銷售淨額'], ['disc', '折扣淨額'], ['voidAmt', '作廢金額'], ['voidN', '作廢結帳單量'], ['refAmt', '退款金額'], ['refN', '退款單量'], ['gross', '銷售總額'], ['n', '實際結帳單量'], ['allN', '結帳單總量'], ['avg', '平均單價']];
+const RPT_MONEY_ = new Set(['net', 'disc', 'voidAmt', 'refAmt', 'gross', 'avg']);
+const RPT_ONLINE_ = ['線上信用卡', '線上Apple Pay', '線上Google Pay', '線上LINEPay'];
+const RPT_OFFLINE_FIRST_ = ['現金', '線下LINEPay', 'LINEPay mini', '其他'];
+const RPT_CH_NAME_ = { '門市': '門市 POS', '線上': '線上點餐', '揪團': '揪團' };
+const RPT_WD_ = ['日', '一', '二', '三', '四', '五', '六'];
+const rptMoney_ = v => '$' + Math.round(v).toLocaleString('en-US');
+const rptPad_ = n => String(n).padStart(2, '0');
+const rptDay_ = (s, add) => { const t = new Date(s + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + (add || 0)); return t.toISOString().slice(0, 10); };
+const rptToday_ = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+
+function rptPreset_(p) {
+  const t = rptToday_(); let f = t, e = t;
+  if (p === 'yday') { f = e = rptDay_(t, -1); }
+  else if (p === 'week') { const wd = new Date(t + 'T00:00:00Z').getUTCDay(); f = rptDay_(t, -((wd + 6) % 7)); }   // 週一開始
+  else if (p === 'month') { f = t.slice(0, 8) + '01'; }
+  else if (p === 'lmonth') { e = rptDay_(t.slice(0, 8) + '01', -1); f = e.slice(0, 8) + '01'; }
+  document.getElementById('rpt-from').value = f; document.getElementById('rpt-to').value = e;
+  document.querySelectorAll('.rpt-presets button').forEach(b => b.classList.toggle('active', b.dataset.p === p));
+  loadReport_();
+}
+function rptDatesEdited_() { document.querySelectorAll('.rpt-presets button').forEach(b => b.classList.remove('active')); }
+// 上下架管理「當日營收」旁的「看詳細 →」
+function rptOpenToday_() { rptLoadedOnce_ = true; switchPosManageSubview('report'); rptTab_('sales'); rptPreset_('today'); }
+function rptTab_(t) {
+  document.getElementById('rpt-tab-sales').classList.toggle('active', t === 'sales');
+  document.getElementById('rpt-tab-pay').classList.toggle('active', t === 'pay');
+  document.getElementById('rpt-sales').style.display = t === 'sales' ? 'block' : 'none';
+  document.getElementById('rpt-pay').style.display = t === 'pay' ? 'block' : 'none';
+}
+function loadReport_() {
+  const from = document.getElementById('rpt-from').value, to = document.getElementById('rpt-to').value || from;
+  const msg = document.getElementById('rpt-msg');
+  if (!from) { msg.textContent = '請選開始日'; return; }
+  if (to < from) { msg.textContent = '結束日要在開始日之後'; return; }
+  const seq = ++rptSeq_;
+  msg.textContent = '載入中...';
+  Promise.all([apiGet({ action: 'reportRows', from, to }), apiGet({ action: 'reportItems', from, to })]).then(([a, b]) => {
+    if (seq !== rptSeq_) return;   // 連按查詢只畫最後一次
+    if (!a || a.status !== 'ok') { msg.textContent = (a && a.message) || '讀取失敗'; return; }
+    rptData_ = a; rptItems_ = (b && b.status === 'ok') ? b.items : [];
+    msg.textContent = (a.from === a.to ? a.from : a.from + ' ～ ' + a.to) + '｜營業日照取餐日、時段照下單時間；待付款、待收款、沒付成就作廢的單不算進營收'
+      + ((b && b.status === 'ok') ? '' : '｜品項排行讀取失敗');
+    renderRptSales_(); renderRptPay_();
+  }).catch(() => { if (seq === rptSeq_) msg.textContent = '連線失敗，請稍後再試'; });
+}
+function rptAgg_(rows) {
+  const a = { net: 0, disc: 0, n: 0, voidAmt: 0, voidN: 0, refAmt: 0, refN: 0, unsAmt: 0, unsN: 0 };
+  for (const r of rows) {
+    if (r.k === 'sale') { a.net += r.total; a.disc += r.disc; a.n += r.n; }
+    else if (r.k === 'void') { a.voidAmt += r.total; a.voidN += r.n; }
+    else if (r.k === 'refund') { a.refAmt += r.refunded; a.refN += r.n; }
+    else if (r.k === 'unsettled') { a.unsAmt += r.total; a.unsN += r.n; }
+  }
+  a.gross = a.net + a.disc; a.allN = a.n + a.voidN + a.refN; a.avg = a.n ? a.net / a.n : 0;
+  return a;
+}
+// 依看法分組：hour＝下單小時（有資料的第一個到最後一個小時）；day＝區間每一天；month＝區間每個月
+function rptBuckets_(rows, view, from, to) {
+  const keyOf = view === 'hour' ? r => r.h : view === 'day' ? r => r.d : r => r.d.slice(0, 7);
+  const map = new Map();
+  rows.forEach(r => { const k = keyOf(r); if (!map.has(k)) map.set(k, []); map.get(k).push(r); });
+  const keys = [];
+  if (view === 'hour') { const hs = [...map.keys()]; if (hs.length) for (let h = Math.min(...hs); h <= Math.max(...hs); h++) keys.push(h); }
+  else if (view === 'day') { for (let d = from; d <= to; d = rptDay_(d, 1)) keys.push(d); }
+  else { for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = rptDay_(m + '-28', 5).slice(0, 7)) keys.push(m); }
+  return keys.map(k => ({ key: k, label: rptLabel_(view, k), rows: map.get(k) || [] }));
+}
+function rptLabel_(view, k) {
+  if (view === 'hour') return rptPad_(k) + ':00-' + rptPad_(k + 1) + ':00';
+  if (view === 'day') return k.slice(5).replace('-', '/') + '（' + RPT_WD_[new Date(k + 'T00:00:00Z').getUTCDay()] + '）';
+  return k.replace('-', '/');
+}
+function rptView_(tab, v, btn) {
+  rptState_.view[tab] = v;
+  btn.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  if (tab === 'sales') renderRptSalesTable_(); else renderRptPay_();
+}
+
+// ---- 營業銷售報表 ----
+function renderRptSales_() {
+  if (!rptData_) return;
+  const a = rptAgg_(rptData_.rows);
+  const card = (t, v, sub) => `<div class="rpt-card"><div class="t">${t}</div><div class="v">${v}</div>${sub ? `<div class="ops-meta">${sub}</div>` : ''}</div>`;
+  document.getElementById('rpt-cards').innerHTML = card('銷售淨額', rptMoney_(a.net), '銷售總額 ' + rptMoney_(a.gross)) + card('實際結帳單量', a.n.toLocaleString())
+    + card('平均單價', rptMoney_(a.avg)) + card('折扣金額', rptMoney_(a.disc)) + card('作廢金額', rptMoney_(a.voidAmt), a.voidN + ' 張') + card('退款金額', rptMoney_(a.refAmt), a.refN + ' 張');
+  document.getElementById('rpt-cards-note').textContent = a.unsN ? `待收款 ${a.unsN} 張 ${rptMoney_(a.unsAmt)}（取餐付款還沒收，未算入）` : '';
+  renderRptChart_();
+  ['qty', 'amount'].forEach(renderRptRank_);
+  renderRptHbars_();
+  renderRptSalesTable_();
+}
+// 銷售概況折線圖：一天看每小時；超過一天看每天；超過兩個月看每月
+function renderRptChart_() {
+  const { rows, from, to } = rptData_;
+  const days = (Date.parse(to) - Date.parse(from)) / 86400000;
+  const view = days === 0 ? 'hour' : days > 62 ? 'month' : 'day';
+  const bs = rptBuckets_(rows.filter(r => r.k === 'sale'), view, from, to).map(b => ({ label: b.label, ...rptAgg_(b.rows) }));
+  const el = document.getElementById('rpt-chart');
+  if (!bs.some(b => b.n)) { el.innerHTML = '<div class="empty-hint">這段期間沒有營收</div>'; return; }
+  const W = 760, H = 240, L = 60, R = 40, T = 14, B = 30, iw = W - L - R, ih = H - T - B;
+  const maxV = Math.max(...bs.map(b => b.net), 1), maxN = Math.max(...bs.map(b => b.n), 1);
+  const x = i => L + (bs.length === 1 ? iw / 2 : i * iw / (bs.length - 1));
+  const yv = v => T + ih - v / maxV * ih, yn = v => T + ih - v / maxN * ih;
+  const step = Math.ceil(bs.length / 12);
+  let g = '';
+  for (let i = 0; i <= 4; i++) {
+    const yy = T + ih * i / 4;
+    g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#eee"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="#888">${rptMoney_(maxV * (4 - i) / 4)}</text>`
+      + `<text x="${W - R + 6}" y="${yy + 4}" font-size="11" fill="#888">${Math.round(maxN * (4 - i) / 4)}</text>`;
+  }
+  bs.forEach((b, i) => { if (i % step === 0) g += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="#888">${escapeHtml(b.label.split('（')[0].split('-')[0])}</text>`; });
+  const line = (f, color, dash) => `<polyline fill="none" stroke="${color}" stroke-width="2"${dash ? ' stroke-dasharray="5 4"' : ''} points="${bs.map((b, i) => x(i) + ',' + f(b)).join(' ')}"/>`;
+  g += line(b => yn(b.n), '#3b7dd8', true) + line(b => yv(b.net), '#e8632c', false);
+  bs.forEach((b, i) => { g += `<circle cx="${x(i)}" cy="${yv(b.net)}" r="3.5" fill="#e8632c"><title>${escapeHtml(b.label)}：${rptMoney_(b.net)}，${b.n} 張</title></circle>`; });
+  el.innerHTML = `<div class="ops-meta" style="margin-bottom:4px;"><span style="color:#e8632c;">━ 銷售淨額（左）</span>　<span style="color:#3b7dd8;">╍ 結帳單量（右）</span>　${view === 'hour' ? '每小時（下單時間）' : view === 'day' ? '每天' : '每月'}；滑鼠移到圓點看數字</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">${g}</svg>`;
+}
+function rptRankKind_(kind, combo, btn) {
+  rptState_.combo[kind] = combo; rptState_.more[kind] = false;
+  btn.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  renderRptRank_(kind);
+}
+function rptRankMore_(kind) { rptState_.more[kind] = !rptState_.more[kind]; renderRptRank_(kind); }
+function renderRptRank_(kind) {
+  const other = kind === 'qty' ? 'amount' : 'qty';
+  const list = rptItems_.filter(i => i.combo === rptState_.combo[kind]).slice().sort((p, q) => q[kind] - p[kind] || q[other] - p[other]);
+  const el = document.getElementById('rpt-rank-' + kind);
+  if (!list.length) { el.innerHTML = '<div class="empty-hint">沒有資料</div>'; return; }
+  const show = rptState_.more[kind] ? list : list.slice(0, 10), max = list[0][kind] || 1;
+  const colors = ['#e8632c', '#f0a03c', '#f3c04a'];
+  el.innerHTML = show.map((i, n) => `<div class="rpt-rank-row"><span class="rpt-rank-no"${n < 3 ? ` style="background:${colors[n]}"` : ''}>${n + 1}</span>`
+    + `<div>${escapeHtml(i.name)}${i.size ? ' <span class="ops-meta">' + escapeHtml(i.size) + '</span>' : ''}<div class="rpt-bar-track"><div class="rpt-bar-fill" style="width:${Math.max(2, i[kind] / max * 100)}%"></div></div></div>`
+    + `<span>${kind === 'qty' ? i.qty + ' 份' : rptMoney_(i.amount)}</span></div>`).join('')
+    + (list.length > 10 ? `<button type="button" class="rpt-more" onclick="rptRankMore_('${kind}')">${rptState_.more[kind] ? '收起' : '查看更多（共 ' + list.length + ' 項）'}</button>` : '');
+}
+function renderRptHbars_() {
+  const sale = rptData_.rows.filter(r => r.k === 'sale'), quick = rptData_.quickSources || [];
+  const draw = (id, keyOf, order, nameOf) => {
+    const m = new Map();
+    sale.forEach(r => { const k = keyOf(r) || '未記錄'; const o = m.get(k) || { net: 0, n: 0 }; o.net += r.total; o.n += r.n; m.set(k, o); });
+    const pos = k => { const i = order.indexOf(k); return i < 0 ? 99 : i; };
+    const keys = [...m.keys()].sort((p, q) => pos(p) - pos(q) || p.localeCompare(q));
+    const max = Math.max(1, ...[...m.values()].map(o => o.net));
+    document.getElementById(id).innerHTML = keys.length ? keys.map(k => {
+      const o = m.get(k);
+      return `<div class="rpt-hbar"><span>${escapeHtml(nameOf(k))}</span><div class="rpt-bar-track" style="height:14px;margin:0;"><div class="rpt-bar-fill" style="height:14px;width:${Math.max(1, o.net / max * 100)}%"></div></div><span style="text-align:right;">${rptMoney_(o.net)}／${o.n} 張</span></div>`;
+    }).join('') : '<div class="empty-hint">沒有資料</div>';
+  };
+  draw('rpt-bar-src', r => r.src, ['門市現場', '線上自取', '外送平台'], k => k);
+  draw('rpt-bar-ch', r => r.ch, ['門市', '線上', '揪團', ...quick], k => RPT_CH_NAME_[k] || k);
+}
+function rptSalesTableData_() {
+  const { rows, from, to } = rptData_, v = rptState_.view.sales;
+  if (!rptState_.cols) rptState_.cols = new Set(RPT_COLS_.map(c => c[0]));
+  const cols = RPT_COLS_.filter(c => rptState_.cols.has(c[0]));
+  const head = [v === 'hour' ? '時段' : v === 'day' ? '日期' : '月份', ...cols.map(c => c[1])];
+  const line = (label, a) => [label, ...cols.map(c => RPT_MONEY_.has(c[0]) ? Math.round(a[c[0]]) : a[c[0]])];
+  const body = [line('總計', rptAgg_(rows)), ...rptBuckets_(rows, v, from, to).map(b => line(b.label, rptAgg_(b.rows)))];
+  return { head, body, money: [false, ...cols.map(c => RPT_MONEY_.has(c[0]))] };
+}
+function renderRptSalesTable_() {
+  if (!rptData_) return;
+  if (!rptState_.cols) rptState_.cols = new Set(RPT_COLS_.map(c => c[0]));
+  document.getElementById('rpt-sales-cols').innerHTML = RPT_COLS_.map(c => `<label><input type="checkbox"${rptState_.cols.has(c[0]) ? ' checked' : ''} onchange="rptToggleCol_('${c[0]}', this.checked)"> ${c[1]}</label>`).join('');
+  const t = rptSalesTableData_();
+  document.getElementById('rpt-sales-table').innerHTML = `<table class="rpt-table"><tr>${t.head.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`
+    + t.body.map((r, i) => `<tr${i === 0 ? ' class="total"' : ''}>${r.map((c, j) => `<td>${j === 0 ? escapeHtml(c) : t.money[j] ? rptMoney_(c) : Number(c).toLocaleString()}</td>`).join('')}</tr>`).join('') + '</table>';
+}
+function rptToggleCol_(k, on) { if (on) rptState_.cols.add(k); else rptState_.cols.delete(k); renderRptSalesTable_(); }
+
+// ---- 收款方式報表：分組照後台「付款方式設定」分頁（線上收款／第三方收款／線下收款）；整段沒金額的方式不出現 ----
+function rptMethodGroup_(m, quick) { return quick.includes(m) ? '第三方收款' : (RPT_ONLINE_.includes(m) || /^線上/.test(m)) ? '線上收款' : '線下收款'; }
+function rptMethodsOf_(rows, quick) {
+  const tot = new Map(); rows.forEach(r => tot.set(r.m, (tot.get(r.m) || 0) + r.total));
+  const G = ['線上收款', '第三方收款', '線下收款'];
+  const rank = m => {
+    const g = rptMethodGroup_(m, quick), list = g === '線上收款' ? RPT_ONLINE_ : g === '第三方收款' ? quick : RPT_OFFLINE_FIRST_, i = list.indexOf(m);
+    return G.indexOf(g) * 1000 + (i >= 0 ? i : m === '取餐付款' ? 900 : m === '未記錄' ? 950 : 500);
+  };
+  return [...tot.keys()].filter(m => tot.get(m) !== 0).sort((p, q) => rank(p) - rank(q) || p.localeCompare(q));
+}
+function rptPayTableData_() {
+  const { from, to } = rptData_, quick = rptData_.quickSources || [], v = rptState_.view.pay;
+  const src = document.getElementById('rpt-pay-src').value;
+  const sale = rptData_.rows.filter(r => r.k === 'sale' && (!src || r.src === src));
+  const all = rptMethodsOf_(sale, quick), ms = all.filter(m => !rptState_.payOff.has(m));
+  const line = (label, rs) => {
+    const by = {}; let net = 0, n = 0;
+    rs.forEach(r => { const o = by[r.m] || (by[r.m] = { amt: 0, n: 0 }); o.amt += r.total; o.n += r.n; net += r.total; n += r.n; });
+    return [label, ...ms.flatMap(m => { const o = by[m] || { amt: 0, n: 0 }; return [o.amt, o.n, net ? Math.round(o.amt / net * 1000) / 10 : 0]; }), net, n];
+  };
+  const body = [line('總計', sale), ...rptBuckets_(sale, v, from, to).map(b => line(b.label, b.rows))];
+  return { all, ms, quick, src, first: v === 'hour' ? '時段' : v === 'day' ? '日期' : '月份', body };
+}
+function renderRptPay_() {
+  if (!rptData_) return;
+  const t = rptPayTableData_();
+  document.getElementById('rpt-pay-methods').innerHTML = t.all.length ? '收款方式 ' + t.all.map(m => `<label><input type="checkbox"${rptState_.payOff.has(m) ? '' : ' checked'} data-m="${escapeHtml(m)}" onchange="rptTogglePay_(this.dataset.m, this.checked)"> ${escapeHtml(m)}</label>`).join('') : '';
+  const el = document.getElementById('rpt-pay-table');
+  if (!t.all.length) { el.innerHTML = '<div class="empty-hint">這段期間沒有營收</div>'; return; }
+  if (!t.ms.length) { el.innerHTML = '<div class="empty-hint">請至少勾一個收款方式</div>'; return; }
+  const groups = [];
+  t.ms.forEach(m => { const g = rptMethodGroup_(m, t.quick), last = groups[groups.length - 1]; if (last && last.g === g) last.n++; else groups.push({ g, n: 1 }); });
+  let h = `<table class="rpt-table"><tr><th rowspan="3">${t.first}</th>${groups.map(x => `<th class="grp" colspan="${x.n * 3}">${x.g}</th>`).join('')}<th rowspan="3">銷售淨額</th><th rowspan="3">結帳單量</th></tr>`
+    + `<tr>${t.ms.map(m => `<th colspan="3">${escapeHtml(m)}</th>`).join('')}</tr><tr>${t.ms.map(() => '<th>金額</th><th>單量</th><th>佔比</th>').join('')}</tr>`;
+  h += t.body.map((r, i) => `<tr${i === 0 ? ' class="total"' : ''}><td>${escapeHtml(r[0])}</td>`
+    + t.ms.map((m, j) => `<td>${rptMoney_(r[1 + j * 3])}</td><td>${r[2 + j * 3]}</td><td>${r[3 + j * 3]}%</td>`).join('')
+    + `<td>${rptMoney_(r[r.length - 2])}</td><td>${r[r.length - 1]}</td></tr>`).join('');
+  el.innerHTML = h + '</table>';
+}
+function rptTogglePay_(m, on) { if (on) rptState_.payOff.delete(m); else rptState_.payOff.add(m); renderRptPay_(); }
+
+// ---- 匯出 CSV（Excel 打得開：前面加 BOM；= + - @ 開頭的字加 ' 防 Excel 當公式）----
+function rptExport_(tab) {
+  if (!rptData_) return;
+  let rows, name;
+  if (tab === 'sales') { const t = rptSalesTableData_(); rows = [t.head, ...t.body]; name = '營業銷售明細'; }
+  else {
+    const t = rptPayTableData_();
+    rows = [[t.first, ...t.ms.flatMap(m => { const g = rptMethodGroup_(m, t.quick); return [`${g}-${m}-金額`, `${g}-${m}-單量`, `${g}-${m}-佔比%`]; }), '銷售淨額', '結帳單量'], ...t.body];
+    name = '收款方式報表' + (t.src ? '_' + t.src : '');
+  }
+  const cell = c => { let s = String(c); if (typeof c === 'string' && /^[=+\-@]/.test(s)) s = "'" + s; return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const csv = '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `${name}_${rptData_.from}_${rptData_.to}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // ---- 上下架管理同步(10-10，規格 上下架管理與POS管理調整設計_2026-10-09.md) ----
@@ -1586,6 +1890,8 @@ function switchBackofficeTab(name) {
   document.getElementById('pmg-subview-home').style.display = (name === 'posmanage' && currentPosManageSubview === 'home') ? 'block' : 'none';
   document.getElementById('pmg-subview-ver').style.display = (name === 'posmanage' && currentPosManageSubview === 'ver') ? 'block' : 'none';
   document.getElementById('pmg-subview-printer').style.display = (name === 'posmanage' && currentPosManageSubview === 'printer') ? 'block' : 'none';
+  document.getElementById('pmg-subview-report').style.display = (name === 'posmanage' && currentPosManageSubview === 'report') ? 'block' : 'none';
+  if (name === 'posmanage' && currentPosManageSubview === 'report' && !rptLoadedOnce_) { rptLoadedOnce_ = true; rptPreset_('today'); }
   if (name === 'posmanage' && currentPosManageSubview === 'printer') loadBoPrinterModes_();
   document.getElementById('pmg-subview-linebind').style.display = (name === 'posmanage' && currentPosManageSubview === 'linebind') ? 'block' : 'none';
   if (name === 'posmanage' && currentPosManageSubview === 'linebind') loadBoLineBind_();
