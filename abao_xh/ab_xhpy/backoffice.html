@@ -5672,7 +5672,8 @@ function pwDetect_(p) {
       && only(['minQty', 'targetItem', 'targetCat', 'targetSize', 'pairMode']) && (c.targetItem || c.targetCat || !c.targetSize)) return 'second';
     if (c.pairMode !== '') return null;
     if (c.requireCat)
-      return E === 'free' && c.minQty === 1 && c.targetItem && (!c.autoAddItem || c.autoAddItem === c.targetItem) && only(['targetItem', 'targetSize', 'requireCat', 'autoAddItem']) ? 'gift' : null;
+      return E === 'free' && c.minQty === 1 && c.targetItem && (!c.autoAddItem || c.autoAddItem === c.targetItem) && (!c.requireOpts || c.requireOpts === '套餐')
+        && only(['targetItem', 'targetSize', 'requireCat', 'autoAddItem', 'requireOpts']) ? 'gift' : null;   // 11-14 限定選項「套餐」＝只算套餐
     if (E === 'free' && c.minQty === 1 && only(['targetItem', 'targetSize'])) return 'freeItem';
   }
   return null;
@@ -5682,6 +5683,7 @@ function pwFieldsFrom_(p) {
   const f = pwCanon_(p);
   f._scope = f.targetCat && !f.targetItem && !f.targetItem2 ? 'cat' : (f.targetItem || f.targetItem2 ? 'item' : (/^discount/.test(f.effect) ? 'none' : 'cat'));
   f._by = f.requireCat && !f.requireItem ? 'cat' : 'item';
+  f.setOnly = f._by === 'cat' && f.requireOpts === '套餐';   // 11-14 只算套餐(16d)
   return f;
 }
 function pwFlagsFrom_(p) {
@@ -5706,7 +5708,7 @@ function pwBuildRule_(type, f) {
     r.targetSize = v('targetSize'); r.requireOpts = v('requireOpts');
   } else if (type === 'gift') {
     r.effect = 'free'; r.targetItem = v('targetItem'); r.targetSize = v('targetSize');
-    if (f._by === 'cat') { r.requireCat = v('requireCat'); r.autoAddItem = f.autoAddItem ? r.targetItem : ''; }
+    if (f._by === 'cat') { r.requireCat = v('requireCat'); r.autoAddItem = f.autoAddItem ? r.targetItem : ''; r.requireOpts = f.setOnly ? '套餐' : ''; }
     else { r.pairMode = '每份送一份'; r.requireItem = v('requireItem'); r.targetItem2 = v('targetItem2'); r.requireOpts = v('requireOpts'); }
   } else if (type === 'spend') {
     r.effect = f.effect === 'free' ? 'free' : 'amountOff'; r.pairMode = '每滿額折一份';
@@ -5770,7 +5772,7 @@ function pwSentence_(type, P, shortCat) {
   }
   if (type === 'gift') {
     const give = (P.targetItem || '?') + sz(P.targetSize) + (P.targetItem2 ? ' 或 ' + P.targetItem2 + '（二選一）' : '');
-    if (P.requireCat) return '點' + cat(P.requireCat) + '的餐點，送一份 ' + give;
+    if (P.requireCat) return '點' + cat(P.requireCat) + (P.requireOpts === '套餐' ? '的套餐（單點不算）' : '的餐點') + '，送一份 ' + give;
     return '每點一份 ' + (P.requireItem || '?') + opts + '，送一份 ' + give;
   }
   if (type === 'spend') return (P.targetItem || '?') + ' 以外的餐點每滿 $' + (P.spendStep || '?') + '，' + (P.targetItem || '?') + sz(P.targetSize) + (P.effect === 'free' ? ' 免費一份' : ' 折 $' + (P.amount || '?') + ' 一份');
@@ -5803,10 +5805,11 @@ function pwTrial_(type, P, priceOf, firstOf, shortCat) {
   } else if (type === 'gift') {
     const pb = P.targetItem ? priceOf(P.targetItem, P.targetSize) : null, pb2 = P.targetItem2 ? priceOf(P.targetItem2, P.targetSize) : null;
     const give = P.targetItem ? itemTxt(P.targetItem, pb) + (P.targetItem2 ? ' 或 ' + itemTxt(P.targetItem2, pb2) : '') : '?';
-    const buy = P.requireCat ? '1 份' + '「' + shortCat(P.requireCat) + '」的餐點' : '1 份 ' + itemTxt(P.requireItem || '?', P.requireItem ? priceOf(P.requireItem, '') : null) + (P.requireOpts ? '＋選「' + P.requireOpts.split('、')[0] + '」' : '');
+    const buy = P.requireCat ? '1 份' + '「' + shortCat(P.requireCat) + '」的' + (P.requireOpts === '套餐' ? '套餐' : '餐點') : '1 份 ' + itemTxt(P.requireItem || '?', P.requireItem ? priceOf(P.requireItem, '') : null) + (P.requireOpts ? '＋選「' + P.requireOpts.split('、')[0] + '」' : '');
     out.push('例：點 ' + buy + ' → 送 ' + give + (pb ? '，折 ' + money(pb.u) + (pb2 && pb2.u !== pb.u ? '（選 ' + P.targetItem2 + ' 折 ' + money(pb2.u) + '）' : '') : ''));
     if (P.targetItem && !pb) noPrice(P.targetItem);
     out.push(P.requireCat ? '一張券送一份' : '點幾份送幾份' + (P.targetItem2 ? '，顧客自己二選一' : ''));
+    if (P.requireCat && P.requireOpts === '套餐') out.push('只算套餐：這個分類有單點／套餐可選的品項，點單點不算（沒有套餐可選的品項照算）');
     if (P.requireCat && P.autoAddItem) out.push('店員按 POS 按鈕時，贈品會自動加進訂單');
   } else if (type === 'spend') {
     const step = Number(P.spendStep) || 0, pr = P.targetItem ? priceOf(P.targetItem, P.targetSize) : null;
@@ -5901,7 +5904,8 @@ function pwRuleHtml_(type, f) {
         ${byCat ? '點 ' + pwCatSel_('requireCat', f.requireCat) + ' 的餐點' : '點 ' + pwItemSel_('requireItem', f.requireItem, '請選點什麼')}`)
       + (byCat ? '' : pwOptsInput_(f.requireOpts, true))
       + L(`就送一份 ${pwItemSel_('targetItem', f.targetItem, '請選送什麼')} ${byCat ? '' : '或 ' + pwItemSel_('targetItem2', f.targetItem2, '（只送一種）') + '（顧客二選一）'} ${pwSizeSel_(f.targetSize)}`)
-      + (byCat ? `<label class="pw-line" style="cursor:pointer;"><input type="checkbox" data-k="autoAddItem" ${f.autoAddItem ? 'checked' : ''} onchange="${pwH_.refresh}"> 店員按 POS 按鈕時，自動把贈品加進訂單</label>`
+      + (byCat ? `<label class="pw-line" style="cursor:pointer;"><input type="checkbox" data-k="setOnly" ${f.setOnly ? 'checked' : ''} onchange="${pwH_.refresh}"> 只算套餐（點單點不送）</label>`
+        + `<label class="pw-line" style="cursor:pointer;"><input type="checkbox" data-k="autoAddItem" ${f.autoAddItem ? 'checked' : ''} onchange="${pwH_.refresh}"> 店員按 POS 按鈕時，自動把贈品加進訂單</label>`
         : '<div class="pm-tip">點幾份送幾份。節氣升級加碼：點當月美X＋按「豪華升級」＋送兩種贈品二選一（飲料選份量 M）</div>');
   }
   if (type === 'spend') return L(`${pwItemSel_('targetItem', f.targetItem, '請選品項')} ${pwSizeSel_(f.targetSize)} 以外的餐點，每滿 $ ${pwNum_('spendStep', f.spendStep, 'min="1"')}`)

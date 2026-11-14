@@ -1475,7 +1475,7 @@ function voucherTargetText_(type) {
 let pendingVoucherUse_ = null;   // {voucherId, type}
 function useVoucherToOrder_(voucherId, type) {
   const b = VOUCHER_BEHAVIOR[type] || {};
-  if (b.requireCat && !cartHasCat_(b.requireCat)) { alert(`要先點「${shortCatName(b.requireCat)}」的餐點，才能用這張券`); goToVoucherCat_(b.requireCat); return; }
+  if (b.requireCat && !cartHasReqCat_(b)) { alert(`要先點${reqCatLabel_(b)}，才能用這張券`); goToVoucherCat_(b.requireCat); return; }
   const mv = memberAllVouchers_.find(x => x.voucherId === voucherId);
   if (mv && mv.actDate && mv.actDate !== currentPickupISO_()) { alert(`這張券只能用在 ${homeMd_(mv.actDate)} 取餐的訂單，請先把取餐日改成 ${homeMd_(mv.actDate)}`); return; }
   closeWallet_();
@@ -1518,7 +1518,7 @@ function findCartLineForVoucher(type) {
   }
   const b = VOUCHER_BEHAVIOR[type];
   if (!b || !b.targetItem) return null;
-  if (b.requireCat && !cartHasCat_(b.requireCat)) return null;   // 週四雞塊券：要有定食
+  if (b.requireCat && !cartHasReqCat_(b)) return null;   // 週四雞塊券：要有定食
   return cart.find(c => !c.x2 && c.baseName === b.targetItem && (!b.targetSize || String(c.size || '').toUpperCase() === b.targetSize)) || null;
 }
 
@@ -1541,6 +1541,15 @@ function catOfLine_(c) {
   return Object.keys(CATALOG).find(k => (CATALOG[k] || []).some(it => it.name === c.baseName)) || '';
 }
 function cartHasCat_(cat) { return cart.some(c => !c.x2 && catOfLine_(c) === cat); }
+// 11-14 只算套餐(16d)：券的限定選項有「套餐」→ 要搭配的分類只算點套餐的那幾份(有單點／套餐可選的品項選了單點不算；
+// 沒有單點／套餐之分的照算)。後端 discount.js promoSetOnly＋orders.js single、平板 setOnly 同一套
+function promoSetOnly_(b) { return String((b && b.requireOpts) || '').split('、').some(t => t.trim() === '套餐'); }
+function lineIsSingle_(c) {
+  const item = (CATALOG[catOfLine_(c)] || []).find(it => it.name === c.baseName);
+  return !!(item && item.price_set) && !(c.set === true || (c.edit && c.edit.setForm === 'set'));   // set：揪團存回來的品項沒有快照
+}
+function cartHasReqCat_(b) { return cart.some(c => !c.x2 && catOfLine_(c) === b.requireCat && !(promoSetOnly_(b) && lineIsSingle_(c))); }
+function reqCatLabel_(b) { return '「' + shortCatName(b.requireCat) + '」的' + (promoSetOnly_(b) ? '套餐（單點不算）' : '餐點'); }
 function goToVoucherCat_(cat) {
   closeWallet_();
   const cartOverlay = document.getElementById('cart-overlay');
@@ -1665,7 +1674,7 @@ function catalogItemByName_(name) {
 function actGiftState_(v) {
   const b = VOUCHER_BEHAVIOR[v.type] || {};
   if (declinedGifts_.has(v.voucherId)) return 'declined';
-  if (b.requireCat && !cartHasCat_(b.requireCat)) return 'needCat';
+  if (b.requireCat && !cartHasReqCat_(b)) return 'needCat';
   if (!catalogItemByName_(b.targetItem)) return 'missing';
   if (itemAvailabilityMap[b.targetItem]) return 'soldout';
   return 'ok';
@@ -1718,7 +1727,7 @@ function actCartMatch_(b) {
   if (b.pairMode === '每份送一份') return lines.some(c => c.baseName === b.requireItem && promoOptsOk_(b, c.name));
   if (isSamePair_(b)) return lines.some(c => samePairLineOk_(b, c));
   if (b.targetCat) return lines.some(c => catOfLine_(c) === b.targetCat);
-  if (b.requireCat) return cartHasCat_(b.requireCat);
+  if (b.requireCat) return cartHasReqCat_(b);
   return !!b.targetItem && lines.some(c => c.baseName === b.targetItem);
 }
 // 雞塊日(每份送一份)：贈品份數＝購物車裡需搭配品項的份數
@@ -1827,7 +1836,7 @@ function recalcVoucherDiscounts_() {
     const mv = memberAllVouchers_.find(x => x.voucherId === v.voucherId);
     const b = VOUCHER_BEHAVIOR[v.type] || {};
     if (mv && mv.actDate && mv.actDate !== pick) return false;
-    if (b.requireCat && !cartHasCat_(b.requireCat)) return false;
+    if (b.requireCat && !cartHasReqCat_(b)) return false;
     return true;
   });
   // 請客團主結帳(10-04)：每個人自己的活動券已經折掉的件數(後端算好)先標起來，團主的券/等級優惠只算剩下的(後端同順序)
@@ -2468,7 +2477,7 @@ function actVoucherRow_(v, b, pick) {
     const st = actGiftState_(v);
     on = st === 'ok' && cart.some(c => c.lineKey === giftKey_(v.voucherId));
     if (on) status = `已自動套用：送 ${escapeHtml_(b.targetItem)}`;
-    else if (st === 'needCat') { status = `點任一份「${escapeHtml_(shortCatName(b.requireCat))}」，${escapeHtml_(b.targetItem)}自動送`; action = btn('去點' + escapeHtml_(shortCatName(b.requireCat)), `goToVoucherCat_('${b.requireCat.replace(/'/g, "\\'")}')`); }
+    else if (st === 'needCat') { status = `點任一份「${escapeHtml_(shortCatName(b.requireCat))}」${promoSetOnly_(b) ? '套餐（單點不算）' : ''}，${escapeHtml_(b.targetItem)}自動送`; action = btn('去點' + escapeHtml_(shortCatName(b.requireCat)), `goToVoucherCat_('${b.requireCat.replace(/'/g, "\\'")}')`); }
     else if (st === 'soldout') status = `${escapeHtml_(b.targetItem)}今日售完，這次無法贈送`;
     else if (st === 'missing') status = `${escapeHtml_(b.targetItem)}目前沒有供應，請洽門市`;
     else if (st === 'declined') { status = '你已移除這份贈品'; action = btn('加回贈品', `declinedGifts_.delete('${v.voucherId}');updateCartBar();renderCheckoutVoucherList();if(document.getElementById('cart-overlay').classList.contains('open'))renderCart();`); }
@@ -2488,7 +2497,7 @@ function toggleCheckoutVoucher(voucherId, type, quiet) {
     if (!behavior) return;
     const mv = memberAllVouchers_.find(x => x.voucherId === voucherId);
     if (mv && mv.actDate && mv.actDate !== currentPickupISO_()) { alert(`這張券只能用在 ${homeMd_(mv.actDate)} 取餐的訂單，請先把取餐日改成 ${homeMd_(mv.actDate)}`); return; }
-    if (behavior.requireCat && !cartHasCat_(behavior.requireCat)) { alert(`要搭配「${shortCatName(behavior.requireCat)}」的餐點才能使用這張券`); return; }
+    if (behavior.requireCat && !cartHasReqCat_(behavior)) { alert(`要搭配${reqCatLabel_(behavior)}才能使用這張券`); return; }
     if (behavior.targetCat) {
       checkoutSelectedVouchers.push({ voucherId, type, discountAmount: 0, targetLineKey: null, pair: true });   // 金額由 recalcVoucherDiscounts_ 逐件分配
     } else if (behavior.mode === 'fixed') {
@@ -4870,7 +4879,7 @@ function saveGroupCtx_() { if (!groupCtx) return; try { localStorage.setItem(gro
 // 第二次健檢(2026-09-24)：內部測試走藍新測試站(?mpgtest=1)時，分享給朋友的連結也要帶著，否則朋友付款會走到正式站
 function groupShareUrl_() { return location.origin + location.pathname + '?g=' + encodeURIComponent(groupCtx.groupId) + (MPG_SANDBOX ? '&mpgtest=1' : ''); }
 function groupItemsFromCart_() {
-  return cart.map(c => ({ lineKey: c.lineKey, name: c.name, baseName: c.baseName, size: c.size || '', price: c.price, basePrice: c.basePrice, qty: c.qty, note: c.note || '', x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined }))
+  return cart.map(c => ({ lineKey: c.lineKey, name: c.name, baseName: c.baseName, size: c.size || '', price: c.price, basePrice: c.basePrice, qty: c.qty, note: c.note || '', set: (c.edit && c.edit.setForm === 'set') || undefined, x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined }))
     .concat(otherNeedsAsGroupItems_());   // 自己選的其他需求一起存進揪團
 }
 function groupStatusClass_(st) { return st === '收單中' ? 'open' : (st === '已結單' || st === '已截止' || st === '付款中') ? 'locked' : st === '已成立' ? 'done' : 'dead'; }

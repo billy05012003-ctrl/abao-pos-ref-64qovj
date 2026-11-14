@@ -1498,7 +1498,8 @@ function applyPromoSettings_(data) {
       : p.mode === 'order'
         ? { mode: 'order', pct: p.amount, exclusive: !!p.exclusive }
         : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null, pct: p.amount, targetItem: p.targetItem || '', targetSize: p.targetSize || '',
-            requireCat: p.requireCat || '', requireItem: p.requireItem || '', exclusive: !!p.exclusive };   // 需搭配/不併用：第四波 4-1 按鈕檢查用
+            requireCat: p.requireCat || '', requireItem: p.requireItem || '', exclusive: !!p.exclusive,
+            setOnly: String(p.requireOpts || '').split('、').some(t => t.trim() === '套餐') };   // 11-14 只算套餐(16d)：限定選項有「套餐」   // 需搭配/不併用：第四波 4-1 按鈕檢查用
     // 等級優惠(2026-09-25)結帳自動套用，不放成手動按鈕(避免店員再按一次重複折)
     if (p.showAsButton && !isTierPerkPromo_(p) && isPromoInPeriod_(p)) DIRECT_DISCOUNT_TYPES.push(p.name);   // 期間外不顯示按鈕
     if (p.manualGrantable && isPromoInPeriod_(p)) MANUAL_GRANT_VOUCHER_TYPES.push(p.name);                     // 期間外不能再贈送
@@ -2113,12 +2114,18 @@ function posDiscountTypesNow_() {
   return POS_ALL_PROMOS.filter(p => p.status !== '停用' && p.showAsButton && !isTierPerkPromo_(p) && isPromoInPeriod_(p) && posActDayOk_(p.name)).map(p => p.name);
 }
 function posCatShort_(cat) { return String(cat || '').split('_').pop(); }
+// 11-14 只算套餐(16d)：有單點／套餐可選的品項，這一列選了單點(基準價不是套餐價)就不算；沒有單點／套餐之分的照算。
+// 後端 orders.js single、點餐頁 lineIsSingle_ 同一套
+function posLineIsSingle_(c) {
+  const item = (CATALOG[c.cat] || []).find(it => it.name === c.baseName);
+  return !!(item && item.price_set) && c.basePrice !== item.price_set;
+}
 // 按下活動鍵前的檢查：通過回 true；不通過跳提示回 false
 function posDiscountPrecheck_(type) {
   const b = VOUCHER_BEHAVIOR[type] || {};
   if (!posActDayOk_(type)) { alert(`今天不是「${type}」的活動日`); return false; }
   if (posMemberOnlyToday_(type) && !selectedMember) { alert(`「${type}」限會員使用，請先在上方查詢會員`); return false; }
-  if (b.requireCat && !posCart.some(c => c.cat === b.requireCat)) { alert(`「${type}」要搭配「${posCatShort_(b.requireCat)}」的餐點，請先點一份`); return false; }
+  if (b.requireCat && !posCart.some(c => c.cat === b.requireCat && !(b.setOnly && posLineIsSingle_(c)))) { alert(`「${type}」要搭配「${posCatShort_(b.requireCat)}」的${b.setOnly ? '套餐（單點不算）' : '餐點'}，請先點一份`); return false; }
   if (b.requireItem && !posCart.some(c => c.baseName === b.requireItem)) { alert(`「${type}」要搭配「${b.requireItem}」，請先點一份`); return false; }
   // 不併用：新按的是不併用、或訂單裡已經有不併用的 → 問店員要留哪一個
   const others = directDiscounts.map(d => d.type).concat(appliedVouchers.map(v => v.type)).filter(t => t !== type);
