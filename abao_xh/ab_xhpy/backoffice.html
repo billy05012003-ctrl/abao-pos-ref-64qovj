@@ -136,6 +136,32 @@
   .mc-delete-btn { background:none; border:1px solid #c94f1f; color:#c94f1f; }
   /* 區塊配置(2026-09-30) */
   .hb-chk { display:flex; gap:6px 12px; flex-wrap:wrap; margin-top:4px; font-size:0.85rem; color:#222; }
+  /* 11-14 老闆：說明精簡成一行重點，細節收進「ⓘ 規則說明」 */
+  .hb-hint { font-size:0.75rem; color:var(--muted); margin-top:4px; }
+  .hb-rule { margin-top:4px; font-size:0.75rem; color:#555; }
+  .hb-rule summary { cursor:pointer; color:var(--brand); font-weight:600; list-style:none; }
+  .hb-rule summary::-webkit-details-marker { display:none; }
+  .hb-rule summary::before { content:'ⓘ '; }
+  .hb-rule[open] summary { margin-bottom:4px; }
+  .hb-rule ul { margin:0; padding-left:18px; } .hb-rule li { margin:2px 0; }
+  /* 11-14 老闆：「正在改哪一邊」每頁都看得到；品牌範本整條換紫色 */
+  .edit-target-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding:8px 12px; border-radius:8px; background:#fff3ea; border:1px solid #f3c9ad; font-size:0.85rem; color:#7a3d14; }
+  .edit-target-bar select { padding:5px 8px; border-radius:6px; border:1px solid #e0b090; font-family:inherit; font-weight:600; }
+  .edit-target-bar.brand { background:#efe7fb; border-color:#c7b2ef; color:#4b2a8a; }
+  .edit-target-bar.brand select { border-color:#b39ae6; }
+  /* 11-14 系列＋檔期 */
+  .hb-series { border:1px solid #eadfd5; border-radius:10px; margin:6px 0; padding:4px 8px; background:#fffaf5; }
+  .hb-series > summary { cursor:pointer; padding:6px 2px; font-size:0.88rem; list-style:none; }
+  .hb-series > summary::-webkit-details-marker { display:none; }
+  .hb-series > summary::before { content:'▸ '; color:var(--muted); }
+  .hb-series[open] > summary::before { content:'▾ '; }
+  .hb-series-now { display:block; font-size:0.75rem; color:var(--muted); margin:2px 0 0 14px; }
+  .hb-ep.past { opacity:0.55; }
+  .hb-ep-st { display:inline-block; font-size:0.68rem; padding:1px 6px; border-radius:8px; background:#eee; color:#555; vertical-align:1px; }
+  .hb-ep-st.now { background:#e8632c; color:#fff; }
+  .hb-ep-st.preview { background:#ffe2b8; color:#8a4b00; }
+  .hb-ep-st.later { background:#e6eefc; color:#2f5aa8; }
+  .hb-ep-st.todo { background:#fff3c4; color:#7a5a00; }
   .hb-chk label { display:flex; align-items:center; gap:4px; }
   .hb-lunar { display:grid; grid-template-columns:repeat(6, 1fr); gap:4px; margin-top:4px; }
   .hb-lunar label { display:flex; align-items:center; gap:3px; font-size:0.8rem; color:#222; }
@@ -469,9 +495,10 @@
   <div id="payalert-list"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-menucms" class="view" style="display:none;">
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-    <label style="font-size:0.8rem;color:var(--muted);">目前編輯：</label>
+  <div class="edit-target-bar" id="mc-target-bar">
+    <b>正在改：</b>
     <select id="mc-store-select" onchange="mcSwitchStore(this.value)"></select>
+    <span id="mc-target-hint">這間店的草稿，按「發布到正式版」才生效</span>
   </div>
   <p style="font-size:0.8rem;color:var(--muted);">
     這裡改的是<b>草稿</b>版本，不會馬上讓顧客/POS看到——改完要按「發布到正式版」才會真的生效。
@@ -588,9 +615,14 @@
   </div>
   <div id="mb-subview-promo" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      這裡管理全部優惠券/折抵按鈕的「效果」本身：固定金額折抵、或依購買品項打折/免費/加一元多一件。
-      「顯示為優惠券按鈕」勾選的會出現在POS功能「優惠券」分類讓店員直接點；沒勾選的只能透過集點兌換/生日禮/註冊禮/店員贈送取得。
+      每張券的「折多少、送什麼」在這裡設定。
     </p>
+    <details class="hb-rule" style="margin:-6px 0 10px;"><summary>規則說明</summary><ul>
+      <li>效果：固定金額折抵，或依購買品項打折／免費／加一元多一件。</li>
+      <li>勾「顯示為 POS 按鈕」＝出現在門市平板「優惠券」分類讓店員點，而且只在券的生效日～到期日之間出現。</li>
+      <li>沒勾＝只能透過集點兌換、生日禮、註冊禮、店員贈送取得。</li>
+      <li>線上要自動套用，要綁在「區塊配置 → 會員好康」的活動上。</li>
+    </ul></details>
     <div id="pm-domain-controls"></div>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
@@ -606,9 +638,12 @@
   </div>
   <div id="mb-subview-blocks" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      線上點餐頁底部三個分頁「新品推薦／會員好康／線上點餐」的內容。跟優惠券同一套：改的是<b>草稿</b>，按「發布到正式版」顧客才看得到（優惠券、集點禮、加價購、區塊配置一起發布）。
-      <br>第一波只做顯示：新品卡片、活動看板（今天的活動大圖、即將到來小卡）；領券與自動折抵第二、三波才開放。
+      線上點餐頁「新品推薦」「會員好康」兩個分頁的內容。
     </p>
+    <details class="hb-rule" style="margin:-6px 0 10px;"><summary>規則說明</summary><ul>
+      <li>改的是草稿，按「發布到正式版」顧客才看得到；優惠券、集點禮、加價購、區塊配置一起發布。</li>
+      <li>會員好康的活動綁了券，優惠日線上會自動套用；沒綁就只顯示。</li>
+    </ul></details>
     <div id="hb-domain-controls"></div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
       <button type="button" class="sched-tab-btn" id="hb-tab-cards" onclick="switchHbTab('cards')">🆕 新品推薦</button>
@@ -2785,8 +2820,19 @@ function submitMcAddCategory() {
 // 切換編輯對象(自己的門市 / 品牌範本)，重新載入這份資料
 // 2026-09-16：集點禮/優惠券共用同一個MC_STORE_ID，切門市時這兩塊的快取(mbLoaded)也要失效，
 // 如果使用者當下就停在集點禮/優惠券子分頁要立刻重新載入，不然會看到上一個門市的舊資料
+// 11-14：優惠券／集點禮／區塊配置頁上也能切（跟菜單管理同一個切換）
+function mcSwitchStoreEverywhere_(storeId) {
+  const sel = document.getElementById('mc-store-select');
+  if (sel) sel.value = storeId;
+  mcSwitchStore(storeId);
+}
 function mcSwitchStore(storeId) {
   MC_STORE_ID = storeId;
+  const bar = document.getElementById('mc-target-bar');
+  if (bar) bar.classList.toggle('brand', storeId === '__brand__');
+  const hint = document.getElementById('mc-target-hint');
+  if (hint) hint.textContent = storeId === '__brand__' ? '改好按下面「同步到分店」，各店再各自發布' : '這間店的草稿，按「發布到正式版」才生效';
+  hbDraft = null;   // 11-14：換門市要一起清掉活動編輯框（以前只清 hbCurrentId，編輯框殘留成「新增」，按儲存會多建一筆）
   document.getElementById('mc-publish-row').style.display = storeId === '__brand__' ? 'none' : 'flex';
   document.getElementById('mc-sync-row').style.display = storeId === '__brand__' ? 'flex' : 'none';
   document.getElementById('mc-snapshot-panel').style.display = 'none'; // 換了編輯對象，收合快照面板避免看到上一個門市的快照
@@ -4021,8 +4067,10 @@ function renderPromoDomainControls() {
   const storeLabel = (MC_STORE_OPTIONS.find(o => o.id === MC_STORE_ID) || {}).label || MC_STORE_ID;
   const isBrand = MC_STORE_ID === '__brand__';
   const html = `
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:0.8rem;color:var(--muted);">
-      目前編輯：<b>${escapeHtml(storeLabel)}</b>${isBrand ? '' : '的草稿版本'}（要切換門市請到「菜單管理」分頁切，集點禮/優惠券跟菜單共用同一個門市切換）
+    <div class="edit-target-bar${isBrand ? ' brand' : ''}">
+      <b>正在改：</b>
+      <select onchange="mcSwitchStoreEverywhere_(this.value)">${MC_STORE_OPTIONS.map(o => `<option value="${escapeHtml(o.id)}"${o.id === MC_STORE_ID ? ' selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select>
+      <span>${isBrand ? '改好按下面「同步到分店」' : '這間店的草稿，按「發布到正式版」才生效'}；菜單、優惠券、集點禮、區塊配置一起切換</span>
     </div>
     <div style="display:${isBrand ? 'none' : 'flex'};gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
       <button type="button" class="mc-save-btn" onclick="publishPromoDomain(this)">發布到正式版</button>
@@ -4205,7 +4253,7 @@ const HB_SKIP_FIRST_ = '不含正月';
 // 底色跟點餐頁活動卡的漸層一致
 const HB_COLORS_ = { 橘: ['#ffcf8a', '#e8632c'], 黃: ['#ffe08a', '#f0a020'], 藍: ['#bcd7ff', '#4a7fd6'], 粉: ['#ffc8dc', '#e0588c'], 紫: ['#d9c8ff', '#7c5cd6'], 綠: ['#c6ecc0', '#3f9a4a'] };
 const HB_CARD_DIFF_FIELDS_ = ['block', 'title', 'desc', 'linkType', 'linkCat', 'linkItem', 'price', 'saleDate', 'tag', 'photoUrl', 'startDate', 'endDate', 'order', 'status', 'locked'];
-const HB_ACT_DIFF_FIELDS_ = ['title', 'desc', 'icon', 'color', 'photoUrl', 'ruleType', 'rule', 'excludes', 'promo', 'method', 'voucherDays', 'perPerson', 'limit', 'memberOnly', 'channels', 'startDate', 'endDate', 'order', 'status', 'locked', 'linkType', 'linkCat', 'linkItem'];
+const HB_ACT_DIFF_FIELDS_ = ['title', 'desc', 'icon', 'color', 'photoUrl', 'ruleType', 'rule', 'excludes', 'promo', 'method', 'voucherDays', 'perPerson', 'limit', 'memberOnly', 'channels', 'startDate', 'endDate', 'order', 'status', 'locked', 'linkType', 'linkCat', 'linkItem', 'series'];
 function hbCardDiffMap_(list) { return Object.fromEntries((list || []).map(c => [c.id, HB_CARD_DIFF_FIELDS_.map(f => JSON.stringify(c[f] === undefined ? '' : c[f]))])); }
 function hbActDiffMap_(list) { return Object.fromEntries((list || []).map(a => [a.id, HB_ACT_DIFF_FIELDS_.map(f => JSON.stringify(a[f] === undefined ? '' : a[f]))])); }
 function hbTitleOf_(a, b, id) { const x = (a || []).concat(b || []).find(y => y.id === id); return x ? x.title : id; }
@@ -4286,15 +4334,61 @@ function renderHbList() {
     return;
   }
   const today = hbToday_();
-  el.innerHTML = '<div>' + hbActs.map(a => {
+  const promoTag = a => a.promo ? '🎟' + a.promo + (Number(a.perPerson) > 1 ? '・每人' + a.perPerson + '組' : '') + (Number(a.limit) > 0 ? '・限量' + a.limit : '') : null;
+  const singles = hbActs.filter(a => !a.series);
+  const singleHtml = singles.map(a => {
     const next = (a.dates || [])[0];
     const when = next ? (next === today ? '今天' : '下次 ' + hbMd_(next)) : (a.ruleType === '指定日期' && !a.rule ? '⚠還沒排日期' : '60天內沒有活動日');
-    const tags = [hbRuleSummary_(a), when, a.promo ? '🎟' + a.promo + (Number(a.perPerson) > 1 ? '・每人' + a.perPerson + '組' : '') + (Number(a.limit) > 0 ? '・限量' + a.limit : '') : null, hbActLinkSummary_(a), a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
+    const tags = [hbRuleSummary_(a), when, promoTag(a), hbActLinkSummary_(a), a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
     return `<div class="mc-item-row sort-row${a.id === hbCurrentId ? ' active' : ''}" data-key="${escapeHtml(a.id)}" onclick="hbEditAct('${hbJs_(a.id)}')">
         ${sortHandleHtml_('hbDragStart_(event, this)')}<div class="sort-body"><span>${escapeHtml(a.icon || '🎁')} ${escapeHtml(a.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span></div>
       </div>`;
-  }).join('') + '</div><button type="button" class="mc-add-btn" style="margin-top:6px;" onclick="hbNewAct()">+ 新增活動</button>';
+  }).join('');
+  // 11-14 系列＋檔期：同系列收成一組，裡面照優惠日排；不能拖曳（順序就是日期）
+  const seriesHtml = hbSeriesNames_().map(name => {
+    const eps = hbSeriesEpisodes_(name);
+    const cur = eps.find(a => hbEpisodeState_(a, today).key === 'now') || eps.find(a => ['preview', 'later'].includes(hbEpisodeState_(a, today).key));
+    const head = cur ? (hbEpisodeState_(cur, today).key === 'now' ? '進行中：' : '下一檔：') + hbEpisodeLabel_(cur) + ' ' + hbSpanLabel_(cur, today) : (eps.some(a => hbEpisodeState_(a, today).key === 'todo') ? '⚠有檔期還沒排日期' : '全部已結束，記得排下一檔');
+    const open = eps.some(a => a.id === hbCurrentId) || (hbDraft && !hbCurrentId && hbDraft.series === name);
+    return `<details class="hb-series"${open ? ' open' : ''}><summary><b>📚 ${escapeHtml(name)}</b>（${eps.length} 檔）<span class="hb-series-now">${escapeHtml(head)}</span></summary>
+      ${eps.map(a => {
+        const st = hbEpisodeState_(a, today);
+        const tags = [hbSpanLabel_(a, today), promoTag(a), hbActLinkSummary_(a), a.startDate ? '顯示 ' + hbShortYmd_(a.startDate, today) + ' 起' : null].filter(Boolean).join('・');
+        return `<div class="mc-item-row hb-ep${a.id === hbCurrentId ? ' active' : ''}${st.key === 'done' || st.key === 'off' ? ' past' : ''}" onclick="hbEditAct('${hbJs_(a.id)}')">
+          <div class="sort-body"><span><span class="hb-ep-st ${st.key}">${st.label}</span> ${escapeHtml(hbEpisodeLabel_(a))}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span></div></div>`;
+      }).join('')}
+      <button type="button" class="mc-add-btn" style="margin:4px 0 6px;" onclick="hbNewAct('${hbJs_(name)}')">+ 新增一檔（沿用上一檔的設定）</button>
+    </details>`;
+  }).join('');
+  el.innerHTML = `<div>${singleHtml || '<div class="empty-hint" style="padding:6px;">目前沒有單一活動</div>'}</div>
+    <button type="button" class="mc-add-btn" style="margin-top:6px;" onclick="hbNewAct()">+ 新增活動</button>
+    ${seriesHtml ? `<div style="font-size:0.8rem;font-weight:700;color:var(--muted);margin:14px 6px 4px;">📚 系列（一檔一檔換的活動）</div>${seriesHtml}` : ''}`;
 }
+// ---- 11-14 系列＋檔期 ----
+function hbSeriesNames_() { const seen = []; hbActs.forEach(a => { if (a.series && seen.indexOf(a.series) === -1) seen.push(a.series); }); return seen; }
+// 指定日期的第一天／最後一天（每週、農曆沒有頭尾，回 null）
+function hbActSpan_(a) {
+  if (a.ruleType !== '指定日期') return null;
+  let first = null, last = null;
+  hbSplit_(a.rule).forEach(t => { const [x, y] = t.split('~'); const e = y || x; if (!first || x < first) first = x; if (!last || e > last) last = e; });
+  return first ? { first, last } : null;
+}
+function hbSeriesEpisodes_(name) {
+  return hbActs.filter(a => a.series === name).sort((a, b) => ((hbActSpan_(a) || {}).first || '9999') < ((hbActSpan_(b) || {}).first || '9999') ? -1 : 1);
+}
+function hbEpisodeState_(a, today) {
+  if (a.status === '停用') return { key: 'off', label: '停用' };
+  const s = hbActSpan_(a);
+  if (!s) return { key: 'todo', label: '未排日期' };
+  if (s.last < today) return { key: 'done', label: '已結束' };
+  if (s.first <= today) return { key: 'now', label: '進行中' };
+  if (a.startDate && a.startDate <= today) return { key: 'preview', label: '預告中' };
+  return { key: 'later', label: '未開始' };
+}
+function hbShortYmd_(ymd, today) { const [y, m, d] = ymd.split('-'); return (y !== today.slice(0, 4) ? y + '/' : '') + Number(m) + '/' + Number(d); }
+function hbSpanLabel_(a, today) { const s = hbActSpan_(a); return s ? hbShortYmd_(s.first, today) + (s.last !== s.first ? '～' + hbShortYmd_(s.last, today) : '') : (a.ruleType === '指定日期' ? '⚠還沒排日期' : hbRuleSummary_(a)); }
+// 檔名：說明開頭有【立春活動】就用它，不然用標題
+function hbEpisodeLabel_(a) { const m = String(a.desc || '').match(/^【([^】]{1,12})】/); return m ? m[1] : a.title; }
 function hbRuleSummary_(a) {
   if (a.ruleType === '每週') return '每週' + hbSplit_(a.rule).join('、');
   if (a.ruleType === '農曆') return '農曆每月' + hbSplit_(a.rule).filter(t => t !== HB_SKIP_FIRST_).join('、') + (a.rule.indexOf(HB_SKIP_FIRST_) !== -1 ? '（不含正月）' : '');
@@ -4414,7 +4508,9 @@ function hbButtonsHtml_(isNew, save, del) {
 function hbDragStart_(e, handle) {
   const isCard = hbTab === 'cards';
   startListDrag(e, handle.closest('.sort-row'), keys =>
-    apiPost({ action: isCard ? 'reorderHomeCards' : 'reorderHomeActs', order: keys, storeId: MC_STORE_ID, version: MC_STATUS }).then(d => {
+    // 活動：系列的檔期不在拖曳清單裡，接在單一活動後面（照日期）一起送，排序號才不會撞
+    (keys = isCard ? keys : keys.concat(hbSeriesNames_().flatMap(n => hbSeriesEpisodes_(n).map(a => a.id))),
+    apiPost({ action: isCard ? 'reorderHomeCards' : 'reorderHomeActs', order: keys, storeId: MC_STORE_ID, version: MC_STATUS })).then(d => {
       if (d.status === 'ok') {
         (isCard ? hbCards : hbActs).forEach(x => { const i = keys.indexOf(x.id); if (i !== -1) x.order = i + 1; });
         if (isCard) hbCards.sort((a, b) => (a.block === b.block ? a.order - b.order : (a.block === '新品上市' ? -1 : 1)));
@@ -4499,10 +4595,17 @@ function moveHbItem(dir) {
 }
 
 // ---------- 會員好康活動編輯 ----------
-function hbNewAct() {
+function hbNewAct(series) {
   hbCurrentId = null;
   hbDraft = { kind: 'act', title: '', desc: '', icon: '🎁', color: '橘', photoUrl: '', ruleType: '每週', weekdays: [], lunarDays: [], skipFirst: false, dateTokens: [], exTokens: [], promo: '', method: '領券',
-    memberOnly: false, channels: ['線上', '門市'], startDate: '', endDate: '', status: '啟用', locked: false, linkType: '', linkCat: '', linkItem: '' };
+    memberOnly: false, channels: ['線上', '門市'], startDate: '', endDate: '', status: '啟用', locked: false, linkType: '', linkCat: '', linkItem: '', series: '' };
+  // 系列新增一檔：沿用最後一檔的標題、圖示、底色、對象通路、限領限量；日期、說明、綁券、連結每檔不同，留空
+  if (series) {
+    const eps = hbSeriesEpisodes_(series), last = eps[eps.length - 1];
+    Object.assign(hbDraft, { series, ruleType: '指定日期' });
+    if (last) Object.assign(hbDraft, { title: last.title, icon: last.icon || '🎁', color: last.color || '橘', memberOnly: !!last.memberOnly,
+      channels: (last.channels || ['線上', '門市']).slice(), perPerson: last.perPerson, limit: last.limit, method: last.method });
+  }
   renderHbList(); renderHbEditor(); scrollEditorIntoView_('hb-editor');
 }
 function hbEditAct(id, noScroll) {
@@ -4540,7 +4643,18 @@ function renderHbActEditor_(el) {
       <div style="position:absolute;left:12px;bottom:10px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.35);"><b style="font-size:1.05rem;">${escapeHtml(d.title || '活動標題')}</b><div style="font-size:0.75rem;">${escapeHtml(d.desc || '一行說明')}</div></div>
     </div>
     <label class="mc-field">活動標題（最多20字）<input maxlength="20" value="${escapeHtml(d.title)}" placeholder="例：週四定食日" oninput="hbDraft.title=this.value"></label>
-    <label class="mc-field">一行說明（最多60字）<input maxlength="60" value="${escapeHtml(d.desc)}" placeholder="例：消費定食送雞塊乙份" oninput="hbDraft.desc=this.value"></label>
+    <label class="mc-field">一行說明（最多60字）<input maxlength="60" value="${escapeHtml(d.desc)}" placeholder="${d.series ? '例：【春分活動】第二件六折' : '例：消費定食送雞塊乙份'}" oninput="hbDraft.desc=this.value"></label>
+    <label class="mc-field">屬於哪個系列（選填）<input maxlength="20" list="hb-series-list" value="${escapeHtml(d.series || '')}" placeholder="例：八大節氣、雞塊日" oninput="hbDraft.series=this.value.trim()">
+      <datalist id="hb-series-list">${hbSeriesNames_().map(n => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
+      <span class="hb-hint">一檔一檔換的活動（節氣、每月雞塊日）填同一個系列，一次排好，時間到自動換檔。</span>
+    </label>
+    <details class="hb-rule" style="margin:-4px 0 10px;"><summary>系列規則說明</summary><ul>
+      <li>每一檔是獨立的活動：自己的說明、優惠日、顯示期間、綁的券、去點餐連結。</li>
+      <li>同一個系列裡，兩檔的優惠日不能重疊（存檔時會擋）。</li>
+      <li>「開始顯示」空白時，自動設成第一個優惠日的 3 週前，顧客一次只會看到當期和下一檔預告。</li>
+      <li>說明用【檔名】開頭（例：【春分活動】），左邊清單就會用它當檔名。</li>
+      <li>系列的檔期在左邊清單照日期排，不能拖曳。</li>
+    </ul></details>
     <div class="mc-field-row">
       <label class="mc-field" style="max-width:120px;">圖示（表情符號）<input maxlength="4" value="${escapeHtml(d.icon)}" oninput="hbDraft.icon=this.value"></label>
       <div class="mc-field">底色（沒上傳圖片時用）
@@ -4555,38 +4669,46 @@ function renderHbActEditor_(el) {
         <span id="hb-photo-status" style="font-size:0.75rem;color:var(--muted);"></span>
       </div>
     </div>
-    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">活動日規則
+    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;"><b>哪幾天有優惠</b>
       <div class="hb-chk" style="margin-bottom:8px;">
         ${['每週', '農曆', '指定日期'].map(t => `<label><input type="radio" name="hb-ruletype" ${d.ruleType === t ? 'checked' : ''} onchange="hbDraft.ruleType='${t}';renderHbEditor();"> ${t === '每週' ? '每週幾' : t === '農曆' ? '農曆每月幾日' : '指定日期（雞塊日、節氣）'}</label>`).join('')}
       </div>
       ${d.ruleType === '每週' ? `<div class="hb-chk">${HB_WEEKDAYS_.split('').map(w => `<label><input type="checkbox" ${d.weekdays.indexOf(w) !== -1 ? 'checked' : ''} onchange="hbToggle_(hbDraft.weekdays,'${w}',this.checked);hbSchedulePreview_();"> 週${w}</label>`).join('')}</div>` : ''}
       ${d.ruleType === '農曆' ? `<div class="hb-lunar">${HB_LUNAR_DAYS_.map(x => `<label><input type="checkbox" ${d.lunarDays.indexOf(x) !== -1 ? 'checked' : ''} onchange="hbToggle_(hbDraft.lunarDays,'${x}',this.checked);hbSchedulePreview_();"> ${x}</label>`).join('')}</div>
         <label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:#222;font-size:0.85rem;"><input type="checkbox" ${d.skipFirst ? 'checked' : ''} onchange="hbDraft.skipFirst=this.checked;hbSchedulePreview_();"> 春節當月不辦（跳過正月）</label>
-        <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">系統內建 2026～2030 年農曆換算，下面會列出換算好的國曆日期給您核對。</div>` : ''}
+        <div class="hb-hint">下面會列出換算好的國曆日期給您核對（內建 2026～2030 年農曆）。</div>` : ''}
       ${d.ruleType === '指定日期' ? `<div class="mc-tags" style="margin:4px 0;">${tokensHtml(d.dateTokens, 'dateTokens')}</div>
         <button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="openHbCal('dateTokens')">📅 選日期</button>
-        <div style="font-size:0.72rem;color:var(--muted);">可以點單天，或切到「選一段」點開始、結束（節氣檔 7 天）。日期還沒排可以先空著。</div>` : ''}
+        <div class="hb-hint">點單天，或切「選一段」點開始和結束（節氣檔 7 天）；還沒排可以先空著。</div>` : ''}
     </div>
-    <div class="mc-field">排除日期（選填，例如店休、跟節氣檔撞期）
+    <div class="mc-field">不辦的日子（選填）
       <div class="mc-tags" style="margin:4px 0;">${tokensHtml(d.exTokens, 'exTokens')}</div>
-      <button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="openHbCal('exTokens')">📅 選排除日期</button>
+      <button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="openHbCal('exTokens')">📅 選不辦的日子</button>
+      <div class="hb-hint">例如店休、跟節氣檔撞期。</div>
     </div>
-    <div class="mc-field">接下來 60 天的活動日（核對用，已扣排除日期、只算活動期間內）
+    <div class="mc-field">接下來 60 天會有優惠的日子（核對用）
       <div id="hb-preview" style="margin-top:4px;"><span style="font-size:0.78rem;color:var(--muted);">計算中…</span></div>
     </div>
-    <div class="mc-field">對象與通路
+    <div class="mc-field">誰可以用、在哪裡用
       <div class="hb-chk">
         <label><input type="checkbox" ${d.memberOnly ? 'checked' : ''} onchange="hbDraft.memberOnly=this.checked"> 會員限定</label>
         <label><input type="checkbox" ${d.channels.indexOf('線上') !== -1 ? 'checked' : ''} onchange="hbToggle_(hbDraft.channels,'線上',this.checked)"> 線上點餐</label>
         <label><input type="checkbox" ${d.channels.indexOf('門市') !== -1 ? 'checked' : ''} onchange="hbToggle_(hbDraft.channels,'門市',this.checked)"> 門市平板</label>
       </div>
     </div>
-    <div class="mc-field-row">
-      <label class="mc-field" style="max-width:180px;">活動開始（選填）<input type="date" value="${escapeHtml(d.startDate || '')}" onchange="hbDraft.startDate=this.value;hbSchedulePreview_();"></label>
-      <label class="mc-field" style="max-width:180px;">活動結束（選填）<input type="date" value="${escapeHtml(d.endDate || '')}" onchange="hbDraft.endDate=this.value;hbSchedulePreview_();"></label>
+    <div class="mc-field"><b>會員好康頁顯示期間（選填）</b>
+      <div class="mc-field-row" style="margin-top:4px;">
+        <label class="mc-field" style="max-width:180px;">開始顯示<input type="date" value="${escapeHtml(d.startDate || '')}" onchange="hbDraft.startDate=this.value;hbSchedulePreview_();"></label>
+        <label class="mc-field" style="max-width:180px;">停止顯示<input type="date" value="${escapeHtml(d.endDate || '')}" onchange="hbDraft.endDate=this.value;hbSchedulePreview_();"></label>
+      </div>
+      <div class="hb-hint">空白＝一直顯示。可以比優惠日早幾天開始，當預告。</div>
+      <details class="hb-rule"><summary>規則說明</summary><ul>
+        <li>上面「哪幾天有優惠」才是真正折扣的日子；這裡是活動卡在會員好康頁出現的期間。</li>
+        <li>期間外的日子，就算在上面選了也不算優惠日、看板也不顯示（例：週二活動只辦到 12/31，停止顯示填 12/31）。</li>
+        <li>例：立春 2/4～2/11 有優惠，開始顯示填 1/14＝提前約 3 週預告。</li>
+      </ul></details>
     </div>
-    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">空白＝一直辦下去。期間外的日子不算活動日，看板也不顯示（例如週二ㄋㄟㄋㄟ日只辦到 12/31，結束填 12/31）。</div>
-    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">優惠內容
+    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;"><b>優惠內容</b>
       <div class="mc-field-row" style="margin-top:6px;">
         <label class="mc-field" style="max-width:130px;">每人限領(組)<input type="number" min="1" max="99" step="1" value="${d.perPerson === '' || d.perPerson == null ? '' : d.perPerson}" placeholder="1" oninput="hbDraft.perPerson=this.value"></label>
         <label class="mc-field" style="max-width:150px;">每天限量(組，本店)<input type="number" min="1" max="9999" step="1" value="${d.limit === '' || d.limit == null ? '' : d.limit}" placeholder="不限" oninput="hbDraft.limit=this.value"></label>
@@ -4598,7 +4720,13 @@ function renderHbActEditor_(el) {
           </select>
         </label>
       </div>
-      <div style="font-size:0.72rem;color:var(--muted);">線上（10-02 第三波）：活動日取餐的訂單，會員點了符合的餐點，系統自動發券並套用，顧客不用按「領券」；只能用在活動日取餐的訂單。每人限領＝每人每個活動日最多幾組（空白＝1；雞塊日一張券就是點幾份送幾份）。每天限量＝算已付款的組數，退款會還名額，空白＝不限。優惠券效果在「優惠券」那頁設定（週二：打5折＋適用分類茶拿鐵；週四：全額免費＋適用品項雞塊＋需搭配分類定食；買一送一／六折／加一元多一件／雞塊日看那頁的「配對方式」）。沒綁券＝只在看板顯示。</div>
+      <div class="hb-hint">綁一張券＝優惠日自動折；不綁＝只在會員好康頁顯示、不折扣。</div>
+      <details class="hb-rule"><summary>規則說明</summary><ul>
+        <li>線上：優惠日取餐的訂單，會員點了符合的餐點就自動套用，顧客不用按「領券」。</li>
+        <li>每人限領＝每人每個優惠日最多幾組，空白＝1；「每份送一份」（雞塊日、節氣贈品）＝點幾份送幾份。</li>
+        <li>每天限量＝本店每天已付款的組數，退款會還名額；空白＝不限。</li>
+        <li>折多少、送什麼、要搭配什麼，在「優惠券」頁設定（例：週二＝打5折＋茶拿鐵分類；週四＝雞塊免費＋需搭配定食）。</li>
+      </ul></details>
     </div>
     ${hbActLinkHtml_(d)}
     ${hbStatusLockHtml_(d)}
@@ -4696,12 +4824,19 @@ function saveHbAct(btn) {
   if (d.ruleType !== '指定日期' && !rule) { alert(d.ruleType === '每週' ? '請至少勾一個星期幾' : '請至少勾一個農曆日'); return; }
   if (!d.channels.length) { alert('通路至少要選一個'); return; }
   if (d.startDate && d.endDate && d.startDate > d.endDate) { alert('活動開始不能晚於活動結束'); return; }
+  // 11-14 系列的檔期：開始顯示空白＝第一個優惠日前 3 週（不然顧客會同時看到好幾檔）
+  if (d.series && !d.startDate && d.ruleType === '指定日期' && d.dateTokens.length) {
+    const first = d.dateTokens.map(t => t.split('~')[0]).sort()[0];
+    const [y, m, dd] = first.split('-').map(Number), x = new Date(y, m - 1, dd - 21);
+    d.startDate = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+  }
   const act = { id: hbCurrentId || undefined, storeId: MC_STORE_ID, version: MC_STATUS, title: d.title.trim(), desc: d.desc.trim(), icon: d.icon.trim(), color: d.color, photoUrl: d.photoUrl || '',
     ruleType: d.ruleType, rule, excludes: d.exTokens.slice().sort().join('、'), memberOnly: !!d.memberOnly, channels: d.channels,
     promo: d.promo || '', method: d.method === '自動折' ? '自動折' : '領券',
     startDate: d.startDate, endDate: d.endDate, status: d.status, locked: !!d.locked,
     linkType: d.linkType || '', linkCat: d.linkCat || '', linkItem: d.linkItem || '',
-    perPerson: d.perPerson == null ? '' : String(d.perPerson).trim(), limit: d.limit == null ? '' : String(d.limit).trim() };
+    perPerson: d.perPerson == null ? '' : String(d.perPerson).trim(), limit: d.limit == null ? '' : String(d.limit).trim(),
+    series: String(d.series || '').trim() };
   hbSave_(btn, { action: 'upsertHomeAct', act });
 }
 function deleteHbAct() {
