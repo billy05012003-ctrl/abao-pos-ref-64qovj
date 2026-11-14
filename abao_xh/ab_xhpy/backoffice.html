@@ -115,6 +115,27 @@
   .pm-help th { text-align:left; white-space:nowrap; vertical-align:top; padding:4px 10px 4px 0; color:#222; font-weight:600; }
   .pm-help td { padding:4px 0; line-height:1.5; border-bottom:1px solid #eee; }
   .pm-help tr:last-child td { border-bottom:none; }
+  /* 優惠券範本精靈(11-14 第 2 段)：類型卡片、一句話規則、預覽 */
+  .pw-step { font-size:0.82rem; font-weight:700; color:#222; margin:14px 0 6px; }
+  .pw-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:6px; }
+  .pw-card { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-family:inherit; color:#222; }
+  .pw-card b { font-size:0.84rem; }
+  .pw-card small { font-size:0.7rem; color:var(--muted); line-height:1.35; }
+  .pw-card .pw-ic { font-size:1.05rem; }
+  .pw-card.on { border-color:var(--brand); background:#fff4ec; box-shadow:0 0 0 1px var(--brand) inset; }
+  .pw-rule { background:#faf6f2; border-radius:8px; padding:10px 12px; font-size:0.88rem; color:#222; line-height:2.3; }
+  .pw-rule .pw-line { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; }
+  .pw-in { padding:5px 6px; border:1px solid var(--border); border-radius:6px; font-size:0.86rem; color:#222; font-family:inherit; background:#fff; max-width:100%; }
+  input.pw-in[type=number] { width:76px; }
+  input.pw-in.pw-wide { width:260px; }
+  .pw-rule .pm-mini-btn { padding:4px 8px; }
+  .pw-preview { border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:0.84rem; line-height:1.6; }
+  .pw-preview .pw-sent { font-size:0.95rem; font-weight:700; color:#222; margin-bottom:4px; }
+  .pw-preview ul { margin:4px 0 0; padding-left:18px; }
+  .pw-preview .pw-err { color:#c0392b; font-weight:600; margin-top:6px; }
+  .pw-usage { background:#fff8e1; border:1px solid #f0d58a; border-radius:8px; padding:7px 10px; font-size:0.8rem; margin:8px 0; line-height:1.5; }
+  .pw-adv-link { background:none; border:none; color:var(--muted); text-decoration:underline; font-size:0.78rem; cursor:pointer; padding:4px 0; font-family:inherit; }
+  .pw-note { background:#eef4fb; border:1px solid #c9dbef; border-radius:8px; padding:7px 10px; font-size:0.8rem; margin-bottom:10px; line-height:1.5; }
   .pm-checks { display:flex; flex-wrap:wrap; gap:8px 22px; font-size:0.85rem; color:#222; margin:4px 0 12px; }
   .pm-checks label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   .mc-save-btn, .mc-delete-btn { padding:9px 16px; border-radius:7px; border:none; font-size:0.85rem; cursor:pointer; margin-right:8px; }
@@ -4047,6 +4068,7 @@ let pmPromos = [];
 let pgGifts = [];
 let bgGifts = [];
 let rgGifts = [];
+let pmActs_ = [];   // 同一份 promoSettings 讀回來的會員好康活動(只用來列「這張券用在哪」)
 
 // 2026-09-16多店架構：集點禮/優惠券沿用菜單管理同一個MC_STORE_ID/MC_STATUS(目前編輯門市/草稿層)，
 // 不另外做第二套門市切換——要切門市請到「菜單管理」分頁切，這裡三個功能編輯的都是同一個「門市」概念
@@ -4056,6 +4078,7 @@ function fetchPromoSettings_() {
     pmPromos = data.promos;
     pgGifts = data.pointGifts;
     pmAddons = data.addons || [];
+    pmActs_ = data.homeActs || [];   // 11-14 範本精靈：編輯優惠券時列出「這張券用在哪些活動」
     return data;
   });
 }
@@ -5083,15 +5106,33 @@ function pmMinTierChanged() {
   document.getElementById('pm-f-allownonmember-wrap').style.display = hasTier ? 'flex' : 'none';
 }
 
+// 11-14 起右邊編輯區先開「範本精靈」(renderPwEditor_)；判斷不出類型的券、或老闆按「進階」才開下面這個全部欄位的編輯框
 function renderPmEditor() {
   if (pmEditorMode === 'addon') { renderAdEditor(); return; }
+  const isNew = pmCurrentName === null;
+  const p = isNew ? null : pmPromos.find(x => x.name === pmCurrentName);
+  if (!isNew && !p) { document.getElementById('pm-editor').innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增優惠券」</div>'; return; }
+  // 換了一張券、換了門市，或同一張券的資料重新讀回來不一樣了，才重新判斷類型(不然老闆正在選的類型會被洗掉)
+  const key = MC_STORE_ID + '|' + (isNew ? '\u0000new' : pmCurrentName), src = isNew ? '' : JSON.stringify(p);
+  if (!pwState_ || pwState_.key !== key || pwState_.src !== src) {
+    const type = isNew ? null : pwDetect_(p);
+    const keepAdv = !!(pwState_ && pwState_.key === key && pwState_.advanced);   // 在進階框存檔後重新讀回來，留在進階框
+    pwState_ = { key, src, type, auto: !isNew && !type, advanced: keepAdv, name: isNew ? '' : p.name,
+      f: pwFieldsFrom_(isNew ? { mode: 'item' } : p), flags: pwFlagsFrom_(isNew ? {} : p) };
+  }
+  if (pwState_.advanced || pwState_.auto) renderPmEditorAdvanced_(); else renderPwEditor_();
+}
+
+function renderPmEditorAdvanced_() {
   const el = document.getElementById('pm-editor');
   const isNew = pmCurrentName === null;
   const p = isNew ? {} : (pmPromos.find(x => x.name === pmCurrentName) || {});
-  if (!isNew && !pmPromos.find(x => x.name === pmCurrentName)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增優惠券」</div>'; return; }
   const mode = p.mode || 'fixed';
   el.innerHTML = `
-    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增優惠券' : '編輯優惠券'}</h3>
+    ${pwState_ && pwState_.auto ? '<div class="pw-note">這張券的設定組合比較特別，範本精靈認不出是哪一種，所以直接用全部欄位編輯（存檔方式跟以前一樣）。</div>'
+      : '<div style="margin-bottom:6px;"><button type="button" class="pw-adv-link" onclick="pwState_.advanced=false;renderPmEditor();">← 回到範本精靈</button></div>'}
+    ${isNew ? '' : pwUsageHtml_(pmCurrentName)}
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增優惠券' : '編輯優惠券'}（進階：全部欄位）</h3>
     <label class="mc-field">名稱<input id="pm-f-name" value="${escapeHtml(p.name || '')}"></label>
     <label class="mc-field">效果模式
       <select id="pm-f-mode" onchange="pmModeChanged()">
@@ -5334,6 +5375,437 @@ function deletePromo() {
     pmCurrentName = null;
     return loadPromos();
   }).catch(err => alert('刪除失敗：' + err.message));
+}
+
+// ======== 優惠券範本精靈(11-14 優惠活動改版第 2 段，規格 優惠活動改版規格_2026-11-14.md) ========
+// 老闆 11-14：優惠券編輯「一點都不直覺」→ ①選類型(卡片) ②一句話填規則 ③期間 ④怎麼拿到 ⑤預覽試算。
+// 只改後台畫面：資料格式完全不變(同一組欄位、同一個 upsertPromo)，線上點餐頁、平板、折扣算法都不用動。
+// 舊券打開時自動判斷類型(pwDetect_)；欄位組合特別、判斷不出來的直接開「進階」(原本全部欄位的編輯框)。
+// 安全原則：每種類型只寫自己那幾個規則欄位，其他規則欄位一律清空——原本編輯框存檔也是這樣(用不到的欄位送空白)，
+// 判斷類型時也只認「沒用到別的欄位」的券，所以打開→存回去跟原本編輯框存出來逐欄相同(預覽頁 ?pwtest=1 逐張核對)。
+const PW_TYPES_ = [
+  { key: 'cash', icon: '💵', title: '折抵金額', eg: '20元兌換券' },
+  { key: 'freeItem', icon: '🎁', title: '免費兌換一份', eg: '荷包蛋兌換券、公關費' },
+  { key: 'second', icon: '✌️', title: '第二件打折', eg: '週二茶拿鐵第二件五折' },
+  { key: 'bogo', icon: '👯', title: '買一送一／加一元多一件', eg: '咖B日、初一' },
+  { key: 'gift', icon: '🎀', title: '點 A 送 B', eg: '週四定食送雞塊、雞塊日、節氣贈品' },
+  { key: 'spend', icon: '🧾', title: '每滿額折一份', eg: '冬至玉米濃湯' },
+  { key: 'orderPct', icon: '🏷️', title: '整張打折（限 POS）', eg: '整張95折' },
+  { key: 'tier', icon: '👑', title: '會員等級優惠', eg: '金寶限定買一送一（自動套用）' }
+];
+const PW_RULE_KEYS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'targetItem', 'targetSize', 'targetCat', 'requireCat', 'targetItem2', 'requireItem', 'pairMode', 'requireOpts', 'spendStep'];
+const PW_EFFECT_LABEL_ = { free: '免費', discount50: '打5折', discount60: '打6折', addOne: '只收 $1', amountOff: '折 $N' };
+let pwState_ = null;   // {key, src, type, auto(判斷不出來), advanced(老闆按進階), name, f(規則欄位), flags(期間／按鈕／等級…)}
+
+// 規則欄位整理成固定格式：數字轉數字、空的一律 ''；原本編輯框存檔時用不到的欄位(例如「固定金額」的品項欄)也當空的
+function pwCanon_(p) {
+  const s = v => v == null ? '' : String(v).trim();
+  const n = v => (v === '' || v == null || isNaN(Number(v))) ? '' : Number(v);
+  const item = p.mode === 'item', effect = item ? s(p.effect) : '';
+  const c = { mode: s(p.mode), effect, amount: '', minQty: '', autoAddItem: '', targetItem: '', targetSize: '', targetCat: '', requireCat: '', targetItem2: '', requireItem: '', pairMode: '', requireOpts: '', spendStep: '' };
+  if (!item) { c.amount = n(p.amount); return c; }
+  if (effect === 'pct' || effect === 'amountOff') c.amount = n(p.amount);
+  c.minQty = n(p.minQty) === '' ? 1 : n(p.minQty);
+  ['autoAddItem', 'targetItem', 'targetCat', 'requireCat', 'targetItem2', 'requireItem', 'pairMode'].forEach(k => { c[k] = s(p[k]); });
+  c.targetSize = s(p.targetSize).toUpperCase() === 'M' || s(p.targetSize).toUpperCase() === 'L' ? s(p.targetSize).toUpperCase() : '';
+  c.requireOpts = s(p.requireOpts).split('、').map(x => x.trim()).filter(Boolean).join('、');
+  c.spendStep = Number(p.spendStep) > 0 ? Number(p.spendStep) : '';
+  return c;
+}
+// 判斷舊券是哪一種；有用到該類型以外的欄位就回 null(→進階)
+function pwDetect_(p) {
+  const c = pwCanon_(p);
+  const used = k => k === 'minQty' ? c.minQty !== 1 : c[k] !== '';
+  const only = allowed => PW_RULE_KEYS_.every(k => k === 'mode' || k === 'effect' || allowed.indexOf(k) !== -1 || !used(k));
+  if (c.mode === 'fixed') return 'cash';
+  if (c.mode === 'order') return 'orderPct';
+  if (c.mode !== 'item') return null;
+  const E = c.effect;
+  // 等級優惠：跟清單分組 pmGroupOf_ 同一個判斷(POS 按鈕＋不可贈送＋最低等級＋適用品項)
+  if (p.showAsButton && !p.manualGrantable && p.minTier && c.targetItem)
+    return ['free', 'discount60', 'discount50'].indexOf(E) !== -1 && c.minQty >= 1 && only(['minQty', 'targetItem', 'targetSize']) ? 'tier' : null;
+  if (c.pairMode === '每滿額折一份')
+    return (E === 'amountOff' || E === 'free') && c.minQty === 1 && c.targetItem && c.spendStep && only(['amount', 'targetItem', 'targetSize', 'pairMode', 'spendStep']) ? 'spend' : null;
+  if (c.pairMode === '同款同客製化') {
+    const items = c.targetItem || c.targetItem2;
+    return ((E === 'free' && c.minQty === 2) || (E === 'addOne' && c.minQty === 1)) && (items ? !c.targetCat : c.targetCat)
+      && only(['minQty', 'targetItem', 'targetItem2', 'targetCat', 'targetSize', 'requireOpts', 'pairMode']) ? 'bogo' : null;
+  }
+  if (c.pairMode === '每份送一份')
+    return E === 'free' && c.minQty === 1 && c.targetItem && c.requireItem && only(['targetItem', 'targetItem2', 'targetSize', 'requireItem', 'requireOpts', 'pairMode']) ? 'gift' : null;
+  if (c.pairMode === '同款' || c.pairMode === '') {
+    if ((E === 'discount50' || E === 'discount60') && c.minQty === 2 && !(c.targetItem && c.targetCat) && !(c.targetItem && c.pairMode === '')
+      && only(['minQty', 'targetItem', 'targetCat', 'targetSize', 'pairMode']) && (c.targetItem || c.targetCat || !c.targetSize)) return 'second';
+    if (c.pairMode !== '') return null;
+    if (c.requireCat)
+      return E === 'free' && c.minQty === 1 && c.targetItem && (!c.autoAddItem || c.autoAddItem === c.targetItem) && only(['targetItem', 'targetSize', 'requireCat', 'autoAddItem']) ? 'gift' : null;
+    if (E === 'free' && c.minQty === 1 && only(['targetItem', 'targetSize'])) return 'freeItem';
+  }
+  return null;
+}
+// 精靈畫面用的欄位：規則欄位＋畫面自己用的 _scope(分類／品項／不指定)、_by(點品項／點分類)
+function pwFieldsFrom_(p) {
+  const f = pwCanon_(p);
+  f._scope = f.targetCat && !f.targetItem && !f.targetItem2 ? 'cat' : (f.targetItem || f.targetItem2 ? 'item' : (/^discount/.test(f.effect) ? 'none' : 'cat'));
+  f._by = f.requireCat && !f.requireItem ? 'cat' : 'item';
+  return f;
+}
+function pwFlagsFrom_(p) {
+  return { showAsButton: !!p.showAsButton, manualGrantable: !!p.manualGrantable, exclusive: !!p.exclusive, status: p.status === '停用' ? '停用' : '啟用',
+    startDate: p.startDate || '', endDate: p.endDate || '', minTier: p.minTier || '', allowNonMember: p.allowNonMember !== false, locked: !!p.locked };
+}
+// 依類型組出規則欄位：只寫這類型用得到的，其他一律空白
+function pwBuildRule_(type, f) {
+  const r = { mode: type === 'cash' ? 'fixed' : (type === 'orderPct' ? 'order' : 'item'), effect: '', amount: '', minQty: '', autoAddItem: '', targetItem: '', targetSize: '', targetCat: '', requireCat: '', targetItem2: '', requireItem: '', pairMode: '', requireOpts: '', spendStep: '' };
+  const v = k => f[k] == null ? '' : f[k];
+  if (type === 'cash' || type === 'orderPct') { r.amount = v('amount'); return r; }
+  r.minQty = 1;
+  if (type === 'freeItem') { r.effect = 'free'; r.targetItem = v('targetItem'); r.targetSize = r.targetItem ? v('targetSize') : ''; }
+  else if (type === 'second') {
+    r.effect = f.effect === 'discount60' ? 'discount60' : 'discount50'; r.minQty = 2;
+    if (f._scope === 'cat') { r.targetCat = v('targetCat'); r.pairMode = f.pairMode === '同款' ? '同款' : ''; r.targetSize = v('targetSize'); }
+    else if (f._scope === 'item') { r.targetItem = v('targetItem'); r.pairMode = '同款'; r.targetSize = v('targetSize'); }
+    else r.pairMode = f.pairMode === '同款' ? '同款' : '';
+  } else if (type === 'bogo') {
+    r.effect = f.effect === 'addOne' ? 'addOne' : 'free'; r.minQty = r.effect === 'addOne' ? 1 : 2; r.pairMode = '同款同客製化';
+    if (f._scope === 'cat') r.targetCat = v('targetCat'); else { r.targetItem = v('targetItem'); r.targetItem2 = v('targetItem2'); }
+    r.targetSize = v('targetSize'); r.requireOpts = v('requireOpts');
+  } else if (type === 'gift') {
+    r.effect = 'free'; r.targetItem = v('targetItem'); r.targetSize = v('targetSize');
+    if (f._by === 'cat') { r.requireCat = v('requireCat'); r.autoAddItem = f.autoAddItem ? r.targetItem : ''; }
+    else { r.pairMode = '每份送一份'; r.requireItem = v('requireItem'); r.targetItem2 = v('targetItem2'); r.requireOpts = v('requireOpts'); }
+  } else if (type === 'spend') {
+    r.effect = f.effect === 'free' ? 'free' : 'amountOff'; r.pairMode = '每滿額折一份';
+    r.targetItem = v('targetItem'); r.targetSize = v('targetSize'); r.spendStep = v('spendStep');
+    if (r.effect === 'amountOff') r.amount = v('amount');
+  } else if (type === 'tier') {
+    r.effect = ['free', 'discount60', 'discount50'].indexOf(f.effect) !== -1 ? f.effect : 'free';
+    r.minQty = v('minQty') === '' ? 1 : v('minQty'); r.targetItem = v('targetItem'); r.targetSize = v('targetSize');
+  }
+  return r;
+}
+// 送給 upsertPromo 的整包(欄位跟原本編輯框 savePromo 一模一樣)
+function pwPayload_(type, name, f, flags, originalName, storeId, version) {
+  const tier = type === 'tier';
+  return Object.assign({ originalName: originalName || undefined, name: name }, pwBuildRule_(type, f), {
+    exclusive: !!flags.exclusive, showAsButton: tier ? true : !!flags.showAsButton, manualGrantable: tier ? false : !!flags.manualGrantable,
+    status: flags.status === '停用' ? '停用' : '啟用', storeId: storeId, version: version, locked: !!flags.locked,
+    minTier: flags.minTier || '', startDate: flags.startDate || '', endDate: flags.endDate || '',
+    allowNonMember: flags.minTier ? flags.allowNonMember !== false : true
+  });
+}
+function pwValidate_(type, P, f) {
+  const posInt = (v, min, max) => v !== '' && Number.isInteger(Number(v)) && Number(v) >= min && (max == null || Number(v) <= max);
+  if (!String(P.name || '').trim()) return '請輸入名稱';
+  if (P.startDate && P.endDate && P.startDate > P.endDate) return '生效日不能晚於到期日';
+  if (type === 'cash' && !posInt(P.amount, 1)) return '請填折抵多少元（整數）';
+  if (type === 'orderPct' && !posInt(P.amount, 10, 99)) return '折數請填 10～99 的整數（例如 95＝打95折，9折請填 90）';
+  if (type === 'second' && f._scope === 'cat' && !P.targetCat) return '請選哪一個分類';
+  if (type === 'second' && f._scope === 'item' && !P.targetItem) return '請選哪一個品項';
+  if (type === 'bogo' && !P.targetItem && !P.targetItem2 && !P.targetCat) return f._scope === 'cat' ? '請選哪一個分類' : '請選哪一個品項';
+  if (type === 'gift' && !P.targetItem) return '請選送什麼';
+  if (type === 'gift' && f._by === 'item' && !P.requireItem) return '請選點什麼才送';
+  if (type === 'gift' && f._by === 'cat' && !P.requireCat) return '請選點哪一個分類才送';
+  if (type === 'spend' && !P.targetItem) return '請選折哪一個品項';
+  if (type === 'spend' && !posInt(P.spendStep, 1)) return '請填每滿多少元（整數）';
+  if (type === 'spend' && P.effect === 'amountOff' && !posInt(P.amount, 1)) return '請填每份折多少元（整數）';
+  if (type === 'tier' && !P.minTier) return '請選哪個等級以上的會員';
+  if (type === 'tier' && !P.targetItem) return '請選哪一個品項';
+  if (type === 'tier' && !posInt(P.minQty, 1)) return '請填要買幾份（整數）';
+  if (type !== 'tier' && P.mode === 'item' && P.showAsButton && !P.manualGrantable && P.minTier && P.targetItem)
+    return '這樣設定會被當成「會員等級優惠」自動套用。要做等級優惠請選 👑 那張卡；不是的話請把「最低適用等級」改回不限，或勾「可手動贈送給會員」';
+  return '';
+}
+// 一句話規則(預覽最上面那行)
+function pwSentence_(type, P, shortCat) {
+  const sz = s => s ? '（' + s + '）' : '';
+  const cat = c => '「' + shortCat(c) + '」';
+  const opts = P.requireOpts ? '，客製化要含：' + P.requireOpts.split('、').join('／') : '';
+  if (type === 'cash') return '結帳時折抵 $' + (P.amount || '?');
+  if (type === 'orderPct') return '整張訂單打' + (P.amount ? pmPctLabel_(Number(P.amount)) : '?折') + '（只在 POS 用）';
+  if (type === 'freeItem') return P.targetItem ? '免費兌換一份 ' + P.targetItem + sz(P.targetSize) : '店員在 POS 點選的那一項免費';
+  if (type === 'second') {
+    const eff = P.effect === 'discount60' ? '6折' : '5折';
+    if (P.targetCat) return cat(P.targetCat) + sz(P.targetSize) + (P.pairMode === '同款' ? '同一款買兩件' : '任兩件') + '，第二件打' + eff;
+    if (P.targetItem) return P.targetItem + sz(P.targetSize) + ' 買兩件，第二件打' + eff;
+    return '店員在 POS 選兩件，第二件打' + eff;
+  }
+  if (type === 'bogo') {
+    const t = P.targetCat ? cat(P.targetCat) + '的飲品／餐點' : [P.targetItem, P.targetItem2].filter(Boolean).join(' 或 ');
+    return t + sz(P.targetSize) + (P.effect === 'addOne' ? ' 加一元多一件' : ' 買一送一') + '（兩件要同款同客製化）' + opts;
+  }
+  if (type === 'gift') {
+    const give = (P.targetItem || '?') + sz(P.targetSize) + (P.targetItem2 ? ' 或 ' + P.targetItem2 + '（二選一）' : '');
+    if (P.requireCat) return '點' + cat(P.requireCat) + '的餐點，送一份 ' + give;
+    return '每點一份 ' + (P.requireItem || '?') + opts + '，送一份 ' + give;
+  }
+  if (type === 'spend') return (P.targetItem || '?') + ' 以外的餐點每滿 $' + (P.spendStep || '?') + '，' + (P.targetItem || '?') + sz(P.targetSize) + (P.effect === 'free' ? ' 免費一份' : ' 折 $' + (P.amount || '?') + ' 一份');
+  if (type === 'tier') return (P.minTier || '?') + '以上的會員買 ' + (P.minQty || '?') + ' 份 ' + (P.targetItem || '?') + sz(P.targetSize) + '，其中 1 份' + (PW_EFFECT_LABEL_[P.effect] || '') + '（每張單一次）';
+  return '';
+}
+// 試算(用菜單價格舉一個例子)；priceOf(品名, 份量) 回 {u, sz}，找不到回 null；firstOf(分類) 回分類裡第一個有價格的品名
+function pwTrial_(type, P, priceOf, firstOf, shortCat) {
+  const out = [], money = n => '$' + n;
+  const itemTxt = (name, pr) => name + (pr && pr.sz ? ' ' + pr.sz : '') + (pr ? '（' + money(pr.u) + '）' : '');
+  const noPrice = name => out.push('（菜單找不到「' + name + '」的價格，沒辦法試算）');
+  const off = (eff, u) => eff === 'free' ? u : eff === 'discount50' ? Math.round(u * 0.5) : eff === 'discount60' ? Math.round(u * 0.4) : eff === 'addOne' ? Math.max(0, u - 1) : 0;
+  if (type === 'cash') out.push('顧客結帳時少付 ' + money(P.amount || 0));
+  else if (type === 'orderPct') { const a = Number(P.amount) || 0; out.push('例：原價 $200 → 打' + (a ? pmPctLabel_(a) : '?折') + '，折 ' + money(200 - Math.round(200 * a / 100))); out.push('用原價算，不受其他折抵影響'); }
+  else if (type === 'freeItem') {
+    if (!P.targetItem) out.push('店員在 POS 先點那一項，再按這顆按鈕');
+    else { const pr = priceOf(P.targetItem, P.targetSize); if (!pr) noPrice(P.targetItem); else out.push('例：點一份 ' + itemTxt(P.targetItem, pr) + ' → 這份免費，折 ' + money(pr.u)); }
+    out.push('只折基本價，加料、升級等加價照收');
+  } else if (type === 'second') {
+    const x = P.targetItem || (P.targetCat ? firstOf(P.targetCat) : '');
+    if (!x) out.push('店員在 POS 自己選要折哪兩件');
+    else { const pr = priceOf(x, P.targetSize); if (!pr) noPrice(x); else out.push('例：點 2 份 ' + itemTxt(x, pr).replace('（', '（各 ') + ' → 第二件' + (P.effect === 'discount60' ? '打6折' : '打5折') + '，折 ' + money(off(P.effect, pr.u))); }
+    if (P.targetCat && P.pairMode !== '同款') out.push('不同款也可以：同分類由貴到便宜兩兩一組，每組較便宜那件打折');
+    if (P.pairMode === '同款') out.push('要同一款才成一組（客製化可以不同），加料照收');
+  } else if (type === 'bogo') {
+    const x = P.targetItem || P.targetItem2 || (P.targetCat ? firstOf(P.targetCat) : '');
+    if (x) { const pr = priceOf(x, P.targetSize); if (!pr) noPrice(x); else out.push('例：點 2 份一模一樣的 ' + itemTxt(x, pr).replace('（', '（各 ') + ' → 第二份' + (P.effect === 'addOne' ? '只收 $1' : '免費') + '，折 ' + money(off(P.effect, pr.u))); }
+    if (P.requireOpts) out.push('客製化沒有含「' + P.requireOpts.split('、').join('／') + '」其中一個的不算');
+    if (P.effect === 'addOne') out.push('線上點一份會自動多加一份');
+  } else if (type === 'gift') {
+    const pb = P.targetItem ? priceOf(P.targetItem, P.targetSize) : null, pb2 = P.targetItem2 ? priceOf(P.targetItem2, P.targetSize) : null;
+    const give = P.targetItem ? itemTxt(P.targetItem, pb) + (P.targetItem2 ? ' 或 ' + itemTxt(P.targetItem2, pb2) : '') : '?';
+    const buy = P.requireCat ? '1 份' + '「' + shortCat(P.requireCat) + '」的餐點' : '1 份 ' + itemTxt(P.requireItem || '?', P.requireItem ? priceOf(P.requireItem, '') : null) + (P.requireOpts ? '＋選「' + P.requireOpts.split('、')[0] + '」' : '');
+    out.push('例：點 ' + buy + ' → 送 ' + give + (pb ? '，折 ' + money(pb.u) + (pb2 && pb2.u !== pb.u ? '（選 ' + P.targetItem2 + ' 折 ' + money(pb2.u) + '）' : '') : ''));
+    if (P.targetItem && !pb) noPrice(P.targetItem);
+    out.push(P.requireCat ? '一張券送一份' : '點幾份送幾份' + (P.targetItem2 ? '，顧客自己二選一' : ''));
+    if (P.requireCat && P.autoAddItem) out.push('店員按 POS 按鈕時，贈品會自動加進訂單');
+  } else if (type === 'spend') {
+    const step = Number(P.spendStep) || 0, pr = P.targetItem ? priceOf(P.targetItem, P.targetSize) : null;
+    if (step && P.targetItem) {
+      const per = P.effect === 'free' ? (pr ? pr.u : null) : Number(P.amount) || 0;
+      out.push('例：' + P.targetItem + ' 以外點了 ' + money(step * 2 + Math.round(step / 2)) + ' → 最多折 2 份 ' + P.targetItem + (per != null ? '，每份折 ' + money(per) + '（共 ' + money(per * 2) + '）' : ''));
+    }
+    out.push('看點餐原價，不管其他折扣；其他需求不算；實際點的份數不夠就照實際份數');
+  } else if (type === 'tier') {
+    const pr = P.targetItem ? priceOf(P.targetItem, P.targetSize) : null;
+    if (P.targetItem && !pr) noPrice(P.targetItem);
+    else if (pr) out.push('例：' + (P.minTier || '?') + '會員點 ' + (P.minQty || '?') + ' 份 ' + itemTxt(P.targetItem, pr).replace('（', '（各 ') + ' → 其中 1 份' + (PW_EFFECT_LABEL_[P.effect] || '') + '，折 ' + money(off(P.effect, pr.u)));
+    out.push('同品名同份量才算；每張單一次');
+  }
+  return out;
+}
+
+// ---- 精靈畫面 ----
+function pwCat_() { return Object.keys(mcCatalog).length ? mcCatalog : (adCatalog_ || {}); }
+function pwPriceOf_(name, size) {
+  const cat = pwCat_();
+  for (const c of Object.keys(cat)) for (const it of (cat[c] || [])) {
+    if (it.name !== name) continue;
+    if (size === 'M' && it.price_m > 0) return { u: Number(it.price_m), sz: 'M' };
+    if (size === 'L' && it.price_l > 0) return { u: Number(it.price_l), sz: 'L' };
+    if (it.price > 0) return { u: Number(it.price), sz: '' };   // 沒分份量的品項(例：二選一贈品裡的蘿蔔糕)照單一價
+    if (!size && it.price_m > 0) return { u: Number(it.price_m), sz: 'M' };
+    if (!size && it.price_l > 0) return { u: Number(it.price_l), sz: 'L' };
+  }
+  return null;
+}
+function pwFirstOf_(catName) {
+  const it = ((pwCat_()[catName]) || []).find(x => x.price > 0 || x.price_m > 0 || x.price_l > 0);
+  return it ? it.name : '';
+}
+function pwItemSel_(k, val, emptyLabel) {
+  const cat = pwCat_(); let found = false;
+  const groups = Object.keys(cat).map(c => (cat[c] || []).length ? `<optgroup label="${escapeHtml(mcShortCatName(c))}">${(cat[c] || []).map(it => {
+    const sel = !found && it.name === val; if (sel) found = true;
+    return `<option value="${escapeHtml(it.name)}"${sel ? ' selected' : ''}>${escapeHtml(it.name)}</option>`;
+  }).join('')}</optgroup>` : '').join('');
+  // 菜單上已經沒有的舊值保留成一個選項，免得沒動到這格卻在存檔時被清掉
+  const missing = val && !found ? `<option value="${escapeHtml(val)}" selected>${escapeHtml(val)}（菜單找不到）</option>` : '';
+  return `<select class="pw-in" data-k="${k}" onchange="pwRefreshPreview_()"><option value="">${escapeHtml(emptyLabel)}</option>${missing}${groups}</select>`;
+}
+function pwCatSel_(k, val) {
+  return `<select class="pw-in" data-k="${k}" onchange="pwRefreshPreview_()"><option value="">請選分類</option>${pmCatOptions_(val)}</select>`;
+}
+function pwSizeSel_(val) {
+  return `份量 <select class="pw-in" data-k="targetSize" onchange="pwRefreshPreview_()"><option value=""${!val ? ' selected' : ''}>不限</option><option value="M"${val === 'M' ? ' selected' : ''}>M</option><option value="L"${val === 'L' ? ' selected' : ''}>L</option></select>`;
+}
+function pwSel_(k, val, options, rerender) {
+  return `<select class="pw-in" data-k="${k}" onchange="${rerender ? 'pwRerender_()' : 'pwRefreshPreview_()'}">${options.map(([v, t]) => `<option value="${escapeHtml(v)}"${v === val ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>`;
+}
+function pwNum_(k, val, attrs) {
+  return `<input class="pw-in" type="number" data-k="${k}" value="${escapeHtml(val === '' || val == null ? '' : String(val))}" ${attrs || ''} oninput="pwRefreshPreview_()">`;
+}
+function pwOptsInput_(val, deluxe) {
+  return `<span class="pw-line">客製化要含 <input class="pw-in pw-wide" data-k="requireOpts" value="${escapeHtml(val || '')}" placeholder="不限（例：正常冰、少冰）" oninput="pwRefreshPreview_()">
+    <button type="button" class="pm-mini-btn" onclick="pwSetOpts_('ice')">限冰飲</button>${deluxe ? '<button type="button" class="pm-mini-btn" onclick="pwSetOpts_(\'deluxe\')">豪華升級</button>' : ''}
+    <button type="button" class="pm-mini-btn" onclick="pwSetOpts_('')">不限</button></span>`;
+}
+function pwSetOpts_(kind) {
+  const el = document.querySelector('#pw-rule [data-k="requireOpts"]'); if (!el) return;
+  if (kind === 'ice') el.value = '正常冰、少冰、微冰、小碎冰';
+  else if (kind === 'deluxe') {   // 跟原本編輯框「豪華升級」按鈕同一份(菜單的豪華經濟升級餐選項)
+    const g = (typeof mcOptionGroups !== 'undefined' && mcOptionGroups && mcOptionGroups.deluxe_upgrade) || null;
+    el.value = (g && (g.options || []).length ? g.options.map(o => o.name) : ['美式狂想 x 雙人脆薯', '美式狂想 x 九塊雞塊', '美式狂想 x 十粒鍋貼']).join('、');
+  } else el.value = '';
+  pwRefreshPreview_();
+}
+// ② 規則：每種類型一句話，空格就是下拉／數字
+function pwRuleHtml_(type, f) {
+  const L = s => `<div class="pw-line">${s}</div>`;
+  if (type === 'cash') return L(`結帳時折抵 $ ${pwNum_('amount', f.amount, 'min="1"')} 元`);
+  if (type === 'orderPct') return L(`整張訂單打 ${pwNum_('amount', f.amount, 'min="10" max="99"')} 折`) + '<div class="pm-tip">95＝打95折、9折請填 90；只折基準價，用原價算；只在門市 POS 用</div>';
+  if (type === 'freeItem') return L(`免費兌換一份 ${pwItemSel_('targetItem', f.targetItem, '不指定（店員在 POS 點哪一項就免費）')} ${pwSizeSel_(f.targetSize)}`)
+    + '<div class="pm-tip">兌換券要選品項（線上購物車品名、份量都一樣才能用）；不指定＝只在 POS 用（例：公關費、單品免費）</div>';
+  if (type === 'second') return L(`範圍 ${pwSel_('_scope', f._scope, [['cat', '同一個分類'], ['item', '指定一個品項'], ['none', '不指定（店員在 POS 選）']], true)}
+      ${f._scope === 'cat' ? pwCatSel_('targetCat', f.targetCat) : f._scope === 'item' ? pwItemSel_('targetItem', f.targetItem, '請選品項') : ''}
+      ${f._scope !== 'none' ? pwSizeSel_(f.targetSize) : ''}`)
+    + L(`買兩件，第二件 ${pwSel_('effect', f.effect, [['discount50', '打5折'], ['discount60', '打6折']])}
+      ${f._scope === 'item' ? '（同一款兩件一組，客製化可以不同）' : pwSel_('pairMode', f.pairMode === '同款' ? '同款' : '', [['', '任兩件都算（不同款也可以）'], ['同款', '要同一款（客製化可以不同）']])}`);
+  if (type === 'bogo') return L(`範圍 ${pwSel_('_scope', f._scope === 'cat' ? 'cat' : 'item', [['item', '指定品項'], ['cat', '同一個分類']], true)}
+      ${f._scope === 'cat' ? pwCatSel_('targetCat', f.targetCat) : pwItemSel_('targetItem', f.targetItem, '請選品項') + ' 或 ' + pwItemSel_('targetItem2', f.targetItem2, '（不用第二個品項）')}
+      ${pwSizeSel_(f.targetSize)}`)
+    + L(`${pwSel_('effect', f.effect === 'addOne' ? 'addOne' : 'free', [['free', '買一送一（第二份免費）'], ['addOne', '加一元多一件（第二份 $1）']])}，兩件要同款同客製化`)
+    + pwOptsInput_(f.requireOpts, false);
+  if (type === 'gift') {
+    const byCat = f._by === 'cat';
+    return L(`${pwSel_('_by', byCat ? 'cat' : 'item', [['item', '每點一份指定餐點'], ['cat', '點某個分類的餐點']], true)}
+        ${byCat ? '點 ' + pwCatSel_('requireCat', f.requireCat) + ' 的餐點' : '點 ' + pwItemSel_('requireItem', f.requireItem, '請選點什麼')}`)
+      + (byCat ? '' : pwOptsInput_(f.requireOpts, true))
+      + L(`就送一份 ${pwItemSel_('targetItem', f.targetItem, '請選送什麼')} ${byCat ? '' : '或 ' + pwItemSel_('targetItem2', f.targetItem2, '（只送一種）') + '（顧客二選一）'} ${pwSizeSel_(f.targetSize)}`)
+      + (byCat ? `<label class="pw-line" style="cursor:pointer;"><input type="checkbox" data-k="autoAddItem" ${f.autoAddItem ? 'checked' : ''} onchange="pwRefreshPreview_()"> 店員按 POS 按鈕時，自動把贈品加進訂單</label>`
+        : '<div class="pm-tip">點幾份送幾份。節氣升級加碼：點當月美X＋按「豪華升級」＋送兩種贈品二選一（飲料選份量 M）</div>');
+  }
+  if (type === 'spend') return L(`${pwItemSel_('targetItem', f.targetItem, '請選品項')} ${pwSizeSel_(f.targetSize)} 以外的餐點，每滿 $ ${pwNum_('spendStep', f.spendStep, 'min="1"')}`)
+    + L(`就 ${pwSel_('effect', f.effect === 'free' ? 'free' : 'amountOff', [['amountOff', '折'], ['free', '免費送']], true)} ${f.effect === 'free' ? '' : '$ ' + pwNum_('amount', f.amount, 'min="1"')} 一份`);
+  if (type === 'tier') return L(`${`<select class="pw-in" data-flag="minTier" onchange="pwRerender_()"><option value="">請選等級</option>${mtTiers.map(t => `<option value="${escapeHtml(t.name)}"${pwState_.flags.minTier === t.name ? ' selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}${pwState_.flags.minTier && !mtTiers.some(t => t.name === pwState_.flags.minTier) ? `<option value="${escapeHtml(pwState_.flags.minTier)}" selected>${escapeHtml(pwState_.flags.minTier)}</option>` : ''}</select>`} 以上的會員`)
+    + L(`買 ${pwNum_('minQty', f.minQty === '' ? 1 : f.minQty, 'min="1"')} 份 ${pwItemSel_('targetItem', f.targetItem, '請選品項')} ${pwSizeSel_(f.targetSize)}`)
+    + L(`其中 1 份 ${pwSel_('effect', ['free', 'discount60', 'discount50'].indexOf(f.effect) !== -1 ? f.effect : 'free', [['free', '免費'], ['discount50', '打5折'], ['discount60', '打6折']])}，每張單一次`)
+    + '<div class="pm-tip">達等級的會員結帳自動套用；每月換品項時改名稱與品項</div>';
+  return '';
+}
+// ④ 怎麼拿到、誰能用
+function pwFlagsHtml_(type, g) {
+  const tier = type === 'tier';
+  const ck = (k, on, label) => `<label><input type="checkbox" data-flag="${k}" ${on ? 'checked' : ''} onchange="pwRerender_()"> ${label}</label>`;
+  return `
+    ${tier ? '<div class="pm-tip" style="margin-bottom:6px;">等級優惠固定是：POS 按鈕、不能手動贈送（結帳自動套用）</div>' : `
+    <div class="pm-checks">${ck('showAsButton', g.showAsButton, '門市平板顯示成按鈕（店員直接點）')}${ck('manualGrantable', g.manualGrantable, '可手動贈送給會員')}</div>`}
+    <div class="pm-checks">${ck('exclusive', g.exclusive, '不併用（線上同一張單不能再用其他券）')}
+      ${MC_STORE_ID !== '__brand__' ? ck('locked', g.locked, '鎖定，不被品牌同步覆蓋') : ''}</div>
+    <div class="pm-grid2">
+      ${tier ? '' : `<label class="mc-field">最低適用等級
+        <select data-flag="minTier" onchange="pwRerender_()"><option value="">不限</option>${mtTiers.map(t => `<option value="${escapeHtml(t.name)}"${g.minTier === t.name ? ' selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>
+        <span class="pm-tip">限定發券／兌換用，不影響 POS 按鈕</span></label>`}
+      ${g.minTier ? `<label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;color:#222;font-size:0.85rem;"><input type="checkbox" data-flag="allowNonMember" ${g.allowNonMember !== false ? 'checked' : ''} onchange="pwRefreshPreview_()"> 未加入會員也能用</label>` : ''}
+    </div>`;
+}
+// 這張券用在哪(活動、集點禮、生日禮、註冊禮)；用在兩個以上的地方要提醒「改了會一起變」
+function pwUsageHtml_(name) {
+  const list = [];
+  (pmActs_ || []).filter(a => a.promo === name).forEach(a => list.push('活動「' + a.title + '」' + (a.status === '停用' ? '（停用中）' : '')));
+  (pgGifts || []).filter(g => g.voucherType === name).forEach(g => list.push('集點禮（' + g.points + ' 點）'));
+  if ((bgGifts || []).some(g => g.voucherType === name)) list.push('生日禮');
+  if ((rgGifts || []).some(g => g.voucherType === name)) list.push('註冊禮');
+  if (!list.length) return '';
+  return `<div class="pw-usage">🔗 這張券用在：${escapeHtml(list.join('、'))}${list.length > 1 ? '<br><b style="color:#c0392b;">⚠ 這幾個地方共用同一張券，改了會一起變</b>' : ''}</div>`;
+}
+function renderPwEditor_() {
+  const el = document.getElementById('pm-editor');
+  const isNew = pmCurrentName === null, s = pwState_;
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <h3 style="margin:0;font-size:1rem;">${isNew ? '新增優惠券' : '編輯優惠券'}</h3>
+      <button type="button" class="pw-adv-link" onclick="pwGoAdvanced_()">進階：顯示所有欄位</button>
+    </div>
+    ${isNew ? '' : pwUsageHtml_(pmCurrentName)}
+    <label class="mc-field" style="margin-top:8px;">名稱（POS 按鈕、顧客券夾上看到的）<input id="pw-name" value="${escapeHtml(s.name || '')}" oninput="pwRefreshPreview_()"></label>
+    <div class="pw-step">① 選類型</div>
+    <div class="pw-cards">${PW_TYPES_.map(t => `<button type="button" class="pw-card${s.type === t.key ? ' on' : ''}" onclick="pwPickType_('${t.key}')"><span class="pw-ic">${t.icon}</span><b>${t.title}</b><small>例：${escapeHtml(t.eg)}</small></button>`).join('')}</div>
+    ${!s.type ? '<div class="empty-hint" style="margin-top:12px;">先選一種類型</div>' : `
+    <div class="pw-step">② 規則</div>
+    <div class="pw-rule" id="pw-rule">${pwRuleHtml_(s.type, s.f)}</div>
+    <div class="pw-step">③ 期間與狀態</div>
+    <div class="pm-grid3">
+      <label class="mc-field">狀態<select data-flag="status" onchange="pwRefreshPreview_()"><option value="啟用"${s.flags.status !== '停用' ? ' selected' : ''}>啟用</option><option value="停用"${s.flags.status === '停用' ? ' selected' : ''}>停用</option></select></label>
+      <label class="mc-field">生效日(選填)<input type="date" data-flag="startDate" value="${escapeHtml(s.flags.startDate || '')}" onchange="pwRefreshPreview_()"></label>
+      <label class="mc-field">到期日(選填)<input type="date" data-flag="endDate" value="${escapeHtml(s.flags.endDate || '')}" onchange="pwRefreshPreview_()"></label>
+    </div>
+    <div class="pm-tip" style="margin:-6px 0 4px;">期間外不顯示 POS 按鈕、不自動套用、不能贈送或兌換；顧客已拿到的券照常可用。不填＝永久。活動綁的券，哪幾天有優惠由活動決定</div>
+    <div class="pw-step">④ 怎麼拿到、誰能用</div>
+    <div id="pw-flags">${pwFlagsHtml_(s.type, s.flags)}</div>
+    <div class="pw-step">⑤ 預覽</div>
+    <div class="pw-preview" id="pw-preview"></div>
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="pwSave_()">儲存</button>
+      ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePromo()">刪除</button>' : ''}
+    </div>`}
+  `;
+  if (s.type) pwRefreshPreview_();
+}
+// 畫面上的值讀回 pwState_(換類型、重畫時保留已經填的)
+function pwReadAll_() {
+  const s = pwState_; if (!s) return;
+  const nm = document.getElementById('pw-name'); if (nm) s.name = nm.value;
+  const val = e => e.type === 'checkbox' ? e.checked : (e.type === 'number' ? (e.value === '' ? '' : Number(e.value)) : e.value);
+  document.querySelectorAll('#pm-editor [data-k]').forEach(e => { s.f[e.dataset.k] = val(e); });
+  document.querySelectorAll('#pm-editor [data-flag]').forEach(e => { s.flags[e.dataset.flag] = val(e); });
+}
+function pwCurrentPayload_() {
+  const s = pwState_, isNew = pmCurrentName === null;
+  const flags = Object.assign({}, s.flags, { locked: MC_STORE_ID !== '__brand__' ? !!s.flags.locked : false });
+  return pwPayload_(s.type, String(s.name || '').trim(), s.f, flags, isNew ? undefined : pmCurrentName, MC_STORE_ID, MC_STATUS);
+}
+function pwRefreshPreview_() {
+  const s = pwState_; if (!s || !s.type) return;
+  pwReadAll_();
+  const box = document.getElementById('pw-preview'); if (!box) return;
+  const P = pwCurrentPayload_(), err = pwValidate_(s.type, P, s.f);
+  const where = [];
+  if (P.status === '停用') where.push('⚠ 停用中：哪裡都不會出現');
+  if (s.type === 'tier') where.push('達到 ' + (P.minTier || '?') + ' 以上的會員，結帳自動套用（不是 POS 手動按鈕）');
+  else {
+    if (P.showAsButton) where.push('門市平板「優惠券」分類有這顆按鈕');
+    if (P.manualGrantable) where.push('可以在後台手動送給會員');
+    if (!P.showAsButton) where.push('不是 POS 按鈕：顧客要靠集點、生日禮、註冊禮、活動或贈送拿到');
+    if (P.minTier) where.push('限 ' + P.minTier + ' 以上' + (P.allowNonMember ? '（未加入會員也能用）' : '（不開放非會員）'));
+  }
+  if (P.exclusive) where.push('線上同一張單不能再用其他券');
+  const period = pmPeriodTag_(P);
+  if (period) where.push('期間：' + period);
+  box.innerHTML = `
+    <div class="pw-sent">${escapeHtml(P.name || '（還沒取名）')}：${escapeHtml(pwSentence_(s.type, P, mcShortCatName))}</div>
+    <div style="color:var(--muted);font-size:0.78rem;">試算</div>
+    <ul>${pwTrial_(s.type, P, pwPriceOf_, pwFirstOf_, mcShortCatName).map(t => '<li>' + escapeHtml(t) + '</li>').join('')}</ul>
+    <div style="color:var(--muted);font-size:0.78rem;margin-top:6px;">出現在哪</div>
+    <ul>${where.map(t => '<li>' + escapeHtml(t) + '</li>').join('')}</ul>
+    ${err ? `<div class="pw-err">⚠ ${escapeHtml(err)}</div>` : ''}`;
+}
+// 下拉選了會改變句子長相的(範圍、點品項／點分類、折／免費、勾選框)：整段重畫
+function pwRerender_() { pwReadAll_(); renderPwEditor_(); }
+function pwPickType_(key) {
+  pwReadAll_();
+  const s = pwState_, f = s.f;
+  s.type = key;
+  if (key === 'second' && ['discount50', 'discount60'].indexOf(f.effect) === -1) f.effect = 'discount50';
+  if (key === 'bogo' && ['free', 'addOne'].indexOf(f.effect) === -1) f.effect = 'free';
+  if (key === 'spend' && ['free', 'amountOff'].indexOf(f.effect) === -1) f.effect = 'amountOff';
+  if (key === 'tier' && ['free', 'discount50', 'discount60'].indexOf(f.effect) === -1) f.effect = 'free';
+  if (key === 'tier' && !(Number(f.minQty) >= 1)) f.minQty = 1;
+  const noTarget = !f.targetCat && !f.targetItem && !f.targetItem2;   // 還沒選範圍時：第二件打折預設「同一個分類」、買一送一預設「指定品項」
+  if (key === 'second' && (noTarget || !f._scope)) f._scope = 'cat';
+  if (key === 'bogo' && (noTarget || f._scope === 'none')) f._scope = 'item';
+  renderPwEditor_();
+}
+function pwGoAdvanced_() {
+  pwReadAll_();
+  if (pmCurrentName !== null || !pwState_.type || confirm('新增中的內容不會帶到進階編輯框，確定要切換嗎？')) { pwState_.advanced = true; renderPmEditor(); }
+}
+function pwSave_() {
+  const s = pwState_; if (!s || !s.type) return;
+  pwReadAll_();
+  const P = pwCurrentPayload_(), err = pwValidate_(s.type, P, s.f);
+  if (err) { alert(err); return; }
+  apiPost({ action: 'upsertPromo', promo: P }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    pmCurrentName = P.name;
+    pwState_ = null;   // 存完照資料庫讀回來的重新判斷
+    return loadPromos();
+  }).catch(e => alert('儲存失敗：' + e.message));
 }
 
 // ---- 加價購(2026-09-27老闆定案，設計見 線上點餐加購設計_2026-09-27.md) ----
