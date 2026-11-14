@@ -4629,6 +4629,7 @@ function hbNewAct(series) {
     Object.assign(hbDraft, { series, ruleType: '指定日期' });
     if (last) Object.assign(hbDraft, { title: last.title, icon: last.icon || '🎁', color: last.color || '橘', memberOnly: !!last.memberOnly,
       channels: (last.channels || ['線上', '門市']).slice(), perPerson: last.perPerson, limit: last.limit, method: last.method });
+    hbDraft.newPromo = hbNewPromoState_(hbPrevEpisodePromo_(hbDraft));   // 11-14 第 3 段：預設建這一檔的新券，先帶入上一檔的券
   }
   renderHbList(); renderHbEditor(); scrollEditorIntoView_('hb-editor');
 }
@@ -4666,9 +4667,9 @@ function renderHbActEditor_(el) {
       ${d.photoUrl ? '' : `<span style="font-size:2.6rem;">${escapeHtml(d.icon || '🎁')}</span>`}
       <div style="position:absolute;left:12px;bottom:10px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.35);"><b style="font-size:1.05rem;">${escapeHtml(d.title || '活動標題')}</b><div style="font-size:0.75rem;">${escapeHtml(d.desc || '一行說明')}</div></div>
     </div>
-    <label class="mc-field">活動標題（最多20字）<input maxlength="20" value="${escapeHtml(d.title)}" placeholder="例：週四定食日" oninput="hbDraft.title=this.value"></label>
-    <label class="mc-field">一行說明（最多60字）<input maxlength="60" value="${escapeHtml(d.desc)}" placeholder="${d.series ? '例：【春分活動】第二件六折' : '例：消費定食送雞塊乙份'}" oninput="hbDraft.desc=this.value"></label>
-    <label class="mc-field">屬於哪個系列（選填）<input maxlength="20" list="hb-series-list" value="${escapeHtml(d.series || '')}" placeholder="例：八大節氣、雞塊日" oninput="hbDraft.series=this.value.trim()">
+    <label class="mc-field">活動標題（最多20字）<input maxlength="20" value="${escapeHtml(d.title)}" placeholder="例：週四定食日" oninput="hbDraft.title=this.value;hbPwAutoName_()"></label>
+    <label class="mc-field">一行說明（最多60字）<input maxlength="60" value="${escapeHtml(d.desc)}" placeholder="${d.series ? '例：【春分活動】第二件六折' : '例：消費定食送雞塊乙份'}" oninput="hbDraft.desc=this.value;hbPwAutoName_()"></label>
+    <label class="mc-field">屬於哪個系列（選填）<input maxlength="20" list="hb-series-list" value="${escapeHtml(d.series || '')}" placeholder="例：八大節氣、雞塊日" oninput="hbDraft.series=this.value.trim();hbPwAutoName_()">
       <datalist id="hb-series-list">${hbSeriesNames_().map(n => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
       <span class="hb-hint">一檔一檔換的活動（節氣、每月雞塊日）填同一個系列，一次排好，時間到自動換檔。</span>
     </label>
@@ -4738,24 +4739,30 @@ function renderHbActEditor_(el) {
         <label class="mc-field" style="max-width:150px;">每天限量(組，本店)<input type="number" min="1" max="9999" step="1" value="${d.limit === '' || d.limit == null ? '' : d.limit}" placeholder="不限" oninput="hbDraft.limit=this.value"></label>
         <label class="mc-field">綁哪一張優惠券
           <select onchange="hbSetActPromo_(this.value)">
-            <option value="">不綁（只在看板顯示）</option>
-            ${pmPromos.filter(p => p.mode === 'item').map(p => `<option value="${escapeHtml(p.name)}" ${d.promo === p.name ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
-            ${d.promo && !pmPromos.some(p => p.name === d.promo) ? `<option value="${escapeHtml(d.promo)}" selected>${escapeHtml(d.promo)}（優惠券已不存在）</option>` : ''}
+            <option value="${HB_NEW_PROMO_}" ${d.newPromo ? 'selected' : ''}>＋ 建一張新券（這一檔專用）</option>
+            <option value="" ${!d.newPromo && !d.promo ? 'selected' : ''}>不綁（只在看板顯示）</option>
+            <optgroup label="綁現有的券">
+            ${pmPromos.filter(p => p.mode === 'item').map(p => `<option value="${escapeHtml(p.name)}" ${!d.newPromo && d.promo === p.name ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
+            ${!d.newPromo && d.promo && !pmPromos.some(p => p.name === d.promo) ? `<option value="${escapeHtml(d.promo)}" selected>${escapeHtml(d.promo)}（優惠券已不存在）</option>` : ''}
+            </optgroup>
           </select>
         </label>
       </div>
+      ${hbPromoPartHtml_(d)}
       <div class="hb-hint">綁一張券＝優惠日自動折；不綁＝只在會員好康頁顯示、不折扣。</div>
       <details class="hb-rule"><summary>規則說明</summary><ul>
         <li>線上：優惠日取餐的訂單，會員點了符合的餐點就自動套用，顧客不用按「領券」。</li>
         <li>每人限領＝每人每個優惠日最多幾組，空白＝1；「每份送一份」（雞塊日、節氣贈品）＝點幾份送幾份。</li>
         <li>每天限量＝本店每天已付款的組數，退款會還名額；空白＝不限。</li>
-        <li>折多少、送什麼、要搭配什麼，在「優惠券」頁設定（例：週二＝打5折＋茶拿鐵分類；週四＝雞塊免費＋需搭配定食）。</li>
+        <li>折多少、送什麼、要搭配什麼：選「＋ 建一張新券」直接在這裡填（系列新增一檔會先帶入上一檔的券），或到「優惠券」頁改現有的券。</li>
+        <li>新券名稱自動取「系列－檔名」（檔名＝說明開頭的【…】），按「儲存」時先建券、再綁到這個活動；券的生效日～到期日＝這一檔的優惠日。</li>
       </ul></details>
     </div>
     ${hbActLinkHtml_(d)}
     ${hbStatusLockHtml_(d)}
     ${hbButtonsHtml_(isNew, 'saveHbAct(this)', 'deleteHbAct()')}`;
   hbSchedulePreview_(true);
+  hbPwRefresh_();
 }
 // 規則一改就問後端算接下來的活動日(農曆換算只在後端一份，不在前端重寫一次)
 function hbSchedulePreview_(immediate) {
@@ -4783,8 +4790,8 @@ function hbActLinkSummary_(a) {
   return null;
 }
 // 券「需搭配分類」優先(週四要先點定食)，其次「適用分類」(週二茶拿鐵)，再來「適用品項」(找它在哪個分類)
-function hbActLinkFromPromo_(name) {
-  const p = name && pmPromos.find(x => x.name === name);
+function hbActLinkFromPromo_(name, obj) {
+  const p = obj || (name && pmPromos.find(x => x.name === name));
   if (!p) return null;
   const cat = hbCatalog_();
   const itemLink = n => {
@@ -4802,18 +4809,169 @@ function hbActLinkFromPromo_(name) {
   return null;
 }
 function hbSetActPromo_(name) {
+  hbPwRead_();
+  if (name === HB_NEW_PROMO_) {   // 切回「建新券」：剛剛填到一半的還在
+    hbDraft.newPromo = hbDraft._newPromoKeep || hbNewPromoState_(hbPrevEpisodePromo_(hbDraft));
+    renderHbEditor(); return;
+  }
+  if (hbDraft.newPromo) { hbDraft._newPromoKeep = hbDraft.newPromo; hbDraft.newPromo = null; }
   hbDraft.promo = name;
   const s = hbActLinkFromPromo_(name);
   if (s) Object.assign(hbDraft, s);
   renderHbEditor();
 }
+// ======== 優惠活動改版第 3 段(11-14)：活動編輯框裡直接建這一檔的券、自動綁 ========
+// 綁券下拉多一個「＋ 建一張新券（這一檔專用）」：用第 2 段的範本精靈(類型卡片＋一句話規則＋預覽)填，名稱自動「系列－檔名」，
+// 按「儲存」先 upsertPromo 建券、成功才 upsertHomeAct 綁上。系列「+ 新增一檔」預設就是建新券，先帶入上一檔的券。
+// 只能選「依購買品項」的五種類型(活動綁券下拉本來就只列 mode=item 的券)；資料格式、後端都沒改。
+const HB_NEW_PROMO_ = '__new_promo__';
+const HB_PW_TYPES_ = ['freeItem', 'second', 'bogo', 'gift', 'spend'];
+const PW_H_HB_ = { refresh: 'hbPwRefresh_()', rerender: 'hbPwRerender_()', opts: 'hbPwSetOpts_' };
+// 新券名稱：系列－檔名(說明開頭【春分活動】→「八大節氣－春分」)；沒寫【】用第一個優惠日；不是系列就用檔名或標題
+function hbAutoPromoName_(d) {
+  const m = String(d.desc || '').match(/^【([^】]{1,12})】/);
+  const ep = m ? m[1].replace(/活動$/, '').trim() : '';
+  if (d.series) {
+    const first = (d.dateTokens || []).map(t => t.split('~')[0]).sort()[0];
+    return d.series + '－' + (ep || (first ? first.replace(/-/g, '/') : ''));   // 還沒寫檔名也沒選日期：先留「八大節氣－」，存檔時提醒
+  }
+  return ep || String(d.title || '').trim();
+}
+// 同系列上一檔(照日期排最後一檔，不含正在編輯的這檔)綁的券
+function hbPrevEpisodePromo_(d) {
+  if (!d.series) return null;
+  const eps = hbSeriesEpisodes_(d.series).filter(a => a.id !== hbCurrentId && a.promo);
+  for (let i = eps.length - 1; i >= 0; i--) { const p = pmPromos.find(x => x.name === eps[i].promo); if (p) return p; }
+  return null;
+}
+function hbNewPromoState_(prev) {
+  const type = prev ? pwDetect_(prev) : null, ok = !!type && HB_PW_TYPES_.indexOf(type) !== -1;
+  const flags = pwFlagsFrom_(ok ? prev : { showAsButton: true });   // 活動券門市照舊用 POS 按鈕手動，預設勾
+  Object.assign(flags, { startDate: '', endDate: '', locked: false, status: '啟用' });
+  const f = pwFieldsFrom_(ok ? prev : { mode: 'item' });
+  return { type: ok ? type : null, f, flags, name: '', nameAuto: true, from: ok ? prev.name : '', fromRule: ok ? JSON.stringify(pwBuildRule_(type, f)) : '' };
+}
+// 帶入上一檔的券後規則一個字都沒改(例：雞塊日忘了換當月品項)→ 提醒(不擋)
+function hbPwSameAsPrev_(d) {
+  const s = d.newPromo;
+  return !!(s && s.type && s.fromRule && JSON.stringify(pwBuildRule_(s.type, s.f)) === s.fromRule);
+}
+// 綁券下拉下面那一塊：建新券＝精靈；綁現有的券＝一句話＋共用提醒
+function hbPromoPartHtml_(d) {
+  if (d.newPromo) {
+    const s = d.newPromo;
+    if (s.nameAuto) s.name = hbAutoPromoName_(d);
+    pwH_ = PW_H_HB_;
+    try {
+      return `<div id="hbpw-box" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:2px 0 8px;">
+        <label class="mc-field">新券名稱（POS 按鈕上看到的；自動取「系列－檔名」，可以改）<input id="hbpw-name" value="${escapeHtml(s.name)}" oninput="hbDraft.newPromo.nameAuto=false;hbPwRefresh_()"></label>
+        ${s.from ? `<div class="pw-note" style="margin:0 0 8px;">已帶入上一檔的券「${escapeHtml(s.from)}」的設定，改成這一檔的內容就好（原本那張券不會被改）</div>` : ''}
+        <div class="pw-cards">${PW_TYPES_.filter(t => HB_PW_TYPES_.indexOf(t.key) !== -1).map(t => `<button type="button" class="pw-card${s.type === t.key ? ' on' : ''}" onclick="hbPwPickType_('${t.key}')"><span class="pw-ic">${t.icon}</span><b>${t.title}</b><small>例：${escapeHtml(t.eg)}</small></button>`).join('')}</div>
+        ${s.type ? `<div class="pw-rule" id="hbpw-rule" style="margin-top:8px;">${pwRuleHtml_(s.type, s.f)}</div>
+        <div class="pm-checks" style="margin:8px 0 4px;">
+          <label><input type="checkbox" data-flag="showAsButton" ${s.flags.showAsButton ? 'checked' : ''} onchange="hbPwRefresh_()"> 門市平板也顯示成按鈕（店員手動）</label>
+          <label><input type="checkbox" data-flag="exclusive" ${s.flags.exclusive ? 'checked' : ''} onchange="hbPwRefresh_()"> 不併用（線上）</label>
+        </div>
+        <div class="pm-tip">${d.ruleType === '指定日期' ? '券的生效日～到期日會自動設成這一檔的優惠日。' : '券不設期間，哪幾天有優惠由這個活動決定。'}按下面「儲存」時先建券、再自動綁到這個活動。</div>
+        <div class="pw-preview" id="hbpw-preview" style="margin-top:8px;"></div>` : '<div class="pm-tip" style="margin-top:6px;">先選一種類型</div>'}
+      </div>`;
+    } finally { pwH_ = PW_H_PM_; }
+  }
+  const p = d.promo && pmPromos.find(x => x.name === d.promo);
+  if (!p) return '';
+  const type = pwDetect_(p);
+  const others = [];
+  hbActs.filter(a => a.promo === p.name && a.id !== hbCurrentId).forEach(a => others.push('活動「' + a.title + '」'));
+  (pgGifts || []).filter(g => g.voucherType === p.name).forEach(g => others.push('集點禮（' + g.points + ' 點）'));
+  if ((bgGifts || []).some(g => g.voucherType === p.name)) others.push('生日禮');
+  if ((rgGifts || []).some(g => g.voucherType === p.name)) others.push('註冊禮');
+  return `<div style="font-size:0.8rem;color:#222;margin:2px 0 8px;line-height:1.5;">📋 ${escapeHtml(type ? pwSentence_(type, p, mcShortCatName) : '（設定比較特別，到優惠券頁看）')}
+      <button type="button" class="pw-adv-link" onclick="hbGoPromo_('${hbJs_(p.name)}')">到優惠券頁修改</button></div>
+    ${others.length ? `<div class="pw-usage">⚠ 這張券也用在：${escapeHtml(others.join('、'))}，改了會一起變</div>` : ''}`;
+}
+function hbGoPromo_(name) {
+  const loaded = mbLoaded.promo;
+  pmEditorMode = 'promo'; pmCurrentName = name; pwState_ = null;
+  switchMemberSubview('promo');
+  if (loaded) loadPromos();
+}
+function hbPwRead_() {
+  const s = hbDraft && hbDraft.newPromo, box = document.getElementById('hbpw-box');
+  if (!s || !box) return;
+  const nm = document.getElementById('hbpw-name'); if (nm) s.name = nm.value;
+  const val = e => e.type === 'checkbox' ? e.checked : (e.type === 'number' ? (e.value === '' ? '' : Number(e.value)) : e.value);
+  box.querySelectorAll('[data-k]').forEach(e => { s.f[e.dataset.k] = val(e); });
+  box.querySelectorAll('[data-flag]').forEach(e => { s.flags[e.dataset.flag] = val(e); });
+}
+function hbPwPayload_(d) {
+  const s = d.newPromo, flags = Object.assign({}, s.flags, { locked: false });
+  const days = d.ruleType === '指定日期' ? (d.dateTokens || []).flatMap(t => t.split('~')).sort() : [];
+  flags.startDate = days[0] || ''; flags.endDate = days[days.length - 1] || '';
+  return pwPayload_(s.type, String(s.name || '').trim(), s.f, flags, undefined, MC_STORE_ID, MC_STATUS);
+}
+function hbPwError_(d, P) {
+  return pwValidate_(d.newPromo.type, P, d.newPromo.f)
+    || (/－$/.test(P.name) ? '新券名稱還沒有檔名：在一行說明開頭寫【春分活動】這種檔名、選優惠日，或直接改新券名稱' : '')
+    || (pmPromos.some(p => p.name === P.name) ? '已經有同名的優惠券「' + P.name + '」，請換一個名稱（或改選綁現有的券）' : '');
+}
+function hbPwRefresh_() {
+  const d = hbDraft, s = d && d.newPromo;
+  if (!s || !s.type) return;
+  hbPwRead_();
+  const box = document.getElementById('hbpw-preview'); if (!box) return;
+  const P = hbPwPayload_(d), err = hbPwError_(d, P);
+  box.innerHTML = `
+    <div class="pw-sent">${escapeHtml(P.name || '（還沒取名）')}：${escapeHtml(pwSentence_(s.type, P, mcShortCatName))}</div>
+    <ul>${pwTrial_(s.type, P, pwPriceOf_, pwFirstOf_, mcShortCatName).map(t => '<li>' + escapeHtml(t) + '</li>').join('')}</ul>
+    ${P.startDate ? `<div style="color:var(--muted);font-size:0.78rem;margin-top:4px;">券的期間：${escapeHtml(P.startDate)}～${escapeHtml(P.endDate)}</div>` : ''}
+    ${hbPwSameAsPrev_(d) ? `<div class="pw-usage" style="margin-bottom:0;">⚠ 規則跟上一檔的券「${escapeHtml(s.from)}」一模一樣，點什麼、送什麼是不是還沒改成這一檔的？</div>` : ''}
+    ${err ?`<div class="pw-err">⚠ ${escapeHtml(err)}</div>` : ''}`;
+}
+function hbPwRerender_() { hbPwRead_(); renderHbEditor(); }
+function hbPwPickType_(key) {
+  hbPwRead_();
+  const s = hbDraft.newPromo;
+  s.type = key; pwTypeDefaults_(key, s.f);
+  renderHbEditor();
+}
+function hbPwSetOpts_(kind) { pwSetOpts_(kind, '#hbpw-rule', hbPwRefresh_); }
+// 改了標題／說明／系列：新券名稱還是自動的就跟著換
+function hbPwAutoName_() {
+  const s = hbDraft && hbDraft.newPromo; if (!s || !s.nameAuto) return;
+  s.name = hbAutoPromoName_(hbDraft);
+  const el = document.getElementById('hbpw-name'); if (el) el.value = s.name;
+  hbPwRefresh_();
+}
+// 同系列其他檔(沒停用)跟這一檔的「指定日期」有沒有重疊(只看今天以後；跟後端同一個規則，後端仍會再擋一次)
+function hbExpandDays_(tokens) {
+  const out = new Set(), today = hbToday_();
+  (tokens || []).forEach(t => {
+    const [a, b] = t.split('~'); const [y, m, dd] = a.split('-').map(Number);
+    for (let x = new Date(y, m - 1, dd), i = 0; i < 400; i++, x.setDate(x.getDate() + 1)) {
+      const s = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+      if (s > (b || a)) break;
+      if (s >= today) out.add(s);
+    }
+  });
+  return out;
+}
+function hbSeriesOverlap_(d) {
+  if (!d.series || d.ruleType !== '指定日期' || d.status === '停用') return '';
+  const mine = hbExpandDays_(d.dateTokens);
+  for (const a of hbActs) {
+    if (a.id === hbCurrentId || a.series !== d.series || a.status === '停用' || a.ruleType !== '指定日期') continue;
+    const hit = Array.from(hbExpandDays_(hbSplit_(a.rule))).filter(x => mine.has(x)).sort();
+    if (hit.length) return '同一個系列的「' + hbEpisodeLabel_(a) + '」也在 ' + hbMd_(hit[0]) + (hit.length > 1 ? ' 等 ' + hit.length + ' 天' : '') + ' 有優惠，系列裡的優惠日不能重疊，請改日期';
+  }
+  return '';
+}
 function hbActLinkMismatch_(d) {
   if (d.linkType !== '品項' && d.linkType !== '分類') return '';
-  const e = hbActLinkFromPromo_(d.promo);
+  const e = d.newPromo ? (d.newPromo.type ? hbActLinkFromPromo_(null, hbPwPayload_(d)) : null) : hbActLinkFromPromo_(d.promo);   // 建新券時跟新券比
   if (!e) return '';
   const ok = d.linkCat === e.linkCat && (d.linkType !== '品項' || e.linkType !== '品項' || d.linkItem === e.linkItem);
   if (ok) return '';
-  return `綁的優惠券「${d.promo}」要${e.linkType === '品項' ? '點「' + e.linkItem + '」' : '點「' + mcShortCatName(e.linkCat) + '」的餐點'}才有優惠，但「去點餐」會跳到${d.linkType === '品項' ? '「' + d.linkItem + '」' : '「' + mcShortCatName(d.linkCat) + '」'}。確定要這樣也可以直接儲存。`;
+  return `${d.newPromo ? '新券' : '綁的優惠券「' + d.promo + '」'}要${e.linkType === '品項' ? '點「' + e.linkItem + '」' : '點「' + mcShortCatName(e.linkCat) + '」的餐點'}才有優惠，但「去點餐」會跳到${d.linkType === '品項' ? '「' + d.linkItem + '」' : '「' + mcShortCatName(d.linkCat) + '」'}。確定要這樣也可以直接儲存。`;
 }
 function hbActLinkHtml_(d) {
   const cat = hbCatalog_();
@@ -4853,6 +5011,26 @@ function saveHbAct(btn) {
     const first = d.dateTokens.map(t => t.split('~')[0]).sort()[0];
     const [y, m, dd] = first.split('-').map(Number), x = new Date(y, m - 1, dd - 21);
     d.startDate = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+  }
+  // 11-14 第 3 段：選了「建一張新券」→ 先建券、成功後綁上再存活動(活動存失敗重按，不會再建一次券)
+  if (d.newPromo) {
+    hbPwRead_();
+    if (!d.newPromo.type) { alert('新券：請選一種類型（或改選「不綁」、綁現有的券）'); return; }
+    const P = hbPwPayload_(d), err = hbPwError_(d, P);
+    if (err) { alert('新券：' + err); return; }
+    const clash = hbSeriesOverlap_(d);   // 同系列優惠日重疊後端也會擋；先在這裡擋，免得券建好了活動卻存不進去
+    if (clash) { alert(clash); return; }
+    if (hbPwSameAsPrev_(d) && !confirm('新券的規則跟上一檔的券「' + d.newPromo.from + '」一模一樣（點什麼、送什麼都沒改）。\n\n確定要這樣建立嗎？')) return;
+    if (!d.linkType) { const l = hbActLinkFromPromo_(null, P); if (l) Object.assign(d, l); }   // 「去點餐」沒設定 → 照新券自動帶
+    btn.disabled = true; btn.textContent = '建立優惠券中...';
+    apiPost({ action: 'upsertPromo', promo: P }).then(r => {
+      if (r.status !== 'ok') throw new Error(r.message || '建立優惠券失敗');
+      pmPromos.push(Object.assign({}, P, { originalName: undefined }));
+      d.newPromo = null; d._newPromoKeep = null; d.promo = P.name;
+      btn.disabled = false; btn.textContent = '儲存';
+      saveHbAct(btn);
+    }).catch(e => { alert('建立優惠券失敗：' + e.message); btn.disabled = false; btn.textContent = '儲存'; });
+    return;
   }
   const act = { id: hbCurrentId || undefined, storeId: MC_STORE_ID, version: MC_STATUS, title: d.title.trim(), desc: d.desc.trim(), icon: d.icon.trim(), color: d.color, photoUrl: d.photoUrl || '',
     ruleType: d.ruleType, rule, excludes: d.exTokens.slice().sort().join('、'), memberOnly: !!d.memberOnly, channels: d.channels,
@@ -5396,6 +5574,9 @@ const PW_TYPES_ = [
 const PW_RULE_KEYS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'targetItem', 'targetSize', 'targetCat', 'requireCat', 'targetItem2', 'requireItem', 'pairMode', 'requireOpts', 'spendStep'];
 const PW_EFFECT_LABEL_ = { free: '免費', discount50: '打5折', discount60: '打6折', addOne: '只收 $1', amountOff: '折 $N' };
 let pwState_ = null;   // {key, src, type, auto(判斷不出來), advanced(老闆按進階), name, f(規則欄位), flags(期間／按鈕／等級…)}
+// 規則句子裡的下拉／數字改了要叫誰：優惠券頁＝pw…；活動編輯框裡建新券(第 3 段)＝hbPw…(產生 HTML 前暫時換掉，產生完換回來)
+const PW_H_PM_ = { refresh: 'pwRefreshPreview_()', rerender: 'pwRerender_()', opts: 'pwSetOpts_' };
+let pwH_ = PW_H_PM_;
 
 // 規則欄位整理成固定格式：數字轉數字、空的一律 ''；原本編輯框存檔時用不到的欄位(例如「固定金額」的品項欄)也當空的
 function pwCanon_(p) {
@@ -5616,33 +5797,33 @@ function pwItemSel_(k, val, emptyLabel) {
   }).join('')}</optgroup>` : '').join('');
   // 菜單上已經沒有的舊值保留成一個選項，免得沒動到這格卻在存檔時被清掉
   const missing = val && !found ? `<option value="${escapeHtml(val)}" selected>${escapeHtml(val)}（菜單找不到）</option>` : '';
-  return `<select class="pw-in" data-k="${k}" onchange="pwRefreshPreview_()"><option value="">${escapeHtml(emptyLabel)}</option>${missing}${groups}</select>`;
+  return `<select class="pw-in" data-k="${k}" onchange="${pwH_.refresh}"><option value="">${escapeHtml(emptyLabel)}</option>${missing}${groups}</select>`;
 }
 function pwCatSel_(k, val) {
-  return `<select class="pw-in" data-k="${k}" onchange="pwRefreshPreview_()"><option value="">請選分類</option>${pmCatOptions_(val)}</select>`;
+  return `<select class="pw-in" data-k="${k}" onchange="${pwH_.refresh}"><option value="">請選分類</option>${pmCatOptions_(val)}</select>`;
 }
 function pwSizeSel_(val) {
-  return `份量 <select class="pw-in" data-k="targetSize" onchange="pwRefreshPreview_()"><option value=""${!val ? ' selected' : ''}>不限</option><option value="M"${val === 'M' ? ' selected' : ''}>M</option><option value="L"${val === 'L' ? ' selected' : ''}>L</option></select>`;
+  return `份量 <select class="pw-in" data-k="targetSize" onchange="${pwH_.refresh}"><option value=""${!val ? ' selected' : ''}>不限</option><option value="M"${val === 'M' ? ' selected' : ''}>M</option><option value="L"${val === 'L' ? ' selected' : ''}>L</option></select>`;
 }
 function pwSel_(k, val, options, rerender) {
-  return `<select class="pw-in" data-k="${k}" onchange="${rerender ? 'pwRerender_()' : 'pwRefreshPreview_()'}">${options.map(([v, t]) => `<option value="${escapeHtml(v)}"${v === val ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>`;
+  return `<select class="pw-in" data-k="${k}" onchange="${rerender ? pwH_.rerender : pwH_.refresh}">${options.map(([v, t]) => `<option value="${escapeHtml(v)}"${v === val ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>`;
 }
 function pwNum_(k, val, attrs) {
-  return `<input class="pw-in" type="number" data-k="${k}" value="${escapeHtml(val === '' || val == null ? '' : String(val))}" ${attrs || ''} oninput="pwRefreshPreview_()">`;
+  return `<input class="pw-in" type="number" data-k="${k}" value="${escapeHtml(val === '' || val == null ? '' : String(val))}" ${attrs || ''} oninput="${pwH_.refresh}">`;
 }
 function pwOptsInput_(val, deluxe) {
-  return `<span class="pw-line">客製化要含 <input class="pw-in pw-wide" data-k="requireOpts" value="${escapeHtml(val || '')}" placeholder="不限（例：正常冰、少冰）" oninput="pwRefreshPreview_()">
-    <button type="button" class="pm-mini-btn" onclick="pwSetOpts_('ice')">限冰飲</button>${deluxe ? '<button type="button" class="pm-mini-btn" onclick="pwSetOpts_(\'deluxe\')">豪華升級</button>' : ''}
-    <button type="button" class="pm-mini-btn" onclick="pwSetOpts_('')">不限</button></span>`;
+  return `<span class="pw-line">客製化要含 <input class="pw-in pw-wide" data-k="requireOpts" value="${escapeHtml(val || '')}" placeholder="不限（例：正常冰、少冰）" oninput="${pwH_.refresh}">
+    <button type="button" class="pm-mini-btn" onclick="${pwH_.opts}('ice')">限冰飲</button>${deluxe ? `<button type="button" class="pm-mini-btn" onclick="${pwH_.opts}('deluxe')">豪華升級</button>` : ''}
+    <button type="button" class="pm-mini-btn" onclick="${pwH_.opts}('')">不限</button></span>`;
 }
-function pwSetOpts_(kind) {
-  const el = document.querySelector('#pw-rule [data-k="requireOpts"]'); if (!el) return;
+function pwSetOpts_(kind, root, after) {
+  const el = document.querySelector((root || '#pw-rule') + ' [data-k="requireOpts"]'); if (!el) return;
   if (kind === 'ice') el.value = '正常冰、少冰、微冰、小碎冰';
   else if (kind === 'deluxe') {   // 跟原本編輯框「豪華升級」按鈕同一份(菜單的豪華經濟升級餐選項)
     const g = (typeof mcOptionGroups !== 'undefined' && mcOptionGroups && mcOptionGroups.deluxe_upgrade) || null;
     el.value = (g && (g.options || []).length ? g.options.map(o => o.name) : ['美式狂想 x 雙人脆薯', '美式狂想 x 九塊雞塊', '美式狂想 x 十粒鍋貼']).join('、');
   } else el.value = '';
-  pwRefreshPreview_();
+  (after || pwRefreshPreview_)();
 }
 // ② 規則：每種類型一句話，空格就是下拉／數字
 function pwRuleHtml_(type, f) {
@@ -5667,12 +5848,12 @@ function pwRuleHtml_(type, f) {
         ${byCat ? '點 ' + pwCatSel_('requireCat', f.requireCat) + ' 的餐點' : '點 ' + pwItemSel_('requireItem', f.requireItem, '請選點什麼')}`)
       + (byCat ? '' : pwOptsInput_(f.requireOpts, true))
       + L(`就送一份 ${pwItemSel_('targetItem', f.targetItem, '請選送什麼')} ${byCat ? '' : '或 ' + pwItemSel_('targetItem2', f.targetItem2, '（只送一種）') + '（顧客二選一）'} ${pwSizeSel_(f.targetSize)}`)
-      + (byCat ? `<label class="pw-line" style="cursor:pointer;"><input type="checkbox" data-k="autoAddItem" ${f.autoAddItem ? 'checked' : ''} onchange="pwRefreshPreview_()"> 店員按 POS 按鈕時，自動把贈品加進訂單</label>`
+      + (byCat ? `<label class="pw-line" style="cursor:pointer;"><input type="checkbox" data-k="autoAddItem" ${f.autoAddItem ? 'checked' : ''} onchange="${pwH_.refresh}"> 店員按 POS 按鈕時，自動把贈品加進訂單</label>`
         : '<div class="pm-tip">點幾份送幾份。節氣升級加碼：點當月美X＋按「豪華升級」＋送兩種贈品二選一（飲料選份量 M）</div>');
   }
   if (type === 'spend') return L(`${pwItemSel_('targetItem', f.targetItem, '請選品項')} ${pwSizeSel_(f.targetSize)} 以外的餐點，每滿 $ ${pwNum_('spendStep', f.spendStep, 'min="1"')}`)
     + L(`就 ${pwSel_('effect', f.effect === 'free' ? 'free' : 'amountOff', [['amountOff', '折'], ['free', '免費送']], true)} ${f.effect === 'free' ? '' : '$ ' + pwNum_('amount', f.amount, 'min="1"')} 一份`);
-  if (type === 'tier') return L(`${`<select class="pw-in" data-flag="minTier" onchange="pwRerender_()"><option value="">請選等級</option>${mtTiers.map(t => `<option value="${escapeHtml(t.name)}"${pwState_.flags.minTier === t.name ? ' selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}${pwState_.flags.minTier && !mtTiers.some(t => t.name === pwState_.flags.minTier) ? `<option value="${escapeHtml(pwState_.flags.minTier)}" selected>${escapeHtml(pwState_.flags.minTier)}</option>` : ''}</select>`} 以上的會員`)
+  if (type === 'tier') return L(`${`<select class="pw-in" data-flag="minTier" onchange="${pwH_.rerender}"><option value="">請選等級</option>${mtTiers.map(t => `<option value="${escapeHtml(t.name)}"${pwState_.flags.minTier === t.name ? ' selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}${pwState_.flags.minTier && !mtTiers.some(t => t.name === pwState_.flags.minTier) ? `<option value="${escapeHtml(pwState_.flags.minTier)}" selected>${escapeHtml(pwState_.flags.minTier)}</option>` : ''}</select>`} 以上的會員`)
     + L(`買 ${pwNum_('minQty', f.minQty === '' ? 1 : f.minQty, 'min="1"')} 份 ${pwItemSel_('targetItem', f.targetItem, '請選品項')} ${pwSizeSel_(f.targetSize)}`)
     + L(`其中 1 份 ${pwSel_('effect', ['free', 'discount60', 'discount50'].indexOf(f.effect) !== -1 ? f.effect : 'free', [['free', '免費'], ['discount50', '打5折'], ['discount60', '打6折']])}，每張單一次`)
     + '<div class="pm-tip">達等級的會員結帳自動套用；每月換品項時改名稱與品項</div>';
@@ -5779,8 +5960,12 @@ function pwRefreshPreview_() {
 function pwRerender_() { pwReadAll_(); renderPwEditor_(); }
 function pwPickType_(key) {
   pwReadAll_();
-  const s = pwState_, f = s.f;
-  s.type = key;
+  pwState_.type = key;
+  pwTypeDefaults_(key, pwState_.f);
+  renderPwEditor_();
+}
+// 換類型時：效果、範圍不適用這一類就換成預設(優惠券頁、活動編輯框建新券共用)
+function pwTypeDefaults_(key, f) {
   if (key === 'second' && ['discount50', 'discount60'].indexOf(f.effect) === -1) f.effect = 'discount50';
   if (key === 'bogo' && ['free', 'addOne'].indexOf(f.effect) === -1) f.effect = 'free';
   if (key === 'spend' && ['free', 'amountOff'].indexOf(f.effect) === -1) f.effect = 'amountOff';
@@ -5789,7 +5974,6 @@ function pwPickType_(key) {
   const noTarget = !f.targetCat && !f.targetItem && !f.targetItem2;   // 還沒選範圍時：第二件打折預設「同一個分類」、買一送一預設「指定品項」
   if (key === 'second' && (noTarget || !f._scope)) f._scope = 'cat';
   if (key === 'bogo' && (noTarget || f._scope === 'none')) f._scope = 'item';
-  renderPwEditor_();
 }
 function pwGoAdvanced_() {
   pwReadAll_();
