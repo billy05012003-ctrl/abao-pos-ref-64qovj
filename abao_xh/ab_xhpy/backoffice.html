@@ -14,6 +14,14 @@
   header { background:var(--brand); color:#fff; padding:16px; }
   header h1 { margin:0; font-size:1.2rem; }
   header .sub { font-size:0.85rem; opacity:0.9; margin-top:2px; }
+  /* 11-14 老闆「品牌和門市強烈一點看出區隔」：品牌層頁面／改品牌範本時頁首整條變紫；每頁最上面一條範圍說明（紫＝品牌、橘＝門市） */
+  header.bo-brand { background:#6a3db8; }
+  .bo-scope-chip { display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px; font-size:0.72rem; font-weight:700; vertical-align:middle; background:rgba(255,255,255,0.22); border:1px solid rgba(255,255,255,0.55); }
+  .bo-scope-bar { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-bottom:12px; padding:9px 12px; border-radius:8px; font-size:0.85rem; }
+  .bo-scope-bar b { font-size:0.9rem; }
+  .bo-scope-bar span { font-size:0.78rem; opacity:0.85; }
+  .bo-scope-bar.store { background:#fff3ea; border:1px solid #f3c9ad; color:#8a3f12; }
+  .bo-scope-bar.brand { background:#efe7fb; border:1px solid #c7b2ef; color:#4b2a8a; }
   /* 後台整體改成左右二欄（左側常駐導覽＋右側內容），比照大麥管理系統的版面邏輯 */
   .app-shell { display:flex; align-items:flex-start; }
   .sidebar { display:flex; flex-direction:column; background:#fff; border-right:1px solid #eee; width:150px; flex:0 0 150px; position:sticky; top:0; align-self:flex-start; }
@@ -29,6 +37,15 @@
   .sidebar .sub-item { padding:10px 14px 10px 34px; font-size:0.85rem; font-weight:500; color:var(--muted); border:none; background:none; border-left:3px solid transparent; cursor:pointer; text-align:left; position:relative; }
   .sidebar .sub-item::before { content:''; position:absolute; left:20px; top:0; bottom:0; width:1px; background:var(--border); }
   .sidebar .sub-item.active { color:var(--brand); background:#FFF7F3; font-weight:700; border-left-color:var(--brand); }
+  /* 11-14 側欄照範圍分段：段標題＋品牌段選中時用紫色 */
+  .sidebar .nav-sec { font-size:0.72rem; font-weight:700; padding:12px 14px 4px; letter-spacing:0.02em; line-height:1.4; }
+  .sidebar .nav-sec + button { margin-top:0; }
+  .sidebar .nav-sec:not(:first-child) { border-top:1px solid #eee; margin-top:6px; }
+  .sidebar .nav-sec small { display:block; font-weight:500; font-size:0.66rem; opacity:0.8; }
+  .sidebar .nav-sec.store { color:#c4561d; }
+  .sidebar .nav-sec.switch { color:#7b4fa8; }
+  .sidebar .nav-sec.brand { color:#6a3db8; }
+  .sidebar button.nav-brand.active { color:#6a3db8; background:#f3edfc; border-left-color:#6a3db8; }
   .main-content { flex:1; min-width:0; }
   #month-remind { margin:12px 16px 0; background:#fff8e1; border:1px solid #f0c36d; border-radius:10px; font-size:0.85rem; }
   #month-remind .mr-head { display:flex; align-items:center; gap:8px; padding:9px 12px; cursor:pointer; font-weight:600; color:#7a5300; }
@@ -49,6 +66,10 @@
     .sidebar .sub-item { border-left:none; border-bottom:3px solid transparent; }
     .sidebar .sub-item.active { border-left-color:transparent; border-bottom-color:var(--brand); }
     .sidebar .sub-item::before { display:none; }
+    .sidebar .nav-sec { align-self:center; white-space:nowrap; padding:4px 6px 4px 12px; border-top:none !important; margin-top:0 !important; border-left:1px solid #eee; }
+    .sidebar .nav-sec:first-child { border-left:none; }
+    .sidebar .nav-sec small { display:none; }
+    .sidebar button.nav-brand.active { border-left-color:transparent; border-bottom-color:#6a3db8; }
   }
   .view { padding:12px 16px 40px; max-width:900px; margin:0; }
   /* 品項彈出視窗編輯用的modal */
@@ -303,7 +324,7 @@
 
 <header style="position:relative;">
   <h1>POS後台</h1>
-  <div class="sub"><span data-store="displayName"></span></div><!-- 11-14 老闆：站在軟體商角度，店名從門市資料讀（displayName），不寫死任何品牌／店名；營業登記名稱只留在發票、商店資訊頁、法律文字 -->
+  <div class="sub"><span id="bo-head-store" data-store="displayName"></span><span id="bo-head-brand" style="display:none;"></span><span id="bo-scope-chip" class="bo-scope-chip" style="display:none;"></span></div><!-- 11-14 老闆：站在軟體商角度，店名從門市資料讀（displayName），不寫死任何品牌／店名；營業登記名稱只留在發票、商店資訊頁、法律文字 -->
   <div id="bo-user" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:0.85rem;display:none;">
     <span id="bo-user-text"></span>
     <button type="button" onclick="boLogout()" style="margin-left:8px;background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.6);border-radius:6px;padding:4px 10px;cursor:pointer;">登出</button>
@@ -324,6 +345,8 @@
 </div>
 <div class="app-shell">
 <nav class="sidebar" id="tabbar">
+  <!-- 11-14 老闆：側欄照「範圍」分三段(門市在上、品牌在下)：這間店 → 品牌範本→門市(可切換) → 品牌・全部門市共用；原本「會員相關」一組裡三種範圍混在一起，拆到各段 -->
+  <div class="nav-sec store">🟠 這間店</div>
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">上下架管理</button>
   <button id="tab-btn-merchant" onclick="toggleMerchantGroup()">
     <span class="group-toggle">商家管理 <span class="group-caret" id="merchant-caret">▶</span></span>
@@ -334,27 +357,8 @@
     <button class="sub-item" id="mch-sub-btn-payment" onclick="switchMerchantSubview('payment')">付款方式設定</button>
     <button class="sub-item" id="mch-sub-btn-payalert" style="display:none;" onclick="switchMerchantSubview('payalert')">金流告警 <span id="bo-payalert-badge" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span></button>
   </div>
-  <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
-    <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
-  </button>
-  <div class="sub-list" id="menucms-sublist">
-    <button class="sub-item" id="mc-sub-btn-categories" onclick="switchMcSubview('categories')">品項分類</button>
-    <button class="sub-item" id="mc-sub-btn-options" onclick="switchMcSubview('options')">客製化選項庫</button>
-  </div>
-  <button id="tab-btn-member" onclick="toggleMemberGroup()">
-    <span class="group-toggle">會員相關 <span class="group-caret" id="member-caret">▶</span></span>
-  </button>
-  <div class="sub-list" id="member-sublist">
-    <button class="sub-item" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
-    <button class="sub-item" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
-    <button class="sub-item" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
-    <button class="sub-item" id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
-    <button class="sub-item" id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
-    <button class="sub-item" id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">區塊配置</button>
-    <!-- 飲品升級不在側欄單獨顯示，改成「優惠券」清單裡公關費下方的捷徑列進入(見renderPmList)，
-         這顆按鈕保留在DOM但隱藏，讓switchBackofficeTab()既有的active/顯示切換邏輯不用另外特判 -->
-    <button class="sub-item" id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')" style="display:none;">飲品升級</button>
-  </div>
+  <!-- 飲品升級：規則存在各店(drink_upgrade_rules.store_id)，11-14 從「會員相關」移到「這間店」並顯示出來(優惠券清單裡的捷徑列照留) -->
+  <button id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')">飲品升級</button>
   <button id="tab-btn-group" onclick="switchBackofficeTab('group')">👥 團購模組</button>
   <!-- 10-10：POS管理改成點進去是分組按鈕格，側欄不再展開子選單(子選單 DOM 保留隱藏，切換程式沿用) -->
   <button id="tab-btn-posmanage" onclick="switchPosManageSubview('home')">
@@ -365,8 +369,24 @@
     <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">夥伴帳號管理</button>
     <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">角色權限設定</button>
   </div>
+  <div class="nav-sec switch">🔀 品牌範本→門市<small>頁內「正在改：」切換</small></div>
+  <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
+    <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
+  </button>
+  <div class="sub-list" id="menucms-sublist">
+    <button class="sub-item" id="mc-sub-btn-categories" onclick="switchMcSubview('categories')">品項分類</button>
+    <button class="sub-item" id="mc-sub-btn-options" onclick="switchMcSubview('options')">客製化選項庫</button>
+  </div>
+  <button id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
+  <button id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
+  <button id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">區塊配置</button>
+  <div class="nav-sec brand">🟣 品牌共用<small>全部門市一起生效</small></div>
+  <button class="nav-brand" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
+  <button class="nav-brand" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
+  <button class="nav-brand" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
 </nav>
 <main class="main-content">
+<div id="bo-scope-bar" class="bo-scope-bar" style="display:none;"></div>
 <div id="backup-warn" style="display:none;"></div>
 <div id="month-remind" style="display:none;"></div>
 <div id="view-availability" class="view">
@@ -897,6 +917,38 @@ function applyBoStoreProfile_(p) {
   document.querySelectorAll('[data-store]').forEach(el => { el.textContent = prof ? (prof[el.dataset.store] || '') : ''; });
   if (prof) document.title = boStoreShortName_() + ' POS後台';
   if (typeof mcRefreshStoreLabels_ === 'function') mcRefreshStoreLabels_();
+  boUpdateScope_();
+}
+// ---- 11-14 品牌／門市區隔(老闆「強烈一點可以看出區隔」，待辦 15i)：每一頁屬於三種範圍之一 ----
+//  brand＝整個品牌共用、存了全部門市馬上生效(會員分級、生日禮、註冊禮：後端存在租戶層 tenant_id，沒有門市)
+//  切換頁＝品牌範本→門市(菜單管理、集點禮、優惠券、加價購、區塊配置)：看「正在改：」選哪個(MC_STORE_ID)，頁內已有切換列，上面不再多一條
+//  store＝只影響這間店(其他所有頁：上下架、商家管理、飲品升級、POS管理、團購…)
+//  品牌名、店名都從門市資料讀(brandName／displayName)，不寫死
+let boCurrentTab_ = 'availability';
+const BO_BRAND_SUBVIEWS_ = ['tiers', 'birthday', 'register'];
+const BO_SWITCH_SUBVIEWS_ = ['points', 'promo', 'blocks'];
+function boScopeNow_() {
+  if (boCurrentTab_ === 'member' && BO_BRAND_SUBVIEWS_.includes(currentMemberSubview)) return 'brand';
+  if (boCurrentTab_ === 'menucms' || (boCurrentTab_ === 'member' && BO_SWITCH_SUBVIEWS_.includes(currentMemberSubview)))
+    return (typeof MC_STORE_ID !== 'undefined' && MC_STORE_ID === '__brand__') ? 'brandEdit' : 'storeEdit';
+  return 'store';
+}
+function boUpdateScope_() {
+  const scope = boScopeNow_(), isBrand = scope === 'brand' || scope === 'brandEdit';
+  const brandName = (BO_STORE_PROFILE_ && BO_STORE_PROFILE_.brandName) || '';
+  const head = document.querySelector('header'); if (!head) return;
+  head.classList.toggle('bo-brand', isBrand);
+  const st = document.getElementById('bo-head-store'), br = document.getElementById('bo-head-brand'), chip = document.getElementById('bo-scope-chip');
+  if (st) st.style.display = isBrand ? 'none' : '';
+  if (br) { br.style.display = isBrand ? '' : 'none'; br.textContent = (brandName ? brandName + ' ' : '') + (scope === 'brandEdit' ? '品牌範本' : '品牌'); }
+  if (chip) { chip.style.display = ''; chip.textContent = scope === 'brand' ? '全部門市共用' : scope === 'brandEdit' ? '改好同步到各店' : '門市'; }
+  const bar = document.getElementById('bo-scope-bar'); if (!bar) return;
+  if (scope === 'brandEdit' || scope === 'storeEdit') { bar.style.display = 'none'; return; }   // 切換頁：頁內「正在改：」那條就是範圍說明
+  bar.style.display = 'flex';
+  bar.className = 'bo-scope-bar ' + (scope === 'brand' ? 'brand' : 'store');
+  bar.innerHTML = scope === 'brand'
+    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>這一頁存了馬上生效，全部門市一起套用</span>`
+    : `<b>🏪 只影響 ${escapeHtml(boStoreShortName_())}</b><span>這一頁的設定只改這間店，不會動到其他門市</span>`;
 }
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
 function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = BO_HOME_STORE_; return p; }
@@ -1107,13 +1159,7 @@ function switchMerchantSubview(name) {
 const MB_SUBVIEWS = ['tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade'];
 let mbLoaded = { tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false };
 let currentMemberSubview = 'tiers';
-function toggleMemberGroup() {
-  const sublist = document.getElementById('member-sublist');
-  const willOpen = !sublist.classList.contains('open');
-  sublist.classList.toggle('open', willOpen);
-  document.getElementById('member-caret').classList.toggle('open', willOpen);
-  if (willOpen) switchMemberSubview(currentMemberSubview);
-}
+function toggleMemberGroup() { switchMemberSubview(currentMemberSubview); }   // 11-14 側欄分段後「會員相關」群組鈕拿掉了，保留給舊呼叫
 function switchMemberSubview(name) {
   currentMemberSubview = name;
   switchBackofficeTab('member');
@@ -1935,10 +1981,11 @@ function deletePosStaffRow() {
 }
 
 function switchBackofficeTab(name) {
+  boCurrentTab_ = name; boUpdateScope_();   // 11-14 品牌／門市區隔：子分頁變數在呼叫前就設好了
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
-  document.getElementById('tab-btn-member').classList.toggle('active', name === 'member');
+  document.getElementById('tab-btn-member')?.classList.toggle('active', name === 'member');   // 11-14 側欄分段後沒有「會員相關」群組鈕了
   document.getElementById('tab-btn-posmanage').classList.toggle('active', name === 'posmanage');
   document.getElementById('tab-btn-group').classList.toggle('active', name === 'group');
   document.getElementById('view-group').style.display = name === 'group' ? 'block' : 'none';
@@ -2021,8 +2068,8 @@ function switchBackofficeTab(name) {
     document.getElementById('mb-subview-' + sv).style.display = (name === 'member' && currentMemberSubview === sv) ? 'block' : 'none';
   });
   if (name === 'member') {
-    document.getElementById('member-sublist').classList.add('open');
-    document.getElementById('member-caret').classList.add('open');
+    document.getElementById('member-sublist')?.classList.add('open');
+    document.getElementById('member-caret')?.classList.add('open');
     if (!mbLoaded[currentMemberSubview]) {
       mbLoaded[currentMemberSubview] = true;
       if (currentMemberSubview === 'tiers') loadMemberTiers();
@@ -2695,8 +2742,8 @@ function mrPeriodLabel_(p) {
   return p.startDate ? mrMd_(p.startDate) + '起' : '到' + mrMd_(p.endDate);
 }
 function mrGo_(sub) {
-  document.getElementById('member-sublist').classList.add('open');
-  document.getElementById('member-caret').classList.add('open');
+  document.getElementById('member-sublist')?.classList.add('open');
+  document.getElementById('member-caret')?.classList.add('open');
   switchMemberSubview(sub);
 }
 function refreshMonthReminder_() {
@@ -2849,6 +2896,7 @@ function mcSwitchStoreEverywhere_(storeId) {
 }
 function mcSwitchStore(storeId) {
   MC_STORE_ID = storeId;
+  boUpdateScope_();
   const bar = document.getElementById('mc-target-bar');
   if (bar) bar.classList.toggle('brand', storeId === '__brand__');
   const hint = document.getElementById('mc-target-hint');
