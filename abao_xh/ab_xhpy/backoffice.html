@@ -4381,7 +4381,8 @@ function hbEpisodeState_(a, today) {
   const s = hbActSpan_(a);
   if (!s) return { key: 'todo', label: '未排日期' };
   if (s.last < today) return { key: 'done', label: '已結束' };
-  if (s.first <= today) return { key: 'now', label: '進行中' };
+  // 只有今天真的落在某一段裡才算進行中（雞塊日 10 月、11 月兩段中間的空檔不算）
+  if (hbSplit_(a.rule).some(t => { const [x, y] = t.split('~'); return x <= today && today <= (y || x); })) return { key: 'now', label: '進行中' };
   if (a.startDate && a.startDate <= today) return { key: 'preview', label: '預告中' };
   return { key: 'later', label: '未開始' };
 }
