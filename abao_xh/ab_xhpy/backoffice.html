@@ -5211,7 +5211,12 @@ function pmPctLabel_(pct) {
   return (pct % 10 === 0 ? pct / 10 : pct) + '折';
 }
 // 優惠券期間提醒(2026-09-26)：已過期／尚未開始／還有N天到期(3天內)；沒設期間回傳null
+// 11-14：停用的券／加價購照樣標期間，但不加 ⚠（不算進「快到期或已過期」紅字）
 function pmPeriodTag_(p) {
+  const tag = pmPeriodTagRaw_(p);
+  return tag && p.status === '停用' ? tag.replace('⚠', '') : tag;
+}
+function pmPeriodTagRaw_(p) {
   if (!p.startDate && !p.endDate) return null;
   const d = new Date(); const t = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   if (p.endDate && t > p.endDate) return '⚠已過期';
