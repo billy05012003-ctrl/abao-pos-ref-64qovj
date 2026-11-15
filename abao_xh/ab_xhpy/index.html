@@ -1215,12 +1215,14 @@ const scheduleSettingsReady = loadScheduleSettings();
 // 維持跟現行行為完全一致(顧客只看得到既有的線上付款流程)，不像商店時段設定那樣需要
 // 本地快取兜底(付款方式不影響能不能點餐，讀不到就先不顯示這個選項，顧客一樣能正常送單)
 let PAY_AT_PICKUP_ENABLED = false;
+let APPLEPAY_ENABLED = false;   // 11-15 只用來改信用卡選項的字（Apple Pay 在藍新付款頁裡選）
 let LINEPAY_ONLINE_ENABLED = false;   // 10-23 線上LINEPay(後台「線上LINEPay」開＝linePayMode LinePayAPI)；讀不到一律不顯示
 function loadPaymentMethodSettings_() {
   return apiGet_({ action: 'paymentMethodSettings', storeId: STORE_ID }).then(resp => {
     if (!resp || resp.status !== 'ok') throw new Error('paymentMethodSettings回傳格式異常');
     PAY_AT_PICKUP_ENABLED = !!resp.payAtPickupEnabled;
     LINEPAY_ONLINE_ENABLED = resp.linePayMode === 'LinePayAPI';
+    APPLEPAY_ENABLED = !!resp.applePayEnabled;
   }).catch(err => {
     console.warn('付款方式設定讀取失敗，「取餐現場付款」選項預設不顯示(維持現行行為)', err);
     PAY_AT_PICKUP_ENABLED = false;
@@ -1233,9 +1235,15 @@ function payMethodSelectRefresh_() {
   const select = document.getElementById('checkout-payment-method');
   if (!label || !select) return;
   const lpOn = LINEPAY_ONLINE_ENABLED && !groupCheckoutMode;
-  select.querySelector('option[value="取餐付款"]').hidden = !PAY_AT_PICKUP_ENABLED;
-  select.querySelector('option[value="linepay"]').hidden = !lpOn;
-  if ((select.value === '取餐付款' && !PAY_AT_PICKUP_ENABLED) || (select.value === 'linepay' && !lpOn)) select.value = 'online';
+  // 11-15 iPhone 的下拉選單不理 <option hidden>（關著的取餐付款還是出現）→ 沒開的選項直接拿掉、有開才放回去（順序固定）
+  if (!payMethodSelectRefresh_.opts) payMethodSelectRefresh_.opts = Array.from(select.options).map(o => { o.hidden = false; return o; });
+  const want = { '取餐付款': PAY_AT_PICKUP_ENABLED, 'online': true, 'linepay': lpOn };
+  const prev = select.value;
+  payMethodSelectRefresh_.opts.forEach(o => {
+    if (o.value === 'online') o.textContent = APPLEPAY_ENABLED ? '線上付款（信用卡／Apple Pay）' : '線上付款（信用卡）';
+    if (want[o.value]) select.appendChild(o); else if (o.parentNode) o.remove();
+  });
+  select.value = want[prev] ? prev : 'online';
   const show = PAY_AT_PICKUP_ENABLED || lpOn;
   label.style.display = show ? 'block' : 'none';
   select.style.display = show ? 'block' : 'none';
