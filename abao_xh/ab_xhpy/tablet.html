@@ -234,6 +234,8 @@
   </div>
 </div>
 <div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
+<!-- 11-15 主畫面也看得到線上點餐暫停／忙碌(原本只在上下架管理裡)；點了打開上下架管理 -->
+<div id="online-status-bar" class="status-banner" style="display:none;cursor:pointer" onclick="openPosLocalItemStatusManager()"></div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
   <div class="pos-col pos-col-items">
@@ -705,6 +707,7 @@ function checkPosDevice_() {
 let currentStoreStatus = { busy: false, paused: false, items: {} };
 
 function refreshStatusBanner() {
+  refreshMainStatusBar_();
   const banner = document.getElementById('status-banner');
   if (currentStoreStatus.paused) {
     banner.className = 'status-banner status-paused';
@@ -731,6 +734,21 @@ function pauseDetail_(st) {
   return parts.length ? '（' + parts.join('，') + '）' : '';
 }
 
+// 11-15：主畫面紅條(暫停)／橘條(忙碌)，正常時藏起來；文字跟上下架管理裡的一樣，多一句「點這裡管理」
+function refreshMainStatusBar_() {
+  const bar = document.getElementById('online-status-bar');
+  if (!bar) return;
+  const st = currentStoreStatus;
+  if (st.paused) {
+    bar.className = 'status-banner status-paused';
+    bar.textContent = '⛔ 線上點餐暫停接單中' + pauseDetail_(st) + '　點這裡管理';
+    bar.style.display = '';
+  } else if (st.busy) {
+    bar.className = 'status-banner status-busy';
+    bar.textContent = '⚠️ 線上點餐忙碌中（' + (st.busyBy ? st.busyBy + '，' : '') + '每' + (st.busyIntervalMinutes || 0) + '分鐘限接1張新單）　點這裡管理';
+    bar.style.display = '';
+  } else bar.style.display = 'none';
+}
 function loadStoreStatus() {
   return apiGet({ action: 'storeStatus', storeId: STORE_ID }).then(data => {
     if (data.status !== 'ok') return;
@@ -3632,6 +3650,9 @@ function tryApplyCfgUpdate_() {
 Promise.all([menuCmsDataReady, promoSettingsReady, drinkUpgradeRulesReady]).then(checkCfgVersion_);
 setInterval(checkCfgVersion_, CFG_POLL_MS);
 setInterval(tryApplyCfgUpdate_, 10000);
+// 11-15：主畫面暫停／忙碌提示——開機讀一次，之後每 60 秒讀一次門市狀態(後台或別台暫停的也看得到)
+loadStoreStatus().catch(() => {});
+setInterval(() => { loadStoreStatus().catch(() => {}); }, 60000);
 
 // ---------- 線上單確認接單(2026-10-12 老闆定案) ----------
 // 線上點餐的單(預訂單、即時單都一樣)後端先標「待確認」，不會出單；這裡每 15 秒讀一次待確認清單，
