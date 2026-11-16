@@ -429,7 +429,7 @@ const TSPL_BLACK_BIT = 0;   // TSPL BITMAP 這一位元＝印黑點。實機印�
 function getLabelMode() { try { return localStorage.getItem('abao_label_mode') === 'bt' ? 'bt' : 'off'; } catch (e) { return 'off'; } }
 function getLabelBt() { try { return localStorage.getItem('abao_label_bt') || ''; } catch (e) { return ''; } }
 function labelOn() { return getLabelMode() === 'bt' && isNet() && !!getLabelBt(); }
-let labelOpened = false, labelLinkUp = false;
+let labelOpened = false, labelLinkUp = false, labelChecked = false;   // labelChecked：這次設定之後試過連標籤機沒（11-16 出單機設定頁顯示「還沒測」用）
 function refreshLabelState(msg, ok) {
   if (msg) { setState('stLabel', msg, ok ? 'ok' : 'bad'); return; }
   if (getLabelMode() !== 'bt') setState('stLabel', '不使用');
@@ -504,10 +504,10 @@ async function labelSend(bytes) {
   if (!hasF()) return false;
   const hex = toHex(bytes);
   if (!labelOpened) { labelOpen(); labelOpened = true; await sleep(3000); }
-  if (fullySend(hex)) { labelLinkUp = true; return true; }
+  if (fullySend(hex)) { labelLinkUp = true; labelChecked = true; return true; }
   log('杯貼送出失敗，重新連線標籤機再試一次', 'y');
   labelOpen(); await sleep(3000);
-  labelLinkUp = fullySend(hex);
+  labelLinkUp = fullySend(hex); labelChecked = true;
   return labelLinkUp;
 }
 // 這台平板印過哪些單的杯貼(老闆 10-13：廚房單補印時杯貼不跟著補，除非第一次沒印成；要補用 POS 頁「補印杯貼」挑杯印)
@@ -529,6 +529,18 @@ async function printLabels(labels, orderId, force) {
   log(ok ? (force ? '補印杯貼 ' : '已印杯貼 ') + labels.length + ' 張（' + orderId + '）' : '⚠ 杯貼沒印出來（' + orderId + '）：請確認標籤機電源、藍牙', ok ? 'g' : 'e');
   refreshLabelState(ok ? '藍牙 ' + getLabelBt() + '（正常）' : '⚠ 杯貼沒印出來', ok);
   return ok;
+}
+// 11-16 出單機設定按「儲存設定」順便試連標籤機：送 ESC ! ?（TSPL 查狀態指令，不會印、不會走紙），送得出去＝連得上
+const LABEL_PROBE_HEX = '1b213f';
+async function labelProbe() {
+  if (!labelOn() || !hasF()) return false;
+  if (!labelOpened) { labelOpen(); labelOpened = true; await sleep(3000); }
+  labelLinkUp = fullySend(LABEL_PROBE_HEX);
+  if (!labelLinkUp) { labelOpen(); await sleep(3000); labelLinkUp = fullySend(LABEL_PROBE_HEX); }
+  labelChecked = true;
+  log(labelLinkUp ? '標籤機試連成功（' + getLabelBt() + '）' : '⚠ 標籤機試連失敗（' + getLabelBt() + '）：請確認電源、藍牙配對、名稱', labelLinkUp ? 'g' : 'e');
+  refreshLabelState(labelLinkUp ? '藍牙 ' + getLabelBt() + '（正常）' : '⚠ 標籤機連不上', labelLinkUp);
+  return labelLinkUp;
 }
 const LABEL_SAMPLE = { no: '0030', time: '08:30', idx: 2, total: 3, name: '阿薩姆奶茶 L', opts: ['少冰', '半糖', '加茶珠'], note: '', who: '小美', price: '$45' };
 
@@ -671,7 +683,7 @@ window.printLocalLines_ = async function (lines, labels, orderId) {
   return ok;
 };
 // 10-13 給 POS 頁「出單機設定」用：讀設定、改設定(權限 POS 頁先驗過)、印測試單
-window.printCfg_ = () => ({ mode: getMode(), ip: getIp(), linkUp, running, fully: hasF(), key: !!getKey(), labelMode: getLabelMode(), labelBt: getLabelBt(), labelLinkUp,
+window.printCfg_ = () => ({ mode: getMode(), ip: getIp(), linkUp, running, fully: hasF(), key: !!getKey(), labelMode: getLabelMode(), labelBt: getLabelBt(), labelLinkUp, labelChecked,
   autoFind: getAutoFind(), scanning: !!lanScanPromise, multi: lanMulti.slice(), autoFindLast: getAutoFindLast() });
 // 11-03 出單機設定「🔎 自動搜尋」：只找不改，找到的給 POS 頁讓店長選、按儲存才生效
 window.printScan_ = async function () {
@@ -686,7 +698,7 @@ window.printSetCfg_ = async function (cfg) {
     if (cfg.labelMode) {   // 10-13 杯貼標籤機：藍牙(要出單機是網路)／不使用
       localStorage.setItem('abao_label_mode', cfg.labelMode === 'bt' ? 'bt' : 'off');
       if (cfg.labelMode === 'bt') localStorage.setItem('abao_label_bt', String(cfg.labelBt || '').trim());
-      labelOpened = false; labelLinkUp = false;
+      labelOpened = false; labelLinkUp = false; labelChecked = false;
     }
   } catch (e) { return { ok: false, why: '平板存不了設定' }; }
   log('出單方式改成「' + (isNet() ? '網路出單機 ' + getIp() + (getAutoFind() ? '' : '（不自動找出單機）') : '藍牙') + '」' + (cfg.by ? '（' + cfg.by + '）' : ''), 'g');
@@ -698,6 +710,7 @@ window.printSetCfg_ = async function (cfg) {
   startLinkMonitor();
   if (getKey() && wantRun && !running) setRunning(true);
   refreshLabelState();
+  if (labelOn()) await labelProbe();   // 11-16 儲存時出單機、標籤機一起試連
   return Object.assign({ ok }, window.printCfg_());
 };
 // 補印杯貼(10-13)：POS 頁挑好的杯直接印(印過也印)

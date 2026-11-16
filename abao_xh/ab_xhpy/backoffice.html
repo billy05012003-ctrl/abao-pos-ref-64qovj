@@ -1153,6 +1153,12 @@ const MC_STORE_OPTIONS = [
 const MC_SYNC_TARGET_STORES = [
   { id: BO_HOME_STORE_, label: boStoreShortName_() }
 ];
+// 11-16 15j：確認視窗顯示店名，不顯示門市代號（meibao）或內部代號（__brand__）
+function mcStoreNameOf_(id) {
+  if (id === '__brand__') return ((BO_STORE_PROFILE_ && BO_STORE_PROFILE_.brandName) ? BO_STORE_PROFILE_.brandName + ' ' : '') + '品牌範本';
+  const m = MC_SYNC_TARGET_STORES.find(x => x.id === id);
+  return (m && m.label) || (id === BO_HOME_STORE_ ? boStoreShortName_() : String(id));
+}
 // 門市資料（店名、品牌名）晚一點才從後端回來 → 回來後更新選項文字（已經畫出來的下拉選單也一起改）
 function mcRefreshStoreLabels_() {
   MC_STORE_OPTIONS[0].label = boStoreShortName_() + '（只改這間店）';
@@ -2994,7 +3000,7 @@ function loadMcSnapshots() {
 
 function restoreMcSnapshot(snapshotId, status) {
   const statusLabel = status === 'draft' ? '草稿' : '正式上線';
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
   apiPost({ action: 'restoreMenuSnapshot', snapshotId }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '復原失敗');
     alert('復原完成');
@@ -3013,7 +3019,7 @@ function publishMcStore() {
   checkPublishRefs_('menu').then(goOn => { if (goOn) publishMcStoreGo_(); });
 }
 function publishMcStoreGo_() {
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新菜單\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新菜單\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   const btn = document.getElementById('mc-publish-btn');
   btn.disabled = true; btn.textContent = '發布中…（請勿重複點擊，處理中請耐心等候)';
   apiPost({ action: 'publishStoreMenu', storeId: MC_STORE_ID }).then(data => {
@@ -3071,7 +3077,7 @@ function syncBrandMenuToStores(alsoPublish, clickedBtn) {
   const checked = Array.from(document.querySelectorAll('.mc-sync-store-cb:checked')).map(cb => cb.value);
   if (!checked.length) { alert('請至少勾選一間分店'); return; }
   const warnExtra = '\n\n・這是整批覆蓋分店目前的草稿內容，不是合併\n・鎖定的品項會跳過不被覆蓋\n・系統會自動存一份同步前的快照，之後可以在「📜版本回溯」復原\n\n請確認品牌範本內容都已經檢查過再繼續。';
-  if (!confirm('確定要把品牌範本同步到：' + checked.join('、') + (alsoPublish ? '（同步且發布，會立刻讓顧客/POS看到）' : '（只同步到草稿，不影響顧客/POS目前看到的版本）') + '？' + warnExtra)) return;
+  if (!confirm('確定要把品牌範本同步到：' + checked.map(id => mcStoreNameOf_(id)).join('、') + (alsoPublish ? '（同步且發布，會立刻讓顧客/POS看到）' : '（只同步到草稿，不影響顧客/POS目前看到的版本）') + '？' + warnExtra)) return;
   const btns = document.querySelectorAll('#mc-sync-row button');
   btns.forEach(b => { b.disabled = true; });
   const originalText = clickedBtn ? clickedBtn.textContent : '';
@@ -4280,7 +4286,7 @@ function publishPromoDomain(btn) {
   checkPublishRefs_('promo').then(goOn => { if (goOn) publishPromoDomainGo_(btn); });
 }
 function publishPromoDomainGo_(btn) {
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的集點禮/優惠券/加價購/區塊配置草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的集點禮/優惠券/加價購/區塊配置草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   btn.disabled = true; btn.textContent = '發布中...';
   apiPost({ action: 'publishStorePromos', storeId: MC_STORE_ID }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
@@ -4335,7 +4341,7 @@ function loadPromoSnapshotPanel(panel) {
 
 function restorePromoSnapshot_(snapshotId, version) {
   const statusLabel = (version || MC_STATUS) === 'live' ? '正式上線' : '草稿';
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
   apiPost({ action: 'restorePromoSnapshot', snapshotId }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '復原失敗');
     alert('已復原');
