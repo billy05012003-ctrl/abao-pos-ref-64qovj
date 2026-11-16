@@ -46,6 +46,13 @@
   .sidebar .nav-sec.switch { color:#7b4fa8; }
   .sidebar .nav-sec.brand { color:#6a3db8; }
   .sidebar button.nav-brand.active { color:#6a3db8; background:#f3edfc; border-left-color:#6a3db8; }
+  /* 11-16 老闆：三段標題可以點一下收合／展開（記在這台電腦） */
+  .sidebar .nav-sec { cursor:pointer; user-select:none; position:relative; padding-right:30px; }
+  .sidebar .nav-sec:hover { background:#faf7f5; }
+  .sidebar .nav-sec .sec-caret { position:absolute; right:14px; top:12px; font-size:0.7rem; transition:transform 0.15s; }
+  .sidebar .nav-sec.closed .sec-caret { transform:rotate(-90deg); }
+  .sidebar .nav-sec.closed.has-active::after { content:'目前頁面在這段'; display:block; font-weight:500; font-size:0.66rem; opacity:0.8; }
+  .sidebar .nav-hide { display:none !important; }
   .main-content { flex:1; min-width:0; }
   #month-remind { margin:12px 16px 0; background:#fff8e1; border:1px solid #f0c36d; border-radius:10px; font-size:0.85rem; }
   #month-remind .mr-head { display:flex; align-items:center; gap:8px; padding:9px 12px; cursor:pointer; font-weight:600; color:#7a5300; }
@@ -69,6 +76,9 @@
     .sidebar .nav-sec { align-self:center; white-space:nowrap; padding:4px 6px 4px 12px; border-top:none !important; margin-top:0 !important; border-left:1px solid #eee; }
     .sidebar .nav-sec:first-child { border-left:none; }
     .sidebar .nav-sec small { display:none; }
+    .sidebar .nav-sec { padding-right:22px; }
+    .sidebar .nav-sec .sec-caret { right:6px; top:6px; }
+    .sidebar .nav-sec.closed.has-active::after { display:none; }
     .sidebar button.nav-brand.active { border-left-color:transparent; border-bottom-color:#6a3db8; }
   }
   .view { padding:12px 16px 40px; max-width:900px; margin:0; }
@@ -346,7 +356,7 @@
 <div class="app-shell">
 <nav class="sidebar" id="tabbar">
   <!-- 11-14 老闆：側欄照「範圍」分三段(門市在上、品牌在下)：這間店 → 品牌範本→門市(可切換) → 品牌・全部門市共用；原本「會員相關」一組裡三種範圍混在一起，拆到各段 -->
-  <div class="nav-sec store">🟠 這間店</div>
+  <div class="nav-sec store" data-sec="store" role="button" tabindex="0" title="點一下收合／展開">🟠 這間店<span class="sec-caret">▼</span></div>
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">上下架管理</button>
   <button id="tab-btn-merchant" onclick="toggleMerchantGroup()">
     <span class="group-toggle">商家管理 <span class="group-caret" id="merchant-caret">▶</span></span>
@@ -369,7 +379,7 @@
     <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">夥伴帳號管理</button>
     <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">角色權限設定</button>
   </div>
-  <div class="nav-sec switch">🔀 品牌範本→門市<small>頁內「正在改：」切換</small></div>
+  <div class="nav-sec switch" data-sec="switch" role="button" tabindex="0" title="點一下收合／展開">🔀 品牌範本→門市<span class="sec-caret">▼</span><small>頁內「正在改：」切換</small></div>
   <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
     <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
   </button>
@@ -380,11 +390,45 @@
   <button id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
   <button id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
   <button id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">區塊配置</button>
-  <div class="nav-sec brand">🟣 品牌共用<small>全部門市一起生效</small></div>
+  <div class="nav-sec brand" data-sec="brand" role="button" tabindex="0" title="點一下收合／展開">🟣 品牌共用<span class="sec-caret">▼</span><small>全部門市一起生效</small></div>
   <button class="nav-brand" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
   <button class="nav-brand" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
   <button class="nav-brand" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
 </nav>
+<script>
+// 11-16 老闆：側欄三段（這間店／品牌範本→門市／品牌共用）點標題收合／展開；收合狀態記在這台電腦（localStorage，讀不到就全部展開）
+//   收起來＝把標題下面到下一個標題之前的按鈕、子選單加 nav-hide（拿掉後原本的 open／inline display 照舊）
+//   收起來的那段如果有目前頁面，標題下面顯示「目前頁面在這段」
+(function () {
+  const KEY = 'abao_bo_nav_closed';
+  const nav = document.getElementById('tabbar');
+  let closed = {};
+  try { closed = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { closed = {}; }
+  const itemsOf = sec => { const out = []; for (let el = sec.nextElementSibling; el && !el.classList.contains('nav-sec'); el = el.nextElementSibling) out.push(el); return out; };
+  function paint(sec) {
+    const isClosed = !!closed[sec.dataset.sec];
+    sec.classList.toggle('closed', isClosed);
+    sec.setAttribute('aria-expanded', isClosed ? 'false' : 'true');
+    const items = itemsOf(sec);
+    items.forEach(el => el.classList.toggle('nav-hide', isClosed));
+    sec.classList.toggle('has-active', isClosed && items.some(el => el.classList.contains('active') || !!el.querySelector('.active')));
+  }
+  function toggle(sec) {
+    closed[sec.dataset.sec] = !closed[sec.dataset.sec];
+    try { localStorage.setItem(KEY, JSON.stringify(closed)); } catch (e) {}
+    paint(sec);
+  }
+  const secs = Array.from(nav.querySelectorAll('.nav-sec[data-sec]'));
+  secs.forEach(sec => {
+    sec.addEventListener('click', () => toggle(sec));
+    sec.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(sec); } });
+    paint(sec);
+  });
+  // 換頁（按鈕的 active 變了）時重算「目前頁面在這段」
+  new MutationObserver(() => secs.forEach(sec => { if (closed[sec.dataset.sec]) paint(sec); }))
+    .observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+})();
+</script>
 <main class="main-content">
 <div id="bo-scope-bar" class="bo-scope-bar" style="display:none;"></div>
 <div id="backup-warn" style="display:none;"></div>
