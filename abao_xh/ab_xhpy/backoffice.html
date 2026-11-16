@@ -307,7 +307,7 @@
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館 POS後台</div>
+      <div id="gate-title" style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">POS後台</div>
       <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（POS後台）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
@@ -315,6 +315,9 @@
       <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
     </div>`;
   document.body.appendChild(gate);
+  // 2026-11-16 (15h) 去寫死：標題先用這台裝置存過的門市資料(abao_store_profile_店代號)的店名，例如「A-Bao溪湖培英店 POS後台」；
+  //   沒存過(新裝置)就顯示傳進來的中性標題。只改顯示，AUTH_KEY 不變，已經輸過密碼的裝置不用重輸
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('abao_store_profile_')===0){const p=JSON.parse(localStorage.getItem(k)||'null');if(p&&p.displayName){document.getElementById('gate-title').textContent=p.displayName+' POS後台';break;}}}}catch(e){}
   function trySubmit(){
     const val=document.getElementById('gate-pw').value;
     if(val===SITE_PASSWORD){
@@ -2625,6 +2628,8 @@ let availabilityExpandedCats = new Set();
 const ADDON_STATUS_CATEGORY = '加購品項/配料選擇';
 const ADDON_STATUS_GROUP_CODES = ['bread_addon', 'omelet_addon', 'salad_addon', 'noodle_addon',
   'dine_set_addon', 'coffee_strength', 'drink_topping', 'deluxe_upgrade', 'noodle_snack_choice'];
+// 11-16 (15b)：奶茶濃淡只算要加錢的(多二匙奶)——平板原本的清單有它、這裡漏了；平板 posAddonNames_ 同一套規則
+const ADDON_STATUS_PRICED_ONLY_CODES = ['milk_tea_richness'];
 
 function buildAddonStatusItems_() {
   const seen = new Set();
@@ -2634,6 +2639,15 @@ function buildAddonStatusItems_() {
     if (!g || !g.options) return;
     g.options.forEach(o => {
       if (seen.has(o.name)) return;
+      seen.add(o.name);
+      items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
+    });
+  });
+  ADDON_STATUS_PRICED_ONLY_CODES.forEach(code => {
+    const g = mcOptionGroups[code];
+    if (!g || !g.options) return;
+    g.options.forEach(o => {
+      if (!(Number(o.price) > 0) || seen.has(o.name)) return;
       seen.add(o.name);
       items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
     });
@@ -2655,11 +2669,11 @@ function renderAvailabilityList() {
     // 選項庫(mcOptionGroups)理論上跟mcCatalog同一次API回來，但萬一是空的還是退回舊快照保底
     const addonItems = Object.keys(mcOptionGroups).length > 0
       ? buildAddonStatusItems_()
-      : ITEM_LIST.filter(it => it.category === ADDON_STATUS_CATEGORY);
+      : (BO_HOME_STORE_ === 'meibao' ? ITEM_LIST.filter(it => it.category === ADDON_STATUS_CATEGORY) : []);   // 11-16 (15b)：舊快照只給培英
     grouped.set(ADDON_STATUS_CATEGORY, addonItems);
   } else {
-    // 菜單資料暫時抓不到(網路或Google暫時性問題)，退回舊快照，至少上下架還能用
-    ITEM_LIST.forEach(it => {
+    // 菜單資料暫時抓不到(網路或Google暫時性問題)，退回舊快照，至少上下架還能用（11-16 (15b)：舊快照是 A-Bao 菜單，只給培英）
+    (BO_HOME_STORE_ === 'meibao' ? ITEM_LIST : []).forEach(it => {
       if (!grouped.has(it.category)) grouped.set(it.category, []);
       grouped.get(it.category).push(it);
     });

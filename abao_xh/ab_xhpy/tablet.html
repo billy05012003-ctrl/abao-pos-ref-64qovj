@@ -149,7 +149,7 @@
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">美寶美食館 POS功能</div>
+      <div id="gate-title" style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">POS功能</div>
       <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（POS功能）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
@@ -157,6 +157,9 @@
       <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
     </div>`;
   document.body.appendChild(gate);
+  // 2026-11-16 (15h) 去寫死：標題先用這台裝置存過的門市資料(abao_store_profile_店代號)的店名，例如「A-Bao溪湖培英店 POS後台」；
+  //   沒存過(新裝置)就顯示傳進來的中性標題。只改顯示，AUTH_KEY 不變，已經輸過密碼的裝置不用重輸
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('abao_store_profile_')===0){const p=JSON.parse(localStorage.getItem(k)||'null');if(p&&p.displayName){document.getElementById('gate-title').textContent=p.displayName+' POS功能';break;}}}}catch(e){}
   function trySubmit(){
     const val=document.getElementById('gate-pw').value;
     if(val===SITE_PASSWORD){
@@ -1490,8 +1493,8 @@ let itemStatusExpandedCats = new Set();
 function posItemStatusList_() {
   const list = [];
   Object.entries(CATALOG || {}).forEach(([cat, items]) => (items || []).forEach(it => list.push({ category: cat, name: it.name })));
-  if (!list.length) return ITEM_LIST;
-  return list.concat(ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY));
+  if (!list.length) return STORE_ID === 'meibao' ? ITEM_LIST : [];   // 11-16 (15b)：菜單還沒讀到時只有培英退回舊快照，別家店空著等菜單
+  return list.concat(posAddonNames_().map(name => ({ category: POS_LOCAL_ADDON_STATUS_CATEGORY, name })));
 }
 
 function renderMergedItemStatusList() {
@@ -2538,9 +2541,26 @@ function closePosLocalItemStatusManager() {
 // 加購品項/配料選擇這個分類底下的名稱，同時對應到好幾組客製化選項(bread_addon/omelet_addon/drink_topping...)，
 // 用同一個key管理，只要選項名稱相同(例如"加起司")就共用同一個上下架狀態
 const POS_LOCAL_ADDON_STATUS_CATEGORY = '加購品項/配料選擇';
-const POS_LOCAL_ADDON_STATUS_NAMES = new Set(
-  ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY).map(it => it.name)
-);
+// 11-16 (15b) 去寫死：加購／配料上下架名單改從選項庫(OPTION_GROUPS)即時產生，跟後台「品項上下架」同一套規則(後台 ADDON_STATUS_GROUP_CODES)：
+//   下面這幾組選項全部算＋奶茶濃淡(milk_tea_richness)裡要加錢的(多二匙奶)；培英算出來跟原本寫死的 21 項一模一樣。
+//   選項庫還沒讀到時，培英才退回舊快照 ITEM_LIST，別家店空著
+const POS_ADDON_GROUP_CODES_ = ['bread_addon', 'omelet_addon', 'salad_addon', 'noodle_addon',
+  'dine_set_addon', 'coffee_strength', 'drink_topping', 'deluxe_upgrade', 'noodle_snack_choice'];
+const POS_ADDON_PRICED_ONLY_CODES_ = ['milk_tea_richness'];
+let posAddonCache_ = { src: null, names: [] };
+function posAddonNames_() {
+  if (posAddonCache_.src && posAddonCache_.src === OPTION_GROUPS) return posAddonCache_.names;
+  const names = [];
+  const add = (code, pricedOnly) => {
+    const g = OPTION_GROUPS && OPTION_GROUPS[code];
+    if (g && g.options) g.options.forEach(o => { if ((!pricedOnly || Number(o.price) > 0) && !names.includes(o.name)) names.push(o.name); });
+  };
+  POS_ADDON_GROUP_CODES_.forEach(c => add(c, false));
+  POS_ADDON_PRICED_ONLY_CODES_.forEach(c => add(c, true));
+  if (names.length) { posAddonCache_ = { src: OPTION_GROUPS, names }; return names; }
+  return STORE_ID === 'meibao' ? ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY).map(it => it.name) : [];
+}
+const POS_LOCAL_ADDON_STATUS_NAMES = { has: n => posAddonNames_().includes(n) };
 
 // 大麥POS參考版面：左欄分類清單，點分類才在中欄顯示該分類品項格線（不是全部分類一次全部攤開）
 function renderPosMenu() {
