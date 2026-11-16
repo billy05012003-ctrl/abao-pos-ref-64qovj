@@ -283,7 +283,7 @@ function startLinkMonitor() {
         if (getIp() !== ipAtStart || !isNet()) return;
         if (r.ok) setLink(true); else { setLink(false, r.why); beep(); }
         // 只有出單機的回應(含沒紙、上蓋)才算連得到；號碼被 Wi-Fi 機等其他設備拿走也要自動找
-        if (r.printer) unreachSince = 0; else if (!unreachSince) unreachSince = Date.now();
+        if (r.printer) { unreachSince = 0; autoFindRetryUsed = false; autoFindRetrySoon = false; } else if (!unreachSince) unreachSince = Date.now();
       } finally { netProbing = false; }
       maybeAutoFind_();   // 11-03 整台連不到太久 → 區網自動找出單機(背景跑，不卡連線檢查)
       return;
@@ -346,6 +346,8 @@ async function eposRequest(inner, ipOverride, waitMs) {
 const LAN_SCAN_CONC = 32, LAN_SCAN_WAIT_MS = 3000;
 const AUTO_FIND_AFTER_MS = 15000;      // 整台連不到超過這麼久才自動找(沒紙／上蓋打開有回應，不算)
 const AUTO_FIND_COOLDOWN_MS = 180000;  // 找過一次後至少隔 3 分鐘才再找，出單機只是關機時不會一直掃
+const AUTO_FIND_RETRY_MS = 30000;      // 11-16 (2g)：自動找一台都沒找到(出單機可能剛好還在開機、還沒拿到號碼)→30 秒後補找一次；
+                                       // 每次斷線只補一次，還是沒有就回到 3 分鐘一次
 function getAutoFind() { try { return localStorage.getItem('abao_print_autofind') !== '0'; } catch (e) { return true; } }
 function getAutoFindLast() { try { return JSON.parse(localStorage.getItem('abao_print_autofind_last') || 'null'); } catch (e) { return null; } }
 function tabletIp4_() { const F = getF(); try { return F && typeof F.getIp4Address === 'function' ? String(F.getIp4Address() || '') : ''; } catch (e) { return ''; } }
@@ -356,6 +358,7 @@ function lanNets_() {
   return nets;
 }
 let lanScanPromise = null, lastLanScanAt = 0, lanMulti = [], unreachSince = 0;
+let autoFindRetrySoon = false, autoFindRetryUsed = false;   // (2g) 下一輪等 30 秒就好／這次斷線已經補找過
 // 同一時間只掃一輪：自動掃描中店長又按搜尋，就等同一輪的結果。回傳找到的 IP 陣列；找不到網段回 null
 function lanScan_(why) {
   if (!lanScanPromise) lanScanPromise = lanScanRun_(why).finally(() => { lanScanPromise = null; lastLanScanAt = Date.now(); });
@@ -388,10 +391,17 @@ async function lanScanRun_(why) {
 async function maybeAutoFind_() {
   if (!isNet() || !getAutoFind() || lanScanPromise || printing) return;
   if (!unreachSince || Date.now() - unreachSince < AUTO_FIND_AFTER_MS) return;
-  if (lastLanScanAt && Date.now() - lastLanScanAt < AUTO_FIND_COOLDOWN_MS) return;
+  if (lastLanScanAt && Date.now() - lastLanScanAt < (autoFindRetrySoon ? AUTO_FIND_RETRY_MS : AUTO_FIND_COOLDOWN_MS)) return;
+  const isRetry = autoFindRetrySoon;
+  autoFindRetrySoon = false;
   const before = getIp();
-  const found = await lanScan_('出單機 ' + before + ' 連不到 ' + Math.round((Date.now() - unreachSince) / 1000) + ' 秒');
+  const found = await lanScan_('出單機 ' + before + ' 連不到 ' + Math.round((Date.now() - unreachSince) / 1000) + ' 秒' + (isRetry ? '，補找一次' : ''));
   if (!found || getIp() !== before || !isNet()) return;   // 掃描中店長改了設定 → 以店長的為準
+  if (!found.length && !autoFindRetryUsed) {   // (2g) 一台都沒找到 → 30 秒後補找一次(只補一次)
+    autoFindRetryUsed = autoFindRetrySoon = true;
+    log('🔎 出單機可能還在開機，30 秒後再找一次', 'y');
+    return;
+  }
   if (found.includes(before)) { lanMulti = []; return; }   // 原本的號碼又通了
   if (found.length === 1) {
     try {
@@ -703,7 +713,7 @@ window.printSetCfg_ = async function (cfg) {
   } catch (e) { return { ok: false, why: '平板存不了設定' }; }
   log('出單方式改成「' + (isNet() ? '網路出單機 ' + getIp() + (getAutoFind() ? '' : '（不自動找出單機）') : '藍牙') + '」' + (cfg.by ? '（' + cfg.by + '）' : ''), 'g');
   linkUp = false; linkDownSince = 0; document.body.classList.remove('linkdown');
-  lanMulti = []; unreachSince = 0; lastLanScanAt = 0;   // 店長改過設定＝重新起算自動找出單機
+  lanMulti = []; unreachSince = 0; lastLanScanAt = 0; autoFindRetrySoon = false; autoFindRetryUsed = false;   // 店長改過設定＝重新起算自動找出單機
   refreshIfaceState();
   lastReconnectAt = 0;
   const ok = isNet() || hasF() ? await reconnect('改出單方式') : false;

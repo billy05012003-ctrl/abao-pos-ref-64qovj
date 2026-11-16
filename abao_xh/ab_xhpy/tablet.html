@@ -257,7 +257,7 @@
     <button type="button" class="pos-back-btn" onclick="setPosStep('items')">← 返回點餐</button>
     <div class="pos-col-title">會員</div>
     <div class="row">
-      <input type="tel" id="member-phone-input" placeholder="顧客電話，或掃會員 QR" maxlength="10" inputmode="numeric" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;" oninput="onMemberPhoneInput_()">
+      <input type="tel" id="member-phone-input" placeholder="顧客電話，或掃會員 QR" maxlength="10" inputmode="numeric" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;" onfocus="posAutoNewOrder_()" oninput="onMemberPhoneInput_()">
       <button class="btn btn-primary" onclick="lookupMember()">查詢</button>
     </div>
     <div id="member-info"></div>
@@ -1784,7 +1784,9 @@ function isValidPhone_(phone) {
 
 // 輸滿10碼合法格式自動查詢(2026-09-17新增)，不用店員自己再點一次查詢鈕
 function onMemberPhoneInput_() {
-  const phone = document.getElementById('member-phone-input').value.trim();
+  const inp = document.getElementById('member-phone-input');
+  if (posConfirmShown_()) { const typed = inp.value; posAutoNewOrder_(); inp.value = typed; }   // 11-16 (2n) 留住剛打／剛掃的電話
+  const phone = inp.value.trim();
   if (isValidPhone_(phone)) lookupMember();
 }
 
@@ -2632,7 +2634,7 @@ function goToPosDiscountCategory() {
     const card = document.createElement('div');
     card.className = 'pos-grid-card pos-discount-card';
     card.innerHTML = `<div class="name">${type}</div>`;
-    card.onclick = () => (type === '活動飲品升級' ? showDrinkUpgradePicker() : applyDirectDiscount(type));
+    card.onclick = () => { posAutoNewOrder_(); type === '活動飲品升級' ? showDrinkUpgradePicker() : applyDirectDiscount(type); };   // 11-16 (2n)
     grid.appendChild(card);
   });
   itemsCol.appendChild(grid);
@@ -2823,7 +2825,7 @@ function goToPosCategory(i) {
       card.innerHTML = `<div class="name">${cardNameHtml}</div><div class="price" style="color:#A32D2D;">${localStatus === '永久下架' ? '已下架' : '本日售完'}</div>`;
     } else {
       card.innerHTML = `<div class="name">${cardNameHtml}</div><div class="price">${priceLabel}</div>`;
-      card.onclick = () => openPosItemModal(cat, key, item);
+      card.onclick = () => { posAutoNewOrder_(); openPosItemModal(cat, key, item); };   // 11-16 (2n)
     }
     grid.appendChild(card);
   });
@@ -3256,6 +3258,7 @@ function closePosItemModal() {
 
 function confirmAddToPosCart() {
   if (!currentPosModal) return;
+  posAutoNewOrder_();   // 11-16 (2n) 保險：客製化畫面在結帳前就開著、結帳完才按「加入訂單」
   for (const gKey of groupsForCategory(currentPosModal.cat, currentPosModal.item.name)) {
     const g = OPTION_GROUPS[gKey];
     if (g.required && (!currentPosModal.groups[gKey] || currentPosModal.groups[gKey].length === 0)) {
@@ -3495,6 +3498,18 @@ function refreshPosCheckoutInfo_() {
 function backToPosCart() {
   document.getElementById('pos-checkout-panel').style.display = 'none';
   document.getElementById('pos-checkout-btn').style.display = 'block';
+}
+// 11-16 (2n) 老闆定「自動開新單」：結帳完成畫面還開著(沒按「開始新訂單」)，就點餐點／活動鍵／點會員電話格／打電話
+// → 先自動 closePosCartAll()，上一張的餐點、會員、付款方式、取餐時間不會帶進下一張。
+// 線上結帳、離線結帳、LINE Pay 成功(lpSuccess_)三條最後都停在 pos-confirm-panel，所以接這一個判斷就全部接住
+function posConfirmShown_() {
+  const p = document.getElementById('pos-confirm-panel');
+  return !!p && p.style.display !== 'none';
+}
+function posAutoNewOrder_() {
+  if (!posConfirmShown_()) return false;
+  closePosCartAll();
+  return true;
 }
 function closePosCartAll() {
   posCart = [];
