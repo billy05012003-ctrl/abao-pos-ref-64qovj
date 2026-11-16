@@ -733,7 +733,7 @@ const ORDER_BACKEND_URL = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy
 const NEW_API_ = ORDER_BACKEND_URL.indexOf('workers.dev') >= 0;   // 打新後端才出現的功能(金流告警、照片縮圖、登入頁文字)都看這個
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡集中兩個小函式自動帶上，
 // 全站呼叫後端一律走這兩個函式，之後新增任何呼叫都自動套用，不用每處各自補
-const APP_KEY = 'abao-meibao-2026';
+const APP_KEY = 'bzpos-web-2026';
 // 多店化第 3 段(2026-10-17)：同一份網頁看網址決定是哪間店(…/abao_xh/<網址路徑>/頁名)。培英網址 ab_xhpy＝歷史店代號 meibao，
 // 其他店網址路徑＝店代號(例 ab_xhzx)；正式網域對不到網址路徑就留空(後端會記錄／擋)不猜培英，本機預覽才當培英
 const STORE_PATH_ALIAS_ = { ab_xhpy: 'meibao' };
@@ -782,7 +782,16 @@ function apiPost_(payload) {
 // LIFF 登入 → ID token 送後端 lineLogin(後端向 LINE 驗證) → 拿 6 小時通行證；沒綁過會員就填手機姓名 lineRegister。
 // 會員手機仍放在原本的 #cust-phone(隱藏)，後面結帳/揪團/兌換券的既有流程都照舊讀它，不用各自改
 // ---------------------------------------------------------------
-const LIFF_ID = '2011773510-WG4YyKFL';
+// 11-16 (15c) 去寫死：LIFF 編號、官方帳號改從門市資料讀(core.stores.line_liff_id／line_oa_id，SQL 40；後端 storeProfile 一起回)。
+//   手機存過門市資料就直接用；第一次來還沒存過(或存的是舊版、沒有這兩欄)→ ensureLiffId_ 先問後端一次。沒填＝這間店沒開 LINE 登入
+function lineLiffId_() { return (STORE_PROFILE_ && STORE_PROFILE_.lineLiffId) || ''; }
+function lineOaId_() { return (STORE_PROFILE_ && STORE_PROFILE_.lineOaId) || ''; }
+function ensureLiffId_() {
+  if (lineLiffId_()) return Promise.resolve(lineLiffId_());
+  return apiGet_({ action: 'storeProfile' })
+    .then(d => { if (d && d.status === 'ok' && d.profile) applyStoreProfile_(d.profile); return lineLiffId_(); })
+    .catch(() => '');
+}
 // 10-24 紙本菜單 QR(已送印，內容固定 ?src=menu)：手機相機掃到會用 Safari／Chrome 開，底部多一格瀏覽器工具列、還要另外登入 LINE →
 // 不是在 LINE 裡打開就改走跟圖文選單同一個 LIFF 網址，進 LINE 內建瀏覽器。記號換成 src=menuline、同一分頁只轉一次：
 // 沒裝 LINE 的手機 LIFF 會把人送回本頁(src≠menu)，照常用瀏覽器點餐，不會來回跳
@@ -792,11 +801,11 @@ const QR_TO_LINE_ = (function () {
     if (p.get('src') !== 'menu' || /\bLine\//i.test(navigator.userAgent)) return false;
     if (sessionStorage.getItem('abao_qr2line') === '1') return false;
     sessionStorage.setItem('abao_qr2line', '1');
-    location.replace('https://liff.line.me/' + LIFF_ID + '?src=menuline');
-    return true;
+    if (!lineLiffId_()) return 'wait';   // 11-16 (15c)：還不知道 LIFF 編號 → 頁面最下面先問後端再轉(這裡變數還沒宣告完，不能呼叫後端)
+    location.replace('https://liff.line.me/' + lineLiffId_() + '?src=menuline');
+    return 'now';
   } catch (e) { return false; }
 })();
-const LINE_OA_ID_ = '@056bofyb';   // 官方帳號 A-Bao溪湖直營(訂單完成「加入 LINE 好友」按鈕用)
 // 正式上線時改 true(同時後端 LINE_LOGIN_REQUIRED_ 改 true、LINE Login 頻道要先 Publish)；
 // 上線前只有測試頁 line_test.html(或網址加 ?linetest=1)走 LINE 登入
 const LINE_LOGIN_OPEN = true;
@@ -881,11 +890,13 @@ async function initLineLogin_() {
   document.getElementById('cust-phone').value = '';
   lineStatusHtml_('<div style="color:var(--muted);">LINE 登入中...</div>');
   try {
+    const liffId = await ensureLiffId_();
+    if (!liffId) { lineStatusHtml_('<div style="color:#a30000;">這間店還沒開放 LINE 登入，請洽門市。</div>'); return; }
     await loadLiffSdk_();
-    await liff.init({ liffId: LIFF_ID });
+    await liff.init({ liffId });
   } catch (e) {
     console.warn('LIFF 初始化失敗', e);
-    lineStatusHtml_(`<div style="color:#a30000;">LINE 登入元件載入失敗，請重新整理頁面，或從 LINE 官方帳號「A-Bao溪湖直營」的選單打開。</div>`);
+    lineStatusHtml_(`<div style="color:#a30000;">LINE 登入元件載入失敗，請重新整理頁面，或從這間店的 LINE 官方帳號選單打開。</div>`);
     return;
   }
   if (!liff.isLoggedIn()) {
@@ -925,8 +936,9 @@ async function initLineLogin_() {
 function showFriendPromo_() {
   const el = document.getElementById('confirm-friend');
   if (!el) return;
-  el.href = 'https://line.me/R/ti/p/' + encodeURIComponent(LINE_OA_ID_);
   el.style.display = 'none';
+  if (!lineOaId_()) return;   // 11-16 (15c)：這間店沒填官方帳號就不顯示加好友
+  el.href = 'https://line.me/R/ti/p/' + encodeURIComponent(lineOaId_());
   try {
     if (window.liff && liff.isLoggedIn()) {
       liff.getFriendship()
@@ -6033,16 +6045,20 @@ if (loginResume_ && !cart.length && Array.isArray(loginResume_.cart) && loginRes
   saveCartSession();
 }
 updateCartBar();
-if (QR_TO_LINE_) { /* 10-24 紙本 QR 正在轉進 LINE，這頁不初始化登入 */ }
-else if (LINE_LOGIN_ON) initLineLogin_();
-else {
+function startLineInit_() {
+  if (LINE_LOGIN_ON) { initLineLogin_(); return; }
   prefillRememberedPhone_();
   // 2026-09-29：LINE 登入完/從 liff.line.me 進來時，LINE 一律先回到 LIFF 設定的網址(本頁)並帶 liff.state=要去的頁；
   // 正式頁還沒開 LINE 登入時也要交給 LIFF 處理登入結果並轉過去(測試頁 line_test.html)，不然會停在這裡。一般顧客網址沒有 liff.state，不受影響
   if (new URLSearchParams(location.search).has('liff.state')) {
-    loadLiffSdk_().then(() => liff.init({ liffId: LIFF_ID })).catch(e => console.warn('LIFF 轉址失敗', e));
+    ensureLiffId_().then(id => id ? loadLiffSdk_().then(() => liff.init({ liffId: id })) : null).catch(e => console.warn('LIFF 轉址失敗', e));
   }
 }
+if (QR_TO_LINE_ === 'now') { /* 10-24 紙本 QR 正在轉進 LINE，這頁不初始化登入 */ }
+else if (QR_TO_LINE_ === 'wait') {   // 11-16 (15c)：第一次來還不知道 LIFF 編號 → 先問後端再轉；這間店沒開 LINE 登入就照常用瀏覽器點餐
+  ensureLiffId_().then(id => { if (id) location.replace('https://liff.line.me/' + id + '?src=menuline'); else startLineInit_(); });
+}
+else startLineInit_();
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 checkLinePayReturn_(); // 10-23 從 LINE Pay 跳回來(網址帶 lpreturn)：後端確認收款後一樣輪詢
 setTimeout(checkUnfinishedPay_, 1500); // 10-23 付款頁直接關掉的單：重新打開時問要不要放回購物車(等購物車暫存讀完、頁面畫好)

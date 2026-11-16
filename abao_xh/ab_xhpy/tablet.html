@@ -636,7 +636,7 @@ const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美
 
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡自動帶上，兩個入口只改這一處，
 // 之後不管POS功能繼續加什麼新API都會自動套用，不用每次補強都想一次
-const APP_KEY = 'abao-meibao-2026';
+const APP_KEY = 'bzpos-web-2026';
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
 function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = STORE_ID; return p; }
 document.addEventListener('DOMContentLoaded', () => {   // 多店化第 3 段：店名從門市資料讀
@@ -1805,7 +1805,7 @@ function lookupMember() {
       el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div><div id="member-voucher-panel"></div>`;
       loadMemberVouchers();
       renderPosCart(); // 會員等級權益依等級自動套用
-    } else if (data.status === 'not_found' && LINE_MEMBER_REGISTER) {
+    } else if (data.status === 'not_found' && LINE_MEMBER_REGISTER && lineRegisterUrl_()) {   // 11-16 (15c)：這間店沒填 LIFF 就退回門市直接建會員
       selectedMember = null;
       renderPosCart();
       el.innerHTML = `
@@ -1836,19 +1836,21 @@ function lookupMember() {
 // 2026-09-29 LINE 登入(設計見 LINE登入設計_2026-09-28.md)：老闆定案門市不再用手機直接建會員，改請顧客掃 QR 用 LINE 註冊。
 // 正式上線(點餐頁 LINE_LOGIN_OPEN、後端 LINE_LOGIN_REQUIRED_ 一起)時改 true；之前照舊用手機建會員
 const LINE_MEMBER_REGISTER = true;
-const LINE_REGISTER_URL = 'https://liff.line.me/2011773510-WG4YyKFL';
+// 11-16 (15c) 去寫死：LINE 註冊 QR 用這間店的 LIFF 編號、提示用官方帳號（門市資料 lineLiffId／lineOaId，SQL 40）
+function lineRegisterUrl_() { const id = STORE_PROFILE_ && STORE_PROFILE_.lineLiffId; return id ? 'https://liff.line.me/' + id : ''; }
+function lineOaText_() { const oa = STORE_PROFILE_ && STORE_PROFILE_.lineOaId; return oa ? '加 LINE 好友 ' + oa + ' 後從選單註冊' : '請洽店長'; }
 function showLineRegisterQr_() {
   const draw = () => {
     const box = document.getElementById('member-line-qr');
     if (!box) return;
     box.innerHTML = '';
-    new QRCode(box, { text: LINE_REGISTER_URL, width: 180, height: 180 });
+    new QRCode(box, { text: lineRegisterUrl_(), width: 180, height: 180 });
   };
   if (window.QRCode) { draw(); return; }
   const s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
   s.onload = draw;
-  s.onerror = () => { const box = document.getElementById('member-line-qr'); if (box) box.textContent = 'QR 載入失敗，請顧客加 LINE 好友 @056bofyb 後從選單註冊'; };
+  s.onerror = () => { const box = document.getElementById('member-line-qr'); if (box) box.textContent = 'QR 載入失敗，請顧客' + lineOaText_(); };
   document.head.appendChild(s);
 }
 

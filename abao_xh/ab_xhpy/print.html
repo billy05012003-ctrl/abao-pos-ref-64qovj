@@ -62,7 +62,7 @@ const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/"; // @@後
 const DEV_QS_ = (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) ? new URLSearchParams(location.search) : new URLSearchParams();
 const ORDER_BACKEND_URL = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy05012003.workers.dev/' : BACKEND_URL_SET_;
 const NEW_API_ = ORDER_BACKEND_URL.indexOf('workers.dev') >= 0;   // 打新後端才出現的功能(金流告警、照片縮圖、登入頁文字)都看這個
-const APP_KEY = 'abao-meibao-2026';   // 跟線上點餐頁同一把公開的appKey；出單密碼另外存在這台電腦的localStorage
+const APP_KEY = 'bzpos-web-2026';   // 跟線上點餐頁同一把公開的appKey；出單密碼另外存在這台電腦的localStorage
 // 多店化第 3 段(2026-10-17)：看網址決定是哪間店(…/abao_xh/<網址路徑>/頁名)；培英網址 ab_xhpy＝歷史店代號 meibao，其他店網址路徑＝店代號；
 // 正式網域對不到就留空(後端記錄／擋)不猜培英，本機才當培英。店名用門市設定的簡稱(後端 storeProfile，存在本機)
 const STORE_PATH_ALIAS_ = { ab_xhpy: 'meibao' };
@@ -130,10 +130,10 @@ function fetchJson(url, opts) {
   return fetch(url, { ...opts, signal: ac.signal }).then(r => r.json()).finally(() => clearTimeout(to));
 }
 function apiPost(payload) {
-  return fetchJson(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ ...payload, appKey: APP_KEY }) });
+  return fetchJson(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ storeId: STORE_ID, ...payload, appKey: APP_KEY }) });   // 11-16 (15d)：每個請求都帶店代號（印好了／印失敗原本沒帶）
 }
 function apiGet(params) {
-  const qs = new URLSearchParams({ ...params, appKey: APP_KEY, _: Date.now() }).toString();
+  const qs = new URLSearchParams({ storeId: STORE_ID, ...params, appKey: APP_KEY, _: Date.now() }).toString();
   return fetchJson(ORDER_BACKEND_URL + '?' + qs);
 }
 const getKey = () => { try { return localStorage.getItem('abao_print_key') || ''; } catch (e) { return ''; } };
