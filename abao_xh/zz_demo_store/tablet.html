@@ -602,7 +602,7 @@ const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美
 
 // 2026-09-02新增：後端doGet/doPost入口統一擋appKey，這裡自動帶上，兩個入口只改這一處，
 // 之後不管POS功能繼續加什麼新API都會自動套用，不用每次補強都想一次
-const APP_KEY = 'abao-meibao-2026';
+const APP_KEY = 'bzpos-web-2026';
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
 function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = STORE_ID; return p; }
 document.addEventListener('DOMContentLoaded', () => {   // 多店化第 3 段：店名從門市資料讀
