@@ -282,6 +282,16 @@
   .rpt-bar-track { height:6px; background:#eee; border-radius:3px; margin-top:3px; } .rpt-bar-fill { height:6px; background:var(--brand); border-radius:3px; }
   .rpt-hbar { display:grid; grid-template-columns:90px 1fr 130px; gap:8px; align-items:center; font-size:0.85rem; padding:4px 0; }
   .rpt-cols { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:0.8rem; color:#555; margin-bottom:6px; } .rpt-cols label { cursor:pointer; white-space:nowrap; }
+  /* 11-16 一鍵開新店 */
+  .os-table { border-collapse:collapse; width:100%; font-size:0.85rem; }
+  .os-table th { background:#f3edfc; color:#4b2a86; padding:7px 9px; font-weight:600; text-align:left; white-space:nowrap; border-bottom:1px solid #e2d6f5; }
+  .os-table td { padding:8px 9px; border-bottom:1px solid #eee; vertical-align:top; }
+  .os-badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.75rem; white-space:nowrap; }
+  .os-badge.run { background:#e3f4e6; color:#1e6b2e; } .os-badge.prep { background:#fff1d6; color:#8a5a00; } .os-badge.new { background:#eee; color:#666; }
+  .os-form { border:1px solid #e2d6f5; background:#faf7fd; border-radius:10px; padding:12px 14px; margin:10px 0; }
+  .os-form label { display:block; font-size:0.8rem; color:#555; margin:8px 0 3px; }
+  .os-form input { width:100%; max-width:420px; padding:7px 9px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem; box-sizing:border-box; }
+  .os-list { font-size:0.82rem; margin:6px 0 0 18px; padding:0; } .os-list li { margin:2px 0; }
   /* 11-16 (9b) 會員清單 */
   .ml-table { border-collapse:collapse; width:100%; font-size:0.85rem; }
   .ml-table th { background:#f3edfc; color:#4b2a86; padding:7px 9px; font-weight:600; text-align:left; white-space:nowrap; border-bottom:1px solid #e2d6f5; }
@@ -403,6 +413,7 @@
   <button class="nav-brand" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
   <button class="nav-brand" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
   <button class="nav-brand" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
+  <button class="nav-brand" id="mb-sub-btn-openstore" onclick="switchMemberSubview('openstore')">🏪 開新店</button>
 </nav>
 <script>
 // 11-16 老闆：側欄三段（這間店／品牌範本→門市／品牌共用）點標題收合／展開；收合狀態記在這台電腦（localStorage，讀不到就全部展開）
@@ -652,6 +663,22 @@
     <div id="ml-info" style="font-size:0.78rem;color:var(--muted);margin-bottom:6px;"></div>
     <div id="ml-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" id="ml-more" class="mc-add-btn" style="display:none;margin-top:8px;" onclick="loadMemberList_(false)">載入更多</button>
+  </div>
+  <!-- 11-16 一鍵開新店（多店化第 4＋5 段，規格 一鍵開新店設計_2026-11-16.md）：後端 GET brandStores、POST openNewStore／releaseStore（只限老闆） -->
+  <div id="mb-subview-openstore" style="display:none;">
+    <p style="font-size:0.85rem;color:#444;margin-top:0;">從<b id="os-from-name">這間店</b>複製設定，再把<b>品牌範本</b>的菜單、優惠帶過去，一次開好一間新店。新店先是「<b>籌備中</b>」：顧客還不能線上點餐，平板可以結帳做內部測試；準備好再按「正式開放」。<b>只有老闆可以按。</b></p>
+    <details style="font-size:0.82rem;margin-bottom:10px;"><summary style="cursor:pointer;color:#4b2a86;">會複製什麼／不會複製什麼</summary>
+      <ul class="os-list">
+        <li>✅ 從這間店複製：營業時間、接單時間、取餐設定、飲品升級規則、角色權限、線下／第三方收款清單、自取規則（新店沒填才帶）</li>
+        <li>✅ 從品牌範本帶入並發布：菜單（分類、品項、客製化）、優惠券、集點禮、加價購、區塊配置</li>
+        <li>⚠ 付款方式：線上刷卡、Apple Pay、線上／線下 LINE Pay、取餐付款<b>全部先關</b>（新店還沒有自己的藍新、LINE Pay），之後到新店後台「付款方式」自己開</li>
+        <li>❌ 不複製：店長／夥伴帳號（老闆帳號全品牌通用，店長、夥伴到新店後台建）、店休日、售完狀態、訂單、平板</li>
+        <li>🔁 「籌備中」的店可以再按一次，重新抓這間店最新的設定和品牌範本；營業中的店（啟用而且有訂單）不能按</li>
+      </ul>
+    </details>
+    <div id="os-list"><div class="empty-hint">載入中...</div></div>
+    <div id="os-form-box"></div>
+    <div id="os-result"></div>
   </div>
   <div id="mb-subview-tiers">
     <p style="font-size:0.8rem;color:var(--muted);">
@@ -990,7 +1017,7 @@ function applyBoStoreProfile_(p) {
 //  store＝只影響這間店(其他所有頁：上下架、商家管理、飲品升級、POS管理、團購…)
 //  品牌名、店名都從門市資料讀(brandName／displayName)，不寫死
 let boCurrentTab_ = 'availability';
-const BO_BRAND_SUBVIEWS_ = ['members', 'tiers', 'birthday', 'register'];
+const BO_BRAND_SUBVIEWS_ = ['members', 'tiers', 'birthday', 'register', 'openstore'];
 const BO_SWITCH_SUBVIEWS_ = ['points', 'promo', 'blocks'];
 function boScopeNow_() {
   if (boCurrentTab_ === 'member' && BO_BRAND_SUBVIEWS_.includes(currentMemberSubview)) return 'brand';
@@ -1012,7 +1039,7 @@ function boUpdateScope_() {
   bar.style.display = 'flex';
   bar.className = 'bo-scope-bar ' + (scope === 'brand' ? 'brand' : 'store');
   bar.innerHTML = scope === 'brand'
-    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>${currentMemberSubview === 'members' ? '會員全部門市共用，這一頁只能看' : '這一頁存了馬上生效，全部門市一起套用'}</span>`
+    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>${currentMemberSubview === 'members' ? '會員全部門市共用，這一頁只能看' : currentMemberSubview === 'openstore' ? '開新店、正式開放（只限老闆）' : '這一頁存了馬上生效，全部門市一起套用'}</span>`
     : `<b>🏪 只影響 ${escapeHtml(boStoreShortName_())}</b><span>這一頁的設定只改這間店，不會動到其他門市</span>`;
 }
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
@@ -1138,6 +1165,7 @@ function renderBoUser_() {
   box.style.display = boSession ? 'block' : 'none';
   if (boSession) document.getElementById('bo-user-text').textContent = '登入：' + boSession.name + '（' + boSession.role + '）';
   applyBoRoleUi_();
+  if (boSession) boLoadBrandStores_();   // 11-16 一鍵開新店：品牌同步清單補上已經開的店
   // 10-24 老闆實測：停在「會員 LINE 綁定」直接換店長登入，畫面還留著老闆看到的內容(後端照樣擋，但畫面不該給看)→登入／登出時重跑身分檢查
   const lb = document.getElementById('pmg-subview-linebind');
   if (lb && lb.style.display === 'block') loadBoLineBind_();
@@ -1171,7 +1199,7 @@ const MC_STORE_OPTIONS = [
   { id: BO_HOME_STORE_, label: boStoreShortName_() + '（只改這間店）' },
   { id: '__brand__', label: mcBrandLabel_() }
 ];
-const MC_SYNC_TARGET_STORES = [
+let MC_SYNC_TARGET_STORES = [   // 11-16 一鍵開新店：登入後用 brandStores 補上已經開的店（籌備中、或有訂單的）
   { id: BO_HOME_STORE_, label: boStoreShortName_() }
 ];
 // 11-16 15j：確認視窗顯示店名，不顯示門市代號（meibao）或內部代號（__brand__）
@@ -1227,8 +1255,8 @@ function switchMerchantSubview(name) {
 }
 
 // 「會員相關」側欄巢狀展開：會員分級/生日禮/註冊禮/集點禮/優惠券共用同一套子分頁切換邏輯
-const MB_SUBVIEWS = ['members', 'tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade'];
-let mbLoaded = { members: false, tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false };
+const MB_SUBVIEWS = ['members', 'tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade', 'openstore'];
+let mbLoaded = { members: false, tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false, openstore: false };
 let currentMemberSubview = 'tiers';
 function toggleMemberGroup() { switchMemberSubview(currentMemberSubview); }   // 11-14 側欄分段後「會員相關」群組鈕拿掉了，保留給舊呼叫
 function switchMemberSubview(name) {
@@ -2158,6 +2186,7 @@ function switchBackofficeTab(name) {
     if (!mbLoaded[currentMemberSubview]) {
       mbLoaded[currentMemberSubview] = true;
       if (currentMemberSubview === 'members') loadMemberList_(true);
+      else if (currentMemberSubview === 'openstore') osLoad_();
       else if (currentMemberSubview === 'tiers') loadMemberTiers();
       else if (currentMemberSubview === 'birthday') loadBirthdayGifts();
       else if (currentMemberSubview === 'register') loadRegisterGifts();
@@ -2167,6 +2196,105 @@ function switchBackofficeTab(name) {
       else if (currentMemberSubview === 'drinkupgrade') loadDrinkUpgradeRules();
     }
   }
+}
+
+// ---- 11-16 一鍵開新店（多店化第 4＋5 段，規格 一鍵開新店設計_2026-11-16.md）----
+// 後端：GET brandStores（這個品牌的門市）、POST openNewStore（複製這間店設定＋品牌範本菜單／優惠，新店＝籌備中）、POST releaseStore（籌備中→啟用）
+let osStores_ = [], osBusy_ = false;
+const osStatusOf_ = s => (s.isHome || (s.status === '啟用' && (s.hasOrders || s.hasMenu))) ? 'run' : s.status === '籌備中' ? 'prep' : 'new';
+const osName_ = s => s.shortName || s.displayName || s.storeId;
+function osPageUrl_(s, page) { return location.origin + '/abao_xh/' + encodeURIComponent(s.urlPath || s.storeId) + '/' + page; }
+// 品牌同步（菜單／優惠）可以選的門市：這間店＋已經開的店（籌備中、或已經有訂單）；HR 先建好但還沒開的店不列（裡面還沒有東西）
+function boLoadBrandStores_() {
+  return apiGet({ action: 'brandStores', storeId: BO_HOME_STORE_ }).then(d => {
+    if (!d || d.status !== 'ok') return null;
+    osStores_ = d.stores || [];
+    const others = osStores_.filter(s => !s.isHome && osStatusOf_(s) !== 'new')
+      .map(s => ({ id: s.storeId, label: osName_(s) + (s.status === '籌備中' ? '（籌備中）' : '') }));
+    MC_SYNC_TARGET_STORES = [MC_SYNC_TARGET_STORES[0]].concat(others);
+    const box = document.getElementById('mc-sync-store-list');
+    if (box && box.innerHTML) box.innerHTML = MC_SYNC_TARGET_STORES.map(s => `<label><input type="checkbox" class="mc-sync-store-cb" value="${escapeHtml(s.id)}"> ${escapeHtml(s.label)}</label>`).join('');
+    return osStores_;
+  }).catch(() => null);
+}
+function osLoad_() {
+  document.getElementById('os-from-name').textContent = boStoreShortName_();
+  const box = document.getElementById('os-list');
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  boLoadBrandStores_().then(list => {
+    if (!list) { box.innerHTML = '<div class="empty-hint">讀不到門市清單，請重新整理（要用老闆或店長登入）</div>'; return; }
+    const owner = isBoOwner_();
+    box.innerHTML = `<table class="os-table"><tr><th>門市</th><th>狀態</th><th>網址</th><th></th></tr>` + list.map(s => {
+      const st = osStatusOf_(s);
+      const badge = st === 'run' ? '<span class="os-badge run">營業中</span>' : st === 'prep' ? '<span class="os-badge prep">籌備中</span>' : '<span class="os-badge new">還沒開</span>';
+      const btns = !owner || st === 'run' ? '' :
+        `<button type="button" class="ops-btn" onclick="osOpenForm_('${escapeHtml(s.storeId)}')">${st === 'prep' ? '🔁 再抓一次最新設定' : '🏪 開新店'}</button>` +
+        (st === 'prep' ? ` <button type="button" class="ops-btn" onclick="osRelease_('${escapeHtml(s.storeId)}')">✅ 正式開放</button>` : '');
+      const url = st === 'new' ? '<span style="color:#aaa;">—</span>' : `<span style="font-size:0.75rem;color:#666;">/abao_xh/${escapeHtml(s.urlPath)}/</span>`;
+      return `<tr><td><b>${escapeHtml(osName_(s))}</b>${s.isHome ? '（這間店）' : ''}<br><span style="font-size:0.75rem;color:#888;">${escapeHtml(s.displayName || '')}　代號 ${escapeHtml(s.storeId)}</span></td><td>${badge}</td><td>${url}</td><td style="white-space:nowrap;">${btns}</td></tr>`;
+    }).join('') + '</table>' + (owner ? '' : '<p style="font-size:0.8rem;color:#a30000;">開新店、正式開放只有老闆可以按。</p>');
+  });
+}
+function osOpenForm_(id) {
+  const s = osStores_.find(x => x.storeId === id); if (!s) return;
+  document.getElementById('os-result').innerHTML = '';
+  const prep = osStatusOf_(s) === 'prep';
+  document.getElementById('os-form-box').innerHTML = `<div class="os-form">
+    <b>${prep ? '🔁 重新抓最新設定：' : '🏪 開新店：'}${escapeHtml(osName_(s))}</b>（從 ${escapeHtml(boStoreShortName_())} 複製）
+    <label>顯示店名（顧客看到的；空白＝不改）</label><input id="os-f-name" maxlength="30" value="${escapeHtml(s.displayName || '')}">
+    <label>地址（空白＝不改）</label><input id="os-f-addr" maxlength="80" placeholder="例如：彰化縣溪湖鎮忠孝街12號">
+    <label>店內電話（空白＝不改）</label><input id="os-f-phone" maxlength="20" placeholder="例如：04-8850832">
+    <label>客服電話（頁尾顯示；空白＝不改）</label><input id="os-f-svc" maxlength="20">
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="ops-btn" id="os-go" onclick="osSubmit_('${escapeHtml(s.storeId)}')">${prep ? '🔁 重新抓' : '🏪 開新店'}</button>
+      <button type="button" class="ops-btn" onclick="document.getElementById('os-form-box').innerHTML=''">取消</button>
+    </div></div>`;
+  document.getElementById('os-form-box').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function osSubmit_(id) {
+  if (osBusy_) return;
+  const s = osStores_.find(x => x.storeId === id); if (!s) return;
+  const prep = osStatusOf_(s) === 'prep';
+  const msg = (prep ? '重新抓最新設定：' : '開新店：') + osName_(s) + '\n\n' +
+    '會從「' + boStoreShortName_() + '」複製：營業／接單時間、取餐設定、飲品升級、權限、收款清單\n' +
+    '會從品牌範本帶入並發布：菜單、優惠券、集點禮、加價購、區塊配置\n' +
+    '付款方式線上收款、LINE Pay、取餐付款全部先關\n\n' +
+    (prep ? '這間店原本的設定、菜單、優惠會被覆蓋（覆蓋前菜單、優惠會自動備份）。\n' : '') + '新店狀態＝籌備中（顧客還不能線上點餐）。確定？';
+  if (!confirm(msg)) return;
+  const info = { displayName: document.getElementById('os-f-name').value.trim(), address: document.getElementById('os-f-addr').value.trim(),
+    phone: document.getElementById('os-f-phone').value.trim(), servicePhone: document.getElementById('os-f-svc').value.trim() };
+  osBusy_ = true;
+  const go = document.getElementById('os-go'); if (go) { go.disabled = true; go.textContent = '處理中…（約 10～20 秒）'; }
+  apiPost({ action: 'openNewStore', storeId: BO_HOME_STORE_, newStoreId: id, info }).then(d => {
+    osBusy_ = false;
+    const res = document.getElementById('os-result');
+    if (!d || d.status !== 'ok') {
+      if (go) { go.disabled = false; go.textContent = prep ? '🔁 重新抓' : '🏪 開新店'; }
+      res.innerHTML = '<div class="os-form" style="border-color:#f3c2c2;background:#fff6f6;color:#a30000;">❌ ' + escapeHtml((d && d.message) || '開店失敗') + '</div>';
+      return;
+    }
+    document.getElementById('os-form-box').innerHTML = '';
+    const ns = { storeId: d.storeId, urlPath: d.urlPath };
+    res.innerHTML = `<div class="os-form" style="border-color:#bfe3c6;background:#f3fbf4;">
+      <b>✅ ${escapeHtml(d.displayName || d.storeId)} ${d.reopened ? '已重新抓最新設定' : '已開好'}（籌備中）</b>
+      <ul class="os-list"><li>營業／接單時段 ${d.copied.hours} 筆、收款清單 ${d.copied.offlineMethods} 筆、飲品升級 ${d.copied.upgradeRules} 筆、權限 ${d.copied.permissions} 筆</li>
+      <li>菜單、優惠已從品牌範本同步並發布</li><li>付款方式線上收款、LINE Pay、取餐付款都是關的</li></ul>
+      <div style="font-size:0.82rem;margin-top:8px;"><b>接下來：</b>
+      <ol style="margin:4px 0 0 18px;padding:0;"><li>網頁要部署到 <code>/abao_xh/${escapeHtml(d.urlPath)}/</code>（請 Claude 部署）</li>
+      <li>老闆用老闆帳號登入新店後台：${escapeHtml(osPageUrl_(ns, 'backoffice.html'))}，建店長／夥伴帳號、檢查付款方式</li>
+      <li>新店平板開 ${escapeHtml(osPageUrl_(ns, 'tablet.html'))}，用老闆或店長 PIN 啟用，接出單機</li>
+      <li>內部測試好了，回這頁按「✅ 正式開放」</li></ol></div></div>`;
+    osLoad_();
+  }).catch(() => { osBusy_ = false; if (go) { go.disabled = false; go.textContent = prep ? '🔁 重新抓' : '🏪 開新店'; } alert('網路異常，請稍後再試（可以再按一次）'); });
+}
+function osRelease_(id) {
+  const s = osStores_.find(x => x.storeId === id); if (!s) return;
+  if (!confirm('正式開放：' + osName_(s) + '\n\n開放後顧客就能線上點餐、開揪團（付款方式照新店後台的設定）。\n確定店長／夥伴帳號、平板、出單機、付款方式都準備好了？')) return;
+  apiPost({ action: 'releaseStore', storeId: BO_HOME_STORE_, targetStoreId: id }).then(d => {
+    if (!d || d.status !== 'ok') { alert((d && d.message) || '開放失敗'); return; }
+    document.getElementById('os-result').innerHTML = '<div class="os-form" style="border-color:#bfe3c6;background:#f3fbf4;"><b>✅ ' + escapeHtml(osName_(s)) + ' 已正式開放</b>（其他平板／網頁最多 5 分鐘內生效）</div>';
+    osLoad_();
+  }).catch(() => alert('網路異常，請稍後再試'));
 }
 
 // ---- 11-16 (9b) 會員清單（只看不改）：後端 GET memberList（要後台登入；電話老闆完整、店長遮罩；一頁 50 筆）----
