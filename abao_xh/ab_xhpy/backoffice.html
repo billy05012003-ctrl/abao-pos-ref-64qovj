@@ -1651,11 +1651,25 @@ function loadBoPrinterModes_() {
     const now = Date.now();
     const ago = ms => { const m = Math.max(0, Math.round((now - ms) / 60000)); return m < 1 ? '剛剛' : m < 60 ? m + ' 分鐘前' : m < 1440 ? Math.round(m / 60) + ' 小時前' : Math.round(m / 1440) + ' 天前'; };
     const active = (d.devices || []).filter(v => v.seenAt && now - v.seenAt <= 7 * 86400000);
+    // 11-16 (2i)：新平板多回報 6 碼（自動找、找到幾台、杯貼機、接單列印、上次自動改 IP）；舊平板只有前 3 碼照舊顯示
+    const ok = t => '<span style="color:#1f7a3d;">✅ ' + t + '</span>', bad = t => '<span style="color:#a32d2d;">⚠️ ' + t + '</span>';
     const rows = active.map(v => {
-      const [mode, ip, up] = String(v.pm || '').split('|');
-      const how = mode === 'net' ? '🌐 網路出單機 ' + escapeHtml(ip || '（沒設 IP）') : mode === 'bt' ? '📶 藍牙' : '（這台平板還沒更新，看不到）';
-      const st = !mode ? '' : up === '1' ? '<span style="color:#1f7a3d;">✅ 出單機連線中</span>' : '<span style="color:#a32d2d;">⚠️ 出單機沒連上</span>';
-      return `<div class="ops-order"><div><b>${how}</b><div class="ops-meta">${boFmtMs_(v.created).split(' ')[0]} 由 ${escapeHtml(v.by)} 啟用的平板｜${ago(v.seenAt)}回報</div></div><div style="font-size:0.85rem;text-align:right;">${st}</div></div>`;
+      const f = String(v.pm || '').split('|');
+      const [mode, ip, up] = f;
+      const how = mode === 'net' ? '🌐 網路出單機 ' + escapeHtml(ip || '（沒設 IP）') : mode === 'bt' ? '📶 藍牙出單機' : '（這台平板還沒更新，看不到）';
+      const st = !mode ? '' : up === '1' ? ok('出單機連線中') : bad('出單機沒連上');
+      const more = [];
+      if (mode && f.length >= 9) {
+        const [, , , auto, multi, lbl, run, at, from] = f;
+        if (mode === 'net') more.push('自動找出單機：' + (auto === '1' ? '開' : '<b>關</b>'));
+        if (Number(multi) > 0) more.push(bad('店裡 Wi-Fi 找到 ' + Number(multi) + ' 台出單機，請到平板「出單機設定」選一台'));
+        if (at) more.push('上次自動改 IP：' + boFmtMs_(Number(at) * 1000) + '（' + escapeHtml(from || '?') + ' → ' + escapeHtml(ip || '?') + '）');
+        more.push('杯貼機：' + (lbl === 'u' ? ok('已連線') : lbl === 'd' ? bad('沒連上') : lbl === 'n' ? '藍牙（還沒印過，不知道有沒有連上）' : '不使用'));
+        more.push('接單列印：' + (run === '1' ? ok('執行中') : bad('還沒開始（客人的單不會自動印）')));
+      } else if (mode) more.push('<span style="color:var(--muted);">這台平板還是舊版，重新整理後會多顯示杯貼機、接單列印、自動找出單機</span>');
+      return `<div class="ops-order" style="align-items:flex-start;"><div><b>${how}</b><div class="ops-meta">${boFmtMs_(v.created).split(' ')[0]} 由 ${escapeHtml(v.by)} 啟用的平板｜${ago(v.seenAt)}回報</div>` +
+        (more.length ? `<div style="font-size:0.82rem;line-height:1.7;margin-top:4px;">${more.join('<br>')}</div>` : '') +
+        `</div><div style="font-size:0.85rem;text-align:right;white-space:nowrap;">${st}</div></div>`;
     }).join('');
     box.innerHTML = `<div class="ops-card"><h3>門市平板用哪種出單機</h3>${rows || '<div class="ops-meta" style="padding:6px 0;">最近 7 天沒有平板回報</div>'}
       <div class="ops-meta" style="margin-top:6px;">只能看；要改請到那台平板「POS管理 → 出單機設定」（要店長以上 PIN）。平板每分鐘回報一次。</div></div>`;

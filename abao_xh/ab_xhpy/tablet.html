@@ -1094,7 +1094,20 @@ const PRN_IP_RE_ = /^(\d{1,3}\.){3}\d{1,3}(:\d{2,5})?$/;
 function prnFrame_() { try { const w = document.getElementById('printModuleFrame').contentWindow; return w && typeof w.printCfg_ === 'function' ? w : null; } catch (e) { return null; } }
 function prnCfg_() { const w = prnFrame_(); try { return w ? w.printCfg_() : null; } catch (e) { return null; } }
 // 回報給後台看的出單方式(跟著每分鐘查版本一起送)：網路|IP|連上1/0，或 藍牙||1/0
-function prnReport_() { const c = prnCfg_(); return c ? (c.mode === 'net' ? 'net|' + c.ip : 'bt|') + '|' + (c.linkUp ? 1 : 0) : ''; }
+// 11-16 (2i) 後面多 6 碼：自動找 1/0(藍牙空白)｜自動找到幾台｜杯貼機 o 不使用／u 連上／d 沒連上／n 還沒測｜接單列印 1/0｜上次自動改 IP 時間(秒)｜改之前的 IP
+//   後端 publish.js 的 PM 格式要跟著改；IP 只留數字、點、冒號，超過長度就不送那段(免得整串被後端當格式不對)
+function prnReport_() {
+  const c = prnCfg_();
+  if (!c) return '';
+  const ipOk = v => /^[0-9.:]{0,21}$/.test(String(v || '')) ? String(v || '') : '';
+  const net = c.mode === 'net';
+  const lbl = c.labelMode !== 'bt' ? 'o' : c.labelLinkUp ? 'u' : c.labelChecked ? 'd' : 'n';
+  const last = net && c.autoFindLast && c.autoFindLast.to === c.ip ? c.autoFindLast : null;
+  const at = last ? Math.floor(Number(last.at) / 1000) : 0;
+  return (net ? 'net|' + ipOk(c.ip) : 'bt|') + '|' + (c.linkUp ? 1 : 0) +
+    '|' + (net ? (c.autoFind ? 1 : 0) : '') + '|' + Math.min(9, (c.multi || []).length) + '|' + lbl + '|' + (c.running ? 1 : 0) +
+    '|' + (at > 0 && at < 1e10 ? at : '') + '|' + (last ? ipOk(last.from) : '');
+}
 function prnLoad_() {
   const c = prnCfg_();
   prnPickMode_(c ? c.mode : 'net');
