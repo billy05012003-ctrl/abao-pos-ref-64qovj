@@ -4354,7 +4354,8 @@ const offlineBuildTicketLines_ = offlineTicketKit_.lines, offlineBuildCupLabels_
 // 離線時結帳存在這台平板、自己排版直接送出單機印，網路恢復後一張張補傳(posSyncOffline)，補傳完出單模組才繼續向雲端領單
 const NET_OFFLINE_AFTER_MS_ = 30000, NET_PROBE_MS_ = 10000, OFFLINE_SYNC_MS_ = 15000;
 const OFFLINE_Q_KEY_ = 'abao_pos_offline_q_' + STORE_ID, OFFLINE_SEQ_KEY_ = 'abao_pos_offline_seq_' + STORE_ID;
-let netLastOk_ = Date.now(), netFails_ = 0, netOffline_ = false, offlineSyncing_ = false;
+// 11-16 (2f)：頁面是斷網時從平板存的那份打開的(pos_offline_sw.js 會標記)→當作從沒連上過，開機讀資料失敗 2 次就直接進離線，不用等 30 秒
+let netLastOk_ = window.__ABAO_PAGE_FROM_CACHE__ ? 0 : Date.now(), netFails_ = 0, netOffline_ = false, offlineSyncing_ = false;
 function posOffline_() { return netOffline_; }
 function netOk_() {
   netLastOk_ = Date.now(); netFails_ = 0;
@@ -4598,6 +4599,10 @@ function actQuotaOfflineLeft_(actId) {
   return { limit: c.limit, left: c.left - used };
 }
 offlineRender_();
+// 11-16 (2f) 斷網重開也打得開：登記離線快取(pos_offline_sw.js，只存平板收銀頁＋出單模組；有網路永遠抓最新版，斷網才用存的那份)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('pos_offline_sw.js').catch(err => console.warn('離線快取登記失敗(不影響收銀，只是斷網重開會打不開)', err)); });
+}
 </script>
 </body>
 </html>
