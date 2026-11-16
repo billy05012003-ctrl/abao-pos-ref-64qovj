@@ -282,6 +282,11 @@
   .rpt-bar-track { height:6px; background:#eee; border-radius:3px; margin-top:3px; } .rpt-bar-fill { height:6px; background:var(--brand); border-radius:3px; }
   .rpt-hbar { display:grid; grid-template-columns:90px 1fr 130px; gap:8px; align-items:center; font-size:0.85rem; padding:4px 0; }
   .rpt-cols { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:0.8rem; color:#555; margin-bottom:6px; } .rpt-cols label { cursor:pointer; white-space:nowrap; }
+  /* 11-16 (9b) 會員清單 */
+  .ml-table { border-collapse:collapse; width:100%; font-size:0.85rem; }
+  .ml-table th { background:#f3edfc; color:#4b2a86; padding:7px 9px; font-weight:600; text-align:left; white-space:nowrap; border-bottom:1px solid #e2d6f5; }
+  .ml-table td { padding:7px 9px; border-bottom:1px solid #eee; }
+  .ml-table tr:hover td { background:#faf7fd; }
   .rpt-table-wrap { overflow-x:auto; }
   .rpt-table { border-collapse:collapse; width:100%; font-size:0.85rem; white-space:nowrap; }
   .rpt-table th { background:#343a40; color:#fff; padding:7px 9px; font-weight:600; border:1px solid #4a5056; } .rpt-table td { padding:6px 9px; border-bottom:1px solid #eee; text-align:right; }
@@ -394,6 +399,7 @@
   <button id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
   <button id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">區塊配置</button>
   <div class="nav-sec brand" data-sec="brand" role="button" tabindex="0" title="點一下收合／展開">🟣 品牌共用<span class="sec-caret">▼</span><small>全部門市一起生效</small></div>
+  <button class="nav-brand" id="mb-sub-btn-members" onclick="switchMemberSubview('members')">👥 會員清單</button>
   <button class="nav-brand" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
   <button class="nav-brand" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
   <button class="nav-brand" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
@@ -635,6 +641,18 @@
   </div>
 </div>
 <div id="view-member" class="view" style="display:none;">
+  <!-- 11-16 (9b) 會員清單（對照大麥「品牌會員列表」）：只看不改；電話老闆看完整、店長看遮罩；後端 GET memberList -->
+  <div id="mb-subview-members" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">會員全部門市共用。這一頁<b>只能看</b>：要改會員資料、點數，請在門市平板或「POS管理 → 會員 LINE 綁定」處理。等級、半年累積是會員最後一次查詢或消費時算的，很久沒來的會員可能還是舊等級。</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+      <input id="ml-q" type="search" placeholder="搜尋姓名，或電話（至少 3 碼）" maxlength="30" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onkeydown="if(event.key==='Enter')loadMemberList_(true)">
+      <select id="ml-tier" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onchange="loadMemberList_(true)"><option value="">全部等級</option></select>
+      <button type="button" class="ops-btn" onclick="loadMemberList_(true)">🔍 查詢</button>
+    </div>
+    <div id="ml-info" style="font-size:0.78rem;color:var(--muted);margin-bottom:6px;"></div>
+    <div id="ml-list"><div class="empty-hint">載入中...</div></div>
+    <button type="button" id="ml-more" class="mc-add-btn" style="display:none;margin-top:8px;" onclick="loadMemberList_(false)">載入更多</button>
+  </div>
   <div id="mb-subview-tiers">
     <p style="font-size:0.8rem;color:var(--muted);">
       升等/續等門檻、點數倍率都在這裡改，改完立刻生效，會直接套用到所有會員下次查詢/消費時的等級判定。
@@ -972,7 +990,7 @@ function applyBoStoreProfile_(p) {
 //  store＝只影響這間店(其他所有頁：上下架、商家管理、飲品升級、POS管理、團購…)
 //  品牌名、店名都從門市資料讀(brandName／displayName)，不寫死
 let boCurrentTab_ = 'availability';
-const BO_BRAND_SUBVIEWS_ = ['tiers', 'birthday', 'register'];
+const BO_BRAND_SUBVIEWS_ = ['members', 'tiers', 'birthday', 'register'];
 const BO_SWITCH_SUBVIEWS_ = ['points', 'promo', 'blocks'];
 function boScopeNow_() {
   if (boCurrentTab_ === 'member' && BO_BRAND_SUBVIEWS_.includes(currentMemberSubview)) return 'brand';
@@ -994,7 +1012,7 @@ function boUpdateScope_() {
   bar.style.display = 'flex';
   bar.className = 'bo-scope-bar ' + (scope === 'brand' ? 'brand' : 'store');
   bar.innerHTML = scope === 'brand'
-    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>這一頁存了馬上生效，全部門市一起套用</span>`
+    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>${currentMemberSubview === 'members' ? '會員全部門市共用，這一頁只能看' : '這一頁存了馬上生效，全部門市一起套用'}</span>`
     : `<b>🏪 只影響 ${escapeHtml(boStoreShortName_())}</b><span>這一頁的設定只改這間店，不會動到其他門市</span>`;
 }
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
@@ -1209,8 +1227,8 @@ function switchMerchantSubview(name) {
 }
 
 // 「會員相關」側欄巢狀展開：會員分級/生日禮/註冊禮/集點禮/優惠券共用同一套子分頁切換邏輯
-const MB_SUBVIEWS = ['tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade'];
-let mbLoaded = { tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false };
+const MB_SUBVIEWS = ['members', 'tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade'];
+let mbLoaded = { members: false, tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false };
 let currentMemberSubview = 'tiers';
 function toggleMemberGroup() { switchMemberSubview(currentMemberSubview); }   // 11-14 側欄分段後「會員相關」群組鈕拿掉了，保留給舊呼叫
 function switchMemberSubview(name) {
@@ -1258,7 +1276,7 @@ const RPT_COLS_ = [['net', '銷售淨額'], ['disc', '折扣淨額'], ['voidAmt'
 const RPT_MONEY_ = new Set(['net', 'disc', 'voidAmt', 'refAmt', 'gross', 'avg']);
 const RPT_ONLINE_ = ['線上信用卡', '線上Apple Pay', '線上Google Pay', '線上LINEPay'];
 const RPT_OFFLINE_FIRST_ = ['現金', '線下LINEPay', 'LINEPay mini', '其他'];
-const RPT_CH_NAME_ = { 'POS': '門市 POS', '門市': '門市 POS', '線上': '線上點餐（含揪團）', '揪團': '揪團' };   // 實際通路值：POS／線上（揪團單也記線上）／熊貓／581／日系
+const RPT_CH_NAME_ = { 'POS': '門市 POS', '門市': '門市 POS', '線上': '線上點餐', '揪團': '揪團' };   // 實際通路值：POS／線上／熊貓／581／日系…；11-16 (9f) 揪團單通路也記線上，報表 SQL 41 靠 group_id 分成「揪團」
 const RPT_WD_ = ['日', '一', '二', '三', '四', '五', '六'];
 const rptMoney_ = v => '$' + Math.round(v).toLocaleString('en-US');
 const rptPad_ = n => String(n).padStart(2, '0');
@@ -2139,7 +2157,8 @@ function switchBackofficeTab(name) {
     document.getElementById('member-caret')?.classList.add('open');
     if (!mbLoaded[currentMemberSubview]) {
       mbLoaded[currentMemberSubview] = true;
-      if (currentMemberSubview === 'tiers') loadMemberTiers();
+      if (currentMemberSubview === 'members') loadMemberList_(true);
+      else if (currentMemberSubview === 'tiers') loadMemberTiers();
       else if (currentMemberSubview === 'birthday') loadBirthdayGifts();
       else if (currentMemberSubview === 'register') loadRegisterGifts();
       else if (currentMemberSubview === 'points') loadPointGifts();
@@ -2148,6 +2167,38 @@ function switchBackofficeTab(name) {
       else if (currentMemberSubview === 'drinkupgrade') loadDrinkUpgradeRules();
     }
   }
+}
+
+// ---- 11-16 (9b) 會員清單（只看不改）：後端 GET memberList（要後台登入；電話老闆完整、店長遮罩；一頁 50 筆）----
+let mlOffset_ = 0, mlSeq_ = 0, mlRows_ = [];
+function loadMemberList_(reset) {
+  const box = document.getElementById('ml-list'), more = document.getElementById('ml-more'), info = document.getElementById('ml-info');
+  if (reset) { mlOffset_ = 0; mlRows_ = []; box.innerHTML = '<div class="empty-hint">載入中...</div>'; }
+  more.disabled = true;
+  const seq = ++mlSeq_;
+  const sel = document.getElementById('ml-tier');
+  apiGet({ action: 'memberList', storeId: BO_HOME_STORE_, q: document.getElementById('ml-q').value.trim(), tierId: sel.value, offset: mlOffset_ }).then(d => {
+    if (seq !== mlSeq_) return;   // 連按查詢：只顯示最後一次
+    more.disabled = false;
+    if (!d || d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml((d && d.message) || '讀取失敗') + '</div>'; more.style.display = 'none'; return; }
+    if (sel.options.length <= 1 && d.tiers && d.tiers.length) {
+      const keep = sel.value;
+      sel.innerHTML = '<option value="">全部等級</option>' + d.tiers.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+      sel.value = keep;
+    }
+    mlRows_ = mlRows_.concat(d.list || []);
+    mlOffset_ = (d.offset || 0) + (d.list || []).length;
+    info.textContent = '目前顯示 ' + mlRows_.length + ' 位' + (d.more ? '（還有更多，按最下面「載入更多」）' : '') + (d.owner ? '' : '｜店長登入：電話只顯示前後幾碼');
+    more.style.display = d.more ? '' : 'none';
+    if (!mlRows_.length) { box.innerHTML = '<div class="empty-hint">找不到符合的會員</div>'; return; }
+    box.innerHTML = '<div style="overflow-x:auto;"><table class="ml-table">'
+      + '<tr><th>姓名</th><th>電話</th><th>等級</th><th style="text-align:right;">點數</th><th style="text-align:right;">半年累積</th><th>最近消費</th><th>加入日</th><th>生日</th><th>LINE</th></tr>'
+      + mlRows_.map(m => `<tr${m.status && m.status !== '啟用' ? ' style="color:var(--muted);"' : ''}><td>${escapeHtml(m.name)}${m.status && m.status !== '啟用' ? '（' + escapeHtml(m.status) + '）' : ''}</td>`
+        + `<td style="white-space:nowrap;">${escapeHtml(m.phone)}</td><td>${escapeHtml(m.tier)}</td><td style="text-align:right;">${m.points}</td>`
+        + `<td style="text-align:right;">$${Number(m.periodSpend).toLocaleString('en-US')}</td><td style="white-space:nowrap;">${escapeHtml(m.lastOrderAt) || '—'}</td>`
+        + `<td style="white-space:nowrap;">${escapeHtml(m.joinedAt)}</td><td>${escapeHtml(m.birthday) || '—'}</td><td>${m.line ? '✅' : '—'}</td></tr>`).join('')
+      + '</table></div>';
+  }).catch(() => { if (seq === mlSeq_) { more.disabled = false; box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; } });
 }
 
 function escapeHtml(s) {
