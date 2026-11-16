@@ -5839,7 +5839,7 @@ function saveProfile_() {
     document.getElementById('pf-msg').innerHTML = '<span style="color:#1e8e3e;">已儲存</span>';
   }).catch(() => { btn.disabled = false; btn.textContent = '儲存'; msg.textContent = '儲存失敗，請確認網路連線後再試'; });
 }
-function closeProfile_() { document.getElementById('profile-overlay').classList.remove('open'); }
+function closeProfile_() { document.getElementById('profile-overlay').classList.remove('open'); }
 // 11-16 (11m) 會員 QR：QR 內容就是會員手機號碼（10 碼）。平板查會員那格輸滿 10 碼會自動查，
 //   掃碼槍掃一下＝店員手打電話：後端不用改、斷網收銀也照樣記電話；跟查會員同一個信任情境（知道電話就查得到）
 let mqrLibP_ = null;
