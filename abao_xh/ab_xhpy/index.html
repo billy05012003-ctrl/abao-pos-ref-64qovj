@@ -456,6 +456,20 @@
     <button type="button" class="btn-secondary" onclick="lineLogout_()" style="margin-top:12px;">登出</button>
   </div>
 </div>
+<!-- 11-16 (11m) 會員 QR：結帳時給店員用掃碼槍掃，平板查會員那格自動帶出會員（QR 內容＝手機號碼，跟店員手打電話同一條路） -->
+<div class="overlay" id="mqr-overlay" style="z-index:27;">
+  <div class="sheet" style="text-align:center;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+      <h2 style="margin:0;">會員 QR</h2>
+      <button type="button" onclick="closeMemberQr_()" style="border:none; background:none; font-size:1.4rem; cursor:pointer; padding:0 4px; line-height:1;">✕</button>
+    </div>
+    <div id="mqr-name" style="font-weight:700; font-size:1.05rem; margin-top:4px;"></div>
+    <div id="mqr-box" style="display:inline-block; padding:14px; background:#fff; border:1px solid var(--border); border-radius:12px; margin:10px 0 6px; min-width:200px; min-height:200px; box-sizing:content-box;"></div>
+    <div id="mqr-phone" style="font-size:0.9rem; color:var(--muted); letter-spacing:1px;"></div>
+    <div style="font-size:0.85rem; line-height:1.7; margin-top:10px;">門市結帳時把這個畫面給店員掃，就不用報電話。<br><span style="color:var(--muted);">掃不到時請把螢幕調亮一點。</span></div>
+    <button type="button" class="btn-secondary" onclick="closeMemberQr_()" style="margin-top:14px;">關閉</button>
+  </div>
+</div>
 <!-- 11-09 老闆選方式一：LINE 登入回來還不是會員 → 直接跳這個小視窗建會員(原本表單藏在購物車最下面，首頁看不出下一步) -->
 <div class="overlay" id="reg-overlay" style="z-index:30;">
   <div class="sheet">
@@ -5754,6 +5768,7 @@ function renderMemberCard_() {
       <button type="button" class="tr" onclick="openTierOverlay()">👑 ${escapeHtml_(tierName)} ›</button>
       <button type="button" class="pt" aria-label="點數 ${Number(m.points) || 0}" onclick="openWallet_('points')">⭐ ${Number(m.points) || 0}</button>
       <button type="button" class="pt${used ? ' on' : ''}" aria-label="${used ? '已套用 ' + used + ' 張兌換券' : '兌換券 ' + voucherCountText_()}" onclick="openWallet_('voucher')">${used ? '✓ ' + used : '🎟 ' + voucherCountText_()}</button>
+      <button type="button" class="pt" aria-label="會員 QR（結帳給店員掃）" onclick="openMemberQr_()">📱 QR</button>
       <div class="lk"><button type="button" onclick="openProfile_()">會員資料</button></div>
     </div>
     ${bar ? `<div class="pg">${bar}${gap ? `<span>${gap}</span>` : ''}</div>` : ''}`;   // 10-24 老闆：「等級好禮」跟「金寶會員 ›」是同一頁→拿掉；點數／兌換券改小圓鈕放第一排(原本下面三格)；卡片上的「登出」拿掉(會員資料頁最下面本來就有)
@@ -5824,7 +5839,36 @@ function saveProfile_() {
     document.getElementById('pf-msg').innerHTML = '<span style="color:#1e8e3e;">已儲存</span>';
   }).catch(() => { btn.disabled = false; btn.textContent = '儲存'; msg.textContent = '儲存失敗，請確認網路連線後再試'; });
 }
-function closeProfile_() { document.getElementById('profile-overlay').classList.remove('open'); }
+function closeProfile_() { document.getElementById('profile-overlay').classList.remove('open'); }
+// 11-16 (11m) 會員 QR：QR 內容就是會員手機號碼（10 碼）。平板查會員那格輸滿 10 碼會自動查，
+//   掃碼槍掃一下＝店員手打電話：後端不用改、斷網收銀也照樣記電話；跟查會員同一個信任情境（知道電話就查得到）
+let mqrLibP_ = null;
+function mqrLoadLib_() {
+  if (window.QRCode) return Promise.resolve();
+  if (!mqrLibP_) mqrLibP_ = new Promise((ok, ng) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    sc.onload = ok; sc.onerror = () => { mqrLibP_ = null; ng(); };
+    document.head.appendChild(sc);
+  });
+  return mqrLibP_;
+}
+function openMemberQr_() {
+  const m = verifiedMember;
+  if (!m) return;
+  const ph = String(m.phone || '').replace(/\D/g, '');
+  const box = document.getElementById('mqr-box');
+  document.getElementById('mqr-name').textContent = (m.name || '') + (m.tier ? '・' + (m.tier.endsWith('會員') ? m.tier : m.tier + '會員') : '');
+  document.getElementById('mqr-phone').textContent = ph.length === 10 ? ph.slice(0, 4) + '-***-' + ph.slice(7) : '';
+  document.getElementById('mqr-overlay').classList.add('open');
+  if (!/^09\d{8}$/.test(ph)) { box.textContent = '這個會員帳號沒有手機號碼，結帳時請直接跟店員說'; return; }
+  box.textContent = '載入中…';
+  mqrLoadLib_().then(() => {
+    box.innerHTML = '';
+    new QRCode(box, { text: ph, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+  }).catch(() => { box.textContent = 'QR 載入失敗，結帳時請直接跟店員說手機號碼'; });
+}
+function closeMemberQr_() { document.getElementById('mqr-overlay').classList.remove('open'); }
 // 登出(10-16)：登出 LINE 後重新整理，購物車留著(這個分頁)；下次結帳再登入
 function lineLogout_() {
   if (!confirm('確定要登出 LINE 嗎？\n登出後點餐頁不會顯示你的點數和兌換券，結帳時需要再登入。')) return;
