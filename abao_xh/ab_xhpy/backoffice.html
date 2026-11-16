@@ -2208,7 +2208,7 @@ function osPageUrl_(s, page) { return location.origin + '/abao_xh/' + encodeURIC
 function boLoadBrandStores_() {
   return apiGet({ action: 'brandStores', storeId: BO_HOME_STORE_ }).then(d => {
     if (!d || d.status !== 'ok') return null;
-    osStores_ = d.stores || [];
+    osStores_ = (d.stores || []).slice().sort((a, b) => (b.isHome ? 1 : 0) - (a.isHome ? 1 : 0));   // 11-16 老闆：這間店排第一，其他照店代號
     const others = osStores_.filter(s => !s.isHome && osStatusOf_(s) !== 'new')
       .map(s => ({ id: s.storeId, label: osName_(s) + (s.status === '籌備中' ? '（籌備中）' : '') }));
     MC_SYNC_TARGET_STORES = [MC_SYNC_TARGET_STORES[0]].concat(others);
