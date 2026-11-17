@@ -264,7 +264,7 @@
     <div class="pos-col-title">會員</div>
     <div id="member-phone-wrap" style="position:relative;">
     <div class="row">
-      <input type="tel" id="member-phone-input" placeholder="顧客電話，或掃會員 QR" maxlength="10" inputmode="none" autocomplete="off" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;" onfocus="posAutoNewOrder_(); posNumpadShow_()" onclick="posNumpadShow_()" oninput="onMemberPhoneInput_()">
+      <input type="tel" id="member-phone-input" placeholder="顧客電話，或掃會員 QR" maxlength="10" inputmode="none" readonly autocomplete="off" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;background:#fff;" onfocus="posAutoNewOrder_(); posNumpadShow_()" onclick="posNumpadShow_()" onkeydown="posPhoneKey_(event)" oninput="onMemberPhoneInput_()">
       <button class="btn btn-primary" onclick="lookupMember()">查詢</button>
     </div>
     <!-- 11-16 (2o) POS 自己的大數字鍵：系統鍵盤有時跳撥號鍵盤、有時整排英文 → 電話格改 inputmode="none" 不叫系統鍵盤，點格子跳這組 0～9 -->
@@ -1813,11 +1813,20 @@ function posNumpadHide_(blur) {
   document.getElementById('pos-numpad').style.display = 'none';
   if (blur) document.getElementById('member-phone-input').blur();
 }
+// 11-17 (2o) 老闆實測：Fully 平板不理 inputmode="none"，照樣跳撥號鍵盤跟大數字鍵打架→電話格改 readonly(系統鍵盤一定不跳)；
+// readonly 收不到打字，掃碼槍／實體鍵盤改在這裡接按鍵(readonly 不接輸入法，注音也不會把數字變ㄅㄉ)
+function posPhoneKey_(e) {
+  if (e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (/^[0-9]$/.test(e.key)) { e.preventDefault(); posNumpadKey_(e.key); }
+  else if (e.key === 'Backspace') { e.preventDefault(); posNumpadKey_('back'); }
+  else if (e.key === 'Enter') { e.preventDefault(); lookupMember(); }
+}
 function posNumpadKey_(k) {
   const inp = document.getElementById('member-phone-input');
   if (k === 'clear') inp.value = '';
   else if (k === 'back') inp.value = inp.value.slice(0, -1);
   else if (inp.value.length < 10) inp.value += k;
+  else inp.value = k;   // 已經滿 10 碼(上一位的電話)再打／再掃＝換一支新號碼，從頭開始
   inp.focus();
   if (k === 'clear' || k === 'back') { document.getElementById('member-info').innerHTML = ''; return; }
   onMemberPhoneInput_();
