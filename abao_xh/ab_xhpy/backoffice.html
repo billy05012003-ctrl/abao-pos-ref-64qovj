@@ -2693,14 +2693,18 @@ function lpEnvNote_(data) {
   if (data.linePayEnv === 'sandbox') return '<b>目前接的是 LINE Pay 測試環境（不會真的收錢），正式上線前不要對顧客使用。</b>';
   return '';
 }
+// 11-18 (12f-A) 收款帳戶名單：這間店還沒有自己的藍新／LINE Pay（廠商在後端設定），相關開關鎖住＋紅字說明（舊後端沒帶這兩欄＝照舊）
+const PM_NO_NB_ = '<b>這間店還沒有自己的藍新收款帳戶，要廠商（BZ）設定後才能開</b>（避免錢收進別間店的帳戶）。';
+const PM_NO_LP_ = '<b>這間店還沒有自己的 LINE Pay 收款帳戶，要廠商（BZ）設定後才能開</b>（避免錢收進別間店的帳戶）。';
 // 10-22 LINE Pay 門市反掃開關(線下收款分頁上方)
 function loadLinePayScanSettings() {
   apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
     const el = document.getElementById('lp-scan-form');
     if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
+    const noLp = data.linePayAccountOk === false;
     el.innerHTML =
-      pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, false,
-        '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。') +
+      pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, noLp,
+        (noLp ? PM_NO_LP_ : '') + '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。', noLp) +
       pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
         (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，顧客用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。');
   });
@@ -2710,19 +2714,20 @@ function loadPaymentMethodSettings() {
   apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
     const el = document.getElementById('payment-method-form');
     if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
+    const noNb = data.newebpayAccountOk === false, noLp = data.linePayAccountOk === false;
     el.innerHTML =
       pmSettingRow_('payAtPickup', '取餐付款', data.payAtPickupEnabled, data.payAtPickupStoreOff,
         data.payAtPickupStoreOff
           ? '門市「線下收款」的取餐付款關著，線上也不能開（顧客線上選了，門市沒地方標已收款）。要開請先到「線下收款」打開。'
           : '開啟後顧客結帳頁會顯示「取餐現場付款」——訂單直接成立、不走線上金流，到店要先在雲端平板標記已收款才能取餐。', data.payAtPickupStoreOff) +
-      pmSettingRow_('credit', '線上信用卡（藍新，一次付清）', data.creditEnabled, false,
-        '關掉的話線上Apple Pay 也會跟著關（同一條藍新結帳頁）。') +
+      pmSettingRow_('credit', '線上信用卡（藍新，一次付清）', data.creditEnabled, noNb,
+        (noNb ? PM_NO_NB_ : '') + '關掉的話線上Apple Pay 也會跟著關（同一條藍新結帳頁）。', noNb) +
       pmSettingRow_('applePay', '線上Apple Pay（藍新）', data.applePayEnabled, !data.creditEnabled,
-        (data.creditEnabled ? '' : '<b>須先開啟「線上信用卡」。</b>') + '跟信用卡走同一條藍新結帳頁，裝置/瀏覽器支援時會自動顯示 Apple Pay 按鈕，沒有獨立的付款流程。') +
+        (noNb ? PM_NO_NB_ : data.creditEnabled ? '' : '<b>須先開啟「線上信用卡」。</b>') + '跟信用卡走同一條藍新結帳頁，裝置/瀏覽器支援時會自動顯示 Apple Pay 按鈕，沒有獨立的付款流程。', noNb) +
       pmSettingRow_('aftee', 'AFTEE先享後付', data.afteeEnabled, true,
         '藍新帳號尚未申請開通此功能，開通＋後端串接完成前不能開（不會出現在顧客結帳頁）。') +
-      pmSettingRow_('linePayOnline', '線上LINEPay（直接串 LINE Pay）', data.linePayMode === 'LinePayAPI', false,
-        '顧客在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。' + lpEnvNote_(data) + 'LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。');
+      pmSettingRow_('linePayOnline', '線上LINEPay（直接串 LINE Pay）', data.linePayMode === 'LinePayAPI', noLp,
+        (noLp ? PM_NO_LP_ : '') + '顧客在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。' + lpEnvNote_(data) + 'LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。', noLp);
   });
 }
 
