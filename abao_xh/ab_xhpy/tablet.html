@@ -1398,9 +1398,40 @@ function doOpenRegister() {
     apiPost({ action: 'openRegister', storeId: STORE_ID, staffName: staffName || openBy, staffPin }).then(data => {
       if (data.status !== 'ok') { alert(data.message || '開帳失敗'); return; }
       document.getElementById('pos-manage-result').textContent = '已開帳（' + new Date().toLocaleTimeString('zh-TW', { hour12: false }) + '）';
+      posRegOpenedDay_ = todayYmd_();
       loadRegisterLog();
     });
   });
+}
+
+// 11-17 (2q) 老闆選「提醒不擋」：開帳只是記錄、結帳不檢查；今天第一次按「確認結帳」時還沒開帳→跳提醒，
+//   可以先去開帳，也可以先結帳（這台平板今天不再提醒）。讀不到開帳記錄、斷網時不提醒（不能因為提醒卡住結帳）
+let posRegOpenedDay_ = '', posRegCheckedDay_ = '';
+const POS_REG_SKIP_KEY_ = 'abao_pos_reg_skip_' + STORE_ID;
+function posRegNote_(logs) {   // 開關帳記錄（新到舊）裡今天有沒有「開帳」
+  const t = todayYmd_();
+  posRegCheckedDay_ = t;
+  const ymd = ms => { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  if ((logs || []).some(l => l.type === '開帳' && ymd(l.time) === t)) posRegOpenedDay_ = t;
+}
+function posRegCheck_() {
+  if (posRegOpenedDay_ === todayYmd_() || posOffline_()) return;
+  apiGet({ action: 'registerLog', storeId: STORE_ID }).then(d => { if (d && d.status === 'ok') posRegNote_(d.logs); }).catch(() => {});
+}
+setTimeout(posRegCheck_, 3000);
+setInterval(posRegCheck_, 5 * 60 * 1000);   // 平板整天開著、跨日也會重新確認
+// 回 true＝先去開帳了（這次不結帳）
+function posRegRemind_() {
+  const t = todayYmd_();
+  if (posRegOpenedDay_ === t || posRegCheckedDay_ !== t || posOffline_()) return false;
+  let skip = ''; try { skip = localStorage.getItem(POS_REG_SKIP_KEY_) || ''; } catch (e) {}
+  if (skip === t) return false;
+  if (confirm('📅 今天還沒開帳\n\n按「確定」先去開帳\n按「取消」先結帳（今天不再提醒）')) {
+    openPosManageOverlay(); pmgOpen_('open');
+    return true;
+  }
+  try { localStorage.setItem(POS_REG_SKIP_KEY_, t); } catch (e) {}
+  return false;
 }
 
 let registerLogUnlocked_ = false;
@@ -1414,6 +1445,7 @@ function loadRegisterLog() {
   }
   apiGet({ action: 'registerLog', storeId: STORE_ID }).then(data => {
     renderPmgToday_(data && data.status === 'ok' ? data.logs : []);
+    if (data && data.status === 'ok') posRegNote_(data.logs);   // 11-17 (2q)
     const container = document.getElementById('register-log-list');
     if (!container) return;
     if (data.status !== 'ok' || data.logs.length === 0) {
@@ -3717,6 +3749,7 @@ function submitPosOrder() {
   }
   const btn = document.getElementById('pos-submit-order-btn');
   if (btn.disabled) return;
+  if (posRegRemind_()) return;   // 11-17 (2q) 今天還沒開帳：提醒不擋
   withPosPerm_('checkout', '結帳', (staffName, staffPin) => submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, pickupTime, staffName, staffPin));
 }
 // 這張單所有折扣逐項：兌換券、門市活動按鈕(負數＝加價，例如舊的活動飲品加價)、會員等級權益
