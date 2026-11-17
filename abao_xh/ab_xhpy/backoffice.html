@@ -46,6 +46,8 @@
   .sidebar .nav-sec.switch { color:#7b4fa8; }
   .sidebar .nav-sec.brand { color:#6a3db8; }
   .sidebar button.nav-brand.active { color:#6a3db8; background:#f3edfc; border-left-color:#6a3db8; }
+  .sidebar button.lic-locked { opacity:0.45; cursor:not-allowed; }   /* 11-17 廠商授權：選配沒買 */
+  .sidebar button.lic-locked::after { content:' 🔒'; }
   /* 11-16 老闆：三段標題可以點一下收合／展開（記在這台電腦） */
   .sidebar .nav-sec { cursor:pointer; user-select:none; position:relative; padding-right:30px; }
   .sidebar .nav-sec:hover { background:#faf7f5; }
@@ -352,7 +354,7 @@
 
 <header style="position:relative;">
   <h1>POS後台</h1>
-  <div class="sub"><span id="bo-head-store" data-store="displayName"></span><span id="bo-head-brand" style="display:none;"></span><span id="bo-scope-chip" class="bo-scope-chip" style="display:none;"></span></div><!-- 11-14 老闆：站在軟體商角度，店名從門市資料讀（displayName），不寫死任何品牌／店名；營業登記名稱只留在發票、商店資訊頁、法律文字 -->
+  <div class="sub"><span id="bo-head-store" data-store="displayName"></span><span id="bo-head-brand" style="display:none;"></span><span id="bo-scope-chip" class="bo-scope-chip" style="display:none;"></span><select id="bo-store-switch" title="切換到別間店的後台" onchange="boSwitchStore_(this)" style="display:none;margin-left:8px;font-size:0.8rem;padding:2px 4px;border-radius:6px;border:1px solid rgba(255,255,255,0.6);max-width:180px;"></select></div><!-- 11-14 老闆：站在軟體商角度，店名從門市資料讀（displayName），不寫死任何品牌／店名；營業登記名稱只留在發票、商店資訊頁、法律文字 -->
   <div id="bo-user" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:0.85rem;display:none;">
     <span id="bo-user-text"></span>
     <button type="button" onclick="boLogout()" style="margin-left:8px;background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.6);border-radius:6px;padding:4px 10px;cursor:pointer;">登出</button>
@@ -1144,7 +1146,7 @@ function boLogin() {
   err.textContent = '登入中…';
   fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'boLogin', storeId: BO_HOME_STORE_, name, pin, appKey: APP_KEY }) }).then(r => r.json()).then(d => {
     if (d.status !== 'ok') { err.textContent = d.message || '登入失敗'; return; }
-    boSession = { token: d.token, name: d.name, role: d.role, exp: d.exp };
+    boSession = { token: d.token, name: d.name, role: d.role, exp: d.exp, license: d.license || null };
     saveBoSession_();
     document.getElementById('bo-login-overlay').style.display = 'none';
     renderBoUser_();
@@ -1165,12 +1167,59 @@ function renderBoUser_() {
   box.style.display = boSession ? 'block' : 'none';
   if (boSession) document.getElementById('bo-user-text').textContent = '登入：' + boSession.name + '（' + boSession.role + '）';
   applyBoRoleUi_();
+  applyLicenseUi_();   // 11-17 廠商授權
   if (boSession) boLoadBrandStores_();   // 11-16 一鍵開新店：品牌同步清單補上已經開的店
   // 10-24 老闆實測：停在「會員 LINE 綁定」直接換店長登入，畫面還留著老闆看到的內容(後端照樣擋，但畫面不該給看)→登入／登出時重跑身分檢查
   const lb = document.getElementById('pmg-subview-linebind');
   if (lb && lb.style.display === 'block') loadBoLineBind_();
   if (!isBoOwner_()) { const badge = document.getElementById('bo-linebind-badge'); if (badge) badge.textContent = ''; }
 }
+// 11-17 廠商授權第 1 段（規格 廠商授權設計_2026-11-17.md）：後端登入／whoami 帶回 license
+//   選配沒買＝灰色＋🔒「加購才能用」（按了只跳說明）；廠商專用（開新店）＝不出現。
+//   後端沒開授權檢查（mode＝off）、或這個客戶授權表一列都沒有（configured＝false）→ 照舊全部顯示
+const BO_LIC_MAP_ = {
+  'mb-sub-btn-drinkupgrade': 'promo', 'mb-sub-btn-promo': 'promo', 'mb-sub-btn-blocks': 'promo',
+  'tab-btn-group': 'group_order',
+  'mb-sub-btn-points': 'member', 'mb-sub-btn-members': 'member', 'mb-sub-btn-tiers': 'member',
+  'mb-sub-btn-birthday': 'member', 'mb-sub-btn-register': 'member',
+  'mb-sub-btn-openstore': 'vendor',
+};
+const BO_LIC_NAME_ = { promo: '優惠活動', group_order: '揪團', member: '會員', multistore: '多店' };
+function boLicense_() { return (boSession && boSession.license) || null; }
+function boLicLocked_(f) {
+  const lic = boLicense_();
+  if (!lic || lic.mode === 'off' || lic.error || !lic.configured) return false;
+  if (f === 'vendor') return !lic.vendor;
+  return !(lic.features && lic.features[f]);
+}
+function applyLicenseUi_() {
+  Object.entries(BO_LIC_MAP_).forEach(([id, f]) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    const locked = boLicLocked_(f);
+    if (f === 'vendor') { b.style.display = locked ? 'none' : ''; return; }
+    b.classList.toggle('lic-locked', locked);
+    b.title = locked ? '加購「' + (BO_LIC_NAME_[f] || f) + '」才能用，請聯絡系統廠商' : '';
+  });
+  renderStoreSwitch_();   // 切換門市選單也跟著授權（多店）和登入身分
+}
+// 灰色的按鈕：攔住點擊，只跳說明（後端第 2 段也會擋，這裡是讓畫面不誤導）
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('.lic-locked');
+  if (!b) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  alert('🔒 這個功能需要加購「' + (BO_LIC_NAME_[BO_LIC_MAP_[b.id]] || '') + '」\n請聯絡系統廠商開通');
+}, true);
+// 已登入（12 小時內）重新打開後台：問一次 whoami 更新授權（廠商改了授權，這邊重新整理就看得到）
+function boRefreshLicense_() {
+  if (!boSession) return;
+  fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify(withStore_({ action: 'boWhoAmI', boToken: boSession.token, appKey: APP_KEY })) })
+    .then(r => r.json()).then(d => {
+      if (!boSession || !d || d.status !== 'ok') return;
+      boSession.license = d.license || null; saveBoSession_(); applyLicenseUi_();
+    }).catch(() => {});
+}
+
 // 店長登入時：只有老闆能改的地方改成唯讀並說明(後端也會擋，這裡是讓畫面不誤導)
 function applyBoRoleUi_() {
   const owner = isBoOwner_();
@@ -2214,8 +2263,31 @@ function boLoadBrandStores_() {
     MC_SYNC_TARGET_STORES = [MC_SYNC_TARGET_STORES[0]].concat(others);
     const box = document.getElementById('mc-sync-store-list');
     if (box && box.innerHTML) box.innerHTML = MC_SYNC_TARGET_STORES.map(s => `<label><input type="checkbox" class="mc-sync-store-cb" value="${escapeHtml(s.id)}"> ${escapeHtml(s.label)}</label>`).join('');
+    renderStoreSwitch_();
     return osStores_;
   }).catch(() => null);
+}
+// 11-17 廠商授權（開新店三步）：客戶後台看不到開新店，只能「切換門市」——頁首選單列出這個品牌開好的店
+//   （營業中、籌備中；廠商沒開通的不列）；只給老闆（全品牌帳號），而且要有「多店」選配。換店＝打開那間店的後台網址，那間店要重新登入
+function renderStoreSwitch_() {
+  const sel = document.getElementById('bo-store-switch');
+  if (!sel) return;
+  const list = osStores_.filter(s => s.isHome || (osStatusOf_(s) !== 'new' && s.licensed !== false));
+  const show = isBoOwner_() && !boLicLocked_('multistore') && list.length >= 2;
+  sel.style.display = show ? '' : 'none';
+  if (!show) return;
+  sel.innerHTML = list.map(s => `<option value="${escapeHtml(s.urlPath)}"${s.isHome ? ' selected' : ''}>🏪 ${escapeHtml(osName_(s))}${s.status === '籌備中' ? '（籌備中）' : ''}</option>`).join('');
+}
+function boSwitchStore_(sel) {
+  const s = osStores_.find(x => x.urlPath === sel.value);
+  const home = osStores_.find(x => x.isHome);
+  if (!s || s.isHome) return;
+  const parts = location.pathname.split('/');
+  const i = parts.indexOf('abao_xh');
+  if (i < 0 || !parts[i + 1]) { alert('這個網址不能切換門市（預覽或測試環境）：' + s.urlPath); if (home) sel.value = home.urlPath; return; }
+  if (!confirm('切換到「' + osName_(s) + '」的後台？\n那間店要重新登入（第一次也要輸入頁面密碼）')) { if (home) sel.value = home.urlPath; return; }
+  parts[i + 1] = s.urlPath;
+  location.href = parts.join('/');
 }
 function osLoad_() {
   document.getElementById('os-from-name').textContent = boStoreShortName_();
@@ -2231,7 +2303,8 @@ function osLoad_() {
         `<button type="button" class="ops-btn" onclick="osOpenForm_('${escapeHtml(s.storeId)}')">${st === 'prep' ? '🔁 再抓一次最新設定' : '🏪 開新店'}</button>` +
         (st === 'prep' ? ` <button type="button" class="ops-btn" onclick="osRelease_('${escapeHtml(s.storeId)}')">✅ 正式開放</button>` : '');
       const url = st === 'new' ? '<span style="color:#aaa;">—</span>' : `<span style="font-size:0.75rem;color:#666;">/abao_xh/${escapeHtml(s.urlPath)}/</span>`;
-      return `<tr><td><b>${escapeHtml(osName_(s))}</b>${s.isHome ? '（這間店）' : ''}<br><span style="font-size:0.75rem;color:#888;">${escapeHtml(s.displayName || '')}　代號 ${escapeHtml(s.storeId)}</span></td><td>${badge}</td><td>${url}</td><td style="white-space:nowrap;">${btns}</td></tr>`;
+      const unlic = s.licensed === false && !s.isHome ? ' <span class="os-badge new" title="11-17 廠商授權：開新店要先請系統廠商開通這間店">廠商還沒開通</span>' : '';   // licensed＝null（讀不到）不顯示
+      return `<tr><td><b>${escapeHtml(osName_(s))}</b>${s.isHome ? '（這間店）' : ''}${unlic}<br><span style="font-size:0.75rem;color:#888;">${escapeHtml(s.displayName || '')}　代號 ${escapeHtml(s.storeId)}</span></td><td>${badge}</td><td>${url}</td><td style="white-space:nowrap;">${btns}</td></tr>`;
     }).join('') + '</table>' + (owner ? '' : '<p style="font-size:0.8rem;color:#a30000;">開新店、正式開放只有老闆可以按。</p>');
   });
 }
@@ -3092,7 +3165,7 @@ loadAvailability();
 refreshMonthReminder_();
 // POS後台登入(2026-09-25)：沒登入就跳登入畫面；付款方式設定是動態載入的，內容一變就重新套用「店長唯讀」
 renderBoUser_();
-if (!boSession) showBoLogin_();
+if (!boSession) showBoLogin_(); else boRefreshLicense_();   // 11-17 廠商授權：已登入就更新一次授權
 new MutationObserver(() => { if (!isBoOwner_()) applyBoRoleUi_(); }).observe(document.getElementById('view-payment'), { childList: true, subtree: true });
 
 // ---------------------------------------------------------------
