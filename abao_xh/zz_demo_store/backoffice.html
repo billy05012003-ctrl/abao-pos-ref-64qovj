@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>【測試版】美寶美食館 POS後台</title>
+<title>【測試版】POS後台</title>
 <style>
   :root { --brand: #e8632c; --bg: #f5f5f5; --muted: #888; --border: #eee0d4; --card: #fff; }
   * { box-sizing: border-box; }
@@ -15,6 +15,14 @@
   header { background:var(--brand); color:#fff; padding:16px; }
   header h1 { margin:0; font-size:1.2rem; }
   header .sub { font-size:0.85rem; opacity:0.9; margin-top:2px; }
+  /* 11-14 老闆「品牌和門市強烈一點看出區隔」：品牌層頁面／改品牌範本時頁首整條變紫；每頁最上面一條範圍說明（紫＝品牌、橘＝門市） */
+  header.bo-brand { background:#6a3db8; }
+  .bo-scope-chip { display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px; font-size:0.72rem; font-weight:700; vertical-align:middle; background:rgba(255,255,255,0.22); border:1px solid rgba(255,255,255,0.55); }
+  .bo-scope-bar { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-bottom:12px; padding:9px 12px; border-radius:8px; font-size:0.85rem; }
+  .bo-scope-bar b { font-size:0.9rem; }
+  .bo-scope-bar span { font-size:0.78rem; opacity:0.85; }
+  .bo-scope-bar.store { background:#fff3ea; border:1px solid #f3c9ad; color:#8a3f12; }
+  .bo-scope-bar.brand { background:#efe7fb; border:1px solid #c7b2ef; color:#4b2a8a; }
   /* 後台整體改成左右二欄（左側常駐導覽＋右側內容），比照大麥管理系統的版面邏輯 */
   .app-shell { display:flex; align-items:flex-start; }
   .sidebar { display:flex; flex-direction:column; background:#fff; border-right:1px solid #eee; width:150px; flex:0 0 150px; position:sticky; top:0; align-self:flex-start; }
@@ -30,6 +38,24 @@
   .sidebar .sub-item { padding:10px 14px 10px 34px; font-size:0.85rem; font-weight:500; color:var(--muted); border:none; background:none; border-left:3px solid transparent; cursor:pointer; text-align:left; position:relative; }
   .sidebar .sub-item::before { content:''; position:absolute; left:20px; top:0; bottom:0; width:1px; background:var(--border); }
   .sidebar .sub-item.active { color:var(--brand); background:#FFF7F3; font-weight:700; border-left-color:var(--brand); }
+  /* 11-14 側欄照範圍分段：段標題＋品牌段選中時用紫色 */
+  .sidebar .nav-sec { font-size:0.72rem; font-weight:700; padding:12px 14px 4px; letter-spacing:0.02em; line-height:1.4; }
+  .sidebar .nav-sec + button { margin-top:0; }
+  .sidebar .nav-sec:not(:first-child) { border-top:1px solid #eee; margin-top:6px; }
+  .sidebar .nav-sec small { display:block; font-weight:500; font-size:0.66rem; opacity:0.8; }
+  .sidebar .nav-sec.store { color:#c4561d; }
+  .sidebar .nav-sec.switch { color:#7b4fa8; }
+  .sidebar .nav-sec.brand { color:#6a3db8; }
+  .sidebar button.nav-brand.active { color:#6a3db8; background:#f3edfc; border-left-color:#6a3db8; }
+  .sidebar button.lic-locked { opacity:0.45; cursor:not-allowed; }   /* 11-17 廠商授權：選配沒買 */
+  .sidebar button.lic-locked::after { content:' 🔒'; }
+  /* 11-16 老闆：三段標題可以點一下收合／展開（記在這台電腦） */
+  .sidebar .nav-sec { cursor:pointer; user-select:none; position:relative; padding-right:30px; }
+  .sidebar .nav-sec:hover { background:#faf7f5; }
+  .sidebar .nav-sec .sec-caret { position:absolute; right:14px; top:12px; font-size:0.7rem; transition:transform 0.15s; }
+  .sidebar .nav-sec.closed .sec-caret { transform:rotate(-90deg); }
+  .sidebar .nav-sec.closed.has-active::after { content:'目前頁面在這段'; display:block; font-weight:500; font-size:0.66rem; opacity:0.8; }
+  .sidebar .nav-hide { display:none !important; }
   .main-content { flex:1; min-width:0; }
   #month-remind { margin:12px 16px 0; background:#fff8e1; border:1px solid #f0c36d; border-radius:10px; font-size:0.85rem; }
   #month-remind .mr-head { display:flex; align-items:center; gap:8px; padding:9px 12px; cursor:pointer; font-weight:600; color:#7a5300; }
@@ -50,6 +76,13 @@
     .sidebar .sub-item { border-left:none; border-bottom:3px solid transparent; }
     .sidebar .sub-item.active { border-left-color:transparent; border-bottom-color:var(--brand); }
     .sidebar .sub-item::before { display:none; }
+    .sidebar .nav-sec { align-self:center; white-space:nowrap; padding:4px 6px 4px 12px; border-top:none !important; margin-top:0 !important; border-left:1px solid #eee; }
+    .sidebar .nav-sec:first-child { border-left:none; }
+    .sidebar .nav-sec small { display:none; }
+    .sidebar .nav-sec { padding-right:22px; }
+    .sidebar .nav-sec .sec-caret { right:6px; top:6px; }
+    .sidebar .nav-sec.closed.has-active::after { display:none; }
+    .sidebar button.nav-brand.active { border-left-color:transparent; border-bottom-color:#6a3db8; }
   }
   .view { padding:12px 16px 40px; max-width:900px; margin:0; }
   /* 品項彈出視窗編輯用的modal */
@@ -116,6 +149,27 @@
   .pm-help th { text-align:left; white-space:nowrap; vertical-align:top; padding:4px 10px 4px 0; color:#222; font-weight:600; }
   .pm-help td { padding:4px 0; line-height:1.5; border-bottom:1px solid #eee; }
   .pm-help tr:last-child td { border-bottom:none; }
+  /* 優惠券範本精靈(11-14 第 2 段)：類型卡片、一句話規則、預覽 */
+  .pw-step { font-size:0.82rem; font-weight:700; color:#222; margin:14px 0 6px; }
+  .pw-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:6px; }
+  .pw-card { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:#fff; cursor:pointer; font-family:inherit; color:#222; }
+  .pw-card b { font-size:0.84rem; }
+  .pw-card small { font-size:0.7rem; color:var(--muted); line-height:1.35; }
+  .pw-card .pw-ic { font-size:1.05rem; }
+  .pw-card.on { border-color:var(--brand); background:#fff4ec; box-shadow:0 0 0 1px var(--brand) inset; }
+  .pw-rule { background:#faf6f2; border-radius:8px; padding:10px 12px; font-size:0.88rem; color:#222; line-height:2.3; }
+  .pw-rule .pw-line { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; }
+  .pw-in { padding:5px 6px; border:1px solid var(--border); border-radius:6px; font-size:0.86rem; color:#222; font-family:inherit; background:#fff; max-width:100%; }
+  input.pw-in[type=number] { width:76px; }
+  input.pw-in.pw-wide { width:260px; }
+  .pw-rule .pm-mini-btn { padding:4px 8px; }
+  .pw-preview { border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:0.84rem; line-height:1.6; }
+  .pw-preview .pw-sent { font-size:0.95rem; font-weight:700; color:#222; margin-bottom:4px; }
+  .pw-preview ul { margin:4px 0 0; padding-left:18px; }
+  .pw-preview .pw-err { color:#c0392b; font-weight:600; margin-top:6px; }
+  .pw-usage { background:#fff8e1; border:1px solid #f0d58a; border-radius:8px; padding:7px 10px; font-size:0.8rem; margin:8px 0; line-height:1.5; }
+  .pw-adv-link { background:none; border:none; color:var(--muted); text-decoration:underline; font-size:0.78rem; cursor:pointer; padding:4px 0; font-family:inherit; }
+  .pw-note { background:#eef4fb; border:1px solid #c9dbef; border-radius:8px; padding:7px 10px; font-size:0.8rem; margin-bottom:10px; line-height:1.5; }
   .pm-checks { display:flex; flex-wrap:wrap; gap:8px 22px; font-size:0.85rem; color:#222; margin:4px 0 12px; }
   .pm-checks label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   .mc-save-btn, .mc-delete-btn { padding:9px 16px; border-radius:7px; border:none; font-size:0.85rem; cursor:pointer; margin-right:8px; }
@@ -137,6 +191,32 @@
   .mc-delete-btn { background:none; border:1px solid #c94f1f; color:#c94f1f; }
   /* 區塊配置(2026-09-30) */
   .hb-chk { display:flex; gap:6px 12px; flex-wrap:wrap; margin-top:4px; font-size:0.85rem; color:#222; }
+  /* 11-14 老闆：說明精簡成一行重點，細節收進「ⓘ 規則說明」 */
+  .hb-hint { font-size:0.75rem; color:var(--muted); margin-top:4px; }
+  .hb-rule { margin-top:4px; font-size:0.75rem; color:#555; }
+  .hb-rule summary { cursor:pointer; color:var(--brand); font-weight:600; list-style:none; }
+  .hb-rule summary::-webkit-details-marker { display:none; }
+  .hb-rule summary::before { content:'ⓘ '; }
+  .hb-rule[open] summary { margin-bottom:4px; }
+  .hb-rule ul { margin:0; padding-left:18px; } .hb-rule li { margin:2px 0; }
+  /* 11-14 老闆：「正在改哪一邊」每頁都看得到；品牌範本整條換紫色 */
+  .edit-target-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding:8px 12px; border-radius:8px; background:#fff3ea; border:1px solid #f3c9ad; font-size:0.85rem; color:#7a3d14; }
+  .edit-target-bar select { padding:5px 8px; border-radius:6px; border:1px solid #e0b090; font-family:inherit; font-weight:600; }
+  .edit-target-bar.brand { background:#efe7fb; border-color:#c7b2ef; color:#4b2a8a; }
+  .edit-target-bar.brand select { border-color:#b39ae6; }
+  /* 11-14 系列＋檔期 */
+  .hb-series { border:1px solid #eadfd5; border-radius:10px; margin:6px 0; padding:4px 8px; background:#fffaf5; }
+  .hb-series > summary { cursor:pointer; padding:6px 2px; font-size:0.88rem; list-style:none; }
+  .hb-series > summary::-webkit-details-marker { display:none; }
+  .hb-series > summary::before { content:'▸ '; color:var(--muted); }
+  .hb-series[open] > summary::before { content:'▾ '; }
+  .hb-series-now { display:block; font-size:0.75rem; color:var(--muted); margin:2px 0 0 14px; }
+  .hb-ep.past { opacity:0.55; }
+  .hb-ep-st { display:inline-block; font-size:0.68rem; padding:1px 6px; border-radius:8px; background:#eee; color:#555; vertical-align:1px; }
+  .hb-ep-st.now { background:#e8632c; color:#fff; }
+  .hb-ep-st.preview { background:#ffe2b8; color:#8a4b00; }
+  .hb-ep-st.later { background:#e6eefc; color:#2f5aa8; }
+  .hb-ep-st.todo { background:#fff3c4; color:#7a5a00; }
   .hb-chk label { display:flex; align-items:center; gap:4px; }
   .hb-lunar { display:grid; grid-template-columns:repeat(6, 1fr); gap:4px; margin-top:4px; }
   .hb-lunar label { display:flex; align-items:center; gap:3px; font-size:0.8rem; color:#222; }
@@ -185,12 +265,55 @@
   .pmg-tile:disabled { background:#f2f2f2; color:#999; border-style:dashed; cursor:default; }
   .pmg-soon { display:inline-block; font-size:0.68rem; background:#ddd; color:#666; padding:1px 6px; border-radius:6px; margin-top:4px; }
   .pmg-crumb { font-size:0.9rem; margin:0 0 10px; }
+  /* 11-13 報表 */
+  .rpt-bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0 10px; font-size:0.9rem; }
+  .rpt-bar input[type=date], .rpt-bar select { padding:5px 6px; border:1px solid var(--border); border-radius:6px; font-family:inherit; }
+  .rpt-presets button, .rpt-seg button, .rpt-tabs button { border:1px solid var(--border); background:#fff; padding:5px 10px; font-family:inherit; cursor:pointer; font-size:0.85rem; }
+  .rpt-presets button.active, .rpt-seg button.active { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .rpt-go { background:var(--brand); color:#fff; border:0; border-radius:6px; padding:6px 16px; cursor:pointer; font-family:inherit; }
+  .rpt-tabs { display:flex; gap:6px; margin:4px 0 10px; }
+  .rpt-tabs button { border-radius:8px; padding:8px 16px; font-size:0.95rem; }
+  .rpt-tabs button.active { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; }
+  .rpt-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(115px,1fr)); gap:10px; margin-top:8px; }
+  .rpt-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .rpt-card .t { font-size:0.8rem; color:var(--muted); } .rpt-card .v { font-size:1.4rem; font-weight:700; margin-top:4px; }
+  .rpt-box { background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px; margin:10px 0; }
+  .rpt-box-h { font-weight:700; margin-bottom:8px; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+  .rpt-two { display:grid; grid-template-columns:1fr 1fr; gap:10px; } @media (max-width:760px) { .rpt-two { grid-template-columns:1fr; } }
+  .rpt-rank-row { display:grid; grid-template-columns:26px 1fr auto; gap:8px; align-items:center; padding:4px 0; font-size:0.88rem; }
+  .rpt-rank-no { width:22px; height:22px; border-radius:50%; background:#999; color:#fff; text-align:center; line-height:22px; font-size:0.8rem; }
+  .rpt-bar-track { height:6px; background:#eee; border-radius:3px; margin-top:3px; } .rpt-bar-fill { height:6px; background:var(--brand); border-radius:3px; }
+  .rpt-hbar { display:grid; grid-template-columns:90px 1fr 130px; gap:8px; align-items:center; font-size:0.85rem; padding:4px 0; }
+  .rpt-cols { display:flex; flex-wrap:wrap; gap:4px 12px; font-size:0.8rem; color:#555; margin-bottom:6px; } .rpt-cols label { cursor:pointer; white-space:nowrap; }
+  /* 11-16 一鍵開新店 */
+  .os-table { border-collapse:collapse; width:100%; font-size:0.85rem; }
+  .os-table th { background:#f3edfc; color:#4b2a86; padding:7px 9px; font-weight:600; text-align:left; white-space:nowrap; border-bottom:1px solid #e2d6f5; }
+  .os-table td { padding:8px 9px; border-bottom:1px solid #eee; vertical-align:top; }
+  .os-badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.75rem; white-space:nowrap; }
+  .os-badge.run { background:#e3f4e6; color:#1e6b2e; } .os-badge.prep { background:#fff1d6; color:#8a5a00; } .os-badge.new { background:#eee; color:#666; }
+  .os-form { border:1px solid #e2d6f5; background:#faf7fd; border-radius:10px; padding:12px 14px; margin:10px 0; }
+  .os-form label { display:block; font-size:0.8rem; color:#555; margin:8px 0 3px; }
+  .os-form input { width:100%; max-width:420px; padding:7px 9px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem; box-sizing:border-box; }
+  .os-list { font-size:0.82rem; margin:6px 0 0 18px; padding:0; } .os-list li { margin:2px 0; }
+  /* 11-16 (9b) 會員清單 */
+  .ml-table { border-collapse:collapse; width:100%; font-size:0.85rem; }
+  .ml-table th { background:#f3edfc; color:#4b2a86; padding:7px 9px; font-weight:600; text-align:left; white-space:nowrap; border-bottom:1px solid #e2d6f5; }
+  .ml-table td { padding:7px 9px; border-bottom:1px solid #eee; }
+  .ml-table tr:hover td { background:#faf7fd; }
+  .rpt-table-wrap { overflow-x:auto; }
+  .rpt-table { border-collapse:collapse; width:100%; font-size:0.85rem; white-space:nowrap; }
+  .rpt-table th { background:#343a40; color:#fff; padding:7px 9px; font-weight:600; border:1px solid #4a5056; } .rpt-table td { padding:6px 9px; border-bottom:1px solid #eee; text-align:right; }
+  .rpt-table td:first-child { text-align:center; } .rpt-table tr.total td { font-weight:700; background:#fdf3ec; }
+  .rpt-table th.grp { background:#5a6268; }
+  .rpt-export { margin-left:auto; background:#343a40; color:#fff; border:0; border-radius:6px; padding:5px 12px; cursor:pointer; font-family:inherit; font-weight:400; }
+  .rpt-more { display:block; margin:6px auto 0; background:none; border:1px solid var(--border); border-radius:6px; padding:4px 14px; cursor:pointer; font-family:inherit; }
   .pmg-crumb a { color:var(--brand); cursor:pointer; text-decoration:none; font-weight:600; }
   .pmg-kv { display:grid; grid-template-columns:120px 1fr; gap:6px 8px; font-size:0.88rem; }
   .pmg-kv div:nth-child(odd) { color:var(--muted); }
 </style>
 </head>
 <body>
+<div style="background:#ff9800;color:#fff;font-size:12px;padding:4px 10px;text-align:center;">🧪 示範門市測試版：資料寫進新後端，不是正式營業用</div>
 <script>
 // 2026-09-25老闆定案：拿掉到期日(原本2026/12/31到期後POS/後台/出單頁會全部打不開，是測試期的預覽期限，正式營運不該留)
 // 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
@@ -203,7 +326,7 @@
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">示範門市 POS後台（測試版）</div>
+      <div id="gate-title" style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">示範門市 POS後台（測試版）</div>
       <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（POS後台）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
@@ -211,6 +334,9 @@
       <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
     </div>`;
   document.body.appendChild(gate);
+  // 2026-11-16 (15h) 去寫死：標題先用這台裝置存過的門市資料(abao_store_profile_店代號)的店名，例如「A-Bao溪湖培英店 POS後台」；
+  //   沒存過(新裝置)就顯示傳進來的中性標題。只改顯示，AUTH_KEY 不變，已經輸過密碼的裝置不用重輸
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('abao_store_profile_')===0){const p=JSON.parse(localStorage.getItem(k)||'null');if(p&&p.displayName){document.getElementById('gate-title').textContent=p.displayName+' POS後台';break;}}}}catch(e){}
   function trySubmit(){
     const val=document.getElementById('gate-pw').value;
     if(val===SITE_PASSWORD){
@@ -228,10 +354,9 @@
 })();
 </script>
 
-<div style="background:#ff9800;color:#fff;font-size:12px;padding:4px 10px;text-align:center;">🧪 示範門市測試版：資料寫進新後端，不是正式營業用</div>
 <header style="position:relative;">
   <h1>POS後台</h1>
-  <div class="sub"><span data-store="legalName">美寶美食館</span>（<span data-store="displayName">A-Bao溪湖培英店</span>）</div>
+  <div class="sub"><span id="bo-head-store" data-store="displayName"></span><span id="bo-head-brand" style="display:none;"></span><span id="bo-scope-chip" class="bo-scope-chip" style="display:none;"></span><select id="bo-store-switch" title="切換到別間店的後台" onchange="boSwitchStore_(this)" style="display:none;margin-left:8px;font-size:0.8rem;padding:2px 4px;border-radius:6px;border:1px solid rgba(255,255,255,0.6);max-width:180px;"></select></div><!-- 11-14 老闆：站在軟體商角度，店名從門市資料讀（displayName），不寫死任何品牌／店名；營業登記名稱只留在發票、商店資訊頁、法律文字 -->
   <div id="bo-user" style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:0.85rem;display:none;">
     <span id="bo-user-text"></span>
     <button type="button" onclick="boLogout()" style="margin-left:8px;background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.6);border-radius:6px;padding:4px 10px;cursor:pointer;">登出</button>
@@ -252,6 +377,8 @@
 </div>
 <div class="app-shell">
 <nav class="sidebar" id="tabbar">
+  <!-- 11-14 老闆：側欄照「範圍」分三段(門市在上、品牌在下)：這間店 → 品牌範本→門市(可切換) → 品牌・全部門市共用；原本「會員相關」一組裡三種範圍混在一起，拆到各段 -->
+  <div class="nav-sec store" data-sec="store" role="button" tabindex="0" title="點一下收合／展開">🟠 這間店<span class="sec-caret">▼</span></div>
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">上下架管理</button>
   <button id="tab-btn-merchant" onclick="toggleMerchantGroup()">
     <span class="group-toggle">商家管理 <span class="group-caret" id="merchant-caret">▶</span></span>
@@ -262,27 +389,8 @@
     <button class="sub-item" id="mch-sub-btn-payment" onclick="switchMerchantSubview('payment')">付款方式設定</button>
     <button class="sub-item" id="mch-sub-btn-payalert" style="display:none;" onclick="switchMerchantSubview('payalert')">金流告警 <span id="bo-payalert-badge" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span></button>
   </div>
-  <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
-    <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
-  </button>
-  <div class="sub-list" id="menucms-sublist">
-    <button class="sub-item" id="mc-sub-btn-categories" onclick="switchMcSubview('categories')">品項分類</button>
-    <button class="sub-item" id="mc-sub-btn-options" onclick="switchMcSubview('options')">客製化選項庫</button>
-  </div>
-  <button id="tab-btn-member" onclick="toggleMemberGroup()">
-    <span class="group-toggle">會員相關 <span class="group-caret" id="member-caret">▶</span></span>
-  </button>
-  <div class="sub-list" id="member-sublist">
-    <button class="sub-item" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
-    <button class="sub-item" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
-    <button class="sub-item" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
-    <button class="sub-item" id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
-    <button class="sub-item" id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
-    <button class="sub-item" id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">區塊配置</button>
-    <!-- 飲品升級不在側欄單獨顯示，改成「優惠券」清單裡公關費下方的捷徑列進入(見renderPmList)，
-         這顆按鈕保留在DOM但隱藏，讓switchBackofficeTab()既有的active/顯示切換邏輯不用另外特判 -->
-    <button class="sub-item" id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')" style="display:none;">飲品升級</button>
-  </div>
+  <!-- 飲品升級：規則存在各店(drink_upgrade_rules.store_id)，11-14 從「會員相關」移到「這間店」並顯示出來(優惠券清單裡的捷徑列照留) -->
+  <button id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')">飲品升級</button>
   <button id="tab-btn-group" onclick="switchBackofficeTab('group')">👥 團購模組</button>
   <!-- 10-10：POS管理改成點進去是分組按鈕格，側欄不再展開子選單(子選單 DOM 保留隱藏，切換程式沿用) -->
   <button id="tab-btn-posmanage" onclick="switchPosManageSubview('home')">
@@ -293,8 +401,60 @@
     <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">夥伴帳號管理</button>
     <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">角色權限設定</button>
   </div>
+  <div class="nav-sec switch" data-sec="switch" role="button" tabindex="0" title="點一下收合／展開">🔀 品牌範本→門市<span class="sec-caret">▼</span><small>頁內「正在改：」切換</small></div>
+  <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
+    <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
+  </button>
+  <div class="sub-list" id="menucms-sublist">
+    <button class="sub-item" id="mc-sub-btn-categories" onclick="switchMcSubview('categories')">品項分類</button>
+    <button class="sub-item" id="mc-sub-btn-options" onclick="switchMcSubview('options')">客製化選項庫</button>
+  </div>
+  <button id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
+  <button id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
+  <button id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">區塊配置</button>
+  <div class="nav-sec brand" data-sec="brand" role="button" tabindex="0" title="點一下收合／展開">🟣 品牌共用<span class="sec-caret">▼</span><small>全部門市一起生效</small></div>
+  <button class="nav-brand" id="mb-sub-btn-members" onclick="switchMemberSubview('members')">👥 會員清單</button>
+  <button class="nav-brand" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
+  <button class="nav-brand" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
+  <button class="nav-brand" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
+  <button class="nav-brand" id="mb-sub-btn-openstore" onclick="switchMemberSubview('openstore')">🏪 開新店</button>
 </nav>
+<script>
+// 11-16 老闆：側欄三段（這間店／品牌範本→門市／品牌共用）點標題收合／展開；收合狀態記在這台電腦（localStorage，讀不到就全部展開）
+//   收起來＝把標題下面到下一個標題之前的按鈕、子選單加 nav-hide（拿掉後原本的 open／inline display 照舊）
+//   收起來的那段如果有目前頁面，標題下面顯示「目前頁面在這段」
+(function () {
+  const KEY = 'abao_bo_nav_closed';
+  const nav = document.getElementById('tabbar');
+  let closed = {};
+  try { closed = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { closed = {}; }
+  const itemsOf = sec => { const out = []; for (let el = sec.nextElementSibling; el && !el.classList.contains('nav-sec'); el = el.nextElementSibling) out.push(el); return out; };
+  function paint(sec) {
+    const isClosed = !!closed[sec.dataset.sec];
+    sec.classList.toggle('closed', isClosed);
+    sec.setAttribute('aria-expanded', isClosed ? 'false' : 'true');
+    const items = itemsOf(sec);
+    items.forEach(el => el.classList.toggle('nav-hide', isClosed));
+    sec.classList.toggle('has-active', isClosed && items.some(el => el.classList.contains('active') || !!el.querySelector('.active')));
+  }
+  function toggle(sec) {
+    closed[sec.dataset.sec] = !closed[sec.dataset.sec];
+    try { localStorage.setItem(KEY, JSON.stringify(closed)); } catch (e) {}
+    paint(sec);
+  }
+  const secs = Array.from(nav.querySelectorAll('.nav-sec[data-sec]'));
+  secs.forEach(sec => {
+    sec.addEventListener('click', () => toggle(sec));
+    sec.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(sec); } });
+    paint(sec);
+  });
+  // 換頁（按鈕的 active 變了）時重算「目前頁面在這段」
+  new MutationObserver(() => secs.forEach(sec => { if (closed[sec.dataset.sec]) paint(sec); }))
+    .observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+})();
+</script>
 <main class="main-content">
+<div id="bo-scope-bar" class="bo-scope-bar" style="display:none;"></div>
 <div id="backup-warn" style="display:none;"></div>
 <div id="month-remind" style="display:none;"></div>
 <div id="view-availability" class="view">
@@ -313,6 +473,7 @@
       <h3>當日營收 <span class="ops-refresh" onclick="loadBoRevenue_()">重新整理</span></h3>
       <div class="ops-money" id="bo-ops-revenue">—</div>
       <div class="ops-meta" id="bo-ops-revenue-count"></div>
+      <div class="ops-meta" style="margin-top:4px;"><a style="color:var(--brand);cursor:pointer;font-weight:600;" onclick="rptOpenToday_()">看詳細 →</a></div>
     </div>
   </div>
   <div class="ops-card">
@@ -356,7 +517,6 @@
 <div id="view-schedule" class="view" style="display:none;">
   <p style="font-size:0.8rem;color:var(--muted);">
     這裡管理線上點餐的營業時間/接單時間/取餐設定，改完立刻生效。只影響<b>線上點餐</b>，不影響POS功能現場點餐。
-    目前只有美寶一間店在用。
   </p>
   <div class="sched-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
     <button type="button" class="sched-tab-btn active" id="sched-tab-btn-hours" onclick="switchSchedSubview('hours')">營業時間設定</button>
@@ -444,9 +604,10 @@
   <div id="payalert-list"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-menucms" class="view" style="display:none;">
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-    <label style="font-size:0.8rem;color:var(--muted);">目前編輯：</label>
+  <div class="edit-target-bar" id="mc-target-bar">
+    <b>正在改：</b>
     <select id="mc-store-select" onchange="mcSwitchStore(this.value)"></select>
+    <span id="mc-target-hint">這間店的草稿，按「發布到正式版」才生效</span>
   </div>
   <p style="font-size:0.8rem;color:var(--muted);">
     這裡改的是<b>草稿</b>版本，不會馬上讓顧客/POS看到——改完要按「發布到正式版」才會真的生效。
@@ -495,6 +656,34 @@
   </div>
 </div>
 <div id="view-member" class="view" style="display:none;">
+  <!-- 11-16 (9b) 會員清單（對照大麥「品牌會員列表」）：只看不改；電話老闆看完整、店長看遮罩；後端 GET memberList -->
+  <div id="mb-subview-members" style="display:none;">
+    <p style="font-size:0.8rem;color:var(--muted);">會員全部門市共用。這一頁<b>只能看</b>：要改會員資料、點數，請在門市平板或「POS管理 → 會員 LINE 綁定」處理。等級、半年累積是會員最後一次查詢或消費時算的，很久沒來的會員可能還是舊等級。</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+      <input id="ml-q" type="search" placeholder="搜尋姓名，或電話（至少 3 碼）" maxlength="30" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onkeydown="if(event.key==='Enter')loadMemberList_(true)">
+      <select id="ml-tier" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onchange="loadMemberList_(true)"><option value="">全部等級</option></select>
+      <button type="button" class="ops-btn" onclick="loadMemberList_(true)">🔍 查詢</button>
+    </div>
+    <div id="ml-info" style="font-size:0.78rem;color:var(--muted);margin-bottom:6px;"></div>
+    <div id="ml-list"><div class="empty-hint">載入中...</div></div>
+    <button type="button" id="ml-more" class="mc-add-btn" style="display:none;margin-top:8px;" onclick="loadMemberList_(false)">載入更多</button>
+  </div>
+  <!-- 11-16 一鍵開新店（多店化第 4＋5 段，規格 一鍵開新店設計_2026-11-16.md）：後端 GET brandStores、POST openNewStore／releaseStore（只限老闆） -->
+  <div id="mb-subview-openstore" style="display:none;">
+    <p style="font-size:0.85rem;color:#444;margin-top:0;">從<b id="os-from-name">這間店</b>複製設定，再把<b>品牌範本</b>的菜單、優惠帶過去，一次開好一間新店。新店先是「<b>籌備中</b>」：顧客還不能線上點餐，平板可以結帳做內部測試；準備好再按「正式開放」。<b>只有老闆可以按。</b></p>
+    <details style="font-size:0.82rem;margin-bottom:10px;"><summary style="cursor:pointer;color:#4b2a86;">會複製什麼／不會複製什麼</summary>
+      <ul class="os-list">
+        <li>✅ 從這間店複製：營業時間、接單時間、取餐設定、飲品升級規則、角色權限、線下／第三方收款清單、自取規則（新店沒填才帶）</li>
+        <li>✅ 從品牌範本帶入並發布：菜單（分類、品項、客製化）、優惠券、集點禮、加價購、區塊配置</li>
+        <li>⚠ 付款方式：線上刷卡、Apple Pay、線上／線下 LINE Pay、取餐付款<b>全部先關</b>（新店還沒有自己的藍新、LINE Pay），之後到新店後台「付款方式」自己開</li>
+        <li>❌ 不複製：店長／夥伴帳號（老闆帳號全品牌通用，店長、夥伴到新店後台建）、店休日、售完狀態、訂單、平板</li>
+        <li>🔁 「籌備中」的店可以再按一次，重新抓這間店最新的設定和品牌範本；營業中的店（啟用而且有訂單）不能按</li>
+      </ul>
+    </details>
+    <div id="os-list"><div class="empty-hint">載入中...</div></div>
+    <div id="os-form-box"></div>
+    <div id="os-result"></div>
+  </div>
   <div id="mb-subview-tiers">
     <p style="font-size:0.8rem;color:var(--muted);">
       升等/續等門檻、點數倍率都在這裡改，改完立刻生效，會直接套用到所有會員下次查詢/消費時的等級判定。
@@ -563,9 +752,14 @@
   </div>
   <div id="mb-subview-promo" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      這裡管理全部優惠券/折抵按鈕的「效果」本身：固定金額折抵、或依購買品項打折/免費/加一元多一件。
-      「顯示為優惠券按鈕」勾選的會出現在POS功能「優惠券」分類讓店員直接點；沒勾選的只能透過集點兌換/生日禮/註冊禮/店員贈送取得。
+      每張券的「折多少、送什麼」在這裡設定。
     </p>
+    <details class="hb-rule" style="margin:-6px 0 10px;"><summary>規則說明</summary><ul>
+      <li>效果：固定金額折抵，或依購買品項打折／免費／加一元多一件。</li>
+      <li>勾「顯示為 POS 按鈕」＝出現在門市平板「優惠券」分類讓店員點，而且只在券的生效日～到期日之間出現。</li>
+      <li>沒勾＝只能透過集點兌換、生日禮、註冊禮、店員贈送取得。</li>
+      <li>線上要自動套用，要綁在「區塊配置 → 會員好康」的活動上。</li>
+    </ul></details>
     <div id="pm-domain-controls"></div>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
@@ -581,9 +775,12 @@
   </div>
   <div id="mb-subview-blocks" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      線上點餐頁底部三個分頁「新品推薦／會員好康／線上點餐」的內容。跟優惠券同一套：改的是<b>草稿</b>，按「發布到正式版」顧客才看得到（優惠券、集點禮、加價購、區塊配置一起發布）。
-      <br>第一波只做顯示：新品卡片、活動看板（今天的活動大圖、即將到來小卡）；領券與自動折抵第二、三波才開放。
+      線上點餐頁「新品推薦」「會員好康」兩個分頁的內容。
     </p>
+    <details class="hb-rule" style="margin:-6px 0 10px;"><summary>規則說明</summary><ul>
+      <li>改的是草稿，按「發布到正式版」顧客才看得到；優惠券、集點禮、加價購、區塊配置一起發布。</li>
+      <li>會員好康的活動綁了券，優惠日線上會自動套用；沒綁就只顯示。</li>
+    </ul></details>
     <div id="hb-domain-controls"></div>
     <div style="display:flex;gap:8px;margin-bottom:12px;">
       <button type="button" class="sched-tab-btn" id="hb-tab-cards" onclick="switchHbTab('cards')">🆕 新品推薦</button>
@@ -642,7 +839,7 @@
     </div>
     <div class="pmg-grp">帳務</div>
     <div class="pmg-grid">
-      <button type="button" class="pmg-tile" disabled><span class="ic">📊</span>報表<br><span class="pmg-soon">準備中</span></button>
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('report')"><span class="ic">📊</span>報表</button>
       <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
     </div>
     <div class="pmg-grp">帳號與權限</div>
@@ -679,6 +876,46 @@
     </p>
     <div id="pmg-log-list"><div class="empty-hint">載入中...</div></div>
   </div>
+  <!-- 11-13 報表（規格 報表設計_2026-11-13.md）：營業銷售報表＋收款方式報表，照大麥版面；營業日＝取餐日、待收款不算、作廢退款分開 -->
+  <div id="pmg-subview-report" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 報表</div>
+    <div class="rpt-bar">
+      <span class="rpt-presets"><button type="button" data-p="today" onclick="rptPreset_('today')">今天</button><button type="button" data-p="yday" onclick="rptPreset_('yday')">昨天</button><button type="button" data-p="week" onclick="rptPreset_('week')">本週</button><button type="button" data-p="month" onclick="rptPreset_('month')">本月</button><button type="button" data-p="lmonth" onclick="rptPreset_('lmonth')">上個月</button></span>
+      <input type="date" id="rpt-from" onchange="rptDatesEdited_()"> ～ <input type="date" id="rpt-to" onchange="rptDatesEdited_()">
+      <button type="button" class="rpt-go" onclick="loadReport_()">查詢</button>
+    </div>
+    <div class="rpt-tabs"><button type="button" id="rpt-tab-sales" class="active" onclick="rptTab_('sales')">營業銷售報表</button><button type="button" id="rpt-tab-pay" onclick="rptTab_('pay')">收款方式報表</button></div>
+    <div id="rpt-msg" class="ops-meta"></div>
+    <div id="rpt-sales">
+      <div class="rpt-cards" id="rpt-cards"></div>
+      <div class="ops-meta" id="rpt-cards-note" style="margin-top:4px;"></div>
+      <div class="rpt-box"><div class="rpt-box-h">銷售概況</div><div id="rpt-chart"></div></div>
+      <div class="rpt-two">
+        <div class="rpt-box"><div class="rpt-box-h">人氣排行 <span class="rpt-seg"><button type="button" class="active" onclick="rptRankKind_('qty',false,this)">餐點</button><button type="button" onclick="rptRankKind_('qty',true,this)">套餐</button></span></div><div id="rpt-rank-qty"></div></div>
+        <div class="rpt-box"><div class="rpt-box-h">銷售額排行 <span class="rpt-seg"><button type="button" class="active" onclick="rptRankKind_('amount',false,this)">餐點</button><button type="button" onclick="rptRankKind_('amount',true,this)">套餐</button></span></div><div id="rpt-rank-amount"></div></div>
+      </div>
+      <div class="rpt-two">
+        <div class="rpt-box"><div class="rpt-box-h">取餐方式銷售淨額 <span class="ops-meta">（先用通路代替）</span></div><div id="rpt-bar-src"></div></div>
+        <div class="rpt-box"><div class="rpt-box-h">結帳單來源銷售淨額</div><div id="rpt-bar-ch"></div></div>
+      </div>
+      <div class="rpt-box">
+        <div class="rpt-box-h">營業銷售明細 <span class="rpt-seg"><button type="button" class="active" onclick="rptView_('sales','hour',this)">時段</button><button type="button" onclick="rptView_('sales','day',this)">日期</button><button type="button" onclick="rptView_('sales','month',this)">月份</button></span>
+          <button type="button" class="rpt-export" onclick="rptExport_('sales')">匯出</button></div>
+        <div id="rpt-sales-cols" class="rpt-cols"></div>
+        <div class="rpt-table-wrap" id="rpt-sales-table"></div>
+      </div>
+    </div>
+    <div id="rpt-pay" style="display:none;">
+      <div class="rpt-bar">取餐方式 <select id="rpt-pay-src" onchange="renderRptPay_()"><option value="">所有取餐方式</option><option>門市現場</option><option>線上自取</option><option>外送平台</option></select></div>
+      <div id="rpt-pay-methods" class="rpt-cols"></div>
+      <div class="ops-meta">整段都沒有金額的收款方式不會出現；取餐付款的單照到店實際收的方式算；佔比＝佔該列銷售淨額。</div>
+      <div class="rpt-box">
+        <div class="rpt-box-h">收款方式報表 <span class="rpt-seg"><button type="button" class="active" onclick="rptView_('pay','hour',this)">時段</button><button type="button" onclick="rptView_('pay','day',this)">日期</button><button type="button" onclick="rptView_('pay','month',this)">月份</button></span>
+          <button type="button" class="rpt-export" onclick="rptExport_('pay')">匯出</button></div>
+        <div class="rpt-table-wrap" id="rpt-pay-table"></div>
+      </div>
+    </div>
+  </div>
   <div id="pmg-subview-perm" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 角色權限設定</div>
     <p style="font-size:0.8rem;color:var(--muted);">
@@ -692,7 +929,7 @@
   </div>
   <div id="pmg-subview-partner" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 夥伴帳號管理</div>
-    <p style="font-size:0.8rem;color:var(--muted);">
+    <p id="ps-intro" style="font-size:0.8rem;color:var(--muted);">
       3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>店長只能管理夥伴帳號</b>，店長／老闆帳號只有老闆能改。
       建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設，老闆忘記請到Google試算表「POS夥伴」分頁修改。用4碼PIN碼識別身份，
       <b>哪些功能要什麼角色，到「角色權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
@@ -702,7 +939,7 @@
       <div class="mc-col" style="max-height:none;">
         <h4>夥伴清單</h4>
         <div id="ps-list"><div class="empty-hint">載入中...</div></div>
-        <button type="button" class="mc-add-btn" onclick="psCurrentName=null;renderPsEditor();">+ 新增夥伴</button>
+        <button type="button" class="mc-add-btn" id="ps-add-btn" onclick="psCurrentName=null;renderPsEditor();">+ 新增夥伴</button>
       </div>
       <div class="mc-col mc-col-wide" style="max-height:none;">
         <h4>編輯夥伴</h4>
@@ -751,7 +988,7 @@
 
 <script>
 // 後端網址(2026-11-08 前端切換準備)：切換日用 05_腳本/切換後端.mjs 一次改 8 個檔(new 新後端／old 退回舊後端／check 檢查)，不要手改下面這行網址
-const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/"; // @@後端網址@@（測試版：固定指新後端）
+const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/"; // @@後端網址@@
 // 本機預覽測試口：只有在本機(localhost／直接開檔)網址加 ?api=new 才改打新後端、加 ?store=店代號 改測別間店(例 zz_demo_store)；正式網域一律忽略這兩個參數
 const DEV_QS_ = (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) ? new URLSearchParams(location.search) : new URLSearchParams();
 const ORDER_BACKEND_URL = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy05012003.workers.dev/' : BACKEND_URL_SET_;
@@ -768,16 +1005,49 @@ const BO_HOME_STORE_ = (function () {
 // 門市資料(後端 storeProfile，存在本機)：標 data-store 的地方換成本店的；培英 HTML 本來就寫培英，看起來不變
 let BO_STORE_PROFILE_ = null;
 try { BO_STORE_PROFILE_ = JSON.parse(localStorage.getItem('abao_store_profile_' + BO_HOME_STORE_) || 'null'); } catch (e) {}
-function boStoreShortName_() { return (BO_STORE_PROFILE_ && (BO_STORE_PROFILE_.legalName || BO_STORE_PROFILE_.shortName)) || (BO_HOME_STORE_ === 'meibao' ? '美寶美食館' : BO_HOME_STORE_); }
+// 11-14 老闆：站在軟體商角度——店名從門市資料讀完整店名（displayName），不先抓營業登記名稱、不寫死任何店；還沒讀到資料用中性的「這間店」
+function boStoreShortName_() { return (BO_STORE_PROFILE_ && (BO_STORE_PROFILE_.displayName || BO_STORE_PROFILE_.shortName)) || '這間店'; }
 function applyBoStoreProfile_(p) {
   if (p && p.storeId) { BO_STORE_PROFILE_ = p; try { localStorage.setItem('abao_store_profile_' + BO_HOME_STORE_, JSON.stringify(p)); } catch (e) {} }
   const prof = BO_STORE_PROFILE_;
-  if (!prof && BO_HOME_STORE_ === 'meibao') return;
   document.querySelectorAll('[data-store]').forEach(el => { el.textContent = prof ? (prof[el.dataset.store] || '') : ''; });
-  if (prof && BO_HOME_STORE_ !== 'meibao') document.title = boStoreShortName_() + ' POS後台';
+  if (prof) document.title = boStoreShortName_() + ' POS後台';
+  if (typeof mcRefreshStoreLabels_ === 'function') mcRefreshStoreLabels_();
+  boUpdateScope_();
+}
+// ---- 11-14 品牌／門市區隔(老闆「強烈一點可以看出區隔」，待辦 15i)：每一頁屬於三種範圍之一 ----
+//  brand＝整個品牌共用、存了全部門市馬上生效(會員分級、生日禮、註冊禮：後端存在租戶層 tenant_id，沒有門市)
+//  切換頁＝品牌範本→門市(菜單管理、集點禮、優惠券、加價購、區塊配置)：看「正在改：」選哪個(MC_STORE_ID)，頁內已有切換列，上面不再多一條
+//  store＝只影響這間店(其他所有頁：上下架、商家管理、飲品升級、POS管理、團購…)
+//  品牌名、店名都從門市資料讀(brandName／displayName)，不寫死
+let boCurrentTab_ = 'availability';
+const BO_BRAND_SUBVIEWS_ = ['members', 'tiers', 'birthday', 'register', 'openstore'];
+const BO_SWITCH_SUBVIEWS_ = ['points', 'promo', 'blocks'];
+function boScopeNow_() {
+  if (boCurrentTab_ === 'member' && BO_BRAND_SUBVIEWS_.includes(currentMemberSubview)) return 'brand';
+  if (boCurrentTab_ === 'menucms' || (boCurrentTab_ === 'member' && BO_SWITCH_SUBVIEWS_.includes(currentMemberSubview)))
+    return (typeof MC_STORE_ID !== 'undefined' && MC_STORE_ID === '__brand__') ? 'brandEdit' : 'storeEdit';
+  return 'store';
+}
+function boUpdateScope_() {
+  const scope = boScopeNow_(), isBrand = scope === 'brand' || scope === 'brandEdit';
+  const brandName = (BO_STORE_PROFILE_ && BO_STORE_PROFILE_.brandName) || '';
+  const head = document.querySelector('header'); if (!head) return;
+  head.classList.toggle('bo-brand', isBrand);
+  const st = document.getElementById('bo-head-store'), br = document.getElementById('bo-head-brand'), chip = document.getElementById('bo-scope-chip');
+  if (st) st.style.display = isBrand ? 'none' : '';
+  if (br) { br.style.display = isBrand ? '' : 'none'; br.textContent = (brandName ? brandName + ' ' : '') + (scope === 'brandEdit' ? '品牌範本' : '品牌'); }
+  if (chip) { chip.style.display = ''; chip.textContent = scope === 'brand' ? '全部門市共用' : scope === 'brandEdit' ? '改好同步到各店' : '門市'; }
+  const bar = document.getElementById('bo-scope-bar'); if (!bar) return;
+  if (scope === 'brandEdit' || scope === 'storeEdit') { bar.style.display = 'none'; return; }   // 切換頁：頁內「正在改：」那條就是範圍說明
+  bar.style.display = 'flex';
+  bar.className = 'bo-scope-bar ' + (scope === 'brand' ? 'brand' : 'store');
+  bar.innerHTML = scope === 'brand'
+    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>${currentMemberSubview === 'members' ? '會員全部門市共用，這一頁只能看' : currentMemberSubview === 'openstore' ? '開新店、正式開放（只限老闆）' : '這一頁存了馬上生效，全部門市一起套用'}</span>`
+    : `<b>🏪 只影響 ${escapeHtml(boStoreShortName_())}</b><span>這一頁的設定只改這間店，不會動到其他門市</span>`;
 }
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
-function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = BO_HOME_STORE_; return p; }
+function withStore_(o) { const p = { ...o }; if (!p.storeId) p.storeId = BO_HOME_STORE_; if (p.storeId === '__brand__' && !p.homeStore) p.homeStore = BO_HOME_STORE_; return p; }   // 11-16 (15d)：後端不再「沒帶店代號當培英」，品牌範本用所屬門市找客戶
 document.addEventListener('DOMContentLoaded', () => {   // 多店化第 3 段：店名從門市資料讀
   applyBoStoreProfile_();
   apiGet({ action: 'storeProfile' }).then(d => { if (d && d.status === 'ok' && d.profile) applyBoStoreProfile_(d.profile); }).catch(() => {});
@@ -878,7 +1148,7 @@ function boLogin() {
   err.textContent = '登入中…';
   fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify({ action: 'boLogin', storeId: BO_HOME_STORE_, name, pin, appKey: APP_KEY }) }).then(r => r.json()).then(d => {
     if (d.status !== 'ok') { err.textContent = d.message || '登入失敗'; return; }
-    boSession = { token: d.token, name: d.name, role: d.role, exp: d.exp };
+    boSession = { token: d.token, name: d.name, role: d.role, exp: d.exp, license: d.license || null };
     saveBoSession_();
     document.getElementById('bo-login-overlay').style.display = 'none';
     renderBoUser_();
@@ -899,11 +1169,59 @@ function renderBoUser_() {
   box.style.display = boSession ? 'block' : 'none';
   if (boSession) document.getElementById('bo-user-text').textContent = '登入：' + boSession.name + '（' + boSession.role + '）';
   applyBoRoleUi_();
+  applyLicenseUi_();   // 11-17 廠商授權
+  if (boSession) boLoadBrandStores_();   // 11-16 一鍵開新店：品牌同步清單補上已經開的店
   // 10-24 老闆實測：停在「會員 LINE 綁定」直接換店長登入，畫面還留著老闆看到的內容(後端照樣擋，但畫面不該給看)→登入／登出時重跑身分檢查
   const lb = document.getElementById('pmg-subview-linebind');
   if (lb && lb.style.display === 'block') loadBoLineBind_();
   if (!isBoOwner_()) { const badge = document.getElementById('bo-linebind-badge'); if (badge) badge.textContent = ''; }
 }
+// 11-17 廠商授權第 1 段（規格 廠商授權設計_2026-11-17.md）：後端登入／whoami 帶回 license
+//   選配沒買＝灰色＋🔒「加購才能用」（按了只跳說明）；廠商專用（開新店）＝不出現。
+//   後端沒開授權檢查（mode＝off）、或這個客戶授權表一列都沒有（configured＝false）→ 照舊全部顯示
+const BO_LIC_MAP_ = {
+  'mb-sub-btn-drinkupgrade': 'promo', 'mb-sub-btn-promo': 'promo', 'mb-sub-btn-blocks': 'promo',
+  'tab-btn-group': 'group_order',
+  'mb-sub-btn-points': 'member', 'mb-sub-btn-members': 'member', 'mb-sub-btn-tiers': 'member',
+  'mb-sub-btn-birthday': 'member', 'mb-sub-btn-register': 'member',
+  'mb-sub-btn-openstore': 'vendor',
+};
+const BO_LIC_NAME_ = { promo: '優惠活動', group_order: '揪團', member: '會員', multistore: '多店' };
+function boLicense_() { return (boSession && boSession.license) || null; }
+function boLicLocked_(f) {
+  const lic = boLicense_();
+  if (!lic || lic.mode === 'off' || lic.error || !lic.configured) return false;
+  if (f === 'vendor') return !lic.vendor;
+  return !(lic.features && lic.features[f]);
+}
+function applyLicenseUi_() {
+  Object.entries(BO_LIC_MAP_).forEach(([id, f]) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    const locked = boLicLocked_(f);
+    if (f === 'vendor') { b.style.display = locked ? 'none' : ''; return; }
+    b.classList.toggle('lic-locked', locked);
+    b.title = locked ? '加購「' + (BO_LIC_NAME_[f] || f) + '」才能用，請聯絡系統廠商' : '';
+  });
+  renderStoreSwitch_();   // 切換門市選單也跟著授權（多店）和登入身分
+}
+// 灰色的按鈕：攔住點擊，只跳說明（後端第 2 段也會擋，這裡是讓畫面不誤導）
+document.addEventListener('click', e => {
+  const b = e.target.closest && e.target.closest('.lic-locked');
+  if (!b) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  alert('🔒 這個功能需要加購「' + (BO_LIC_NAME_[BO_LIC_MAP_[b.id]] || '') + '」\n請聯絡系統廠商開通');
+}, true);
+// 已登入（12 小時內）重新打開後台：問一次 whoami 更新授權（廠商改了授權，這邊重新整理就看得到）
+function boRefreshLicense_() {
+  if (!boSession) return;
+  fetch(ORDER_BACKEND_URL, { method: 'POST', body: JSON.stringify(withStore_({ action: 'boWhoAmI', boToken: boSession.token, appKey: APP_KEY })) })
+    .then(r => r.json()).then(d => {
+      if (!boSession || !d || d.status !== 'ok') return;
+      boSession.license = d.license || null; saveBoSession_(); applyLicenseUi_();
+    }).catch(() => {});
+}
+
 // 店長登入時：只有老闆能改的地方改成唯讀並說明(後端也會擋，這裡是讓畫面不誤導)
 function applyBoRoleUi_() {
   const owner = isBoOwner_();
@@ -924,14 +1242,35 @@ function applyBoRoleUi_() {
 // 多店化第 3 段(10-17)起預設值＝這份後台網址的門市(BO_HOME_STORE_)，不用再複製改代號
 let MC_STORE_ID = BO_HOME_STORE_;
 const MC_STATUS = 'draft';
-// 目前僅美寶正式運作，其餘三店代號先保留欄位，等分店真的建立後再補上正確代號
+// 品牌範本（__brand__）＝這個客戶（租戶／品牌）推給旗下各店的來源；另一個選項是登入的這間店自己的草稿
+// 11-14 老闆定：改菜單／活動先改品牌範本→同步到店草稿→比對→發布；只有這間店要不一樣時才直接改這間店（AI 動手前要先跟老闆確認改哪一邊）
+// 11-14：品牌名稱從門市資料的 brandName 讀（後端讀客戶資料 core.tenants.brand_name，SQL 38）；沒有就只寫「品牌範本」，不寫死任何品牌
+const mcBrandLabel_ = () => ((BO_STORE_PROFILE_ && BO_STORE_PROFILE_.brandName) ? BO_STORE_PROFILE_.brandName + ' ' : '') + '品牌範本（改這裡再推送到各店）';
 const MC_STORE_OPTIONS = [
-  { id: BO_HOME_STORE_, label: boStoreShortName_() + '（自己的門市）' },
-  { id: '__brand__', label: '品牌範本（推送到分店用）' }
+  { id: BO_HOME_STORE_, label: boStoreShortName_() + '（只改這間店）' },
+  { id: '__brand__', label: mcBrandLabel_() }
 ];
-const MC_SYNC_TARGET_STORES = [
+let MC_SYNC_TARGET_STORES = [   // 11-16 一鍵開新店：登入後用 brandStores 補上已經開的店（籌備中、或有訂單的）
   { id: BO_HOME_STORE_, label: boStoreShortName_() }
 ];
+// 11-16 15j：確認視窗顯示店名，不顯示門市代號（meibao）或內部代號（__brand__）
+function mcStoreNameOf_(id) {
+  if (id === '__brand__') return ((BO_STORE_PROFILE_ && BO_STORE_PROFILE_.brandName) ? BO_STORE_PROFILE_.brandName + ' ' : '') + '品牌範本';
+  const m = MC_SYNC_TARGET_STORES.find(x => x.id === id);
+  return (m && m.label) || (id === BO_HOME_STORE_ ? boStoreShortName_() : String(id));
+}
+// 門市資料（店名、品牌名）晚一點才從後端回來 → 回來後更新選項文字（已經畫出來的下拉選單也一起改）
+function mcRefreshStoreLabels_() {
+  MC_STORE_OPTIONS[0].label = boStoreShortName_() + '（只改這間店）';
+  MC_STORE_OPTIONS[1].label = mcBrandLabel_();
+  MC_SYNC_TARGET_STORES[0].label = boStoreShortName_();
+  const sel = document.getElementById('mc-store-select');
+  if (sel) Array.from(sel.options).forEach(o => { const m = MC_STORE_OPTIONS.find(x => x.id === o.value); if (m) o.textContent = m.label; });
+  document.querySelectorAll('.mc-sync-store-cb, .promo-sync-store-cb').forEach(cb => {
+    const m = MC_SYNC_TARGET_STORES.find(x => x.id === cb.value);
+    if (m && cb.parentNode && cb.nextSibling) cb.nextSibling.textContent = ' ' + m.label;
+  });
+}
 
 // 品項清單跟雲端平板/POS功能共用同一份(手動同步，來源見05_腳本/build_backoffice.py)
 const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美1 花醬 牛肉培根 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美2 蜂蜜芥末 德式燻腸 捲餅"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美3 日式白醬 酥炸魚排 蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美4 雙層澳洲牛肉 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美5 雙層豬肉 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美6 清爽薯泥培根 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美7 泰式風味 鮮魚 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美8 日式咖哩 豬排 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美9 香濃雞排 起司法國土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美10 美味豬排 起司蛋總匯土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美11 千島醬 薯泥雞排 起司蛋土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美12 甜辣泰式 雞排 起司蛋捲餅"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"培根炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"香雞炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"火腿炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"烤肉炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"日式豬排炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"日式雞排炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"德式燻腸炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"泡菜燒肉炒麵"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定01 炒麵加蛋＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定02 美式湯餃＋烤肉蛋漢堡"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定03 炒麵加蛋＋雞塊"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定04 烤肉炒麵＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定06 玉米起司特酥蛋餅＋米花雞球"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定07 烤肉蛋漢堡＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定08 烤肉炒麵＋黃金香酥雞"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定09 炒麵加蛋＋黃金香酥雞"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定10 烤肉炒麵＋米花雞球"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定11 美式湯餃＋雞塊"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定12 玉米起司特酥蛋餅＋鍋貼"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜燒肉異國炒麵"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜豬排蛋堡"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜雞排捲"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜蛋餅"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"韓風玫瑰醬 鳳梨雞排堡"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"經典赤辣醬 鳳梨雞排堡"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"蜂蜜芥末醬 鳳梨雞排堡"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"玉米起司"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"鮪魚玉米"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"鮪魚洋蔥"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"培根玉米起司"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"惡魔雙色拔絲"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"火腿肉鬆蔬食"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"火腿起司 佐花醬小黃瓜"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"和洋豬排蔬食"},{"category":"BURGERS_漢堡","name":"玉米蛋"},{"category":"BURGERS_漢堡","name":"肉鬆蛋"},{"category":"BURGERS_漢堡","name":"豬肉蛋 (漢堡肉)"},{"category":"BURGERS_漢堡","name":"烤肉蛋 (里肌肉)"},{"category":"BURGERS_漢堡","name":"香雞蛋"},{"category":"BURGERS_漢堡","name":"牛肉蛋"},{"category":"BURGERS_漢堡","name":"總匯蛋 (里肌肉)"},{"category":"BURGERS_漢堡","name":"日式雞排蛋"},{"category":"BURGERS_漢堡","name":"日式豬排蛋"},{"category":"BURGERS_漢堡","name":"日式花枝排蛋"},{"category":"BURGERS_漢堡","name":"日式蝦排蛋"},{"category":"BURGERS_漢堡","name":"雞腿蛋 (原/辣)"},{"category":"TOAST_土司","name":"煎蛋"},{"category":"TOAST_土司","name":"玉米蛋"},{"category":"TOAST_土司","name":"肉鬆蛋"},{"category":"TOAST_土司","name":"起司蛋"},{"category":"TOAST_土司","name":"火腿蛋"},{"category":"TOAST_土司","name":"培根蛋"},{"category":"TOAST_土司","name":"鮪魚蛋"},{"category":"TOAST_土司","name":"烤肉蛋 (里肌肉)"},{"category":"TOAST_土司","name":"香雞蛋"},{"category":"TOAST_土司","name":"總匯蛋 (漢堡肉)"},{"category":"TOAST_土司","name":"雞腿蛋 (原/辣)"},{"category":"JAN SERIES_果醬磚研系列","name":"草莓"},{"category":"JAN SERIES_果醬磚研系列","name":"藍莓"},{"category":"JAN SERIES_果醬磚研系列","name":"奶酥"},{"category":"JAN SERIES_果醬磚研系列","name":"花生"},{"category":"JAN SERIES_果醬磚研系列","name":"奶油"},{"category":"JAN SERIES_果醬磚研系列","name":"巧克力"},{"category":"JAN SERIES_果醬磚研系列","name":"狠蒜"},{"category":"THICKCUT TOAST_厚片","name":"起司奶油"},{"category":"THICKCUT TOAST_厚片","name":"鮪魚洋蔥"},{"category":"THICKCUT TOAST_厚片","name":"燻雞起司"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"日式蔬食沙拉"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"日式咖哩"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"冰州魚排"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"大洋鮮魚"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"烤肉穀堡"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"孜然醬雞排"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"孜然醬豬排"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"火腿起司"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"蕃茄豬肉"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"苜蓿芽起司"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"陽光香雞"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"蔬食烤肉"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"日式燻雞"},{"category":"BURRITO_蔬食捲餅","name":"香雞蕃茄"},{"category":"BURRITO_蔬食捲餅","name":"黃金烤肉"},{"category":"BURRITO_蔬食捲餅","name":"日式雞排"},{"category":"BURRITO_蔬食捲餅","name":"海味花枝"},{"category":"BURRITO_蔬食捲餅","name":"鮮味蝦排"},{"category":"BURRITO_蔬食捲餅","name":"美式雞腿 (原/辣)"},{"category":"PUFF PASTRY_起酥堡","name":"草莓起酥"},{"category":"PUFF PASTRY_起酥堡","name":"洋芋蔬食"},{"category":"PUFF PASTRY_起酥堡","name":"苜蓿芽玉米"},{"category":"PUFF PASTRY_起酥堡","name":"蕃茄蔬食"},{"category":"PUFF PASTRY_起酥堡","name":"蔬食烤肉"},{"category":"PAIN PERDU_法國土司 ","name":"日式培根"},{"category":"PAIN PERDU_法國土司 ","name":"深海鮪魚"},{"category":"PAIN PERDU_法國土司 ","name":"黃金烤肉"},{"category":"CHINESE OMELET_招牌蛋餅","name":"原味"},{"category":"CHINESE OMELET_招牌蛋餅","name":"肉鬆"},{"category":"CHINESE OMELET_招牌蛋餅","name":"玉米"},{"category":"CHINESE OMELET_招牌蛋餅","name":"起司"},{"category":"CHINESE OMELET_招牌蛋餅","name":"蔬食"},{"category":"CHINESE OMELET_招牌蛋餅","name":"洋蔥"},{"category":"CHINESE OMELET_招牌蛋餅","name":"火腿"},{"category":"CHINESE OMELET_招牌蛋餅","name":"培根"},{"category":"CHINESE OMELET_招牌蛋餅","name":"熱狗"},{"category":"CHINESE OMELET_招牌蛋餅","name":"鮪魚"},{"category":"CHINESE OMELET_招牌蛋餅","name":"烤肉"},{"category":"SALAD VEGETABLE_田園蔬果","name":"馬鈴薯土司"},{"category":"SALAD VEGETABLE_田園蔬果","name":"南瓜土司"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥蔬食鮪魚"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥苜蓿芽火腿"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥蔬菜沙拉"},{"category":"SALAD VEGETABLE_田園蔬果","name":"田園蔬菜捲"},{"category":"CHINESE SNACKS_中式茶食","name":"荷包蛋"},{"category":"CHINESE SNACKS_中式茶食","name":"熱狗 (4條)"},{"category":"CHINESE SNACKS_中式茶食","name":"玉米濃湯"},{"category":"CHINESE SNACKS_中式茶食","name":"炒麵"},{"category":"CHINESE SNACKS_中式茶食","name":"鍋貼(5個)"},{"category":"CHINESE SNACKS_中式茶食","name":"雞塊 (4個)"},{"category":"CHINESE SNACKS_中式茶食","name":"蘿蔔糕 (2片)"},{"category":"CHINESE SNACKS_中式茶食","name":"薯餅 (4片)"},{"category":"CHINESE SNACKS_中式茶食","name":"米花雞球 (8個)"},{"category":"CHINESE SNACKS_中式茶食","name":"野菜豚炸餃(8個)"},{"category":"CHINESE SNACKS_中式茶食","name":"脆薯"},{"category":"CHINESE SNACKS_中式茶食","name":"美式湯麵"},{"category":"CHINESE SNACKS_中式茶食","name":"義響鐵板麵"},{"category":"CHINESE SNACKS_中式茶食","name":"黃金香酥雞"},{"category":"CHINESE SNACKS_中式茶食","name":"二折雞翅(3入/7入)"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"玄米檸檬綠茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨美人茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"檸檬黃金烏龍"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨美人鮮奶茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨烏龍鮮奶茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨玄米鮮奶綠"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"檸檬紅茶"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"檸檬綠茶"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"蜜漬鳳梨紅茶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖豆漿"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖薏仁"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖奶茶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖紅茶牛奶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖牛奶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖檸檬飲"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀豆漿"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀紅茶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀紅茶豆漿"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀奶茶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀綠奶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀薏仁漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"研磨豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"紅茶豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"胚芽豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"薏仁豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"抹茶豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"養生薏仁漿"},{"category":"PURE TEA_純味茶","name":"阿薩姆紅茶"},{"category":"PURE TEA_純味茶","name":"茉莉綠茶"},{"category":"PURE TEA_純味茶","name":"高山青茶"},{"category":"PURE TEA_純味茶","name":"東方美人 (現沏)"},{"category":"PURE TEA_純味茶","name":"黃金烏龍 (現沏)"},{"category":"PURE TEA_純味茶","name":"阿里山 (現沏)"},{"category":"PURE TEA_純味茶","name":"玄米玉露 (現沏)"},{"category":"PURE TEA_純味茶","name":"四季綠茶 (現沏)"},{"category":"MILK TEA_奶茶系列","name":"阿薩姆奶茶"},{"category":"MILK TEA_奶茶系列","name":"茉香奶綠"},{"category":"MILK TEA_奶茶系列","name":"高山青奶"},{"category":"MILK TEA_奶茶系列","name":"胚芽奶茶"},{"category":"MILK TEA_奶茶系列","name":"茶珠青奶"},{"category":"MILK TEA_奶茶系列","name":"茶珠綠奶"},{"category":"MILK TEA_奶茶系列","name":"茶珠奶茶"},{"category":"TEA LATTES_茶拿鐵","name":"東方拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"烏龍拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"阿里山拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"四季拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"玄米拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"紅茶拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"綠茶拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"青茶拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"豆奶拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"特調咖啡"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"義式咖啡"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"小農拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"卡布奇諾"},{"category":"加購品項/配料選擇","name":"加起司"},{"category":"加購品項/配料選擇","name":"加二片起司"},{"category":"加購品項/配料選擇","name":"加蛋"},{"category":"加購品項/配料選擇","name":"加火腿"},{"category":"加購品項/配料選擇","name":"加培根"},{"category":"加購品項/配料選擇","name":"加麵"},{"category":"加購品項/配料選擇","name":"薯餅(6入)"},{"category":"加購品項/配料選擇","name":"雞塊(6入)"},{"category":"加購品項/配料選擇","name":"二折雞翅(3入)"},{"category":"加購品項/配料選擇","name":"茶珠"},{"category":"加購品項/配料選擇","name":"多穀"},{"category":"加購品項/配料選擇","name":"抹茶"},{"category":"加購品項/配料選擇","name":"胚芽"},{"category":"加購品項/配料選擇","name":"美式狂想 x 雙人脆薯"},{"category":"加購品項/配料選擇","name":"美式狂想 x 九塊雞塊"},{"category":"加購品項/配料選擇","name":"美式狂想 x 十粒鍋貼"},{"category":"加購品項/配料選擇","name":"加一份Espresso"},{"category":"加購品項/配料選擇","name":"加二份Espresso"},{"category":"加購品項/配料選擇","name":"多二匙奶"},{"category":"加購品項/配料選擇","name":"野菜豚炸餃"},{"category":"加購品項/配料選擇","name":"米花雞球"}];
@@ -967,16 +1306,10 @@ function switchMerchantSubview(name) {
 }
 
 // 「會員相關」側欄巢狀展開：會員分級/生日禮/註冊禮/集點禮/優惠券共用同一套子分頁切換邏輯
-const MB_SUBVIEWS = ['tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade'];
-let mbLoaded = { tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false };
+const MB_SUBVIEWS = ['members', 'tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade', 'openstore'];
+let mbLoaded = { members: false, tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false, openstore: false };
 let currentMemberSubview = 'tiers';
-function toggleMemberGroup() {
-  const sublist = document.getElementById('member-sublist');
-  const willOpen = !sublist.classList.contains('open');
-  sublist.classList.toggle('open', willOpen);
-  document.getElementById('member-caret').classList.toggle('open', willOpen);
-  if (willOpen) switchMemberSubview(currentMemberSubview);
-}
+function toggleMemberGroup() { switchMemberSubview(currentMemberSubview); }   // 11-14 側欄分段後「會員相關」群組鈕拿掉了，保留給舊呼叫
 function switchMemberSubview(name) {
   currentMemberSubview = name;
   switchBackofficeTab('member');
@@ -1011,6 +1344,242 @@ function loadPosManageLog() {
         ${l.note ? `<span style="color:var(--muted);">（${escapeHtml(l.note)}）</span>` : ''}
       </div>`).join('');
   });
+}
+
+// ---- 11-13 報表（規格 報表設計_2026-11-13.md；後端 GET reportRows／reportItems，SQL 37）----
+// 後端只回彙總數字（取餐日×下單小時×收款方式×通路×種類），這裡組成「營業銷售報表」「收款方式報表」；CSV 也在這裡產生。
+// 規則（老闆 11-13 定）：營業日＝取餐日；時段＝下單時間；待收款不算進營收、另外列；作廢和退款分兩欄；取餐方式先用通路代替
+let rptLoadedOnce_ = false, rptData_ = null, rptItems_ = [], rptSeq_ = 0;
+const rptState_ = { view: { sales: 'hour', pay: 'hour' }, combo: { qty: false, amount: false }, more: { qty: false, amount: false }, cols: null, payOff: new Set() };
+const RPT_COLS_ = [['net', '銷售淨額'], ['disc', '折扣淨額'], ['voidAmt', '作廢金額'], ['voidN', '作廢結帳單量'], ['refAmt', '退款金額'], ['refN', '退款單量'], ['gross', '銷售總額'], ['n', '實際結帳單量'], ['allN', '結帳單總量'], ['avg', '平均單價']];
+const RPT_MONEY_ = new Set(['net', 'disc', 'voidAmt', 'refAmt', 'gross', 'avg']);
+const RPT_ONLINE_ = ['線上信用卡', '線上Apple Pay', '線上Google Pay', '線上LINEPay'];
+const RPT_OFFLINE_FIRST_ = ['現金', '線下LINEPay', 'LINEPay mini', '其他'];
+const RPT_CH_NAME_ = { 'POS': '門市 POS', '門市': '門市 POS', '線上': '線上點餐', '揪團': '揪團' };   // 實際通路值：POS／線上／熊貓／581／日系…；11-16 (9f) 揪團單通路也記線上，報表 SQL 41 靠 group_id 分成「揪團」
+const RPT_WD_ = ['日', '一', '二', '三', '四', '五', '六'];
+const rptMoney_ = v => '$' + Math.round(v).toLocaleString('en-US');
+const rptPad_ = n => String(n).padStart(2, '0');
+const rptDay_ = (s, add) => { const t = new Date(s + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + (add || 0)); return t.toISOString().slice(0, 10); };
+const rptToday_ = () => new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+
+function rptPreset_(p) {
+  const t = rptToday_(); let f = t, e = t;
+  if (p === 'yday') { f = e = rptDay_(t, -1); }
+  else if (p === 'week') { const wd = new Date(t + 'T00:00:00Z').getUTCDay(); f = rptDay_(t, -((wd + 6) % 7)); }   // 週一開始
+  else if (p === 'month') { f = t.slice(0, 8) + '01'; }
+  else if (p === 'lmonth') { e = rptDay_(t.slice(0, 8) + '01', -1); f = e.slice(0, 8) + '01'; }
+  document.getElementById('rpt-from').value = f; document.getElementById('rpt-to').value = e;
+  document.querySelectorAll('.rpt-presets button').forEach(b => b.classList.toggle('active', b.dataset.p === p));
+  loadReport_();
+}
+function rptDatesEdited_() { document.querySelectorAll('.rpt-presets button').forEach(b => b.classList.remove('active')); }
+// 上下架管理「當日營收」旁的「看詳細 →」
+function rptOpenToday_() { rptLoadedOnce_ = true; switchPosManageSubview('report'); rptTab_('sales'); rptPreset_('today'); }
+function rptTab_(t) {
+  document.getElementById('rpt-tab-sales').classList.toggle('active', t === 'sales');
+  document.getElementById('rpt-tab-pay').classList.toggle('active', t === 'pay');
+  document.getElementById('rpt-sales').style.display = t === 'sales' ? 'block' : 'none';
+  document.getElementById('rpt-pay').style.display = t === 'pay' ? 'block' : 'none';
+}
+function loadReport_() {
+  const from = document.getElementById('rpt-from').value, to = document.getElementById('rpt-to').value || from;
+  const msg = document.getElementById('rpt-msg');
+  if (!from) { msg.textContent = '請選開始日'; return; }
+  if (to < from) { msg.textContent = '結束日要在開始日之後'; return; }
+  const seq = ++rptSeq_;
+  msg.textContent = '載入中...';
+  Promise.all([apiGet({ action: 'reportRows', from, to }), apiGet({ action: 'reportItems', from, to })]).then(([a, b]) => {
+    if (seq !== rptSeq_) return;   // 連按查詢只畫最後一次
+    if (!a || a.status !== 'ok') { msg.textContent = (a && a.message) || '讀取失敗'; return; }
+    rptData_ = a; rptItems_ = (b && b.status === 'ok') ? b.items : [];
+    msg.textContent = (a.from === a.to ? a.from : a.from + ' ～ ' + a.to) + '｜營業日照取餐日、時段照下單時間；待付款、待收款、沒付成就作廢的單不算進營收'
+      + ((b && b.status === 'ok') ? '' : '｜品項排行讀取失敗');
+    renderRptSales_(); renderRptPay_();
+  }).catch(() => { if (seq === rptSeq_) msg.textContent = '連線失敗，請稍後再試'; });
+}
+function rptAgg_(rows) {
+  const a = { net: 0, disc: 0, n: 0, voidAmt: 0, voidN: 0, refAmt: 0, refN: 0, unsAmt: 0, unsN: 0 };
+  for (const r of rows) {
+    if (r.k === 'sale') { a.net += r.total; a.disc += r.disc; a.n += r.n; }
+    else if (r.k === 'void') { a.voidAmt += r.total; a.voidN += r.n; }
+    else if (r.k === 'refund') { a.refAmt += r.refunded; a.refN += r.n; }
+    else if (r.k === 'unsettled') { a.unsAmt += r.total; a.unsN += r.n; }
+  }
+  a.gross = a.net + a.disc; a.allN = a.n + a.voidN + a.refN; a.avg = a.n ? a.net / a.n : 0;
+  return a;
+}
+// 依看法分組：hour＝下單小時（有資料的第一個到最後一個小時）；day＝區間每一天；month＝區間每個月
+function rptBuckets_(rows, view, from, to) {
+  const keyOf = view === 'hour' ? r => r.h : view === 'day' ? r => r.d : r => r.d.slice(0, 7);
+  const map = new Map();
+  rows.forEach(r => { const k = keyOf(r); if (!map.has(k)) map.set(k, []); map.get(k).push(r); });
+  const keys = [];
+  if (view === 'hour') { const hs = [...map.keys()]; if (hs.length) for (let h = Math.min(...hs); h <= Math.max(...hs); h++) keys.push(h); }
+  else if (view === 'day') { for (let d = from; d <= to; d = rptDay_(d, 1)) keys.push(d); }
+  else { for (let m = from.slice(0, 7); m <= to.slice(0, 7); m = rptDay_(m + '-28', 5).slice(0, 7)) keys.push(m); }
+  return keys.map(k => ({ key: k, label: rptLabel_(view, k), rows: map.get(k) || [] }));
+}
+function rptLabel_(view, k) {
+  if (view === 'hour') return rptPad_(k) + ':00-' + rptPad_(k + 1) + ':00';
+  if (view === 'day') return k.slice(5).replace('-', '/') + '（' + RPT_WD_[new Date(k + 'T00:00:00Z').getUTCDay()] + '）';
+  return k.replace('-', '/');
+}
+function rptView_(tab, v, btn) {
+  rptState_.view[tab] = v;
+  btn.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  if (tab === 'sales') renderRptSalesTable_(); else renderRptPay_();
+}
+
+// ---- 營業銷售報表 ----
+function renderRptSales_() {
+  if (!rptData_) return;
+  const a = rptAgg_(rptData_.rows);
+  const card = (t, v, sub) => `<div class="rpt-card"><div class="t">${t}</div><div class="v">${v}</div>${sub ? `<div class="ops-meta">${sub}</div>` : ''}</div>`;
+  document.getElementById('rpt-cards').innerHTML = card('銷售淨額', rptMoney_(a.net), '銷售總額 ' + rptMoney_(a.gross)) + card('實際結帳單量', a.n.toLocaleString())
+    + card('平均單價', rptMoney_(a.avg)) + card('折扣金額', rptMoney_(a.disc)) + card('作廢金額', rptMoney_(a.voidAmt), a.voidN + ' 張') + card('退款金額', rptMoney_(a.refAmt), a.refN + ' 張');
+  document.getElementById('rpt-cards-note').textContent = a.unsN ? `待收款 ${a.unsN} 張 ${rptMoney_(a.unsAmt)}（取餐付款還沒收，未算入）` : '';
+  renderRptChart_();
+  ['qty', 'amount'].forEach(renderRptRank_);
+  renderRptHbars_();
+  renderRptSalesTable_();
+}
+// 銷售概況折線圖：一天看每小時；超過一天看每天；超過兩個月看每月
+function renderRptChart_() {
+  const { rows, from, to } = rptData_;
+  const days = (Date.parse(to) - Date.parse(from)) / 86400000;
+  const view = days === 0 ? 'hour' : days > 62 ? 'month' : 'day';
+  const bs = rptBuckets_(rows.filter(r => r.k === 'sale'), view, from, to).map(b => ({ label: b.label, ...rptAgg_(b.rows) }));
+  const el = document.getElementById('rpt-chart');
+  if (!bs.some(b => b.n)) { el.innerHTML = '<div class="empty-hint">這段期間沒有營收</div>'; return; }
+  const W = 760, H = 240, L = 60, R = 40, T = 14, B = 30, iw = W - L - R, ih = H - T - B;
+  const maxV = Math.max(...bs.map(b => b.net), 1), maxN = Math.max(...bs.map(b => b.n), 1);
+  const x = i => L + (bs.length === 1 ? iw / 2 : i * iw / (bs.length - 1));
+  const yv = v => T + ih - v / maxV * ih, yn = v => T + ih - v / maxN * ih;
+  const step = Math.ceil(bs.length / 12);
+  let g = '';
+  for (let i = 0; i <= 4; i++) {
+    const yy = T + ih * i / 4;
+    g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#eee"/><text x="${L - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="#888">${rptMoney_(maxV * (4 - i) / 4)}</text>`
+      + `<text x="${W - R + 6}" y="${yy + 4}" font-size="11" fill="#888">${Math.round(maxN * (4 - i) / 4)}</text>`;
+  }
+  bs.forEach((b, i) => { if (i % step === 0) g += `<text x="${x(i)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="#888">${escapeHtml(b.label.split('（')[0].split('-')[0])}</text>`; });
+  const line = (f, color, dash) => `<polyline fill="none" stroke="${color}" stroke-width="2"${dash ? ' stroke-dasharray="5 4"' : ''} points="${bs.map((b, i) => x(i) + ',' + f(b)).join(' ')}"/>`;
+  g += line(b => yn(b.n), '#3b7dd8', true) + line(b => yv(b.net), '#e8632c', false);
+  bs.forEach((b, i) => { g += `<circle cx="${x(i)}" cy="${yv(b.net)}" r="3.5" fill="#e8632c"><title>${escapeHtml(b.label)}：${rptMoney_(b.net)}，${b.n} 張</title></circle>`; });
+  el.innerHTML = `<div class="ops-meta" style="margin-bottom:4px;"><span style="color:#e8632c;">━ 銷售淨額（左）</span>　<span style="color:#3b7dd8;">╍ 結帳單量（右）</span>　${view === 'hour' ? '每小時（下單時間）' : view === 'day' ? '每天' : '每月'}；滑鼠移到圓點看數字</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">${g}</svg>`;
+}
+function rptRankKind_(kind, combo, btn) {
+  rptState_.combo[kind] = combo; rptState_.more[kind] = false;
+  btn.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  renderRptRank_(kind);
+}
+function rptRankMore_(kind) { rptState_.more[kind] = !rptState_.more[kind]; renderRptRank_(kind); }
+function renderRptRank_(kind) {
+  const other = kind === 'qty' ? 'amount' : 'qty';
+  const list = rptItems_.filter(i => i.combo === rptState_.combo[kind]).slice().sort((p, q) => q[kind] - p[kind] || q[other] - p[other]);
+  const el = document.getElementById('rpt-rank-' + kind);
+  if (!list.length) { el.innerHTML = '<div class="empty-hint">沒有資料</div>'; return; }
+  const show = rptState_.more[kind] ? list : list.slice(0, 10), max = list[0][kind] || 1;
+  const colors = ['#e8632c', '#f0a03c', '#f3c04a'];
+  el.innerHTML = show.map((i, n) => `<div class="rpt-rank-row"><span class="rpt-rank-no"${n < 3 ? ` style="background:${colors[n]}"` : ''}>${n + 1}</span>`
+    + `<div>${escapeHtml(i.name)}${i.size ? ' <span class="ops-meta">' + escapeHtml(i.size) + '</span>' : ''}<div class="rpt-bar-track"><div class="rpt-bar-fill" style="width:${Math.max(2, i[kind] / max * 100)}%"></div></div></div>`
+    + `<span>${kind === 'qty' ? i.qty + ' 份' : rptMoney_(i.amount)}</span></div>`).join('')
+    + (list.length > 10 ? `<button type="button" class="rpt-more" onclick="rptRankMore_('${kind}')">${rptState_.more[kind] ? '收起' : '查看更多（共 ' + list.length + ' 項）'}</button>` : '');
+}
+function renderRptHbars_() {
+  const sale = rptData_.rows.filter(r => r.k === 'sale'), quick = rptData_.quickSources || [];
+  const draw = (id, keyOf, order, nameOf) => {
+    const m = new Map();
+    sale.forEach(r => { const k = keyOf(r) || '未記錄'; const o = m.get(k) || { net: 0, n: 0 }; o.net += r.total; o.n += r.n; m.set(k, o); });
+    const pos = k => { const i = order.indexOf(k); return i < 0 ? 99 : i; };
+    const keys = [...m.keys()].sort((p, q) => pos(p) - pos(q) || p.localeCompare(q));
+    const max = Math.max(1, ...[...m.values()].map(o => o.net));
+    document.getElementById(id).innerHTML = keys.length ? keys.map(k => {
+      const o = m.get(k);
+      return `<div class="rpt-hbar"><span>${escapeHtml(nameOf(k))}</span><div class="rpt-bar-track" style="height:14px;margin:0;"><div class="rpt-bar-fill" style="height:14px;width:${Math.max(1, o.net / max * 100)}%"></div></div><span style="text-align:right;">${rptMoney_(o.net)}／${o.n} 張</span></div>`;
+    }).join('') : '<div class="empty-hint">沒有資料</div>';
+  };
+  draw('rpt-bar-src', r => r.src, ['門市現場', '線上自取', '外送平台'], k => k);
+  draw('rpt-bar-ch', r => r.ch, ['POS', '門市', '線上', '揪團', ...quick], k => RPT_CH_NAME_[k] || k);
+}
+function rptSalesTableData_() {
+  const { rows, from, to } = rptData_, v = rptState_.view.sales;
+  if (!rptState_.cols) rptState_.cols = new Set(RPT_COLS_.map(c => c[0]));
+  const cols = RPT_COLS_.filter(c => rptState_.cols.has(c[0]));
+  const head = [v === 'hour' ? '時段' : v === 'day' ? '日期' : '月份', ...cols.map(c => c[1])];
+  const line = (label, a) => [label, ...cols.map(c => RPT_MONEY_.has(c[0]) ? Math.round(a[c[0]]) : a[c[0]])];
+  const body = [line('總計', rptAgg_(rows)), ...rptBuckets_(rows, v, from, to).map(b => line(b.label, rptAgg_(b.rows)))];
+  return { head, body, money: [false, ...cols.map(c => RPT_MONEY_.has(c[0]))] };
+}
+function renderRptSalesTable_() {
+  if (!rptData_) return;
+  if (!rptState_.cols) rptState_.cols = new Set(RPT_COLS_.map(c => c[0]));
+  document.getElementById('rpt-sales-cols').innerHTML = RPT_COLS_.map(c => `<label><input type="checkbox"${rptState_.cols.has(c[0]) ? ' checked' : ''} onchange="rptToggleCol_('${c[0]}', this.checked)"> ${c[1]}</label>`).join('');
+  const t = rptSalesTableData_();
+  document.getElementById('rpt-sales-table').innerHTML = `<table class="rpt-table"><tr>${t.head.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`
+    + t.body.map((r, i) => `<tr${i === 0 ? ' class="total"' : ''}>${r.map((c, j) => `<td>${j === 0 ? escapeHtml(c) : t.money[j] ? rptMoney_(c) : Number(c).toLocaleString()}</td>`).join('')}</tr>`).join('') + '</table>';
+}
+function rptToggleCol_(k, on) { if (on) rptState_.cols.add(k); else rptState_.cols.delete(k); renderRptSalesTable_(); }
+
+// ---- 收款方式報表：分組照後台「付款方式設定」分頁（線上收款／第三方收款／線下收款）；整段沒金額的方式不出現 ----
+function rptMethodGroup_(m, quick) { return quick.includes(m) ? '第三方收款' : (RPT_ONLINE_.includes(m) || /^線上/.test(m)) ? '線上收款' : '線下收款'; }
+function rptMethodsOf_(rows, quick) {
+  const tot = new Map(); rows.forEach(r => tot.set(r.m, (tot.get(r.m) || 0) + r.total));
+  const G = ['線上收款', '第三方收款', '線下收款'];
+  const rank = m => {
+    const g = rptMethodGroup_(m, quick), list = g === '線上收款' ? RPT_ONLINE_ : g === '第三方收款' ? quick : RPT_OFFLINE_FIRST_, i = list.indexOf(m);
+    return G.indexOf(g) * 1000 + (i >= 0 ? i : m === '取餐付款' ? 900 : m === '未記錄' ? 950 : 500);
+  };
+  return [...tot.keys()].filter(m => tot.get(m) !== 0).sort((p, q) => rank(p) - rank(q) || p.localeCompare(q));
+}
+function rptPayTableData_() {
+  const { from, to } = rptData_, quick = rptData_.quickSources || [], v = rptState_.view.pay;
+  const src = document.getElementById('rpt-pay-src').value;
+  const sale = rptData_.rows.filter(r => r.k === 'sale' && (!src || r.src === src));
+  const all = rptMethodsOf_(sale, quick), ms = all.filter(m => !rptState_.payOff.has(m));
+  const line = (label, rs) => {
+    const by = {}; let net = 0, n = 0;
+    rs.forEach(r => { const o = by[r.m] || (by[r.m] = { amt: 0, n: 0 }); o.amt += r.total; o.n += r.n; net += r.total; n += r.n; });
+    return [label, ...ms.flatMap(m => { const o = by[m] || { amt: 0, n: 0 }; return [o.amt, o.n, net ? Math.round(o.amt / net * 1000) / 10 : 0]; }), net, n];
+  };
+  const body = [line('總計', sale), ...rptBuckets_(sale, v, from, to).map(b => line(b.label, b.rows))];
+  return { all, ms, quick, src, first: v === 'hour' ? '時段' : v === 'day' ? '日期' : '月份', body };
+}
+function renderRptPay_() {
+  if (!rptData_) return;
+  const t = rptPayTableData_();
+  document.getElementById('rpt-pay-methods').innerHTML = t.all.length ? '收款方式 ' + t.all.map(m => `<label><input type="checkbox"${rptState_.payOff.has(m) ? '' : ' checked'} data-m="${escapeHtml(m)}" onchange="rptTogglePay_(this.dataset.m, this.checked)"> ${escapeHtml(m)}</label>`).join('') : '';
+  const el = document.getElementById('rpt-pay-table');
+  if (!t.all.length) { el.innerHTML = '<div class="empty-hint">這段期間沒有營收</div>'; return; }
+  if (!t.ms.length) { el.innerHTML = '<div class="empty-hint">請至少勾一個收款方式</div>'; return; }
+  const groups = [];
+  t.ms.forEach(m => { const g = rptMethodGroup_(m, t.quick), last = groups[groups.length - 1]; if (last && last.g === g) last.n++; else groups.push({ g, n: 1 }); });
+  let h = `<table class="rpt-table"><tr><th rowspan="3">${t.first}</th>${groups.map(x => `<th class="grp" colspan="${x.n * 3}">${x.g}</th>`).join('')}<th rowspan="3">銷售淨額</th><th rowspan="3">結帳單量</th></tr>`
+    + `<tr>${t.ms.map(m => `<th colspan="3">${escapeHtml(m)}</th>`).join('')}</tr><tr>${t.ms.map(() => '<th>金額</th><th>單量</th><th>佔比</th>').join('')}</tr>`;
+  h += t.body.map((r, i) => `<tr${i === 0 ? ' class="total"' : ''}><td>${escapeHtml(r[0])}</td>`
+    + t.ms.map((m, j) => `<td>${rptMoney_(r[1 + j * 3])}</td><td>${r[2 + j * 3]}</td><td>${r[3 + j * 3]}%</td>`).join('')
+    + `<td>${rptMoney_(r[r.length - 2])}</td><td>${r[r.length - 1]}</td></tr>`).join('');
+  el.innerHTML = h + '</table>';
+}
+function rptTogglePay_(m, on) { if (on) rptState_.payOff.delete(m); else rptState_.payOff.add(m); renderRptPay_(); }
+
+// ---- 匯出 CSV（Excel 打得開：前面加 BOM；= + - @ 開頭的字加 ' 防 Excel 當公式）----
+function rptExport_(tab) {
+  if (!rptData_) return;
+  let rows, name;
+  if (tab === 'sales') { const t = rptSalesTableData_(); rows = [t.head, ...t.body]; name = '營業銷售明細'; }
+  else {
+    const t = rptPayTableData_();
+    rows = [[t.first, ...t.ms.flatMap(m => { const g = rptMethodGroup_(m, t.quick); return [`${g}-${m}-金額`, `${g}-${m}-單量`, `${g}-${m}-佔比%`]; }), '銷售淨額', '結帳單量'], ...t.body];
+    name = '收款方式報表' + (t.src ? '_' + t.src : '');
+  }
+  const cell = c => { let s = String(c); if (typeof c === 'string' && /^[=+\-@]/.test(s)) s = "'" + s; return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const csv = '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `${name}_${rptData_.from}_${rptData_.to}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // ---- 上下架管理同步(10-10，規格 上下架管理與POS管理調整設計_2026-10-09.md) ----
@@ -1182,11 +1751,25 @@ function loadBoPrinterModes_() {
     const now = Date.now();
     const ago = ms => { const m = Math.max(0, Math.round((now - ms) / 60000)); return m < 1 ? '剛剛' : m < 60 ? m + ' 分鐘前' : m < 1440 ? Math.round(m / 60) + ' 小時前' : Math.round(m / 1440) + ' 天前'; };
     const active = (d.devices || []).filter(v => v.seenAt && now - v.seenAt <= 7 * 86400000);
+    // 11-16 (2i)：新平板多回報 6 碼（自動找、找到幾台、杯貼機、接單列印、上次自動改 IP）；舊平板只有前 3 碼照舊顯示
+    const ok = t => '<span style="color:#1f7a3d;">✅ ' + t + '</span>', bad = t => '<span style="color:#a32d2d;">⚠️ ' + t + '</span>';
     const rows = active.map(v => {
-      const [mode, ip, up] = String(v.pm || '').split('|');
-      const how = mode === 'net' ? '🌐 網路出單機 ' + escapeHtml(ip || '（沒設 IP）') : mode === 'bt' ? '📶 藍牙' : '（這台平板還沒更新，看不到）';
-      const st = !mode ? '' : up === '1' ? '<span style="color:#1f7a3d;">✅ 出單機連線中</span>' : '<span style="color:#a32d2d;">⚠️ 出單機沒連上</span>';
-      return `<div class="ops-order"><div><b>${how}</b><div class="ops-meta">${boFmtMs_(v.created).split(' ')[0]} 由 ${escapeHtml(v.by)} 啟用的平板｜${ago(v.seenAt)}回報</div></div><div style="font-size:0.85rem;text-align:right;">${st}</div></div>`;
+      const f = String(v.pm || '').split('|');
+      const [mode, ip, up] = f;
+      const how = mode === 'net' ? '🌐 網路出單機 ' + escapeHtml(ip || '（沒設 IP）') : mode === 'bt' ? '📶 藍牙出單機' : '（這台平板還沒更新，看不到）';
+      const st = !mode ? '' : up === '1' ? ok('出單機連線中') : bad('出單機沒連上');
+      const more = [];
+      if (mode && f.length >= 9) {
+        const [, , , auto, multi, lbl, run, at, from] = f;
+        if (mode === 'net') more.push('自動找出單機：' + (auto === '1' ? '開' : '<b>關</b>'));
+        if (Number(multi) > 0) more.push(bad('店裡 Wi-Fi 找到 ' + Number(multi) + ' 台出單機，請到平板「出單機設定」選一台'));
+        if (at) more.push('上次自動改 IP：' + boFmtMs_(Number(at) * 1000) + '（' + escapeHtml(from || '?') + ' → ' + escapeHtml(ip || '?') + '）');
+        more.push('杯貼機：' + (lbl === 'u' ? ok('已連線') : lbl === 'd' ? bad('沒連上') : lbl === 'n' ? '藍牙（還沒印過，不知道有沒有連上）' : '不使用'));
+        more.push('接單列印：' + (run === '1' ? ok('執行中') : bad('還沒開始（客人的單不會自動印）')));
+      } else if (mode) more.push('<span style="color:var(--muted);">這台平板還是舊版，重新整理後會多顯示杯貼機、接單列印、自動找出單機</span>');
+      return `<div class="ops-order" style="align-items:flex-start;"><div><b>${how}</b><div class="ops-meta">${boFmtMs_(v.created).split(' ')[0]} 由 ${escapeHtml(v.by)} 啟用的平板｜${ago(v.seenAt)}回報</div>` +
+        (more.length ? `<div style="font-size:0.82rem;line-height:1.7;margin-top:4px;">${more.join('<br>')}</div>` : '') +
+        `</div><div style="font-size:0.85rem;text-align:right;white-space:nowrap;">${st}</div></div>`;
     }).join('');
     box.innerHTML = `<div class="ops-card"><h3>門市平板用哪種出單機</h3>${rows || '<div class="ops-meta" style="padding:6px 0;">最近 7 天沒有平板回報</div>'}
       <div class="ops-meta" style="margin-top:6px;">只能看；要改請到那台平板「POS管理 → 出單機設定」（要店長以上 PIN）。平板每分鐘回報一次。</div></div>`;
@@ -1295,7 +1878,15 @@ if (NEW_API_) {
   const b = document.getElementById('mch-sub-btn-payalert'); if (b) b.style.display = '';
   // 新後端沒有試算表，「POS夥伴」分頁那條路不在了(PIN 存雜湊，只能由另一個老闆帳號或系統管理員重設)
   const fg = document.getElementById('bo-login-forgot'); if (fg) fg.textContent = '忘記PIN：請老闆幫你重設；老闆自己忘記請另一位老闆重設，或聯絡系統管理員（小保）';
+  // 11-11 老闆定：夥伴帳號(含PIN)只有老闆能新增或修改，店長不能幫別人改(新後端 upsertPosStaff 也擋)
+  const pi = document.getElementById('ps-intro'); if (pi) pi.innerHTML =
+    '3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>夥伴帳號（含PIN碼）只有老闆能新增或修改</b>，店長只能看名單。' +
+    '建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設（點名字 →「修改PIN碼」填新的4碼 → 儲存，不用輸入舊PIN）；老闆自己忘記請另一位老闆重設，或聯絡系統管理員（小保）。' +
+    '<b>哪些功能要什麼角色，到「角色權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。' +
+    '<b>還沒建立任何夥伴之前，權限不會生效</b>(退款、人工標記已付款除外，這兩項一定要先建店長/老闆)。';
 }
+// 打新後端時夥伴帳號只限老闆改：店長登入後台看得到名單，但不能新增、不能編輯(舊後端照舊：店長可管夥伴)
+function psOwnerOnly_() { return NEW_API_ && !isBoOwner_(); }
 function payAlertTime_(v) { const ms = typeof v === 'number' ? v : Date.parse(v); return isNaN(ms) ? '—' : boFmtMs_(ms); }
 function setPayAlertBadge_(n) {
   const el = document.getElementById('bo-payalert-badge');
@@ -1483,6 +2074,7 @@ function loadPosStaffList() {
 }
 function renderPsList() {
   const el = document.getElementById('ps-list');
+  const addBtn = document.getElementById('ps-add-btn'); if (addBtn) addBtn.style.display = psOwnerOnly_() ? 'none' : '';
   if (!posStaffList.length) { el.innerHTML = '<div class="empty-hint">尚未新增任何夥伴</div>'; return; }
   el.innerHTML = posStaffList.map(s => `
     <div class="mc-item-row${s.name === psCurrentName ? ' active' : ''}" onclick="psCurrentName='${escapeHtml(s.name).replace(/'/g, "\\'")}';renderPsList();renderPsEditor();">
@@ -1494,6 +2086,7 @@ function renderPsEditor() {
   const isNew = psCurrentName === null;
   const s = isNew ? {} : (posStaffList.find(x => x.name === psCurrentName) || {});
   if (!isNew && !posStaffList.find(x => x.name === psCurrentName)) { el.innerHTML = '<div class="empty-hint">選一位來編輯，或點「新增夥伴」</div>'; return; }
+  if (psOwnerOnly_()) { el.innerHTML = '<div class="empty-hint">夥伴帳號（含PIN碼）只有老闆可以新增或修改，請老闆登入後台處理</div>'; return; }
   // 店長只能新增/修改夥伴；店長/老闆帳號只有老闆能改(後端也會擋)
   if (!isBoOwner_() && !isNew && s.role !== '夥伴') { el.innerHTML = '<div class="empty-hint">「' + escapeHtml(s.name) + '」是' + escapeHtml(s.role) + '帳號，只有老闆可以修改</div>'; return; }
   const roleOptions = isBoOwner_() ? ['夥伴', '店長', '老闆'] : ['夥伴'];
@@ -1506,8 +2099,8 @@ function renderPsEditor() {
           ${roleOptions.map(r => `<option value="${r}" ${(s.role || '夥伴') === r ? 'selected' : ''}>${r}</option>`).join('')}
         </select>
       </label>
-      <label class="mc-field">PIN碼(4碼數字)<input id="ps-f-pin" type="text" inputmode="numeric" maxlength="4" placeholder="${isNew ? '必填' : '留空＝不更改'}"></label>
     </div>
+    <label class="mc-field" style="max-width:240px;">${isNew ? 'PIN碼（4碼數字，必填）' : '修改PIN碼（填新的4碼；留空＝不更改）'}<input id="ps-f-pin" type="text" inputmode="numeric" maxlength="4" placeholder="${isNew ? '必填' : '留空＝不更改'}"></label>
     <label class="mc-field" style="max-width:160px;">狀態
       <select id="ps-f-status">
         <option value="啟用" ${(s.status || '啟用') === '啟用' ? 'selected' : ''}>啟用</option>
@@ -1535,6 +2128,7 @@ function savePosStaffRow() {
     status: document.getElementById('ps-f-status').value,
     storeId: SCHED_STORE_ID
   };
+  // 11-11 拿掉 11-09 的暫時補救(多送一份攤平欄位)：新後端 11-11 起也收巢狀 staff（Worker 60a3cdac）
   apiPost({ action: 'upsertPosStaff', staff: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     psCurrentName = name;
@@ -1551,10 +2145,11 @@ function deletePosStaffRow() {
 }
 
 function switchBackofficeTab(name) {
+  boCurrentTab_ = name; boUpdateScope_();   // 11-14 品牌／門市區隔：子分頁變數在呼叫前就設好了
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
-  document.getElementById('tab-btn-member').classList.toggle('active', name === 'member');
+  document.getElementById('tab-btn-member')?.classList.toggle('active', name === 'member');   // 11-14 側欄分段後沒有「會員相關」群組鈕了
   document.getElementById('tab-btn-posmanage').classList.toggle('active', name === 'posmanage');
   document.getElementById('tab-btn-group').classList.toggle('active', name === 'group');
   document.getElementById('view-group').style.display = name === 'group' ? 'block' : 'none';
@@ -1577,6 +2172,8 @@ function switchBackofficeTab(name) {
   document.getElementById('pmg-subview-home').style.display = (name === 'posmanage' && currentPosManageSubview === 'home') ? 'block' : 'none';
   document.getElementById('pmg-subview-ver').style.display = (name === 'posmanage' && currentPosManageSubview === 'ver') ? 'block' : 'none';
   document.getElementById('pmg-subview-printer').style.display = (name === 'posmanage' && currentPosManageSubview === 'printer') ? 'block' : 'none';
+  document.getElementById('pmg-subview-report').style.display = (name === 'posmanage' && currentPosManageSubview === 'report') ? 'block' : 'none';
+  if (name === 'posmanage' && currentPosManageSubview === 'report' && !rptLoadedOnce_) { rptLoadedOnce_ = true; rptPreset_('today'); }
   if (name === 'posmanage' && currentPosManageSubview === 'printer') loadBoPrinterModes_();
   document.getElementById('pmg-subview-linebind').style.display = (name === 'posmanage' && currentPosManageSubview === 'linebind') ? 'block' : 'none';
   if (name === 'posmanage' && currentPosManageSubview === 'linebind') loadBoLineBind_();
@@ -1635,11 +2232,13 @@ function switchBackofficeTab(name) {
     document.getElementById('mb-subview-' + sv).style.display = (name === 'member' && currentMemberSubview === sv) ? 'block' : 'none';
   });
   if (name === 'member') {
-    document.getElementById('member-sublist').classList.add('open');
-    document.getElementById('member-caret').classList.add('open');
+    document.getElementById('member-sublist')?.classList.add('open');
+    document.getElementById('member-caret')?.classList.add('open');
     if (!mbLoaded[currentMemberSubview]) {
       mbLoaded[currentMemberSubview] = true;
-      if (currentMemberSubview === 'tiers') loadMemberTiers();
+      if (currentMemberSubview === 'members') loadMemberList_(true);
+      else if (currentMemberSubview === 'openstore') osLoad_();
+      else if (currentMemberSubview === 'tiers') loadMemberTiers();
       else if (currentMemberSubview === 'birthday') loadBirthdayGifts();
       else if (currentMemberSubview === 'register') loadRegisterGifts();
       else if (currentMemberSubview === 'points') loadPointGifts();
@@ -1648,6 +2247,161 @@ function switchBackofficeTab(name) {
       else if (currentMemberSubview === 'drinkupgrade') loadDrinkUpgradeRules();
     }
   }
+}
+
+// ---- 11-16 一鍵開新店（多店化第 4＋5 段，規格 一鍵開新店設計_2026-11-16.md）----
+// 後端：GET brandStores（這個品牌的門市）、POST openNewStore（複製這間店設定＋品牌範本菜單／優惠，新店＝籌備中）、POST releaseStore（籌備中→啟用）
+let osStores_ = [], osBusy_ = false;
+const osStatusOf_ = s => (s.isHome || (s.status === '啟用' && (s.hasOrders || s.hasMenu))) ? 'run' : s.status === '籌備中' ? 'prep' : 'new';
+const osName_ = s => s.shortName || s.displayName || s.storeId;
+function osPageUrl_(s, page) { return location.origin + '/abao_xh/' + encodeURIComponent(s.urlPath || s.storeId) + '/' + page; }
+// 品牌同步（菜單／優惠）可以選的門市：這間店＋已經開的店（籌備中、或已經有訂單）；HR 先建好但還沒開的店不列（裡面還沒有東西）
+function boLoadBrandStores_() {
+  return apiGet({ action: 'brandStores', storeId: BO_HOME_STORE_ }).then(d => {
+    if (!d || d.status !== 'ok') return null;
+    osStores_ = (d.stores || []).slice().sort((a, b) => (b.isHome ? 1 : 0) - (a.isHome ? 1 : 0));   // 11-16 老闆：這間店排第一，其他照店代號
+    const others = osStores_.filter(s => !s.isHome && osStatusOf_(s) !== 'new')
+      .map(s => ({ id: s.storeId, label: osName_(s) + (s.status === '籌備中' ? '（籌備中）' : '') }));
+    MC_SYNC_TARGET_STORES = [MC_SYNC_TARGET_STORES[0]].concat(others);
+    const box = document.getElementById('mc-sync-store-list');
+    if (box && box.innerHTML) box.innerHTML = MC_SYNC_TARGET_STORES.map(s => `<label><input type="checkbox" class="mc-sync-store-cb" value="${escapeHtml(s.id)}"> ${escapeHtml(s.label)}</label>`).join('');
+    renderStoreSwitch_();
+    return osStores_;
+  }).catch(() => null);
+}
+// 11-17 廠商授權（開新店三步）：客戶後台看不到開新店，只能「切換門市」——頁首選單列出這個品牌開好的店
+//   （營業中、籌備中；廠商沒開通的不列）；只給老闆（全品牌帳號），而且要有「多店」選配。換店＝打開那間店的後台網址，那間店要重新登入
+function renderStoreSwitch_() {
+  const sel = document.getElementById('bo-store-switch');
+  if (!sel) return;
+  const list = osStores_.filter(s => s.isHome || (osStatusOf_(s) !== 'new' && s.licensed !== false));
+  const show = isBoOwner_() && !boLicLocked_('multistore') && list.length >= 2;
+  sel.style.display = show ? '' : 'none';
+  if (!show) return;
+  sel.innerHTML = list.map(s => `<option value="${escapeHtml(s.urlPath)}"${s.isHome ? ' selected' : ''}>🏪 ${escapeHtml(osName_(s))}${s.status === '籌備中' ? '（籌備中）' : ''}</option>`).join('');
+}
+function boSwitchStore_(sel) {
+  const s = osStores_.find(x => x.urlPath === sel.value);
+  const home = osStores_.find(x => x.isHome);
+  if (!s || s.isHome) return;
+  const parts = location.pathname.split('/');
+  const i = parts.indexOf('abao_xh');
+  if (i < 0 || !parts[i + 1]) { alert('這個網址不能切換門市（預覽或測試環境）：' + s.urlPath); if (home) sel.value = home.urlPath; return; }
+  if (!confirm('切換到「' + osName_(s) + '」的後台？\n那間店要重新登入（第一次也要輸入頁面密碼）')) { if (home) sel.value = home.urlPath; return; }
+  parts[i + 1] = s.urlPath;
+  location.href = parts.join('/');
+}
+function osLoad_() {
+  document.getElementById('os-from-name').textContent = boStoreShortName_();
+  const box = document.getElementById('os-list');
+  box.innerHTML = '<div class="empty-hint">載入中...</div>';
+  boLoadBrandStores_().then(list => {
+    if (!list) { box.innerHTML = '<div class="empty-hint">讀不到門市清單，請重新整理（要用老闆或店長登入）</div>'; return; }
+    const owner = isBoOwner_();
+    box.innerHTML = `<table class="os-table"><tr><th>門市</th><th>狀態</th><th>網址</th><th></th></tr>` + list.map(s => {
+      const st = osStatusOf_(s);
+      const badge = st === 'run' ? '<span class="os-badge run">營業中</span>' : st === 'prep' ? '<span class="os-badge prep">籌備中</span>' : '<span class="os-badge new">還沒開</span>';
+      const btns = !owner || st === 'run' ? '' :
+        `<button type="button" class="ops-btn" onclick="osOpenForm_('${escapeHtml(s.storeId)}')">${st === 'prep' ? '🔁 再抓一次最新設定' : '🏪 開新店'}</button>` +
+        (st === 'prep' ? ` <button type="button" class="ops-btn" onclick="osRelease_('${escapeHtml(s.storeId)}')">✅ 正式開放</button>` : '');
+      const url = st === 'new' ? '<span style="color:#aaa;">—</span>' : `<span style="font-size:0.75rem;color:#666;">/abao_xh/${escapeHtml(s.urlPath)}/</span>`;
+      const unlic = s.licensed === false && !s.isHome ? ' <span class="os-badge new" title="11-17 廠商授權：開新店要先請系統廠商開通這間店">廠商還沒開通</span>' : '';   // licensed＝null（讀不到）不顯示
+      return `<tr><td><b>${escapeHtml(osName_(s))}</b>${s.isHome ? '（這間店）' : ''}${unlic}<br><span style="font-size:0.75rem;color:#888;">${escapeHtml(s.displayName || '')}　代號 ${escapeHtml(s.storeId)}</span></td><td>${badge}</td><td>${url}</td><td style="white-space:nowrap;">${btns}</td></tr>`;
+    }).join('') + '</table>' + (owner ? '' : '<p style="font-size:0.8rem;color:#a30000;">開新店、正式開放只有老闆可以按。</p>');
+  });
+}
+function osOpenForm_(id) {
+  const s = osStores_.find(x => x.storeId === id); if (!s) return;
+  document.getElementById('os-result').innerHTML = '';
+  const prep = osStatusOf_(s) === 'prep';
+  document.getElementById('os-form-box').innerHTML = `<div class="os-form">
+    <b>${prep ? '🔁 重新抓最新設定：' : '🏪 開新店：'}${escapeHtml(osName_(s))}</b>（從 ${escapeHtml(boStoreShortName_())} 複製）
+    <label>顯示店名（顧客看到的；空白＝不改）</label><input id="os-f-name" maxlength="30" value="${escapeHtml(s.displayName || '')}">
+    <label>地址（空白＝不改）</label><input id="os-f-addr" maxlength="80" placeholder="例如：彰化縣溪湖鎮忠孝街12號">
+    <label>店內電話（空白＝不改）</label><input id="os-f-phone" maxlength="20" placeholder="例如：04-8850832">
+    <label>客服電話（頁尾顯示；空白＝不改）</label><input id="os-f-svc" maxlength="20">
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+      <button type="button" class="ops-btn" id="os-go" onclick="osSubmit_('${escapeHtml(s.storeId)}')">${prep ? '🔁 重新抓' : '🏪 開新店'}</button>
+      <button type="button" class="ops-btn" onclick="document.getElementById('os-form-box').innerHTML=''">取消</button>
+    </div></div>`;
+  document.getElementById('os-form-box').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function osSubmit_(id) {
+  if (osBusy_) return;
+  const s = osStores_.find(x => x.storeId === id); if (!s) return;
+  const prep = osStatusOf_(s) === 'prep';
+  const msg = (prep ? '重新抓最新設定：' : '開新店：') + osName_(s) + '\n\n' +
+    '會從「' + boStoreShortName_() + '」複製：營業／接單時間、取餐設定、飲品升級、權限、收款清單\n' +
+    '會從品牌範本帶入並發布：菜單、優惠券、集點禮、加價購、區塊配置\n' +
+    '付款方式線上收款、LINE Pay、取餐付款全部先關\n\n' +
+    (prep ? '這間店原本的設定、菜單、優惠會被覆蓋（覆蓋前菜單、優惠會自動備份）。\n' : '') + '新店狀態＝籌備中（顧客還不能線上點餐）。確定？';
+  if (!confirm(msg)) return;
+  const info = { displayName: document.getElementById('os-f-name').value.trim(), address: document.getElementById('os-f-addr').value.trim(),
+    phone: document.getElementById('os-f-phone').value.trim(), servicePhone: document.getElementById('os-f-svc').value.trim() };
+  osBusy_ = true;
+  const go = document.getElementById('os-go'); if (go) { go.disabled = true; go.textContent = '處理中…（約 10～20 秒）'; }
+  apiPost({ action: 'openNewStore', storeId: BO_HOME_STORE_, newStoreId: id, info }).then(d => {
+    osBusy_ = false;
+    const res = document.getElementById('os-result');
+    if (!d || d.status !== 'ok') {
+      if (go) { go.disabled = false; go.textContent = prep ? '🔁 重新抓' : '🏪 開新店'; }
+      res.innerHTML = '<div class="os-form" style="border-color:#f3c2c2;background:#fff6f6;color:#a30000;">❌ ' + escapeHtml((d && d.message) || '開店失敗') + '</div>';
+      return;
+    }
+    document.getElementById('os-form-box').innerHTML = '';
+    const ns = { storeId: d.storeId, urlPath: d.urlPath };
+    res.innerHTML = `<div class="os-form" style="border-color:#bfe3c6;background:#f3fbf4;">
+      <b>✅ ${escapeHtml(d.displayName || d.storeId)} ${d.reopened ? '已重新抓最新設定' : '已開好'}（籌備中）</b>
+      <ul class="os-list"><li>營業／接單時段 ${d.copied.hours} 筆、收款清單 ${d.copied.offlineMethods} 筆、飲品升級 ${d.copied.upgradeRules} 筆、權限 ${d.copied.permissions} 筆</li>
+      <li>菜單、優惠已從品牌範本同步並發布</li><li>付款方式線上收款、LINE Pay、取餐付款都是關的</li></ul>
+      <div style="font-size:0.82rem;margin-top:8px;"><b>接下來：</b>
+      <ol style="margin:4px 0 0 18px;padding:0;"><li>網頁要部署到 <code>/abao_xh/${escapeHtml(d.urlPath)}/</code>（請 Claude 部署）</li>
+      <li>老闆用老闆帳號登入新店後台：${escapeHtml(osPageUrl_(ns, 'backoffice.html'))}，建店長／夥伴帳號、檢查付款方式</li>
+      <li>新店平板開 ${escapeHtml(osPageUrl_(ns, 'tablet.html'))}，用老闆或店長 PIN 啟用，接出單機</li>
+      <li>內部測試好了，回這頁按「✅ 正式開放」</li></ol></div></div>`;
+    osLoad_();
+  }).catch(() => { osBusy_ = false; if (go) { go.disabled = false; go.textContent = prep ? '🔁 重新抓' : '🏪 開新店'; } alert('網路異常，請稍後再試（可以再按一次）'); });
+}
+function osRelease_(id) {
+  const s = osStores_.find(x => x.storeId === id); if (!s) return;
+  if (!confirm('正式開放：' + osName_(s) + '\n\n開放後顧客就能線上點餐、開揪團（付款方式照新店後台的設定）。\n確定店長／夥伴帳號、平板、出單機、付款方式都準備好了？')) return;
+  apiPost({ action: 'releaseStore', storeId: BO_HOME_STORE_, targetStoreId: id }).then(d => {
+    if (!d || d.status !== 'ok') { alert((d && d.message) || '開放失敗'); return; }
+    document.getElementById('os-result').innerHTML = '<div class="os-form" style="border-color:#bfe3c6;background:#f3fbf4;"><b>✅ ' + escapeHtml(osName_(s)) + ' 已正式開放</b>（其他平板／網頁最多 5 分鐘內生效）</div>';
+    osLoad_();
+  }).catch(() => alert('網路異常，請稍後再試'));
+}
+
+// ---- 11-16 (9b) 會員清單（只看不改）：後端 GET memberList（要後台登入；電話老闆完整、店長遮罩；一頁 50 筆）----
+let mlOffset_ = 0, mlSeq_ = 0, mlRows_ = [];
+function loadMemberList_(reset) {
+  const box = document.getElementById('ml-list'), more = document.getElementById('ml-more'), info = document.getElementById('ml-info');
+  if (reset) { mlOffset_ = 0; mlRows_ = []; box.innerHTML = '<div class="empty-hint">載入中...</div>'; }
+  more.disabled = true;
+  const seq = ++mlSeq_;
+  const sel = document.getElementById('ml-tier');
+  apiGet({ action: 'memberList', storeId: BO_HOME_STORE_, q: document.getElementById('ml-q').value.trim(), tierId: sel.value, offset: mlOffset_ }).then(d => {
+    if (seq !== mlSeq_) return;   // 連按查詢：只顯示最後一次
+    more.disabled = false;
+    if (!d || d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml((d && d.message) || '讀取失敗') + '</div>'; more.style.display = 'none'; return; }
+    if (sel.options.length <= 1 && d.tiers && d.tiers.length) {
+      const keep = sel.value;
+      sel.innerHTML = '<option value="">全部等級</option>' + d.tiers.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+      sel.value = keep;
+    }
+    mlRows_ = mlRows_.concat(d.list || []);
+    mlOffset_ = (d.offset || 0) + (d.list || []).length;
+    info.textContent = '目前顯示 ' + mlRows_.length + ' 位' + (d.more ? '（還有更多，按最下面「載入更多」）' : '') + (d.owner ? '' : '｜店長登入：電話只顯示前後幾碼');
+    more.style.display = d.more ? '' : 'none';
+    if (!mlRows_.length) { box.innerHTML = '<div class="empty-hint">找不到符合的會員</div>'; return; }
+    box.innerHTML = '<div style="overflow-x:auto;"><table class="ml-table">'
+      + '<tr><th>姓名</th><th>電話</th><th>等級</th><th style="text-align:right;">點數</th><th style="text-align:right;">半年累積</th><th>最近消費</th><th>加入日</th><th>生日</th><th>LINE</th></tr>'
+      + mlRows_.map(m => `<tr${m.status && m.status !== '啟用' ? ' style="color:var(--muted);"' : ''}><td>${escapeHtml(m.name)}${m.status && m.status !== '啟用' ? '（' + escapeHtml(m.status) + '）' : ''}</td>`
+        + `<td style="white-space:nowrap;">${escapeHtml(m.phone)}</td><td>${escapeHtml(m.tier)}</td><td style="text-align:right;">${m.points}</td>`
+        + `<td style="text-align:right;">$${Number(m.periodSpend).toLocaleString('en-US')}</td><td style="white-space:nowrap;">${escapeHtml(m.lastOrderAt) || '—'}</td>`
+        + `<td style="white-space:nowrap;">${escapeHtml(m.joinedAt)}</td><td>${escapeHtml(m.birthday) || '—'}</td><td>${m.line ? '✅' : '—'}</td></tr>`).join('')
+      + '</table></div>';
+  }).catch(() => { if (seq === mlSeq_) { more.disabled = false; box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; } });
 }
 
 function escapeHtml(s) {
@@ -1929,10 +2683,11 @@ function pmSettingToggle_(key, el) {
     if (key === 'linePayOnline') s.linePayMode = on ? 'LinePayAPI' : '不開放';
     if (key === 'linePayScan') { s.linePayScanEnabled = on; if (!on) s.linePayCarrierEnabled = false; }   // 支付載具相依掃碼收款
     if (key === 'linePayCarrier') s.linePayCarrierEnabled = on;
+    if (key === 'twqr') s.twqrEnabled = on;   // 11-18 (3d) 線下TWQR(沒帶＝後端維持原值，其他開關不會蓋掉它)
     return apiPost({ action: 'updatePaymentMethodSettings', settings: s });
   }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
-    if (key === 'linePayScan' || key === 'linePayCarrier') loadLinePayScanSettings(); else loadPaymentMethodSettings();
+    if (key === 'linePayScan' || key === 'linePayCarrier' || key === 'twqr') loadLinePayScanSettings(); else loadPaymentMethodSettings();
   }).catch(err => { el.checked = !on; el.disabled = false; alert('沒有儲存：' + (err.message || '網路異常')); });
 }
 // 10-24 LINE Pay 開關說明照後端實際環境顯示(指令碼屬性 LINEPAY_ENV)，原本寫死「測試環境」，10-24 切正式後就不對了
@@ -1941,36 +2696,46 @@ function lpEnvNote_(data) {
   if (data.linePayEnv === 'sandbox') return '<b>目前接的是 LINE Pay 測試環境（不會真的收錢），正式上線前不要對顧客使用。</b>';
   return '';
 }
+// 11-18 (12f-A) 收款帳戶名單：這間店還沒有自己的藍新／LINE Pay（廠商在後端設定），相關開關鎖住＋紅字說明（舊後端沒帶這兩欄＝照舊）
+const PM_NO_NB_ = '<b>這間店還沒有自己的藍新收款帳戶，要廠商（BZ）設定後才能開</b>（避免錢收進別間店的帳戶）。';
+const PM_NO_LP_ = '<b>這間店還沒有自己的 LINE Pay 收款帳戶，要廠商（BZ）設定後才能開</b>（避免錢收進別間店的帳戶）。';
 // 10-22 LINE Pay 門市反掃開關(線下收款分頁上方)
 function loadLinePayScanSettings() {
   apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
     const el = document.getElementById('lp-scan-form');
     if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
+    const noLp = data.linePayAccountOk === false;
     el.innerHTML =
-      pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, false,
-        '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。') +
+      pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, noLp,
+        (noLp ? PM_NO_LP_ : '') + '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。', noLp) +
       pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
-        (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，顧客用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。');
+        (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，顧客用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。') +
+      (('twqrAccountOk' in data) ? pmSettingRow_('twqr', '線下TWQR（ezPay 簡單付）', data.twqrEnabled, !data.twqrAccountOk,
+        (data.twqrAccountOk ? '' : PM_NO_TQ_) + '開啟後門市平板付款方式會多一顆「線下TWQR」：平板顯示 QR，顧客用全支付、台灣Pay、街口、銀行 App 掃碼付款，收款成功才出單；QR 3 分鐘失效。斷網時不能用（按鈕會反灰）。'
+        + (data.twqrEnv === 'test' ? '<b>目前接的是 ezPay 測試站（不會真的收錢）。</b>' : data.twqrAccountOk ? '<b style="color:#a32d2d;">開了就會真的收錢，退款也是真的退。</b>' : '')
+        + '改完門市平板 5 分鐘內會跟上。', !data.twqrAccountOk) : '');   // 11-18 (3d)；舊後端沒帶這欄＝不顯示
   });
 }
+const PM_NO_TQ_ = '<b>這間店還沒有自己的 ezPay 收款帳戶，要廠商（BZ）設定後才能開</b>（避免錢收進別間店的帳戶）。';
 
 function loadPaymentMethodSettings() {
   apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(data => {
     const el = document.getElementById('payment-method-form');
     if (data.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>'; return; }
+    const noNb = data.newebpayAccountOk === false, noLp = data.linePayAccountOk === false;
     el.innerHTML =
       pmSettingRow_('payAtPickup', '取餐付款', data.payAtPickupEnabled, data.payAtPickupStoreOff,
         data.payAtPickupStoreOff
           ? '門市「線下收款」的取餐付款關著，線上也不能開（顧客線上選了，門市沒地方標已收款）。要開請先到「線下收款」打開。'
           : '開啟後顧客結帳頁會顯示「取餐現場付款」——訂單直接成立、不走線上金流，到店要先在雲端平板標記已收款才能取餐。', data.payAtPickupStoreOff) +
-      pmSettingRow_('credit', '線上信用卡（藍新，一次付清）', data.creditEnabled, false,
-        '關掉的話線上Apple Pay 也會跟著關（同一條藍新結帳頁）。') +
+      pmSettingRow_('credit', '線上信用卡（藍新，一次付清）', data.creditEnabled, noNb,
+        (noNb ? PM_NO_NB_ : '') + '關掉的話線上Apple Pay 也會跟著關（同一條藍新結帳頁）。', noNb) +
       pmSettingRow_('applePay', '線上Apple Pay（藍新）', data.applePayEnabled, !data.creditEnabled,
-        (data.creditEnabled ? '' : '<b>須先開啟「線上信用卡」。</b>') + '跟信用卡走同一條藍新結帳頁，裝置/瀏覽器支援時會自動顯示 Apple Pay 按鈕，沒有獨立的付款流程。') +
+        (noNb ? PM_NO_NB_ : data.creditEnabled ? '' : '<b>須先開啟「線上信用卡」。</b>') + '跟信用卡走同一條藍新結帳頁，裝置/瀏覽器支援時會自動顯示 Apple Pay 按鈕，沒有獨立的付款流程。', noNb) +
       pmSettingRow_('aftee', 'AFTEE先享後付', data.afteeEnabled, true,
         '藍新帳號尚未申請開通此功能，開通＋後端串接完成前不能開（不會出現在顧客結帳頁）。') +
-      pmSettingRow_('linePayOnline', '線上LINEPay（直接串 LINE Pay）', data.linePayMode === 'LinePayAPI', false,
-        '顧客在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。' + lpEnvNote_(data) + 'LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。');
+      pmSettingRow_('linePayOnline', '線上LINEPay（直接串 LINE Pay）', data.linePayMode === 'LinePayAPI', noLp,
+        (noLp ? PM_NO_LP_ : '') + '顧客在點餐頁選 LINE Pay → 跳到 LINE Pay 付款 → 跳回點餐頁出單（揪團的單照舊用信用卡）。' + lpEnvNote_(data) + 'LINE Pay 不走藍新（10-23 定案）。門市的「LINEPay mini」（實體商店帳號 abao82416619）、「線下LINEPay」在「線下收款」分頁另外開關，都不受這裡影響。', noLp);
   });
 }
 
@@ -2128,6 +2893,8 @@ let availabilityExpandedCats = new Set();
 const ADDON_STATUS_CATEGORY = '加購品項/配料選擇';
 const ADDON_STATUS_GROUP_CODES = ['bread_addon', 'omelet_addon', 'salad_addon', 'noodle_addon',
   'dine_set_addon', 'coffee_strength', 'drink_topping', 'deluxe_upgrade', 'noodle_snack_choice'];
+// 11-16 (15b)：奶茶濃淡只算要加錢的(多二匙奶)——平板原本的清單有它、這裡漏了；平板 posAddonNames_ 同一套規則
+const ADDON_STATUS_PRICED_ONLY_CODES = ['milk_tea_richness'];
 
 function buildAddonStatusItems_() {
   const seen = new Set();
@@ -2137,6 +2904,15 @@ function buildAddonStatusItems_() {
     if (!g || !g.options) return;
     g.options.forEach(o => {
       if (seen.has(o.name)) return;
+      seen.add(o.name);
+      items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
+    });
+  });
+  ADDON_STATUS_PRICED_ONLY_CODES.forEach(code => {
+    const g = mcOptionGroups[code];
+    if (!g || !g.options) return;
+    g.options.forEach(o => {
+      if (!(Number(o.price) > 0) || seen.has(o.name)) return;
       seen.add(o.name);
       items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
     });
@@ -2158,11 +2934,11 @@ function renderAvailabilityList() {
     // 選項庫(mcOptionGroups)理論上跟mcCatalog同一次API回來，但萬一是空的還是退回舊快照保底
     const addonItems = Object.keys(mcOptionGroups).length > 0
       ? buildAddonStatusItems_()
-      : ITEM_LIST.filter(it => it.category === ADDON_STATUS_CATEGORY);
+      : (BO_HOME_STORE_ === 'meibao' ? ITEM_LIST.filter(it => it.category === ADDON_STATUS_CATEGORY) : []);   // 11-16 (15b)：舊快照只給培英
     grouped.set(ADDON_STATUS_CATEGORY, addonItems);
   } else {
-    // 菜單資料暫時抓不到(網路或Google暫時性問題)，退回舊快照，至少上下架還能用
-    ITEM_LIST.forEach(it => {
+    // 菜單資料暫時抓不到(網路或Google暫時性問題)，退回舊快照，至少上下架還能用（11-16 (15b)：舊快照是 A-Bao 菜單，只給培英）
+    (BO_HOME_STORE_ === 'meibao' ? ITEM_LIST : []).forEach(it => {
       if (!grouped.has(it.category)) grouped.set(it.category, []);
       grouped.get(it.category).push(it);
     });
@@ -2309,8 +3085,8 @@ function mrPeriodLabel_(p) {
   return p.startDate ? mrMd_(p.startDate) + '起' : '到' + mrMd_(p.endDate);
 }
 function mrGo_(sub) {
-  document.getElementById('member-sublist').classList.add('open');
-  document.getElementById('member-caret').classList.add('open');
+  document.getElementById('member-sublist')?.classList.add('open');
+  document.getElementById('member-caret')?.classList.add('open');
   switchMemberSubview(sub);
 }
 function refreshMonthReminder_() {
@@ -2402,7 +3178,7 @@ loadAvailability();
 refreshMonthReminder_();
 // POS後台登入(2026-09-25)：沒登入就跳登入畫面；付款方式設定是動態載入的，內容一變就重新套用「店長唯讀」
 renderBoUser_();
-if (!boSession) showBoLogin_();
+if (!boSession) showBoLogin_(); else boRefreshLicense_();   // 11-17 廠商授權：已登入就更新一次授權
 new MutationObserver(() => { if (!isBoOwner_()) applyBoRoleUi_(); }).observe(document.getElementById('view-payment'), { childList: true, subtree: true });
 
 // ---------------------------------------------------------------
@@ -2455,8 +3231,20 @@ function submitMcAddCategory() {
 // 切換編輯對象(自己的門市 / 品牌範本)，重新載入這份資料
 // 2026-09-16：集點禮/優惠券共用同一個MC_STORE_ID，切門市時這兩塊的快取(mbLoaded)也要失效，
 // 如果使用者當下就停在集點禮/優惠券子分頁要立刻重新載入，不然會看到上一個門市的舊資料
+// 11-14：優惠券／集點禮／區塊配置頁上也能切（跟菜單管理同一個切換）
+function mcSwitchStoreEverywhere_(storeId) {
+  const sel = document.getElementById('mc-store-select');
+  if (sel) sel.value = storeId;
+  mcSwitchStore(storeId);
+}
 function mcSwitchStore(storeId) {
   MC_STORE_ID = storeId;
+  boUpdateScope_();
+  const bar = document.getElementById('mc-target-bar');
+  if (bar) bar.classList.toggle('brand', storeId === '__brand__');
+  const hint = document.getElementById('mc-target-hint');
+  if (hint) hint.textContent = storeId === '__brand__' ? '改好按下面「同步到分店」，各店再各自發布' : '這間店的草稿，按「發布到正式版」才生效';
+  hbDraft = null;   // 11-14：換門市要一起清掉活動編輯框（以前只清 hbCurrentId，編輯框殘留成「新增」，按儲存會多建一筆）
   document.getElementById('mc-publish-row').style.display = storeId === '__brand__' ? 'none' : 'flex';
   document.getElementById('mc-sync-row').style.display = storeId === '__brand__' ? 'flex' : 'none';
   document.getElementById('mc-snapshot-panel').style.display = 'none'; // 換了編輯對象，收合快照面板避免看到上一個門市的快照
@@ -2505,7 +3293,7 @@ function loadMcSnapshots() {
 
 function restoreMcSnapshot(snapshotId, status) {
   const statusLabel = status === 'draft' ? '草稿' : '正式上線';
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
   apiPost({ action: 'restoreMenuSnapshot', snapshotId }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '復原失敗');
     alert('復原完成');
@@ -2524,7 +3312,7 @@ function publishMcStore() {
   checkPublishRefs_('menu').then(goOn => { if (goOn) publishMcStoreGo_(); });
 }
 function publishMcStoreGo_() {
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新菜單\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新菜單\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   const btn = document.getElementById('mc-publish-btn');
   btn.disabled = true; btn.textContent = '發布中…（請勿重複點擊，處理中請耐心等候)';
   apiPost({ action: 'publishStoreMenu', storeId: MC_STORE_ID }).then(data => {
@@ -2582,7 +3370,7 @@ function syncBrandMenuToStores(alsoPublish, clickedBtn) {
   const checked = Array.from(document.querySelectorAll('.mc-sync-store-cb:checked')).map(cb => cb.value);
   if (!checked.length) { alert('請至少勾選一間分店'); return; }
   const warnExtra = '\n\n・這是整批覆蓋分店目前的草稿內容，不是合併\n・鎖定的品項會跳過不被覆蓋\n・系統會自動存一份同步前的快照，之後可以在「📜版本回溯」復原\n\n請確認品牌範本內容都已經檢查過再繼續。';
-  if (!confirm('確定要把品牌範本同步到：' + checked.join('、') + (alsoPublish ? '（同步且發布，會立刻讓顧客/POS看到）' : '（只同步到草稿，不影響顧客/POS目前看到的版本）') + '？' + warnExtra)) return;
+  if (!confirm('確定要把品牌範本同步到：' + checked.map(id => mcStoreNameOf_(id)).join('、') + (alsoPublish ? '（同步且發布，會立刻讓顧客/POS看到）' : '（只同步到草稿，不影響顧客/POS目前看到的版本）') + '？' + warnExtra)) return;
   const btns = document.querySelectorAll('#mc-sync-row button');
   btns.forEach(b => { b.disabled = true; });
   const originalText = clickedBtn ? clickedBtn.textContent : '';
@@ -3671,6 +4459,7 @@ let pmPromos = [];
 let pgGifts = [];
 let bgGifts = [];
 let rgGifts = [];
+let pmActs_ = [];   // 同一份 promoSettings 讀回來的會員好康活動(只用來列「這張券用在哪」)
 
 // 2026-09-16多店架構：集點禮/優惠券沿用菜單管理同一個MC_STORE_ID/MC_STATUS(目前編輯門市/草稿層)，
 // 不另外做第二套門市切換——要切門市請到「菜單管理」分頁切，這裡三個功能編輯的都是同一個「門市」概念
@@ -3680,6 +4469,7 @@ function fetchPromoSettings_() {
     pmPromos = data.promos;
     pgGifts = data.pointGifts;
     pmAddons = data.addons || [];
+    pmActs_ = data.homeActs || [];   // 11-14 範本精靈：編輯優惠券時列出「這張券用在哪些活動」
     return data;
   });
 }
@@ -3691,8 +4481,10 @@ function renderPromoDomainControls() {
   const storeLabel = (MC_STORE_OPTIONS.find(o => o.id === MC_STORE_ID) || {}).label || MC_STORE_ID;
   const isBrand = MC_STORE_ID === '__brand__';
   const html = `
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;font-size:0.8rem;color:var(--muted);">
-      目前編輯：<b>${escapeHtml(storeLabel)}</b>${isBrand ? '' : '的草稿版本'}（要切換門市請到「菜單管理」分頁切，集點禮/優惠券跟菜單共用同一個門市切換）
+    <div class="edit-target-bar${isBrand ? ' brand' : ''}">
+      <b>正在改：</b>
+      <select onchange="mcSwitchStoreEverywhere_(this.value)">${MC_STORE_OPTIONS.map(o => `<option value="${escapeHtml(o.id)}"${o.id === MC_STORE_ID ? ' selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select>
+      <span>${isBrand ? '改好按下面「同步到分店」' : '這間店的草稿，按「發布到正式版」才生效'}；菜單、優惠券、集點禮、區塊配置一起切換</span>
     </div>
     <div style="display:${isBrand ? 'none' : 'flex'};gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
       <button type="button" class="mc-save-btn" onclick="publishPromoDomain(this)">發布到正式版</button>
@@ -3787,7 +4579,7 @@ function publishPromoDomain(btn) {
   checkPublishRefs_('promo').then(goOn => { if (goOn) publishPromoDomainGo_(btn); });
 }
 function publishPromoDomainGo_(btn) {
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的集點禮/優惠券/加價購/區塊配置草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的集點禮/優惠券/加價購/區塊配置草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   btn.disabled = true; btn.textContent = '發布中...';
   apiPost({ action: 'publishStorePromos', storeId: MC_STORE_ID }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
@@ -3842,7 +4634,7 @@ function loadPromoSnapshotPanel(panel) {
 
 function restorePromoSnapshot_(snapshotId, version) {
   const statusLabel = (version || MC_STATUS) === 'live' ? '正式上線' : '草稿';
-  if (!confirm('確定要把「' + MC_STORE_ID + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的' + statusLabel + '版整批復原成這份快照的內容嗎？\n\n・這會覆蓋目前的內容\n・回復前系統會自動再存一份備份，復原錯了還能再復原回來\n\n請確認再繼續。')) return;
   apiPost({ action: 'restorePromoSnapshot', snapshotId }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '復原失敗');
     alert('已復原');
@@ -3875,7 +4667,7 @@ const HB_SKIP_FIRST_ = '不含正月';
 // 底色跟點餐頁活動卡的漸層一致
 const HB_COLORS_ = { 橘: ['#ffcf8a', '#e8632c'], 黃: ['#ffe08a', '#f0a020'], 藍: ['#bcd7ff', '#4a7fd6'], 粉: ['#ffc8dc', '#e0588c'], 紫: ['#d9c8ff', '#7c5cd6'], 綠: ['#c6ecc0', '#3f9a4a'] };
 const HB_CARD_DIFF_FIELDS_ = ['block', 'title', 'desc', 'linkType', 'linkCat', 'linkItem', 'price', 'saleDate', 'tag', 'photoUrl', 'startDate', 'endDate', 'order', 'status', 'locked'];
-const HB_ACT_DIFF_FIELDS_ = ['title', 'desc', 'icon', 'color', 'photoUrl', 'ruleType', 'rule', 'excludes', 'promo', 'method', 'voucherDays', 'perPerson', 'limit', 'memberOnly', 'channels', 'startDate', 'endDate', 'order', 'status', 'locked', 'linkType', 'linkCat', 'linkItem'];
+const HB_ACT_DIFF_FIELDS_ = ['title', 'desc', 'icon', 'color', 'photoUrl', 'ruleType', 'rule', 'excludes', 'promo', 'method', 'voucherDays', 'perPerson', 'limit', 'memberOnly', 'channels', 'startDate', 'endDate', 'order', 'status', 'locked', 'linkType', 'linkCat', 'linkItem', 'series'];
 function hbCardDiffMap_(list) { return Object.fromEntries((list || []).map(c => [c.id, HB_CARD_DIFF_FIELDS_.map(f => JSON.stringify(c[f] === undefined ? '' : c[f]))])); }
 function hbActDiffMap_(list) { return Object.fromEntries((list || []).map(a => [a.id, HB_ACT_DIFF_FIELDS_.map(f => JSON.stringify(a[f] === undefined ? '' : a[f]))])); }
 function hbTitleOf_(a, b, id) { const x = (a || []).concat(b || []).find(y => y.id === id); return x ? x.title : id; }
@@ -3956,15 +4748,62 @@ function renderHbList() {
     return;
   }
   const today = hbToday_();
-  el.innerHTML = '<div>' + hbActs.map(a => {
+  const promoTag = a => a.promo ? '🎟' + a.promo + (Number(a.perPerson) > 1 ? '・每人' + a.perPerson + '組' : '') + (Number(a.limit) > 0 ? '・限量' + a.limit : '') : null;
+  const singles = hbActs.filter(a => !a.series);
+  const singleHtml = singles.map(a => {
     const next = (a.dates || [])[0];
     const when = next ? (next === today ? '今天' : '下次 ' + hbMd_(next)) : (a.ruleType === '指定日期' && !a.rule ? '⚠還沒排日期' : '60天內沒有活動日');
-    const tags = [hbRuleSummary_(a), when, a.promo ? '🎟' + a.promo + (Number(a.perPerson) > 1 ? '・每人' + a.perPerson + '組' : '') + (Number(a.limit) > 0 ? '・限量' + a.limit : '') : null, hbActLinkSummary_(a), a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
+    const tags = [hbRuleSummary_(a), when, promoTag(a), hbActLinkSummary_(a), a.memberOnly ? '會員限定' : null, hbPeriodTag_(a), a.status === '停用' ? '停用' : null].filter(Boolean).join('・');
     return `<div class="mc-item-row sort-row${a.id === hbCurrentId ? ' active' : ''}" data-key="${escapeHtml(a.id)}" onclick="hbEditAct('${hbJs_(a.id)}')">
         ${sortHandleHtml_('hbDragStart_(event, this)')}<div class="sort-body"><span>${escapeHtml(a.icon || '🎁')} ${escapeHtml(a.title)}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span></div>
       </div>`;
-  }).join('') + '</div><button type="button" class="mc-add-btn" style="margin-top:6px;" onclick="hbNewAct()">+ 新增活動</button>';
+  }).join('');
+  // 11-14 系列＋檔期：同系列收成一組，裡面照優惠日排；不能拖曳（順序就是日期）
+  const seriesHtml = hbSeriesNames_().map(name => {
+    const eps = hbSeriesEpisodes_(name);
+    const cur = eps.find(a => hbEpisodeState_(a, today).key === 'now') || eps.find(a => ['preview', 'later'].includes(hbEpisodeState_(a, today).key));
+    const head = cur ? (hbEpisodeState_(cur, today).key === 'now' ? '進行中：' : '下一檔：') + hbEpisodeLabel_(cur) + ' ' + hbSpanLabel_(cur, today) : (eps.some(a => hbEpisodeState_(a, today).key === 'todo') ? '⚠有檔期還沒排日期' : '全部已結束，記得排下一檔');
+    const open = eps.some(a => a.id === hbCurrentId) || (hbDraft && !hbCurrentId && hbDraft.series === name);
+    return `<details class="hb-series"${open ? ' open' : ''}><summary><b>📚 ${escapeHtml(name)}</b>（${eps.length} 檔）<span class="hb-series-now">${escapeHtml(head)}</span></summary>
+      ${eps.map(a => {
+        const st = hbEpisodeState_(a, today);
+        const tags = [hbSpanLabel_(a, today), promoTag(a), hbActLinkSummary_(a), a.startDate ? '顯示 ' + hbShortYmd_(a.startDate, today) + ' 起' : null].filter(Boolean).join('・');
+        return `<div class="mc-item-row hb-ep${a.id === hbCurrentId ? ' active' : ''}${st.key === 'done' || st.key === 'off' ? ' past' : ''}" onclick="hbEditAct('${hbJs_(a.id)}')">
+          <div class="sort-body"><span><span class="hb-ep-st ${st.key}">${st.label}</span> ${escapeHtml(hbEpisodeLabel_(a))}</span><span class="mc-item-price" style="font-size:0.75rem;white-space:normal;">${escapeHtml(tags)}</span></div></div>`;
+      }).join('')}
+      <button type="button" class="mc-add-btn" style="margin:4px 0 6px;" onclick="hbNewAct('${hbJs_(name)}')">+ 新增一檔（沿用上一檔的設定）</button>
+    </details>`;
+  }).join('');
+  el.innerHTML = `<div>${singleHtml || '<div class="empty-hint" style="padding:6px;">目前沒有單一活動</div>'}</div>
+    <button type="button" class="mc-add-btn" style="margin-top:6px;" onclick="hbNewAct()">+ 新增活動</button>
+    ${seriesHtml ? `<div style="font-size:0.8rem;font-weight:700;color:var(--muted);margin:14px 6px 4px;">📚 系列（一檔一檔換的活動）</div>${seriesHtml}` : ''}`;
 }
+// ---- 11-14 系列＋檔期 ----
+function hbSeriesNames_() { const seen = []; hbActs.forEach(a => { if (a.series && seen.indexOf(a.series) === -1) seen.push(a.series); }); return seen; }
+// 指定日期的第一天／最後一天（每週、農曆沒有頭尾，回 null）
+function hbActSpan_(a) {
+  if (a.ruleType !== '指定日期') return null;
+  let first = null, last = null;
+  hbSplit_(a.rule).forEach(t => { const [x, y] = t.split('~'); const e = y || x; if (!first || x < first) first = x; if (!last || e > last) last = e; });
+  return first ? { first, last } : null;
+}
+function hbSeriesEpisodes_(name) {
+  return hbActs.filter(a => a.series === name).sort((a, b) => ((hbActSpan_(a) || {}).first || '9999') < ((hbActSpan_(b) || {}).first || '9999') ? -1 : 1);
+}
+function hbEpisodeState_(a, today) {
+  if (a.status === '停用') return { key: 'off', label: '停用' };
+  const s = hbActSpan_(a);
+  if (!s) return { key: 'todo', label: '未排日期' };
+  if (s.last < today) return { key: 'done', label: '已結束' };
+  // 只有今天真的落在某一段裡才算進行中（雞塊日 10 月、11 月兩段中間的空檔不算）
+  if (hbSplit_(a.rule).some(t => { const [x, y] = t.split('~'); return x <= today && today <= (y || x); })) return { key: 'now', label: '進行中' };
+  if (a.startDate && a.startDate <= today) return { key: 'preview', label: '預告中' };
+  return { key: 'later', label: '未開始' };
+}
+function hbShortYmd_(ymd, today) { const [y, m, d] = ymd.split('-'); return (y !== today.slice(0, 4) ? y + '/' : '') + Number(m) + '/' + Number(d); }
+function hbSpanLabel_(a, today) { const s = hbActSpan_(a); return s ? hbShortYmd_(s.first, today) + (s.last !== s.first ? '～' + hbShortYmd_(s.last, today) : '') : (a.ruleType === '指定日期' ? '⚠還沒排日期' : hbRuleSummary_(a)); }
+// 檔名：說明開頭有【立春活動】就用它，不然用標題
+function hbEpisodeLabel_(a) { const m = String(a.desc || '').match(/^【([^】]{1,12})】/); return m ? m[1] : a.title; }
 function hbRuleSummary_(a) {
   if (a.ruleType === '每週') return '每週' + hbSplit_(a.rule).join('、');
   if (a.ruleType === '農曆') return '農曆每月' + hbSplit_(a.rule).filter(t => t !== HB_SKIP_FIRST_).join('、') + (a.rule.indexOf(HB_SKIP_FIRST_) !== -1 ? '（不含正月）' : '');
@@ -4084,7 +4923,9 @@ function hbButtonsHtml_(isNew, save, del) {
 function hbDragStart_(e, handle) {
   const isCard = hbTab === 'cards';
   startListDrag(e, handle.closest('.sort-row'), keys =>
-    apiPost({ action: isCard ? 'reorderHomeCards' : 'reorderHomeActs', order: keys, storeId: MC_STORE_ID, version: MC_STATUS }).then(d => {
+    // 活動：系列的檔期不在拖曳清單裡，接在單一活動後面（照日期）一起送，排序號才不會撞
+    (keys = isCard ? keys : keys.concat(hbSeriesNames_().flatMap(n => hbSeriesEpisodes_(n).map(a => a.id))),
+    apiPost({ action: isCard ? 'reorderHomeCards' : 'reorderHomeActs', order: keys, storeId: MC_STORE_ID, version: MC_STATUS })).then(d => {
       if (d.status === 'ok') {
         (isCard ? hbCards : hbActs).forEach(x => { const i = keys.indexOf(x.id); if (i !== -1) x.order = i + 1; });
         if (isCard) hbCards.sort((a, b) => (a.block === b.block ? a.order - b.order : (a.block === '新品上市' ? -1 : 1)));
@@ -4169,10 +5010,18 @@ function moveHbItem(dir) {
 }
 
 // ---------- 會員好康活動編輯 ----------
-function hbNewAct() {
+function hbNewAct(series) {
   hbCurrentId = null;
   hbDraft = { kind: 'act', title: '', desc: '', icon: '🎁', color: '橘', photoUrl: '', ruleType: '每週', weekdays: [], lunarDays: [], skipFirst: false, dateTokens: [], exTokens: [], promo: '', method: '領券',
-    memberOnly: false, channels: ['線上', '門市'], startDate: '', endDate: '', status: '啟用', locked: false, linkType: '', linkCat: '', linkItem: '' };
+    memberOnly: false, channels: ['線上', '門市'], startDate: '', endDate: '', status: '啟用', locked: false, linkType: '', linkCat: '', linkItem: '', series: '' };
+  // 系列新增一檔：沿用最後一檔的標題、圖示、底色、對象通路、限領限量；日期、說明、綁券、連結每檔不同，留空
+  if (series) {
+    const eps = hbSeriesEpisodes_(series), last = eps[eps.length - 1];
+    Object.assign(hbDraft, { series, ruleType: '指定日期' });
+    if (last) Object.assign(hbDraft, { title: last.title, icon: last.icon || '🎁', color: last.color || '橘', memberOnly: !!last.memberOnly,
+      channels: (last.channels || ['線上', '門市']).slice(), perPerson: last.perPerson, limit: last.limit, method: last.method });
+    hbDraft.newPromo = hbNewPromoState_(hbPrevEpisodePromo_(hbDraft));   // 11-14 第 3 段：預設建這一檔的新券，先帶入上一檔的券
+  }
   renderHbList(); renderHbEditor(); scrollEditorIntoView_('hb-editor');
 }
 function hbEditAct(id, noScroll) {
@@ -4209,8 +5058,19 @@ function renderHbActEditor_(el) {
       ${d.photoUrl ? '' : `<span style="font-size:2.6rem;">${escapeHtml(d.icon || '🎁')}</span>`}
       <div style="position:absolute;left:12px;bottom:10px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.35);"><b style="font-size:1.05rem;">${escapeHtml(d.title || '活動標題')}</b><div style="font-size:0.75rem;">${escapeHtml(d.desc || '一行說明')}</div></div>
     </div>
-    <label class="mc-field">活動標題（最多20字）<input maxlength="20" value="${escapeHtml(d.title)}" placeholder="例：週四定食日" oninput="hbDraft.title=this.value"></label>
-    <label class="mc-field">一行說明（最多60字）<input maxlength="60" value="${escapeHtml(d.desc)}" placeholder="例：消費定食送雞塊乙份" oninput="hbDraft.desc=this.value"></label>
+    <label class="mc-field">活動標題（最多20字）<input maxlength="20" value="${escapeHtml(d.title)}" placeholder="例：週四定食日" oninput="hbDraft.title=this.value;hbPwAutoName_()"></label>
+    <label class="mc-field">一行說明（最多60字）<input maxlength="60" value="${escapeHtml(d.desc)}" placeholder="${d.series ? '例：【春分活動】第二件六折' : '例：消費定食送雞塊乙份'}" oninput="hbDraft.desc=this.value;hbPwAutoName_()"></label>
+    <label class="mc-field">屬於哪個系列（選填）<input maxlength="20" list="hb-series-list" value="${escapeHtml(d.series || '')}" placeholder="例：八大節氣、雞塊日" oninput="hbDraft.series=this.value.trim();hbPwAutoName_()">
+      <datalist id="hb-series-list">${hbSeriesNames_().map(n => `<option value="${escapeHtml(n)}">`).join('')}</datalist>
+      <span class="hb-hint">一檔一檔換的活動（節氣、每月雞塊日）填同一個系列，一次排好，時間到自動換檔。</span>
+    </label>
+    <details class="hb-rule" style="margin:-4px 0 10px;"><summary>系列規則說明</summary><ul>
+      <li>每一檔是獨立的活動：自己的說明、優惠日、顯示期間、綁的券、去點餐連結。</li>
+      <li>同一個系列裡，兩檔的優惠日不能重疊（存檔時會擋）。</li>
+      <li>「開始顯示」空白時，自動設成第一個優惠日的 3 週前，顧客一次只會看到當期和下一檔預告。</li>
+      <li>說明用【檔名】開頭（例：【春分活動】），左邊清單就會用它當檔名。</li>
+      <li>系列的檔期在左邊清單照日期排，不能拖曳。</li>
+    </ul></details>
     <div class="mc-field-row">
       <label class="mc-field" style="max-width:120px;">圖示（表情符號）<input maxlength="4" value="${escapeHtml(d.icon)}" oninput="hbDraft.icon=this.value"></label>
       <div class="mc-field">底色（沒上傳圖片時用）
@@ -4225,55 +5085,75 @@ function renderHbActEditor_(el) {
         <span id="hb-photo-status" style="font-size:0.75rem;color:var(--muted);"></span>
       </div>
     </div>
-    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">活動日規則
+    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;"><b>哪幾天有優惠</b>
       <div class="hb-chk" style="margin-bottom:8px;">
         ${['每週', '農曆', '指定日期'].map(t => `<label><input type="radio" name="hb-ruletype" ${d.ruleType === t ? 'checked' : ''} onchange="hbDraft.ruleType='${t}';renderHbEditor();"> ${t === '每週' ? '每週幾' : t === '農曆' ? '農曆每月幾日' : '指定日期（雞塊日、節氣）'}</label>`).join('')}
       </div>
       ${d.ruleType === '每週' ? `<div class="hb-chk">${HB_WEEKDAYS_.split('').map(w => `<label><input type="checkbox" ${d.weekdays.indexOf(w) !== -1 ? 'checked' : ''} onchange="hbToggle_(hbDraft.weekdays,'${w}',this.checked);hbSchedulePreview_();"> 週${w}</label>`).join('')}</div>` : ''}
       ${d.ruleType === '農曆' ? `<div class="hb-lunar">${HB_LUNAR_DAYS_.map(x => `<label><input type="checkbox" ${d.lunarDays.indexOf(x) !== -1 ? 'checked' : ''} onchange="hbToggle_(hbDraft.lunarDays,'${x}',this.checked);hbSchedulePreview_();"> ${x}</label>`).join('')}</div>
         <label style="display:flex;align-items:center;gap:6px;margin-top:8px;color:#222;font-size:0.85rem;"><input type="checkbox" ${d.skipFirst ? 'checked' : ''} onchange="hbDraft.skipFirst=this.checked;hbSchedulePreview_();"> 春節當月不辦（跳過正月）</label>
-        <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">系統內建 2026～2030 年農曆換算，下面會列出換算好的國曆日期給您核對。</div>` : ''}
+        <div class="hb-hint">下面會列出換算好的國曆日期給您核對（內建 2026～2030 年農曆）。</div>` : ''}
       ${d.ruleType === '指定日期' ? `<div class="mc-tags" style="margin:4px 0;">${tokensHtml(d.dateTokens, 'dateTokens')}</div>
         <button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="openHbCal('dateTokens')">📅 選日期</button>
-        <div style="font-size:0.72rem;color:var(--muted);">可以點單天，或切到「選一段」點開始、結束（節氣檔 7 天）。日期還沒排可以先空著。</div>` : ''}
+        <div class="hb-hint">點單天，或切「選一段」點開始和結束（節氣檔 7 天）；還沒排可以先空著。</div>` : ''}
     </div>
-    <div class="mc-field">排除日期（選填，例如店休、跟節氣檔撞期）
+    <div class="mc-field">不辦的日子（選填）
       <div class="mc-tags" style="margin:4px 0;">${tokensHtml(d.exTokens, 'exTokens')}</div>
-      <button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="openHbCal('exTokens')">📅 選排除日期</button>
+      <button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="openHbCal('exTokens')">📅 選不辦的日子</button>
+      <div class="hb-hint">例如店休、跟節氣檔撞期。</div>
     </div>
-    <div class="mc-field">接下來 60 天的活動日（核對用，已扣排除日期、只算活動期間內）
+    <div class="mc-field">接下來 60 天會有優惠的日子（核對用）
       <div id="hb-preview" style="margin-top:4px;"><span style="font-size:0.78rem;color:var(--muted);">計算中…</span></div>
     </div>
-    <div class="mc-field">對象與通路
+    <div class="mc-field">誰可以用、在哪裡用
       <div class="hb-chk">
         <label><input type="checkbox" ${d.memberOnly ? 'checked' : ''} onchange="hbDraft.memberOnly=this.checked"> 會員限定</label>
         <label><input type="checkbox" ${d.channels.indexOf('線上') !== -1 ? 'checked' : ''} onchange="hbToggle_(hbDraft.channels,'線上',this.checked)"> 線上點餐</label>
         <label><input type="checkbox" ${d.channels.indexOf('門市') !== -1 ? 'checked' : ''} onchange="hbToggle_(hbDraft.channels,'門市',this.checked)"> 門市平板</label>
       </div>
     </div>
-    <div class="mc-field-row">
-      <label class="mc-field" style="max-width:180px;">活動開始（選填）<input type="date" value="${escapeHtml(d.startDate || '')}" onchange="hbDraft.startDate=this.value;hbSchedulePreview_();"></label>
-      <label class="mc-field" style="max-width:180px;">活動結束（選填）<input type="date" value="${escapeHtml(d.endDate || '')}" onchange="hbDraft.endDate=this.value;hbSchedulePreview_();"></label>
+    <div class="mc-field"><b>會員好康頁顯示期間（選填）</b>
+      <div class="mc-field-row" style="margin-top:4px;">
+        <label class="mc-field" style="max-width:180px;">開始顯示<input type="date" value="${escapeHtml(d.startDate || '')}" onchange="hbDraft.startDate=this.value;hbSchedulePreview_();"></label>
+        <label class="mc-field" style="max-width:180px;">停止顯示<input type="date" value="${escapeHtml(d.endDate || '')}" onchange="hbDraft.endDate=this.value;hbSchedulePreview_();"></label>
+      </div>
+      <div class="hb-hint">空白＝一直顯示。可以比優惠日早幾天開始，當預告。</div>
+      <details class="hb-rule"><summary>規則說明</summary><ul>
+        <li>上面「哪幾天有優惠」才是真正折扣的日子；這裡是活動卡在會員好康頁出現的期間。</li>
+        <li>期間外的日子，就算在上面選了也不算優惠日、看板也不顯示（例：週二活動只辦到 12/31，停止顯示填 12/31）。</li>
+        <li>例：立春 2/4～2/11 有優惠，開始顯示填 1/14＝提前約 3 週預告。</li>
+      </ul></details>
     </div>
-    <div style="font-size:0.75rem;color:var(--muted);margin:-4px 0 8px;">空白＝一直辦下去。期間外的日子不算活動日，看板也不顯示（例如週二ㄋㄟㄋㄟ日只辦到 12/31，結束填 12/31）。</div>
-    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;">優惠內容
+    <div class="mc-field" style="background:#faf6f2;border-radius:8px;padding:10px;"><b>優惠內容</b>
       <div class="mc-field-row" style="margin-top:6px;">
         <label class="mc-field" style="max-width:130px;">每人限領(組)<input type="number" min="1" max="99" step="1" value="${d.perPerson === '' || d.perPerson == null ? '' : d.perPerson}" placeholder="1" oninput="hbDraft.perPerson=this.value"></label>
         <label class="mc-field" style="max-width:150px;">每天限量(組，本店)<input type="number" min="1" max="9999" step="1" value="${d.limit === '' || d.limit == null ? '' : d.limit}" placeholder="不限" oninput="hbDraft.limit=this.value"></label>
         <label class="mc-field">綁哪一張優惠券
           <select onchange="hbSetActPromo_(this.value)">
-            <option value="">不綁（只在看板顯示）</option>
-            ${pmPromos.filter(p => p.mode === 'item').map(p => `<option value="${escapeHtml(p.name)}" ${d.promo === p.name ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
-            ${d.promo && !pmPromos.some(p => p.name === d.promo) ? `<option value="${escapeHtml(d.promo)}" selected>${escapeHtml(d.promo)}（優惠券已不存在）</option>` : ''}
+            <option value="${HB_NEW_PROMO_}" ${d.newPromo ? 'selected' : ''}>＋ 建一張新券（這一檔專用）</option>
+            <option value="" ${!d.newPromo && !d.promo ? 'selected' : ''}>不綁（只在看板顯示）</option>
+            <optgroup label="綁現有的券">
+            ${pmPromos.filter(p => p.mode === 'item').map(p => `<option value="${escapeHtml(p.name)}" ${!d.newPromo && d.promo === p.name ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
+            ${!d.newPromo && d.promo && !pmPromos.some(p => p.name === d.promo) ? `<option value="${escapeHtml(d.promo)}" selected>${escapeHtml(d.promo)}（優惠券已不存在）</option>` : ''}
+            </optgroup>
           </select>
         </label>
       </div>
-      <div style="font-size:0.72rem;color:var(--muted);">線上（10-02 第三波）：活動日取餐的訂單，會員點了符合的餐點，系統自動發券並套用，顧客不用按「領券」；只能用在活動日取餐的訂單。每人限領＝每人每個活動日最多幾組（空白＝1；雞塊日一張券就是點幾份送幾份）。每天限量＝算已付款的組數，退款會還名額，空白＝不限。優惠券效果在「優惠券」那頁設定（週二：打5折＋適用分類茶拿鐵；週四：全額免費＋適用品項雞塊＋需搭配分類定食；買一送一／六折／加一元多一件／雞塊日看那頁的「配對方式」）。沒綁券＝只在看板顯示。</div>
+      ${hbPromoPartHtml_(d)}
+      <div class="hb-hint">綁一張券＝優惠日自動折；不綁＝只在會員好康頁顯示、不折扣。</div>
+      <details class="hb-rule"><summary>規則說明</summary><ul>
+        <li>線上：優惠日取餐的訂單，會員點了符合的餐點就自動套用，顧客不用按「領券」。</li>
+        <li>每人限領＝每人每個優惠日最多幾組，空白＝1；「每份送一份」（雞塊日、節氣贈品）＝點幾份送幾份。</li>
+        <li>每天限量＝本店每天已付款的組數，退款會還名額；空白＝不限。</li>
+        <li>折多少、送什麼、要搭配什麼：選「＋ 建一張新券」直接在這裡填（系列新增一檔會先帶入上一檔的券），或到「優惠券」頁改現有的券。</li>
+        <li>新券名稱自動取「系列－檔名」（檔名＝說明開頭的【…】），按「儲存」時先建券、再綁到這個活動；券的生效日～到期日＝這一檔的優惠日。</li>
+      </ul></details>
     </div>
     ${hbActLinkHtml_(d)}
     ${hbStatusLockHtml_(d)}
     ${hbButtonsHtml_(isNew, 'saveHbAct(this)', 'deleteHbAct()')}`;
   hbSchedulePreview_(true);
+  hbPwRefresh_();
 }
 // 規則一改就問後端算接下來的活動日(農曆換算只在後端一份，不在前端重寫一次)
 function hbSchedulePreview_(immediate) {
@@ -4301,8 +5181,8 @@ function hbActLinkSummary_(a) {
   return null;
 }
 // 券「需搭配分類」優先(週四要先點定食)，其次「適用分類」(週二茶拿鐵)，再來「適用品項」(找它在哪個分類)
-function hbActLinkFromPromo_(name) {
-  const p = name && pmPromos.find(x => x.name === name);
+function hbActLinkFromPromo_(name, obj) {
+  const p = obj || (name && pmPromos.find(x => x.name === name));
   if (!p) return null;
   const cat = hbCatalog_();
   const itemLink = n => {
@@ -4320,18 +5200,169 @@ function hbActLinkFromPromo_(name) {
   return null;
 }
 function hbSetActPromo_(name) {
+  hbPwRead_();
+  if (name === HB_NEW_PROMO_) {   // 切回「建新券」：剛剛填到一半的還在
+    hbDraft.newPromo = hbDraft._newPromoKeep || hbNewPromoState_(hbPrevEpisodePromo_(hbDraft));
+    renderHbEditor(); return;
+  }
+  if (hbDraft.newPromo) { hbDraft._newPromoKeep = hbDraft.newPromo; hbDraft.newPromo = null; }
   hbDraft.promo = name;
   const s = hbActLinkFromPromo_(name);
   if (s) Object.assign(hbDraft, s);
   renderHbEditor();
 }
+// ======== 優惠活動改版第 3 段(11-14)：活動編輯框裡直接建這一檔的券、自動綁 ========
+// 綁券下拉多一個「＋ 建一張新券（這一檔專用）」：用第 2 段的範本精靈(類型卡片＋一句話規則＋預覽)填，名稱自動「系列－檔名」，
+// 按「儲存」先 upsertPromo 建券、成功才 upsertHomeAct 綁上。系列「+ 新增一檔」預設就是建新券，先帶入上一檔的券。
+// 只能選「依購買品項」的五種類型(活動綁券下拉本來就只列 mode=item 的券)；資料格式、後端都沒改。
+const HB_NEW_PROMO_ = '__new_promo__';
+const HB_PW_TYPES_ = ['freeItem', 'second', 'bogo', 'gift', 'spend'];
+const PW_H_HB_ = { refresh: 'hbPwRefresh_()', rerender: 'hbPwRerender_()', opts: 'hbPwSetOpts_' };
+// 新券名稱：系列－檔名(說明開頭【春分活動】→「八大節氣－春分」)；沒寫【】用第一個優惠日；不是系列就用檔名或標題
+function hbAutoPromoName_(d) {
+  const m = String(d.desc || '').match(/^【([^】]{1,12})】/);
+  const ep = m ? m[1].replace(/活動$/, '').trim() : '';
+  if (d.series) {
+    const first = (d.dateTokens || []).map(t => t.split('~')[0]).sort()[0];
+    return d.series + '－' + (ep || (first ? first.replace(/-/g, '/') : ''));   // 還沒寫檔名也沒選日期：先留「八大節氣－」，存檔時提醒
+  }
+  return ep || String(d.title || '').trim();
+}
+// 同系列上一檔(照日期排最後一檔，不含正在編輯的這檔)綁的券
+function hbPrevEpisodePromo_(d) {
+  if (!d.series) return null;
+  const eps = hbSeriesEpisodes_(d.series).filter(a => a.id !== hbCurrentId && a.promo);
+  for (let i = eps.length - 1; i >= 0; i--) { const p = pmPromos.find(x => x.name === eps[i].promo); if (p) return p; }
+  return null;
+}
+function hbNewPromoState_(prev) {
+  const type = prev ? pwDetect_(prev) : null, ok = !!type && HB_PW_TYPES_.indexOf(type) !== -1;
+  const flags = pwFlagsFrom_(ok ? prev : { showAsButton: true });   // 活動券門市照舊用 POS 按鈕手動，預設勾
+  Object.assign(flags, { startDate: '', endDate: '', locked: false, status: '啟用' });
+  const f = pwFieldsFrom_(ok ? prev : { mode: 'item' });
+  return { type: ok ? type : null, f, flags, name: '', nameAuto: true, from: ok ? prev.name : '', fromRule: ok ? JSON.stringify(pwBuildRule_(type, f)) : '' };
+}
+// 帶入上一檔的券後規則一個字都沒改(例：雞塊日忘了換當月品項)→ 提醒(不擋)
+function hbPwSameAsPrev_(d) {
+  const s = d.newPromo;
+  return !!(s && s.type && s.fromRule && JSON.stringify(pwBuildRule_(s.type, s.f)) === s.fromRule);
+}
+// 綁券下拉下面那一塊：建新券＝精靈；綁現有的券＝一句話＋共用提醒
+function hbPromoPartHtml_(d) {
+  if (d.newPromo) {
+    const s = d.newPromo;
+    if (s.nameAuto) s.name = hbAutoPromoName_(d);
+    pwH_ = PW_H_HB_;
+    try {
+      return `<div id="hbpw-box" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin:2px 0 8px;">
+        <label class="mc-field">新券名稱（POS 按鈕上看到的；自動取「系列－檔名」，可以改）<input id="hbpw-name" value="${escapeHtml(s.name)}" oninput="hbDraft.newPromo.nameAuto=false;hbPwRefresh_()"></label>
+        ${s.from ? `<div class="pw-note" style="margin:0 0 8px;">已帶入上一檔的券「${escapeHtml(s.from)}」的設定，改成這一檔的內容就好（原本那張券不會被改）</div>` : ''}
+        <div class="pw-cards">${PW_TYPES_.filter(t => HB_PW_TYPES_.indexOf(t.key) !== -1).map(t => `<button type="button" class="pw-card${s.type === t.key ? ' on' : ''}" onclick="hbPwPickType_('${t.key}')"><span class="pw-ic">${t.icon}</span><b>${t.title}</b><small>例：${escapeHtml(t.eg)}</small></button>`).join('')}</div>
+        ${s.type ? `<div class="pw-rule" id="hbpw-rule" style="margin-top:8px;">${pwRuleHtml_(s.type, s.f)}</div>
+        <div class="pm-checks" style="margin:8px 0 4px;">
+          <label><input type="checkbox" data-flag="showAsButton" ${s.flags.showAsButton ? 'checked' : ''} onchange="hbPwRefresh_()"> 門市平板也顯示成按鈕（店員手動）</label>
+          <label><input type="checkbox" data-flag="exclusive" ${s.flags.exclusive ? 'checked' : ''} onchange="hbPwRefresh_()"> 不併用（線上）</label>
+        </div>
+        <div class="pm-tip">${d.ruleType === '指定日期' ? '券的生效日～到期日會自動設成這一檔的優惠日。' : '券不設期間，哪幾天有優惠由這個活動決定。'}按下面「儲存」時先建券、再自動綁到這個活動。</div>
+        <div class="pw-preview" id="hbpw-preview" style="margin-top:8px;"></div>` : '<div class="pm-tip" style="margin-top:6px;">先選一種類型</div>'}
+      </div>`;
+    } finally { pwH_ = PW_H_PM_; }
+  }
+  const p = d.promo && pmPromos.find(x => x.name === d.promo);
+  if (!p) return '';
+  const type = pwDetect_(p);
+  const others = [];
+  hbActs.filter(a => a.promo === p.name && a.id !== hbCurrentId).forEach(a => others.push('活動「' + a.title + '」'));
+  (pgGifts || []).filter(g => g.voucherType === p.name).forEach(g => others.push('集點禮（' + g.points + ' 點）'));
+  if ((bgGifts || []).some(g => g.voucherType === p.name)) others.push('生日禮');
+  if ((rgGifts || []).some(g => g.voucherType === p.name)) others.push('註冊禮');
+  return `<div style="font-size:0.8rem;color:#222;margin:2px 0 8px;line-height:1.5;">📋 ${escapeHtml(type ? pwSentence_(type, p, mcShortCatName) : '（設定比較特別，到優惠券頁看）')}
+      <button type="button" class="pw-adv-link" onclick="hbGoPromo_('${hbJs_(p.name)}')">到優惠券頁修改</button></div>
+    ${others.length ? `<div class="pw-usage">⚠ 這張券也用在：${escapeHtml(others.join('、'))}，改了會一起變</div>` : ''}`;
+}
+function hbGoPromo_(name) {
+  const loaded = mbLoaded.promo;
+  pmEditorMode = 'promo'; pmCurrentName = name; pwState_ = null;
+  switchMemberSubview('promo');
+  if (loaded) loadPromos();
+}
+function hbPwRead_() {
+  const s = hbDraft && hbDraft.newPromo, box = document.getElementById('hbpw-box');
+  if (!s || !box) return;
+  const nm = document.getElementById('hbpw-name'); if (nm) s.name = nm.value;
+  const val = e => e.type === 'checkbox' ? e.checked : (e.type === 'number' ? (e.value === '' ? '' : Number(e.value)) : e.value);
+  box.querySelectorAll('[data-k]').forEach(e => { s.f[e.dataset.k] = val(e); });
+  box.querySelectorAll('[data-flag]').forEach(e => { s.flags[e.dataset.flag] = val(e); });
+}
+function hbPwPayload_(d) {
+  const s = d.newPromo, flags = Object.assign({}, s.flags, { locked: false });
+  const days = d.ruleType === '指定日期' ? (d.dateTokens || []).flatMap(t => t.split('~')).sort() : [];
+  flags.startDate = days[0] || ''; flags.endDate = days[days.length - 1] || '';
+  return pwPayload_(s.type, String(s.name || '').trim(), s.f, flags, undefined, MC_STORE_ID, MC_STATUS);
+}
+function hbPwError_(d, P) {
+  return pwValidate_(d.newPromo.type, P, d.newPromo.f)
+    || (/－$/.test(P.name) ? '新券名稱還沒有檔名：在一行說明開頭寫【春分活動】這種檔名、選優惠日，或直接改新券名稱' : '')
+    || (pmPromos.some(p => p.name === P.name) ? '已經有同名的優惠券「' + P.name + '」，請換一個名稱（或改選綁現有的券）' : '');
+}
+function hbPwRefresh_() {
+  const d = hbDraft, s = d && d.newPromo;
+  if (!s || !s.type) return;
+  hbPwRead_();
+  const box = document.getElementById('hbpw-preview'); if (!box) return;
+  const P = hbPwPayload_(d), err = hbPwError_(d, P);
+  box.innerHTML = `
+    <div class="pw-sent">${escapeHtml(P.name || '（還沒取名）')}：${escapeHtml(pwSentence_(s.type, P, mcShortCatName))}</div>
+    <ul>${pwTrial_(s.type, P, pwPriceOf_, pwFirstOf_, mcShortCatName).map(t => '<li>' + escapeHtml(t) + '</li>').join('')}</ul>
+    ${P.startDate ? `<div style="color:var(--muted);font-size:0.78rem;margin-top:4px;">券的期間：${escapeHtml(P.startDate)}～${escapeHtml(P.endDate)}</div>` : ''}
+    ${hbPwSameAsPrev_(d) ? `<div class="pw-usage" style="margin-bottom:0;">⚠ 規則跟上一檔的券「${escapeHtml(s.from)}」一模一樣，點什麼、送什麼是不是還沒改成這一檔的？</div>` : ''}
+    ${err ?`<div class="pw-err">⚠ ${escapeHtml(err)}</div>` : ''}`;
+}
+function hbPwRerender_() { hbPwRead_(); renderHbEditor(); }
+function hbPwPickType_(key) {
+  hbPwRead_();
+  const s = hbDraft.newPromo;
+  s.type = key; pwTypeDefaults_(key, s.f);
+  renderHbEditor();
+}
+function hbPwSetOpts_(kind) { pwSetOpts_(kind, '#hbpw-rule', hbPwRefresh_); }
+// 改了標題／說明／系列：新券名稱還是自動的就跟著換
+function hbPwAutoName_() {
+  const s = hbDraft && hbDraft.newPromo; if (!s || !s.nameAuto) return;
+  s.name = hbAutoPromoName_(hbDraft);
+  const el = document.getElementById('hbpw-name'); if (el) el.value = s.name;
+  hbPwRefresh_();
+}
+// 同系列其他檔(沒停用)跟這一檔的「指定日期」有沒有重疊(只看今天以後；跟後端同一個規則，後端仍會再擋一次)
+function hbExpandDays_(tokens) {
+  const out = new Set(), today = hbToday_();
+  (tokens || []).forEach(t => {
+    const [a, b] = t.split('~'); const [y, m, dd] = a.split('-').map(Number);
+    for (let x = new Date(y, m - 1, dd), i = 0; i < 400; i++, x.setDate(x.getDate() + 1)) {
+      const s = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+      if (s > (b || a)) break;
+      if (s >= today) out.add(s);
+    }
+  });
+  return out;
+}
+function hbSeriesOverlap_(d) {
+  if (!d.series || d.ruleType !== '指定日期' || d.status === '停用') return '';
+  const mine = hbExpandDays_(d.dateTokens);
+  for (const a of hbActs) {
+    if (a.id === hbCurrentId || a.series !== d.series || a.status === '停用' || a.ruleType !== '指定日期') continue;
+    const hit = Array.from(hbExpandDays_(hbSplit_(a.rule))).filter(x => mine.has(x)).sort();
+    if (hit.length) return '同一個系列的「' + hbEpisodeLabel_(a) + '」也在 ' + hbMd_(hit[0]) + (hit.length > 1 ? ' 等 ' + hit.length + ' 天' : '') + ' 有優惠，系列裡的優惠日不能重疊，請改日期';
+  }
+  return '';
+}
 function hbActLinkMismatch_(d) {
   if (d.linkType !== '品項' && d.linkType !== '分類') return '';
-  const e = hbActLinkFromPromo_(d.promo);
+  const e = d.newPromo ? (d.newPromo.type ? hbActLinkFromPromo_(null, hbPwPayload_(d)) : null) : hbActLinkFromPromo_(d.promo);   // 建新券時跟新券比
   if (!e) return '';
   const ok = d.linkCat === e.linkCat && (d.linkType !== '品項' || e.linkType !== '品項' || d.linkItem === e.linkItem);
   if (ok) return '';
-  return `綁的優惠券「${d.promo}」要${e.linkType === '品項' ? '點「' + e.linkItem + '」' : '點「' + mcShortCatName(e.linkCat) + '」的餐點'}才有優惠，但「去點餐」會跳到${d.linkType === '品項' ? '「' + d.linkItem + '」' : '「' + mcShortCatName(d.linkCat) + '」'}。確定要這樣也可以直接儲存。`;
+  return `${d.newPromo ? '新券' : '綁的優惠券「' + d.promo + '」'}要${e.linkType === '品項' ? '點「' + e.linkItem + '」' : '點「' + mcShortCatName(e.linkCat) + '」的餐點'}才有優惠，但「去點餐」會跳到${d.linkType === '品項' ? '「' + d.linkItem + '」' : '「' + mcShortCatName(d.linkCat) + '」'}。確定要這樣也可以直接儲存。`;
 }
 function hbActLinkHtml_(d) {
   const cat = hbCatalog_();
@@ -4366,12 +5397,39 @@ function saveHbAct(btn) {
   if (d.ruleType !== '指定日期' && !rule) { alert(d.ruleType === '每週' ? '請至少勾一個星期幾' : '請至少勾一個農曆日'); return; }
   if (!d.channels.length) { alert('通路至少要選一個'); return; }
   if (d.startDate && d.endDate && d.startDate > d.endDate) { alert('活動開始不能晚於活動結束'); return; }
+  // 11-14 系列的檔期：開始顯示空白＝第一個優惠日前 3 週（不然顧客會同時看到好幾檔）
+  if (d.series && !d.startDate && d.ruleType === '指定日期' && d.dateTokens.length) {
+    const first = d.dateTokens.map(t => t.split('~')[0]).sort()[0];
+    const [y, m, dd] = first.split('-').map(Number), x = new Date(y, m - 1, dd - 21);
+    d.startDate = x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+  }
+  // 11-14 第 3 段：選了「建一張新券」→ 先建券、成功後綁上再存活動(活動存失敗重按，不會再建一次券)
+  if (d.newPromo) {
+    hbPwRead_();
+    if (!d.newPromo.type) { alert('新券：請選一種類型（或改選「不綁」、綁現有的券）'); return; }
+    const P = hbPwPayload_(d), err = hbPwError_(d, P);
+    if (err) { alert('新券：' + err); return; }
+    const clash = hbSeriesOverlap_(d);   // 同系列優惠日重疊後端也會擋；先在這裡擋，免得券建好了活動卻存不進去
+    if (clash) { alert(clash); return; }
+    if (hbPwSameAsPrev_(d) && !confirm('新券的規則跟上一檔的券「' + d.newPromo.from + '」一模一樣（點什麼、送什麼都沒改）。\n\n確定要這樣建立嗎？')) return;
+    if (!d.linkType) { const l = hbActLinkFromPromo_(null, P); if (l) Object.assign(d, l); }   // 「去點餐」沒設定 → 照新券自動帶
+    btn.disabled = true; btn.textContent = '建立優惠券中...';
+    apiPost({ action: 'upsertPromo', promo: P }).then(r => {
+      if (r.status !== 'ok') throw new Error(r.message || '建立優惠券失敗');
+      pmPromos.push(Object.assign({}, P, { originalName: undefined }));
+      d.newPromo = null; d._newPromoKeep = null; d.promo = P.name;
+      btn.disabled = false; btn.textContent = '儲存';
+      saveHbAct(btn);
+    }).catch(e => { alert('建立優惠券失敗：' + e.message); btn.disabled = false; btn.textContent = '儲存'; });
+    return;
+  }
   const act = { id: hbCurrentId || undefined, storeId: MC_STORE_ID, version: MC_STATUS, title: d.title.trim(), desc: d.desc.trim(), icon: d.icon.trim(), color: d.color, photoUrl: d.photoUrl || '',
     ruleType: d.ruleType, rule, excludes: d.exTokens.slice().sort().join('、'), memberOnly: !!d.memberOnly, channels: d.channels,
     promo: d.promo || '', method: d.method === '自動折' ? '自動折' : '領券',
     startDate: d.startDate, endDate: d.endDate, status: d.status, locked: !!d.locked,
     linkType: d.linkType || '', linkCat: d.linkCat || '', linkItem: d.linkItem || '',
-    perPerson: d.perPerson == null ? '' : String(d.perPerson).trim(), limit: d.limit == null ? '' : String(d.limit).trim() };
+    perPerson: d.perPerson == null ? '' : String(d.perPerson).trim(), limit: d.limit == null ? '' : String(d.limit).trim(),
+    series: String(d.series || '').trim() };
   hbSave_(btn, { action: 'upsertHomeAct', act });
 }
 function deleteHbAct() {
@@ -4496,7 +5554,12 @@ function pmPctLabel_(pct) {
   return (pct % 10 === 0 ? pct / 10 : pct) + '折';
 }
 // 優惠券期間提醒(2026-09-26)：已過期／尚未開始／還有N天到期(3天內)；沒設期間回傳null
+// 11-14：停用的券／加價購照樣標期間，但不加 ⚠（不算進「快到期或已過期」紅字）
 function pmPeriodTag_(p) {
+  const tag = pmPeriodTagRaw_(p);
+  return tag && p.status === '停用' ? tag.replace('⚠', '') : tag;
+}
+function pmPeriodTagRaw_(p) {
   if (!p.startDate && !p.endDate) return null;
   const d = new Date(); const t = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   if (p.endDate && t > p.endDate) return '⚠已過期';
@@ -4617,15 +5680,33 @@ function pmMinTierChanged() {
   document.getElementById('pm-f-allownonmember-wrap').style.display = hasTier ? 'flex' : 'none';
 }
 
+// 11-14 起右邊編輯區先開「範本精靈」(renderPwEditor_)；判斷不出類型的券、或老闆按「進階」才開下面這個全部欄位的編輯框
 function renderPmEditor() {
   if (pmEditorMode === 'addon') { renderAdEditor(); return; }
+  const isNew = pmCurrentName === null;
+  const p = isNew ? null : pmPromos.find(x => x.name === pmCurrentName);
+  if (!isNew && !p) { document.getElementById('pm-editor').innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增優惠券」</div>'; return; }
+  // 換了一張券、換了門市，或同一張券的資料重新讀回來不一樣了，才重新判斷類型(不然老闆正在選的類型會被洗掉)
+  const key = MC_STORE_ID + '|' + (isNew ? '\u0000new' : pmCurrentName), src = isNew ? '' : JSON.stringify(p);
+  if (!pwState_ || pwState_.key !== key || pwState_.src !== src) {
+    const type = isNew ? null : pwDetect_(p);
+    const keepAdv = !!(pwState_ && pwState_.key === key && pwState_.advanced);   // 在進階框存檔後重新讀回來，留在進階框
+    pwState_ = { key, src, type, auto: !isNew && !type, advanced: keepAdv, name: isNew ? '' : p.name,
+      f: pwFieldsFrom_(isNew ? { mode: 'item' } : p), flags: pwFlagsFrom_(isNew ? {} : p) };
+  }
+  if (pwState_.advanced || pwState_.auto) renderPmEditorAdvanced_(); else renderPwEditor_();
+}
+
+function renderPmEditorAdvanced_() {
   const el = document.getElementById('pm-editor');
   const isNew = pmCurrentName === null;
   const p = isNew ? {} : (pmPromos.find(x => x.name === pmCurrentName) || {});
-  if (!isNew && !pmPromos.find(x => x.name === pmCurrentName)) { el.innerHTML = '<div class="empty-hint">選一筆來編輯，或點「新增優惠券」</div>'; return; }
   const mode = p.mode || 'fixed';
   el.innerHTML = `
-    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增優惠券' : '編輯優惠券'}</h3>
+    ${pwState_ && pwState_.auto ? '<div class="pw-note">這張券的設定組合比較特別，範本精靈認不出是哪一種，所以直接用全部欄位編輯（存檔方式跟以前一樣）。</div>'
+      : '<div style="margin-bottom:6px;"><button type="button" class="pw-adv-link" onclick="pwState_.advanced=false;renderPmEditor();">← 回到範本精靈</button></div>'}
+    ${isNew ? '' : pwUsageHtml_(pmCurrentName)}
+    <h3 style="margin-top:0;font-size:1rem;">${isNew ? '新增優惠券' : '編輯優惠券'}（進階：全部欄位）</h3>
     <label class="mc-field">名稱<input id="pm-f-name" value="${escapeHtml(p.name || '')}"></label>
     <label class="mc-field">效果模式
       <select id="pm-f-mode" onchange="pmModeChanged()">
@@ -4868,6 +5949,447 @@ function deletePromo() {
     pmCurrentName = null;
     return loadPromos();
   }).catch(err => alert('刪除失敗：' + err.message));
+}
+
+// ======== 優惠券範本精靈(11-14 優惠活動改版第 2 段，規格 優惠活動改版規格_2026-11-14.md) ========
+// 老闆 11-14：優惠券編輯「一點都不直覺」→ ①選類型(卡片) ②一句話填規則 ③期間 ④怎麼拿到 ⑤預覽試算。
+// 只改後台畫面：資料格式完全不變(同一組欄位、同一個 upsertPromo)，線上點餐頁、平板、折扣算法都不用動。
+// 舊券打開時自動判斷類型(pwDetect_)；欄位組合特別、判斷不出來的直接開「進階」(原本全部欄位的編輯框)。
+// 安全原則：每種類型只寫自己那幾個規則欄位，其他規則欄位一律清空——原本編輯框存檔也是這樣(用不到的欄位送空白)，
+// 判斷類型時也只認「沒用到別的欄位」的券，所以打開→存回去跟原本編輯框存出來逐欄相同(預覽頁 ?pwtest=1 逐張核對)。
+const PW_TYPES_ = [
+  { key: 'cash', icon: '💵', title: '折抵金額', eg: '20元兌換券' },
+  { key: 'freeItem', icon: '🎁', title: '免費兌換一份', eg: '荷包蛋兌換券、公關費' },
+  { key: 'second', icon: '✌️', title: '第二件打折', eg: '週二茶拿鐵第二件五折' },
+  { key: 'bogo', icon: '👯', title: '買一送一／加一元多一件', eg: '咖B日、初一' },
+  { key: 'gift', icon: '🎀', title: '點 A 送 B', eg: '週四定食送雞塊、雞塊日、節氣贈品' },
+  { key: 'spend', icon: '🧾', title: '每滿額折一份', eg: '冬至玉米濃湯' },
+  { key: 'orderPct', icon: '🏷️', title: '整張打折（限 POS）', eg: '整張95折' },
+  { key: 'tier', icon: '👑', title: '會員等級優惠', eg: '金寶限定買一送一（自動套用）' }
+];
+const PW_RULE_KEYS_ = ['mode', 'effect', 'amount', 'minQty', 'autoAddItem', 'targetItem', 'targetSize', 'targetCat', 'requireCat', 'targetItem2', 'requireItem', 'pairMode', 'requireOpts', 'spendStep'];
+const PW_EFFECT_LABEL_ = { free: '免費', discount50: '打5折', discount60: '打6折', addOne: '只收 $1', amountOff: '折 $N' };
+let pwState_ = null;   // {key, src, type, auto(判斷不出來), advanced(老闆按進階), name, f(規則欄位), flags(期間／按鈕／等級…)}
+// 規則句子裡的下拉／數字改了要叫誰：優惠券頁＝pw…；活動編輯框裡建新券(第 3 段)＝hbPw…(產生 HTML 前暫時換掉，產生完換回來)
+const PW_H_PM_ = { refresh: 'pwRefreshPreview_()', rerender: 'pwRerender_()', opts: 'pwSetOpts_' };
+let pwH_ = PW_H_PM_;
+
+// 規則欄位整理成固定格式：數字轉數字、空的一律 ''；原本編輯框存檔時用不到的欄位(例如「固定金額」的品項欄)也當空的
+function pwCanon_(p) {
+  const s = v => v == null ? '' : String(v).trim();
+  const n = v => (v === '' || v == null || isNaN(Number(v))) ? '' : Number(v);
+  const item = p.mode === 'item', effect = item ? s(p.effect) : '';
+  const c = { mode: s(p.mode), effect, amount: '', minQty: '', autoAddItem: '', targetItem: '', targetSize: '', targetCat: '', requireCat: '', targetItem2: '', requireItem: '', pairMode: '', requireOpts: '', spendStep: '' };
+  if (!item) { c.amount = n(p.amount); return c; }
+  if (effect === 'pct' || effect === 'amountOff') c.amount = n(p.amount);
+  c.minQty = n(p.minQty) === '' ? 1 : n(p.minQty);
+  ['autoAddItem', 'targetItem', 'targetCat', 'requireCat', 'targetItem2', 'requireItem', 'pairMode'].forEach(k => { c[k] = s(p[k]); });
+  c.targetSize = s(p.targetSize).toUpperCase() === 'M' || s(p.targetSize).toUpperCase() === 'L' ? s(p.targetSize).toUpperCase() : '';
+  c.requireOpts = s(p.requireOpts).split('、').map(x => x.trim()).filter(Boolean).join('、');
+  c.spendStep = Number(p.spendStep) > 0 ? Number(p.spendStep) : '';
+  return c;
+}
+// 判斷舊券是哪一種；有用到該類型以外的欄位就回 null(→進階)
+function pwDetect_(p) {
+  const c = pwCanon_(p);
+  const used = k => k === 'minQty' ? c.minQty !== 1 : c[k] !== '';
+  const only = allowed => PW_RULE_KEYS_.every(k => k === 'mode' || k === 'effect' || allowed.indexOf(k) !== -1 || !used(k));
+  if (c.mode === 'fixed') return 'cash';
+  if (c.mode === 'order') return 'orderPct';
+  if (c.mode !== 'item') return null;
+  const E = c.effect;
+  // 等級優惠：跟清單分組 pmGroupOf_ 同一個判斷(POS 按鈕＋不可贈送＋最低等級＋適用品項)
+  if (p.showAsButton && !p.manualGrantable && p.minTier && c.targetItem)
+    return ['free', 'discount60', 'discount50'].indexOf(E) !== -1 && c.minQty >= 1 && only(['minQty', 'targetItem', 'targetSize']) ? 'tier' : null;
+  if (c.pairMode === '每滿額折一份')
+    return (E === 'amountOff' || E === 'free') && c.minQty === 1 && c.targetItem && c.spendStep && only(['amount', 'targetItem', 'targetSize', 'pairMode', 'spendStep']) ? 'spend' : null;
+  if (c.pairMode === '同款同客製化') {
+    const items = c.targetItem || c.targetItem2;
+    return ((E === 'free' && c.minQty === 2) || (E === 'addOne' && c.minQty === 1)) && (items ? !c.targetCat : c.targetCat)
+      && only(['minQty', 'targetItem', 'targetItem2', 'targetCat', 'targetSize', 'requireOpts', 'pairMode']) ? 'bogo' : null;
+  }
+  if (c.pairMode === '每份送一份')
+    return E === 'free' && c.minQty === 1 && c.targetItem && c.requireItem && only(['targetItem', 'targetItem2', 'targetSize', 'requireItem', 'requireOpts', 'pairMode']) ? 'gift' : null;
+  if (c.pairMode === '同款' || c.pairMode === '') {
+    if ((E === 'discount50' || E === 'discount60') && c.minQty === 2 && !(c.targetItem && c.targetCat) && !(c.targetItem && c.pairMode === '')
+      && only(['minQty', 'targetItem', 'targetCat', 'targetSize', 'pairMode']) && (c.targetItem || c.targetCat || !c.targetSize)) return 'second';
+    if (c.pairMode !== '') return null;
+    if (c.requireCat)
+      return E === 'free' && c.minQty === 1 && c.targetItem && (!c.autoAddItem || c.autoAddItem === c.targetItem) && (!c.requireOpts || c.requireOpts === '套餐')
+        && only(['targetItem', 'targetSize', 'requireCat', 'autoAddItem', 'requireOpts']) ? 'gift' : null;   // 11-14 限定選項「套餐」＝只算套餐
+    if (E === 'free' && c.minQty === 1 && only(['targetItem', 'targetSize'])) return 'freeItem';
+  }
+  return null;
+}
+// 精靈畫面用的欄位：規則欄位＋畫面自己用的 _scope(分類／品項／不指定)、_by(點品項／點分類)
+function pwFieldsFrom_(p) {
+  const f = pwCanon_(p);
+  f._scope = f.targetCat && !f.targetItem && !f.targetItem2 ? 'cat' : (f.targetItem || f.targetItem2 ? 'item' : (/^discount/.test(f.effect) ? 'none' : 'cat'));
+  f._by = f.requireCat && !f.requireItem ? 'cat' : 'item';
+  f.setOnly = f._by === 'cat' && f.requireOpts === '套餐';   // 11-14 只算套餐(16d)
+  return f;
+}
+function pwFlagsFrom_(p) {
+  return { showAsButton: !!p.showAsButton, manualGrantable: !!p.manualGrantable, exclusive: !!p.exclusive, status: p.status === '停用' ? '停用' : '啟用',
+    startDate: p.startDate || '', endDate: p.endDate || '', minTier: p.minTier || '', allowNonMember: p.allowNonMember !== false, locked: !!p.locked };
+}
+// 依類型組出規則欄位：只寫這類型用得到的，其他一律空白
+function pwBuildRule_(type, f) {
+  const r = { mode: type === 'cash' ? 'fixed' : (type === 'orderPct' ? 'order' : 'item'), effect: '', amount: '', minQty: '', autoAddItem: '', targetItem: '', targetSize: '', targetCat: '', requireCat: '', targetItem2: '', requireItem: '', pairMode: '', requireOpts: '', spendStep: '' };
+  const v = k => f[k] == null ? '' : f[k];
+  if (type === 'cash' || type === 'orderPct') { r.amount = v('amount'); return r; }
+  r.minQty = 1;
+  if (type === 'freeItem') { r.effect = 'free'; r.targetItem = v('targetItem'); r.targetSize = r.targetItem ? v('targetSize') : ''; }
+  else if (type === 'second') {
+    r.effect = f.effect === 'discount60' ? 'discount60' : 'discount50'; r.minQty = 2;
+    if (f._scope === 'cat') { r.targetCat = v('targetCat'); r.pairMode = f.pairMode === '同款' ? '同款' : ''; r.targetSize = v('targetSize'); }
+    else if (f._scope === 'item') { r.targetItem = v('targetItem'); r.pairMode = '同款'; r.targetSize = v('targetSize'); }
+    else r.pairMode = f.pairMode === '同款' ? '同款' : '';
+  } else if (type === 'bogo') {
+    r.effect = f.effect === 'addOne' ? 'addOne' : 'free'; r.minQty = r.effect === 'addOne' ? 1 : 2; r.pairMode = '同款同客製化';
+    if (f._scope === 'cat') r.targetCat = v('targetCat'); else { r.targetItem = v('targetItem'); r.targetItem2 = v('targetItem2'); }
+    r.targetSize = v('targetSize'); r.requireOpts = v('requireOpts');
+  } else if (type === 'gift') {
+    r.effect = 'free'; r.targetItem = v('targetItem'); r.targetSize = v('targetSize');
+    if (f._by === 'cat') { r.requireCat = v('requireCat'); r.autoAddItem = f.autoAddItem ? r.targetItem : ''; r.requireOpts = f.setOnly ? '套餐' : ''; }
+    else { r.pairMode = '每份送一份'; r.requireItem = v('requireItem'); r.targetItem2 = v('targetItem2'); r.requireOpts = v('requireOpts'); }
+  } else if (type === 'spend') {
+    r.effect = f.effect === 'free' ? 'free' : 'amountOff'; r.pairMode = '每滿額折一份';
+    r.targetItem = v('targetItem'); r.targetSize = v('targetSize'); r.spendStep = v('spendStep');
+    if (r.effect === 'amountOff') r.amount = v('amount');
+  } else if (type === 'tier') {
+    r.effect = ['free', 'discount60', 'discount50'].indexOf(f.effect) !== -1 ? f.effect : 'free';
+    r.minQty = v('minQty') === '' ? 1 : v('minQty'); r.targetItem = v('targetItem'); r.targetSize = v('targetSize');
+  }
+  return r;
+}
+// 送給 upsertPromo 的整包(欄位跟原本編輯框 savePromo 一模一樣)
+function pwPayload_(type, name, f, flags, originalName, storeId, version) {
+  const tier = type === 'tier';
+  return Object.assign({ originalName: originalName || undefined, name: name }, pwBuildRule_(type, f), {
+    exclusive: !!flags.exclusive, showAsButton: tier ? true : !!flags.showAsButton, manualGrantable: tier ? false : !!flags.manualGrantable,
+    status: flags.status === '停用' ? '停用' : '啟用', storeId: storeId, version: version, locked: !!flags.locked,
+    minTier: flags.minTier || '', startDate: flags.startDate || '', endDate: flags.endDate || '',
+    allowNonMember: flags.minTier ? flags.allowNonMember !== false : true
+  });
+}
+function pwValidate_(type, P, f) {
+  const posInt = (v, min, max) => v !== '' && Number.isInteger(Number(v)) && Number(v) >= min && (max == null || Number(v) <= max);
+  if (!String(P.name || '').trim()) return '請輸入名稱';
+  if (P.startDate && P.endDate && P.startDate > P.endDate) return '生效日不能晚於到期日';
+  if (type === 'cash' && !posInt(P.amount, 1)) return '請填折抵多少元（整數）';
+  if (type === 'orderPct' && !posInt(P.amount, 10, 99)) return '折數請填 10～99 的整數（例如 95＝打95折，9折請填 90）';
+  if (type === 'second' && f._scope === 'cat' && !P.targetCat) return '請選哪一個分類';
+  if (type === 'second' && f._scope === 'item' && !P.targetItem) return '請選哪一個品項';
+  if (type === 'bogo' && !P.targetItem && !P.targetItem2 && !P.targetCat) return f._scope === 'cat' ? '請選哪一個分類' : '請選哪一個品項';
+  if (type === 'gift' && !P.targetItem) return '請選送什麼';
+  if (type === 'gift' && f._by === 'item' && !P.requireItem) return '請選點什麼才送';
+  if (type === 'gift' && f._by === 'cat' && !P.requireCat) return '請選點哪一個分類才送';
+  if (type === 'spend' && !P.targetItem) return '請選折哪一個品項';
+  if (type === 'spend' && !posInt(P.spendStep, 1)) return '請填每滿多少元（整數）';
+  if (type === 'spend' && P.effect === 'amountOff' && !posInt(P.amount, 1)) return '請填每份折多少元（整數）';
+  if (type === 'tier' && !P.minTier) return '請選哪個等級以上的會員';
+  if (type === 'tier' && !P.targetItem) return '請選哪一個品項';
+  if (type === 'tier' && !posInt(P.minQty, 1)) return '請填要買幾份（整數）';
+  if (type !== 'tier' && P.mode === 'item' && P.showAsButton && !P.manualGrantable && P.minTier && P.targetItem)
+    return '這樣設定會被當成「會員等級優惠」自動套用。要做等級優惠請選 👑 那張卡；不是的話請把「最低適用等級」改回不限，或勾「可手動贈送給會員」';
+  return '';
+}
+// 一句話規則(預覽最上面那行)
+function pwSentence_(type, P, shortCat) {
+  const sz = s => s ? '（' + s + '）' : '';
+  const cat = c => '「' + shortCat(c) + '」';
+  const opts = P.requireOpts ? '，客製化要含：' + P.requireOpts.split('、').join('／') : '';
+  if (type === 'cash') return '結帳時折抵 $' + (P.amount || '?');
+  if (type === 'orderPct') return '整張訂單打' + (P.amount ? pmPctLabel_(Number(P.amount)) : '?折') + '（只在 POS 用）';
+  if (type === 'freeItem') return P.targetItem ? '免費兌換一份 ' + P.targetItem + sz(P.targetSize) : '店員在 POS 點選的那一項免費';
+  if (type === 'second') {
+    const eff = P.effect === 'discount60' ? '6折' : '5折';
+    if (P.targetCat) return cat(P.targetCat) + sz(P.targetSize) + (P.pairMode === '同款' ? '同一款買兩件' : '任兩件') + '，第二件打' + eff;
+    if (P.targetItem) return P.targetItem + sz(P.targetSize) + ' 買兩件，第二件打' + eff;
+    return '店員在 POS 選兩件，第二件打' + eff;
+  }
+  if (type === 'bogo') {
+    const t = P.targetCat ? cat(P.targetCat) + '的飲品／餐點' : [P.targetItem, P.targetItem2].filter(Boolean).join(' 或 ');
+    return t + sz(P.targetSize) + (P.effect === 'addOne' ? ' 加一元多一件' : ' 買一送一') + '（兩件要同款同客製化）' + opts;
+  }
+  if (type === 'gift') {
+    const give = (P.targetItem || '?') + sz(P.targetSize) + (P.targetItem2 ? ' 或 ' + P.targetItem2 + '（二選一）' : '');
+    if (P.requireCat) return '點' + cat(P.requireCat) + (P.requireOpts === '套餐' ? '的套餐（單點不算）' : '的餐點') + '，送一份 ' + give;
+    return '每點一份 ' + (P.requireItem || '?') + opts + '，送一份 ' + give;
+  }
+  if (type === 'spend') return (P.targetItem || '?') + ' 以外的餐點每滿 $' + (P.spendStep || '?') + '，' + (P.targetItem || '?') + sz(P.targetSize) + (P.effect === 'free' ? ' 免費一份' : ' 折 $' + (P.amount || '?') + ' 一份');
+  if (type === 'tier') return (P.minTier || '?') + '以上的會員買 ' + (P.minQty || '?') + ' 份 ' + (P.targetItem || '?') + sz(P.targetSize) + '，其中 1 份' + (PW_EFFECT_LABEL_[P.effect] || '') + '（每張單一次）';
+  return '';
+}
+// 試算(用菜單價格舉一個例子)；priceOf(品名, 份量) 回 {u, sz}，找不到回 null；firstOf(分類) 回分類裡第一個有價格的品名
+function pwTrial_(type, P, priceOf, firstOf, shortCat) {
+  const out = [], money = n => '$' + n;
+  const itemTxt = (name, pr) => name + (pr && pr.sz ? ' ' + pr.sz : '') + (pr ? '（' + money(pr.u) + '）' : '');
+  const noPrice = name => out.push('（菜單找不到「' + name + '」的價格，沒辦法試算）');
+  const off = (eff, u) => eff === 'free' ? u : eff === 'discount50' ? Math.round(u * 0.5) : eff === 'discount60' ? Math.round(u * 0.4) : eff === 'addOne' ? Math.max(0, u - 1) : 0;
+  if (type === 'cash') out.push('顧客結帳時少付 ' + money(P.amount || 0));
+  else if (type === 'orderPct') { const a = Number(P.amount) || 0; out.push('例：原價 $200 → 打' + (a ? pmPctLabel_(a) : '?折') + '，折 ' + money(200 - Math.round(200 * a / 100))); out.push('用原價算，不受其他折抵影響'); }
+  else if (type === 'freeItem') {
+    if (!P.targetItem) out.push('店員在 POS 先點那一項，再按這顆按鈕');
+    else { const pr = priceOf(P.targetItem, P.targetSize); if (!pr) noPrice(P.targetItem); else out.push('例：點一份 ' + itemTxt(P.targetItem, pr) + ' → 這份免費，折 ' + money(pr.u)); }
+    out.push('只折基本價，加料、升級等加價照收');
+  } else if (type === 'second') {
+    const x = P.targetItem || (P.targetCat ? firstOf(P.targetCat) : '');
+    if (!x) out.push('店員在 POS 自己選要折哪兩件');
+    else { const pr = priceOf(x, P.targetSize); if (!pr) noPrice(x); else out.push('例：點 2 份 ' + itemTxt(x, pr).replace('（', '（各 ') + ' → 第二件' + (P.effect === 'discount60' ? '打6折' : '打5折') + '，折 ' + money(off(P.effect, pr.u))); }
+    if (P.targetCat && P.pairMode !== '同款') out.push('不同款也可以：同分類由貴到便宜兩兩一組，每組較便宜那件打折');
+    if (P.pairMode === '同款') out.push('要同一款才成一組（客製化可以不同），加料照收');
+  } else if (type === 'bogo') {
+    const x = P.targetItem || P.targetItem2 || (P.targetCat ? firstOf(P.targetCat) : '');
+    if (x) { const pr = priceOf(x, P.targetSize); if (!pr) noPrice(x); else out.push('例：點 2 份一模一樣的 ' + itemTxt(x, pr).replace('（', '（各 ') + ' → 第二份' + (P.effect === 'addOne' ? '只收 $1' : '免費') + '，折 ' + money(off(P.effect, pr.u))); }
+    if (P.requireOpts) out.push('客製化沒有含「' + P.requireOpts.split('、').join('／') + '」其中一個的不算');
+    if (P.effect === 'addOne') out.push('線上點一份會自動多加一份');
+  } else if (type === 'gift') {
+    const pb = P.targetItem ? priceOf(P.targetItem, P.targetSize) : null, pb2 = P.targetItem2 ? priceOf(P.targetItem2, P.targetSize) : null;
+    const give = P.targetItem ? itemTxt(P.targetItem, pb) + (P.targetItem2 ? ' 或 ' + itemTxt(P.targetItem2, pb2) : '') : '?';
+    const buy = P.requireCat ? '1 份' + '「' + shortCat(P.requireCat) + '」的' + (P.requireOpts === '套餐' ? '套餐' : '餐點') : '1 份 ' + itemTxt(P.requireItem || '?', P.requireItem ? priceOf(P.requireItem, '') : null) + (P.requireOpts ? '＋選「' + P.requireOpts.split('、')[0] + '」' : '');
+    out.push('例：點 ' + buy + ' → 送 ' + give + (pb ? '，折 ' + money(pb.u) + (pb2 && pb2.u !== pb.u ? '（選 ' + P.targetItem2 + ' 折 ' + money(pb2.u) + '）' : '') : ''));
+    if (P.targetItem && !pb) noPrice(P.targetItem);
+    out.push(P.requireCat ? '一張券送一份' : '點幾份送幾份' + (P.targetItem2 ? '，顧客自己二選一' : ''));
+    if (P.requireCat && P.requireOpts === '套餐') out.push('只算套餐：這個分類有單點／套餐可選的品項，點單點不算（沒有套餐可選的品項照算）');
+    if (P.requireCat && P.autoAddItem) out.push('店員按 POS 按鈕時，贈品會自動加進訂單');
+  } else if (type === 'spend') {
+    const step = Number(P.spendStep) || 0, pr = P.targetItem ? priceOf(P.targetItem, P.targetSize) : null;
+    if (step && P.targetItem) {
+      const per = P.effect === 'free' ? (pr ? pr.u : null) : Number(P.amount) || 0;
+      out.push('例：' + P.targetItem + ' 以外點了 ' + money(step * 2 + Math.round(step / 2)) + ' → 最多折 2 份 ' + P.targetItem + (per != null ? '，每份折 ' + money(per) + '（共 ' + money(per * 2) + '）' : ''));
+    }
+    out.push('看點餐原價，不管其他折扣；其他需求不算；實際點的份數不夠就照實際份數');
+  } else if (type === 'tier') {
+    const pr = P.targetItem ? priceOf(P.targetItem, P.targetSize) : null;
+    if (P.targetItem && !pr) noPrice(P.targetItem);
+    else if (pr) out.push('例：' + (P.minTier || '?') + '會員點 ' + (P.minQty || '?') + ' 份 ' + itemTxt(P.targetItem, pr).replace('（', '（各 ') + ' → 其中 1 份' + (PW_EFFECT_LABEL_[P.effect] || '') + '，折 ' + money(off(P.effect, pr.u)));
+    out.push('同品名同份量才算；每張單一次');
+  }
+  return out;
+}
+
+// ---- 精靈畫面 ----
+function pwCat_() { return Object.keys(mcCatalog).length ? mcCatalog : (adCatalog_ || {}); }
+function pwPriceOf_(name, size) {
+  const cat = pwCat_();
+  for (const c of Object.keys(cat)) for (const it of (cat[c] || [])) {
+    if (it.name !== name) continue;
+    if (size === 'M' && it.price_m > 0) return { u: Number(it.price_m), sz: 'M' };
+    if (size === 'L' && it.price_l > 0) return { u: Number(it.price_l), sz: 'L' };
+    if (it.price > 0) return { u: Number(it.price), sz: '' };   // 沒分份量的品項(例：二選一贈品裡的蘿蔔糕)照單一價
+    if (!size && it.price_m > 0) return { u: Number(it.price_m), sz: 'M' };
+    if (!size && it.price_l > 0) return { u: Number(it.price_l), sz: 'L' };
+  }
+  return null;
+}
+function pwFirstOf_(catName) {
+  const it = ((pwCat_()[catName]) || []).find(x => x.price > 0 || x.price_m > 0 || x.price_l > 0);
+  return it ? it.name : '';
+}
+function pwItemSel_(k, val, emptyLabel) {
+  const cat = pwCat_(); let found = false;
+  const groups = Object.keys(cat).map(c => (cat[c] || []).length ? `<optgroup label="${escapeHtml(mcShortCatName(c))}">${(cat[c] || []).map(it => {
+    const sel = !found && it.name === val; if (sel) found = true;
+    return `<option value="${escapeHtml(it.name)}"${sel ? ' selected' : ''}>${escapeHtml(it.name)}</option>`;
+  }).join('')}</optgroup>` : '').join('');
+  // 菜單上已經沒有的舊值保留成一個選項，免得沒動到這格卻在存檔時被清掉
+  const missing = val && !found ? `<option value="${escapeHtml(val)}" selected>${escapeHtml(val)}（菜單找不到）</option>` : '';
+  return `<select class="pw-in" data-k="${k}" onchange="${pwH_.refresh}"><option value="">${escapeHtml(emptyLabel)}</option>${missing}${groups}</select>`;
+}
+function pwCatSel_(k, val) {
+  return `<select class="pw-in" data-k="${k}" onchange="${pwH_.refresh}"><option value="">請選分類</option>${pmCatOptions_(val)}</select>`;
+}
+function pwSizeSel_(val) {
+  return `份量 <select class="pw-in" data-k="targetSize" onchange="${pwH_.refresh}"><option value=""${!val ? ' selected' : ''}>不限</option><option value="M"${val === 'M' ? ' selected' : ''}>M</option><option value="L"${val === 'L' ? ' selected' : ''}>L</option></select>`;
+}
+function pwSel_(k, val, options, rerender) {
+  return `<select class="pw-in" data-k="${k}" onchange="${rerender ? pwH_.rerender : pwH_.refresh}">${options.map(([v, t]) => `<option value="${escapeHtml(v)}"${v === val ? ' selected' : ''}>${escapeHtml(t)}</option>`).join('')}</select>`;
+}
+function pwNum_(k, val, attrs) {
+  return `<input class="pw-in" type="number" data-k="${k}" value="${escapeHtml(val === '' || val == null ? '' : String(val))}" ${attrs || ''} oninput="${pwH_.refresh}">`;
+}
+function pwOptsInput_(val, deluxe) {
+  return `<span class="pw-line">客製化要含 <input class="pw-in pw-wide" data-k="requireOpts" value="${escapeHtml(val || '')}" placeholder="不限（例：正常冰、少冰）" oninput="${pwH_.refresh}">
+    <button type="button" class="pm-mini-btn" onclick="${pwH_.opts}('ice')">限冰飲</button>${deluxe ? `<button type="button" class="pm-mini-btn" onclick="${pwH_.opts}('deluxe')">豪華升級</button>` : ''}
+    <button type="button" class="pm-mini-btn" onclick="${pwH_.opts}('')">不限</button></span>`;
+}
+function pwSetOpts_(kind, root, after) {
+  const el = document.querySelector((root || '#pw-rule') + ' [data-k="requireOpts"]'); if (!el) return;
+  if (kind === 'ice') el.value = '正常冰、少冰、微冰、小碎冰';
+  else if (kind === 'deluxe') {   // 跟原本編輯框「豪華升級」按鈕同一份(菜單的豪華經濟升級餐選項)
+    const g = (typeof mcOptionGroups !== 'undefined' && mcOptionGroups && mcOptionGroups.deluxe_upgrade) || null;
+    el.value = (g && (g.options || []).length ? g.options.map(o => o.name) : ['美式狂想 x 雙人脆薯', '美式狂想 x 九塊雞塊', '美式狂想 x 十粒鍋貼']).join('、');
+  } else el.value = '';
+  (after || pwRefreshPreview_)();
+}
+// ② 規則：每種類型一句話，空格就是下拉／數字
+function pwRuleHtml_(type, f) {
+  const L = s => `<div class="pw-line">${s}</div>`;
+  if (type === 'cash') return L(`結帳時折抵 $ ${pwNum_('amount', f.amount, 'min="1"')} 元`);
+  if (type === 'orderPct') return L(`整張訂單打 ${pwNum_('amount', f.amount, 'min="10" max="99"')} 折`) + '<div class="pm-tip">95＝打95折、9折請填 90；只折基準價，用原價算；只在門市 POS 用</div>';
+  if (type === 'freeItem') return L(`免費兌換一份 ${pwItemSel_('targetItem', f.targetItem, '不指定（店員在 POS 點哪一項就免費）')} ${pwSizeSel_(f.targetSize)}`)
+    + '<div class="pm-tip">兌換券要選品項（線上購物車品名、份量都一樣才能用）；不指定＝只在 POS 用（例：公關費、單品免費）</div>';
+  if (type === 'second') return L(`範圍 ${pwSel_('_scope', f._scope, [['cat', '同一個分類'], ['item', '指定一個品項'], ['none', '不指定（店員在 POS 選）']], true)}
+      ${f._scope === 'cat' ? pwCatSel_('targetCat', f.targetCat) : f._scope === 'item' ? pwItemSel_('targetItem', f.targetItem, '請選品項') : ''}
+      ${f._scope !== 'none' ? pwSizeSel_(f.targetSize) : ''}`)
+    + L(`買兩件，第二件 ${pwSel_('effect', f.effect, [['discount50', '打5折'], ['discount60', '打6折']])}
+      ${f._scope === 'item' ? '（同一款兩件一組，客製化可以不同）' : pwSel_('pairMode', f.pairMode === '同款' ? '同款' : '', [['', '任兩件都算（不同款也可以）'], ['同款', '要同一款（客製化可以不同）']])}`);
+  if (type === 'bogo') return L(`範圍 ${pwSel_('_scope', f._scope === 'cat' ? 'cat' : 'item', [['item', '指定品項'], ['cat', '同一個分類']], true)}
+      ${f._scope === 'cat' ? pwCatSel_('targetCat', f.targetCat) : pwItemSel_('targetItem', f.targetItem, '請選品項') + ' 或 ' + pwItemSel_('targetItem2', f.targetItem2, '（不用第二個品項）')}
+      ${pwSizeSel_(f.targetSize)}`)
+    + L(`${pwSel_('effect', f.effect === 'addOne' ? 'addOne' : 'free', [['free', '買一送一（第二份免費）'], ['addOne', '加一元多一件（第二份 $1）']])}，兩件要同款同客製化`)
+    + pwOptsInput_(f.requireOpts, false);
+  if (type === 'gift') {
+    const byCat = f._by === 'cat';
+    return L(`${pwSel_('_by', byCat ? 'cat' : 'item', [['item', '每點一份指定餐點'], ['cat', '點某個分類的餐點']], true)}
+        ${byCat ? '點 ' + pwCatSel_('requireCat', f.requireCat) + ' 的餐點' : '點 ' + pwItemSel_('requireItem', f.requireItem, '請選點什麼')}`)
+      + (byCat ? '' : pwOptsInput_(f.requireOpts, true))
+      + L(`就送一份 ${pwItemSel_('targetItem', f.targetItem, '請選送什麼')} ${byCat ? '' : '或 ' + pwItemSel_('targetItem2', f.targetItem2, '（只送一種）') + '（顧客二選一）'} ${pwSizeSel_(f.targetSize)}`)
+      + (byCat ? `<label class="pw-line" style="cursor:pointer;"><input type="checkbox" data-k="setOnly" ${f.setOnly ? 'checked' : ''} onchange="${pwH_.refresh}"> 只算套餐（點單點不送）</label>`
+        + `<label class="pw-line" style="cursor:pointer;"><input type="checkbox" data-k="autoAddItem" ${f.autoAddItem ? 'checked' : ''} onchange="${pwH_.refresh}"> 店員按 POS 按鈕時，自動把贈品加進訂單</label>`
+        : '<div class="pm-tip">點幾份送幾份。節氣升級加碼：點當月美X＋按「豪華升級」＋送兩種贈品二選一（飲料選份量 M）</div>');
+  }
+  if (type === 'spend') return L(`${pwItemSel_('targetItem', f.targetItem, '請選品項')} ${pwSizeSel_(f.targetSize)} 以外的餐點，每滿 $ ${pwNum_('spendStep', f.spendStep, 'min="1"')}`)
+    + L(`就 ${pwSel_('effect', f.effect === 'free' ? 'free' : 'amountOff', [['amountOff', '折'], ['free', '免費送']], true)} ${f.effect === 'free' ? '' : '$ ' + pwNum_('amount', f.amount, 'min="1"')} 一份`);
+  if (type === 'tier') return L(`${`<select class="pw-in" data-flag="minTier" onchange="${pwH_.rerender}"><option value="">請選等級</option>${mtTiers.map(t => `<option value="${escapeHtml(t.name)}"${pwState_.flags.minTier === t.name ? ' selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}${pwState_.flags.minTier && !mtTiers.some(t => t.name === pwState_.flags.minTier) ? `<option value="${escapeHtml(pwState_.flags.minTier)}" selected>${escapeHtml(pwState_.flags.minTier)}</option>` : ''}</select>`} 以上的會員`)
+    + L(`買 ${pwNum_('minQty', f.minQty === '' ? 1 : f.minQty, 'min="1"')} 份 ${pwItemSel_('targetItem', f.targetItem, '請選品項')} ${pwSizeSel_(f.targetSize)}`)
+    + L(`其中 1 份 ${pwSel_('effect', ['free', 'discount60', 'discount50'].indexOf(f.effect) !== -1 ? f.effect : 'free', [['free', '免費'], ['discount50', '打5折'], ['discount60', '打6折']])}，每張單一次`)
+    + '<div class="pm-tip">達等級的會員結帳自動套用；每月換品項時改名稱與品項</div>';
+  return '';
+}
+// ④ 怎麼拿到、誰能用
+function pwFlagsHtml_(type, g) {
+  const tier = type === 'tier';
+  const ck = (k, on, label) => `<label><input type="checkbox" data-flag="${k}" ${on ? 'checked' : ''} onchange="pwRerender_()"> ${label}</label>`;
+  return `
+    ${tier ? '<div class="pm-tip" style="margin-bottom:6px;">等級優惠固定是：POS 按鈕、不能手動贈送（結帳自動套用）</div>' : `
+    <div class="pm-checks">${ck('showAsButton', g.showAsButton, '門市平板顯示成按鈕（店員直接點）')}${ck('manualGrantable', g.manualGrantable, '可手動贈送給會員')}</div>`}
+    <div class="pm-checks">${ck('exclusive', g.exclusive, '不併用（線上同一張單不能再用其他券）')}
+      ${MC_STORE_ID !== '__brand__' ? ck('locked', g.locked, '鎖定，不被品牌同步覆蓋') : ''}</div>
+    <div class="pm-grid2">
+      ${tier ? '' : `<label class="mc-field">最低適用等級
+        <select data-flag="minTier" onchange="pwRerender_()"><option value="">不限</option>${mtTiers.map(t => `<option value="${escapeHtml(t.name)}"${g.minTier === t.name ? ' selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}</select>
+        <span class="pm-tip">限定發券／兌換用，不影響 POS 按鈕</span></label>`}
+      ${g.minTier ? `<label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;color:#222;font-size:0.85rem;"><input type="checkbox" data-flag="allowNonMember" ${g.allowNonMember !== false ? 'checked' : ''} onchange="pwRefreshPreview_()"> 未加入會員也能用</label>` : ''}
+    </div>`;
+}
+// 這張券用在哪(活動、集點禮、生日禮、註冊禮)；用在兩個以上的地方要提醒「改了會一起變」
+function pwUsageHtml_(name) {
+  const list = [];
+  (pmActs_ || []).filter(a => a.promo === name).forEach(a => list.push('活動「' + a.title + '」' + (a.status === '停用' ? '（停用中）' : '')));
+  (pgGifts || []).filter(g => g.voucherType === name).forEach(g => list.push('集點禮（' + g.points + ' 點）'));
+  if ((bgGifts || []).some(g => g.voucherType === name)) list.push('生日禮');
+  if ((rgGifts || []).some(g => g.voucherType === name)) list.push('註冊禮');
+  if (!list.length) return '';
+  return `<div class="pw-usage">🔗 這張券用在：${escapeHtml(list.join('、'))}${list.length > 1 ? '<br><b style="color:#c0392b;">⚠ 這幾個地方共用同一張券，改了會一起變</b>' : ''}</div>`;
+}
+function renderPwEditor_() {
+  const el = document.getElementById('pm-editor');
+  const isNew = pmCurrentName === null, s = pwState_;
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+      <h3 style="margin:0;font-size:1rem;">${isNew ? '新增優惠券' : '編輯優惠券'}</h3>
+      <button type="button" class="pw-adv-link" onclick="pwGoAdvanced_()">進階：顯示所有欄位</button>
+    </div>
+    ${isNew ? '' : pwUsageHtml_(pmCurrentName)}
+    <label class="mc-field" style="margin-top:8px;">名稱（POS 按鈕、顧客券夾上看到的）<input id="pw-name" value="${escapeHtml(s.name || '')}" oninput="pwRefreshPreview_()"></label>
+    <div class="pw-step">① 選類型</div>
+    <div class="pw-cards">${PW_TYPES_.map(t => `<button type="button" class="pw-card${s.type === t.key ? ' on' : ''}" onclick="pwPickType_('${t.key}')"><span class="pw-ic">${t.icon}</span><b>${t.title}</b><small>例：${escapeHtml(t.eg)}</small></button>`).join('')}</div>
+    ${!s.type ? '<div class="empty-hint" style="margin-top:12px;">先選一種類型</div>' : `
+    <div class="pw-step">② 規則</div>
+    <div class="pw-rule" id="pw-rule">${pwRuleHtml_(s.type, s.f)}</div>
+    <div class="pw-step">③ 期間與狀態</div>
+    <div class="pm-grid3">
+      <label class="mc-field">狀態<select data-flag="status" onchange="pwRefreshPreview_()"><option value="啟用"${s.flags.status !== '停用' ? ' selected' : ''}>啟用</option><option value="停用"${s.flags.status === '停用' ? ' selected' : ''}>停用</option></select></label>
+      <label class="mc-field">生效日(選填)<input type="date" data-flag="startDate" value="${escapeHtml(s.flags.startDate || '')}" onchange="pwRefreshPreview_()"></label>
+      <label class="mc-field">到期日(選填)<input type="date" data-flag="endDate" value="${escapeHtml(s.flags.endDate || '')}" onchange="pwRefreshPreview_()"></label>
+    </div>
+    <div class="pm-tip" style="margin:-6px 0 4px;">期間外不顯示 POS 按鈕、不自動套用、不能贈送或兌換；顧客已拿到的券照常可用。不填＝永久。活動綁的券，哪幾天有優惠由活動決定</div>
+    <div class="pw-step">④ 怎麼拿到、誰能用</div>
+    <div id="pw-flags">${pwFlagsHtml_(s.type, s.flags)}</div>
+    <div class="pw-step">⑤ 預覽</div>
+    <div class="pw-preview" id="pw-preview"></div>
+    <div style="margin:14px 0;">
+      <button type="button" class="mc-save-btn" onclick="pwSave_()">儲存</button>
+      ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deletePromo()">刪除</button>' : ''}
+    </div>`}
+  `;
+  if (s.type) pwRefreshPreview_();
+}
+// 畫面上的值讀回 pwState_(換類型、重畫時保留已經填的)
+function pwReadAll_() {
+  const s = pwState_; if (!s) return;
+  const nm = document.getElementById('pw-name'); if (nm) s.name = nm.value;
+  const val = e => e.type === 'checkbox' ? e.checked : (e.type === 'number' ? (e.value === '' ? '' : Number(e.value)) : e.value);
+  document.querySelectorAll('#pm-editor [data-k]').forEach(e => { s.f[e.dataset.k] = val(e); });
+  document.querySelectorAll('#pm-editor [data-flag]').forEach(e => { s.flags[e.dataset.flag] = val(e); });
+}
+function pwCurrentPayload_() {
+  const s = pwState_, isNew = pmCurrentName === null;
+  const flags = Object.assign({}, s.flags, { locked: MC_STORE_ID !== '__brand__' ? !!s.flags.locked : false });
+  return pwPayload_(s.type, String(s.name || '').trim(), s.f, flags, isNew ? undefined : pmCurrentName, MC_STORE_ID, MC_STATUS);
+}
+function pwRefreshPreview_() {
+  const s = pwState_; if (!s || !s.type) return;
+  pwReadAll_();
+  const box = document.getElementById('pw-preview'); if (!box) return;
+  const P = pwCurrentPayload_(), err = pwValidate_(s.type, P, s.f);
+  const where = [];
+  if (P.status === '停用') where.push('⚠ 停用中：哪裡都不會出現');
+  if (s.type === 'tier') where.push('達到 ' + (P.minTier || '?') + ' 以上的會員，結帳自動套用（不是 POS 手動按鈕）');
+  else {
+    if (P.showAsButton) where.push('門市平板「優惠券」分類有這顆按鈕');
+    if (P.manualGrantable) where.push('可以在後台手動送給會員');
+    if (!P.showAsButton) where.push('不是 POS 按鈕：顧客要靠集點、生日禮、註冊禮、活動或贈送拿到');
+    if (P.minTier) where.push('限 ' + P.minTier + ' 以上' + (P.allowNonMember ? '（未加入會員也能用）' : '（不開放非會員）'));
+  }
+  if (P.exclusive) where.push('線上同一張單不能再用其他券');
+  const period = pmPeriodTag_(P);
+  if (period) where.push('期間：' + period);
+  box.innerHTML = `
+    <div class="pw-sent">${escapeHtml(P.name || '（還沒取名）')}：${escapeHtml(pwSentence_(s.type, P, mcShortCatName))}</div>
+    <div style="color:var(--muted);font-size:0.78rem;">試算</div>
+    <ul>${pwTrial_(s.type, P, pwPriceOf_, pwFirstOf_, mcShortCatName).map(t => '<li>' + escapeHtml(t) + '</li>').join('')}</ul>
+    <div style="color:var(--muted);font-size:0.78rem;margin-top:6px;">出現在哪</div>
+    <ul>${where.map(t => '<li>' + escapeHtml(t) + '</li>').join('')}</ul>
+    ${err ? `<div class="pw-err">⚠ ${escapeHtml(err)}</div>` : ''}`;
+}
+// 下拉選了會改變句子長相的(範圍、點品項／點分類、折／免費、勾選框)：整段重畫
+function pwRerender_() { pwReadAll_(); renderPwEditor_(); }
+function pwPickType_(key) {
+  pwReadAll_();
+  pwState_.type = key;
+  pwTypeDefaults_(key, pwState_.f);
+  renderPwEditor_();
+}
+// 換類型時：效果、範圍不適用這一類就換成預設(優惠券頁、活動編輯框建新券共用)
+function pwTypeDefaults_(key, f) {
+  if (key === 'second' && ['discount50', 'discount60'].indexOf(f.effect) === -1) f.effect = 'discount50';
+  if (key === 'bogo' && ['free', 'addOne'].indexOf(f.effect) === -1) f.effect = 'free';
+  if (key === 'spend' && ['free', 'amountOff'].indexOf(f.effect) === -1) f.effect = 'amountOff';
+  if (key === 'tier' && ['free', 'discount50', 'discount60'].indexOf(f.effect) === -1) f.effect = 'free';
+  if (key === 'tier' && !(Number(f.minQty) >= 1)) f.minQty = 1;
+  const noTarget = !f.targetCat && !f.targetItem && !f.targetItem2;   // 還沒選範圍時：第二件打折預設「同一個分類」、買一送一預設「指定品項」
+  if (key === 'second' && (noTarget || !f._scope)) f._scope = 'cat';
+  if (key === 'bogo' && (noTarget || f._scope === 'none')) f._scope = 'item';
+}
+function pwGoAdvanced_() {
+  pwReadAll_();
+  if (pmCurrentName !== null || !pwState_.type || confirm('新增中的內容不會帶到進階編輯框，確定要切換嗎？')) { pwState_.advanced = true; renderPmEditor(); }
+}
+function pwSave_() {
+  const s = pwState_; if (!s || !s.type) return;
+  pwReadAll_();
+  const P = pwCurrentPayload_(), err = pwValidate_(s.type, P, s.f);
+  if (err) { alert(err); return; }
+  apiPost({ action: 'upsertPromo', promo: P }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    pmCurrentName = P.name;
+    pwState_ = null;   // 存完照資料庫讀回來的重新判斷
+    return loadPromos();
+  }).catch(e => alert('儲存失敗：' + e.message));
 }
 
 // ---- 加價購(2026-09-27老闆定案，設計見 線上點餐加購設計_2026-09-27.md) ----

@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>【測試版】美寶美食館 POS功能（店家端）</title>
+<title>【測試版】POS功能（店家端）</title>
 <style>
   :root { --brand: #e8632c; --bg: #f5f5f5; --muted: #888; --border: #eee0d4; --card: #fff; }
   * { box-sizing: border-box; }
@@ -39,6 +39,12 @@
   .pos-cart-lines-scroll { flex:1 1 auto; overflow-y:auto; min-height:110px; }
   .pos-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:20; align-items:center; justify-content:center; }
   .pos-overlay.open { display:flex; }
+  /* 11-16 (2o) 會員電話大數字鍵：蓋在電話格下面，不推動訂單清單 */
+  .pos-numpad { position:absolute; top:100%; left:0; right:0; z-index:15; margin-top:4px; padding:6px; background:#fff; border:1px solid var(--border); border-radius:10px; box-shadow:0 6px 18px rgba(0,0,0,0.18); display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; }
+  .pos-numpad button { height:52px; font-size:1.5rem; font-weight:bold; border:1px solid var(--border); border-radius:8px; background:#fafafa; color:#333; cursor:pointer; padding:0; touch-action:manipulation; }
+  .pos-numpad button:active { background:#ffe3d3; }
+  .pos-numpad button.fn { font-size:1rem; font-weight:normal; color:#555; }
+  .pos-numpad button.close { grid-column:1 / -1; height:40px; background:#fff; }
   #pos-drink-overlay { z-index:25; }
   .pos-sheet { background:#fff; width:100%; max-width:420px; max-height:85vh; overflow-y:auto; border-radius:16px; padding:16px; }
   .pos-cart-line { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
@@ -91,6 +97,11 @@
   .pos-pay-btn.active { background:var(--brand); color:#fff; border-color:var(--brand); font-weight:600; }
   .pos-pay-btn.warn { border-color:#c0392b; color:#c0392b; }
   .pos-pay-btn.warn.active { background:#c0392b; border-color:#c0392b; color:#fff; }
+  /* 11-16 出單機設定頁分塊 */
+  .prn-card { border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:10px; background:#fff; }
+  .prn-card-h { font-size:0.9rem; font-weight:700; margin:0 0 8px; }
+  .prn-note { font-size:0.8rem; line-height:1.5; color:#b35c00; background:#fff6e5; border:1px solid #f3d19c; border-radius:8px; padding:6px 10px; margin:8px 0 0; }
+  #prn-dirty { margin:0 0 8px; color:#c62828; background:#fdecea; border-color:#e0a19c; }
   .revenue-num { font-size:1.6rem; font-weight:700; color:var(--brand); }
   .order-card { display:flex; justify-content:space-between; align-items:center; padding:10px; border:1px solid #eee; border-radius:8px; margin-bottom:8px; }
   .order-card .meta { font-size:0.85rem; color:#666; }
@@ -120,6 +131,12 @@
   .pmg-tile:disabled { background:#f2f2f2; color:#999; border-style:dashed; cursor:default; }
   .pmg-soon { display:inline-block; font-size:0.68rem; background:#ddd; color:#666; padding:1px 6px; border-radius:6px; margin-top:4px; }
   .pmg-sub { display:none; margin:8px 0 0; padding:0; box-shadow:none; }
+  /* 11-13 今日報表 */
+  .tr-cards { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .tr-card { border:1px solid var(--border); border-radius:8px; padding:8px; } .tr-card .t { font-size:0.72rem; color:var(--muted); } .tr-card .v { font-size:1.1rem; font-weight:700; }
+  .tr-h { font-size:0.85rem; font-weight:600; margin:12px 0 4px; }
+  .tr-table { width:100%; border-collapse:collapse; font-size:0.82rem; } .tr-table th { text-align:right; color:var(--muted); font-weight:400; padding:3px 4px; border-bottom:1px solid var(--border); }
+  .tr-table td { text-align:right; padding:3px 4px; border-bottom:1px solid #f2f2f2; } .tr-table td:first-child, .tr-table th:first-child { text-align:left; }
   .pmg-kv { display:grid; grid-template-columns:110px 1fr; gap:6px 8px; font-size:0.86rem; }
   .pmg-kv div:nth-child(odd) { color:var(--muted); }
   .soon-card { opacity:.6; border:1px dashed #ccc; }
@@ -127,6 +144,7 @@
 </style>
 </head>
 <body>
+<div style="background:#ff9800;color:#fff;font-size:12px;padding:4px 10px;text-align:center;">🧪 示範門市測試版：資料寫進新後端，不是正式營業用</div>
 <script>
 // 2026-09-25老闆定案：拿掉到期日(原本2026/12/31到期後POS/後台/出單頁會全部打不開，是測試期的預覽期限，正式營運不該留)
 // 密碼閘門（僅擋一般不相關人員誤開，前端密碼看得到原始碼，不是真資安防護）
@@ -139,7 +157,7 @@
   gate.innerHTML=`
     <div style="background:#fff;border-radius:14px;padding:32px 28px;width:300px;box-shadow:0 8px 32px rgba(0,0,0,.28);text-align:center">
       <div style="width:52px;height:52px;border-radius:50%;background:#FFF0E8;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:24px">🔒</div>
-      <div style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">示範門市 POS功能（測試版）</div>
+      <div id="gate-title" style="font-size:15px;font-weight:500;color:#222;margin-bottom:2px">示範門市 POS功能（測試版）</div>
       <div style="font-size:11px;color:#888;margin-bottom:20px">輸入通行密碼繼續使用（POS功能）</div>
       <input type="password" id="gate-pw" placeholder="通行密碼" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;text-align:center;margin-bottom:6px;outline:none">
       <div id="gate-err" style="font-size:10px;color:#A32D2D;min-height:16px;margin-bottom:10px"></div>
@@ -147,6 +165,9 @@
       <div style="font-size:10px;color:#aaa;margin-top:16px">忘記請聯繫老闆</div>
     </div>`;
   document.body.appendChild(gate);
+  // 2026-11-16 (15h) 去寫死：標題先用這台裝置存過的門市資料(abao_store_profile_店代號)的店名，例如「A-Bao溪湖培英店 POS後台」；
+  //   沒存過(新裝置)就顯示傳進來的中性標題。只改顯示，AUTH_KEY 不變，已經輸過密碼的裝置不用重輸
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('abao_store_profile_')===0){const p=JSON.parse(localStorage.getItem(k)||'null');if(p&&p.displayName){document.getElementById('gate-title').textContent=p.displayName+' POS功能';break;}}}}catch(e){}
   function trySubmit(){
     const val=document.getElementById('gate-pw').value;
     if(val===SITE_PASSWORD){
@@ -164,11 +185,10 @@
 })();
 </script>
 
-<div style="background:#ff9800;color:#fff;font-size:12px;padding:4px 10px;text-align:center;">🧪 示範門市測試版：資料寫進新後端，不是正式營業用</div>
 
 <header style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
   <div>
-    <h1 data-store="displayName">A-Bao溪湖培英店</h1>
+    <h1 data-store="displayName"></h1>
     <div class="sub">POS功能（店家端，非顧客點餐頁）</div>
   </div>
   <!-- 印單模組：用iframe隔離，跟POS的JS完全獨立執行環境，不會撞名/互相拖累。
@@ -209,7 +229,7 @@
 <div class="pos-overlay" id="lp-overlay" onclick="if(event.target===this)lpCloseList_()">
   <div class="pos-sheet" style="max-width:560px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-      <h2 style="margin:0;font-size:1.1rem">⚠️ LINE Pay 收款未完成</h2>
+      <h2 id="lp-list-title" style="margin:0;font-size:1.1rem">⚠️ LINE Pay 收款未完成</h2>
       <button type="button" class="btn btn-secondary" onclick="lpCloseList_()">關閉</button>
     </div>
     <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">這些單還沒確定收到錢，<b>先不要做餐</b>。按「重新查詢」看顧客有沒有付款成功；系統每幾分鐘也會自動再查，查到已付款會自動補印出單。</div>
@@ -229,7 +249,21 @@
     <div id="lp-scan-btns" style="display:flex;flex-direction:column;gap:6px"></div>
   </div>
 </div>
+<!-- 11-18 (3d) 線下TWQR：平板顯示 QR，顧客用手機錢包(全支付、台灣Pay、街口…)掃 -->
+<div class="pos-overlay" id="tq-overlay">
+  <div class="pos-sheet" style="max-width:460px;text-align:center">
+    <h2 style="margin:0 0 2px;font-size:1.15rem">請顧客用手機錢包掃 QR 付款</h2>
+    <div style="font-size:0.8rem;color:var(--muted)">全支付、台灣Pay、街口、各家銀行 App 都可以掃</div>
+    <div id="tq-amount" style="font-size:1.6rem;font-weight:700;color:var(--brand);margin:6px 0"></div>
+    <div id="tq-qr" style="width:260px;height:260px;max-width:100%;margin:4px auto;display:flex;align-items:center;justify-content:center;background:#fff"></div>
+    <div id="tq-timer" style="font-size:0.95rem;color:var(--muted);min-height:1.3em"></div>
+    <div id="tq-msg" style="min-height:2.6em;margin:8px 0;font-size:0.95rem"></div>
+    <div id="tq-btns" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+</div>
 <div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
+<!-- 11-15 主畫面也看得到線上點餐暫停／忙碌(原本只在上下架管理裡)；點了打開上下架管理 -->
+<div id="online-status-bar" class="status-banner" style="display:none;cursor:pointer" onclick="openPosLocalItemStatusManager()"></div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
   <div class="pos-col pos-col-items">
@@ -242,9 +276,19 @@
   <div class="pos-col pos-col-cart">
     <button type="button" class="pos-back-btn" onclick="setPosStep('items')">← 返回點餐</button>
     <div class="pos-col-title">會員</div>
+    <div id="member-phone-wrap" style="position:relative;">
     <div class="row">
-      <input type="tel" id="member-phone-input" placeholder="顧客電話" maxlength="10" inputmode="numeric" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;" oninput="onMemberPhoneInput_()">
+      <input type="tel" id="member-phone-input" placeholder="顧客電話，或掃會員 QR" maxlength="10" inputmode="none" readonly autocomplete="off" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;background:#fff;" onfocus="posAutoNewOrder_(); posNumpadShow_()" onclick="posNumpadShow_()" onkeydown="posPhoneKey_(event)" oninput="onMemberPhoneInput_()">
       <button class="btn btn-primary" onclick="lookupMember()">查詢</button>
+    </div>
+    <!-- 11-16 (2o) POS 自己的大數字鍵：系統鍵盤有時跳撥號鍵盤、有時整排英文 → 電話格改 inputmode="none" 不叫系統鍵盤，點格子跳這組 0～9 -->
+    <div id="pos-numpad" class="pos-numpad" style="display:none;" onpointerdown="event.preventDefault()">
+      <button type="button" onclick="posNumpadKey_('1')">1</button><button type="button" onclick="posNumpadKey_('2')">2</button><button type="button" onclick="posNumpadKey_('3')">3</button>
+      <button type="button" onclick="posNumpadKey_('4')">4</button><button type="button" onclick="posNumpadKey_('5')">5</button><button type="button" onclick="posNumpadKey_('6')">6</button>
+      <button type="button" onclick="posNumpadKey_('7')">7</button><button type="button" onclick="posNumpadKey_('8')">8</button><button type="button" onclick="posNumpadKey_('9')">9</button>
+      <button type="button" class="fn" onclick="posNumpadKey_('clear')">清除</button><button type="button" onclick="posNumpadKey_('0')">0</button><button type="button" class="fn" onclick="posNumpadKey_('back')">⌫</button>
+      <button type="button" class="fn close" onclick="posNumpadHide_(true)">收起</button>
+    </div>
     </div>
     <div id="member-info"></div>
     <div class="pos-col-title">目前訂單</div>
@@ -260,6 +304,8 @@
       <div id="pos-payment-method-group" style="display:flex;flex-wrap:wrap;gap:8px;">
         <!-- 10-22 LINE Pay 門市反掃：後台「付款方式設定」開了才出現；斷網反灰 -->
         <button type="button" class="pos-pay-btn" id="pos-pay-lpscan" data-method="線下LINEPay" style="display:none" onclick="setPosPaymentMethod_('線下LINEPay')">線下LINEPay</button>
+        <!-- 11-18 (3d) 線下TWQR：後台開了、這間店有 ezPay 收款帳戶才出現；斷網反灰 -->
+        <button type="button" class="pos-pay-btn" id="pos-pay-twqr" data-method="線下TWQR" style="display:none" onclick="setPosPaymentMethod_('線下TWQR')">線下TWQR</button>
         <!-- 10-22 其餘按鈕由 posPayBtnsRender_() 依後台「線下收款」清單產生(現金永遠在) -->
       </div>
       <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個顧客現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
@@ -443,7 +489,7 @@
       </div>
       <div class="pmg-grp">帳務</div>
       <div class="pmg-grid">
-        <button type="button" class="pmg-tile" disabled><span class="ic">📊</span>報表<br><span class="pmg-soon">準備中</span></button>
+        <button type="button" class="pmg-tile" onclick="openTabReport_()"><span class="ic">📊</span>報表</button>
         <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
       </div>
       <div class="pmg-grp">系統</div>
@@ -477,36 +523,57 @@
       <div id="pmg-ver-body"><div class="empty-hint">載入中...</div></div>
     </section>
 
+    <!-- 11-13 今日報表：平板只看今天、不匯出；完整的營業銷售／收款方式報表在後台 POS管理 → 報表 -->
+    <section class="pmg-sub" id="pmg-sub-report">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span id="tr-date" style="font-size:0.78rem;color:var(--muted)"></span><span class="refresh-link" onclick="loadTabReport_()">重新整理</span></div>
+      <div id="tr-body"><div class="empty-hint">載入中...</div></div>
+    </section>
+
     <section class="pmg-sub" id="pmg-sub-printer">
+      <!-- 11-16 老闆：改成「① 出單機／② 杯貼機／③ 掃碼槍」三塊，測試鈕放回各自那塊；儲存鈕放在兩台印表機下面（一起存、一起試連）；掃碼槍不用存，只有掃一下測試 -->
       <div id="prn-status" class="pmg-today" style="margin-bottom:10px">讀取中…</div>
-      <div style="font-size:0.85rem;font-weight:600;margin:0 0 6px">出單方式（這台平板）</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <button type="button" class="pos-pay-btn" id="prn-mode-net" onclick="prnPickMode_('net')">🌐 網路出單機</button>
-        <button type="button" class="pos-pay-btn" id="prn-mode-bt" onclick="prnPickMode_('bt')">📶 藍牙</button>
-      </div>
-      <div id="prn-ip-row">
-        <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">出單機 IP（不知道號碼就按「🔎 自動搜尋」）</label>
-        <div style="display:flex;gap:8px">
-          <input type="text" id="prn-ip" inputmode="decimal" placeholder="例如 192.168.1.50" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;box-sizing:border-box;">
-          <button type="button" class="btn btn-secondary" id="prn-scan-btn" style="flex:none;padding:8px 12px" onclick="prnScan_()">🔎 自動搜尋</button>
+      <div class="prn-card">
+        <div class="prn-card-h">① 出單機（廚房單）</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button type="button" class="pos-pay-btn" id="prn-mode-net" onclick="prnPickMode_('net', true)">🌐 網路出單機</button>
+          <button type="button" class="pos-pay-btn" id="prn-mode-bt" onclick="prnPickMode_('bt', true)">📶 藍牙</button>
         </div>
-        <div id="prn-scan-res" style="display:none;font-size:0.82rem;margin-top:6px;line-height:1.6"></div>
-        <!-- 11-03 區網自動找出單機：出單機整台連不到超過 15 秒就在店裡 Wi-Fi 找，只找到 1 台才自動改 IP -->
-        <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin-top:8px"><input type="checkbox" id="prn-autofind" checked> 連不上時自動找出單機（Wi-Fi 機重開、出單機換了號碼會自己接回）</label>
+        <div id="prn-ip-row">
+          <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">出單機 IP（不知道號碼就按「🔎 自動搜尋」）</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="prn-ip" inputmode="decimal" placeholder="例如 192.168.1.50" oninput="prnMarkDirty_()" style="flex:1;min-width:0;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;box-sizing:border-box;">
+            <button type="button" class="btn btn-secondary" id="prn-scan-btn" style="flex:none;padding:8px 12px" onclick="prnScan_()">🔎 自動搜尋</button>
+          </div>
+          <div id="prn-scan-res" style="display:none;font-size:0.82rem;margin-top:6px;line-height:1.6"></div>
+          <!-- 11-03 區網自動找出單機：出單機整台連不到超過 15 秒就在店裡 Wi-Fi 找，只找到 1 台才自動改 IP -->
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin-top:8px"><input type="checkbox" id="prn-autofind" checked onchange="prnMarkDirty_()"> 連不上時自動找出單機（Wi-Fi 機重開、出單機換了號碼會自己接回）</label>
+        </div>
+        <div id="prn-bt-note" class="prn-note" style="display:none"></div>
+        <button class="btn btn-secondary" id="prn-test-btn" style="width:100%;padding:10px;margin-top:10px" onclick="prnTest_()">🖨 印一張測試單</button>
       </div>
-      <div style="font-size:0.85rem;font-weight:600;margin:14px 0 6px">飲料杯貼標籤機</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <button type="button" class="pos-pay-btn" id="lbl-mode-off" onclick="lblPickMode_('off')">不使用</button>
-        <button type="button" class="pos-pay-btn" id="lbl-mode-bt" onclick="lblPickMode_('bt')">📶 藍牙標籤機</button>
+      <div class="prn-card">
+        <div class="prn-card-h">② 飲料杯貼機</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button type="button" class="pos-pay-btn" id="lbl-mode-off" onclick="lblPickMode_('off', true)">不使用</button>
+          <button type="button" class="pos-pay-btn" id="lbl-mode-bt" onclick="lblPickMode_('bt', true)">📶 藍牙標籤機</button>
+        </div>
+        <div id="lbl-bt-row">
+          <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">杯貼機藍牙名稱（平板「設定 → 藍牙」先配對好，名稱照藍牙清單填，一個字都不能差）</label>
+          <input type="text" id="lbl-bt" placeholder="例如 XP-420B" oninput="prnMarkDirty_()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;box-sizing:border-box;">
+          <div style="font-size:0.76rem;color:var(--muted);margin-top:6px">平板一次只能連一台藍牙印表機：用藍牙杯貼機時，出單機要用「網路出單機」。</div>
+        </div>
+        <div id="lbl-bt-note" class="prn-note" style="display:none"></div>
+        <button class="btn btn-secondary" id="lbl-test-btn" style="width:100%;padding:10px;margin-top:10px" onclick="lblTest_()">🏷 印測試杯貼／看版面</button>
+        <div id="lbl-preview" style="display:none;text-align:center;margin-top:8px"><img id="lbl-preview-img" alt="杯貼預覽" style="width:240px;max-width:100%;border:1px dashed var(--border);border-radius:6px;image-rendering:pixelated"><div style="font-size:0.72rem;color:var(--muted)">40×30mm 實際大小約這張的 6 成</div></div>
       </div>
-      <div id="lbl-bt-row">
-        <label style="display:block;font-size:0.78rem;margin:0 0 4px;color:var(--muted)">標籤機藍牙名稱（平板系統藍牙先配對好；出單機要是網路出單機）</label>
-        <input type="text" id="lbl-bt" placeholder="例如 XP-420B" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;box-sizing:border-box;">
+      <div id="prn-dirty" class="prn-note" style="display:none">⚠ 設定改了還沒儲存：按下面「💾 儲存設定」才會生效，測試鈕也要存好才會用新設定</div>
+      <button class="btn btn-primary" style="width:100%;padding:12px;margin-top:2px" onclick="prnSave_()">💾 儲存設定<span style="display:block;font-size:0.76rem;font-weight:400;opacity:0.9">出單機、杯貼機一起存，存好自動試連兩台</span></button>
+      <div class="prn-card" style="margin-top:14px">
+        <div class="prn-card-h">③ 藍牙掃碼槍<span style="font-weight:400;font-size:0.76rem;color:var(--muted)">（平板系統直接連，這裡不用存）</span></div>
+        <input type="text" id="scan-test-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="點這格，再用掃碼槍掃任何條碼" onfocus="scanTestFocus_()" onblur="scanTestBlur_()" oninput="scanTestInput_()" onkeydown="scanTestKey_(event)" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:1rem;box-sizing:border-box;">
+        <div id="scan-test-res" style="font-size:0.85rem;margin-top:8px;line-height:1.6;color:var(--muted)">掃碼槍是平板系統當成鍵盤連的，網頁看不到有沒有連上，掃一下才知道。</div>
+        <div style="font-size:0.76rem;color:var(--muted);margin-top:6px;line-height:1.6">掃完要打字：按畫面左邊小條的 ⌨️ 叫出大鍵盤。小條要顯示「A」（英文），中文會把載具變成中文字。</div>
       </div>
-      <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:10px" onclick="prnSave_()">儲存並連線</button>
-      <button class="btn btn-secondary" id="prn-test-btn" style="width:100%;padding:10px;margin-top:6px" onclick="prnTest_()">🖨 印一張測試單</button>
-      <button class="btn btn-secondary" id="lbl-test-btn" style="width:100%;padding:10px;margin-top:6px" onclick="lblTest_()">🏷 杯貼版面預覽／印測試杯貼</button>
-      <div id="lbl-preview" style="display:none;text-align:center;margin-top:8px"><img id="lbl-preview-img" alt="杯貼預覽" style="width:240px;max-width:100%;border:1px dashed var(--border);border-radius:6px;image-rendering:pixelated"><div style="font-size:0.72rem;color:var(--muted)">40×30mm 實際大小約這張的 6 成</div></div>
       <div style="font-size:0.76rem;color:var(--muted);line-height:1.6;margin-top:8px">
         網路出單機：平板經店裡 Wi-Fi 直接送到出單機，<b>不經外網，斷網照印</b>（平板要保持連店裡 Wi-Fi）。第一次設定要在 Fully 設定開「Ignore SSL Errors」。<br>
         改設定需要店長以上 PIN；設定存在這台平板，後台「門市平板（出單方式）」看得到。
@@ -573,7 +640,7 @@
 
 <script>
 // 後端網址(2026-11-08 前端切換準備)：切換日用 05_腳本/切換後端.mjs 一次改 8 個檔(new 新後端／old 退回舊後端／check 檢查)，不要手改下面這行網址
-const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/"; // @@後端網址@@（測試版：固定指新後端）
+const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/"; // @@後端網址@@
 // 本機預覽測試口：只有在本機(localhost／直接開檔)網址加 ?api=new 才改打新後端、加 ?store=店代號 改測別間店(例 zz_demo_store)；正式網域一律忽略這兩個參數
 const DEV_QS_ = (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) ? new URLSearchParams(location.search) : new URLSearchParams();
 const ORDER_BACKEND_URL = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy05012003.workers.dev/' : BACKEND_URL_SET_;
@@ -594,9 +661,8 @@ function applyStoreProfile_(p) {
   if (p && p.storeId) { STORE_PROFILE_ = p; try { localStorage.setItem('abao_store_profile_' + STORE_ID, JSON.stringify(p)); } catch (e) {} }
   const prof = STORE_PROFILE_;
   if (prof && prof.shortName) TABLET_STORE_NAMES_[STORE_ID] = prof.shortName;
-  if (!prof && STORE_ID === 'meibao') return;
   document.querySelectorAll('[data-store]').forEach(el => { el.textContent = prof ? (prof[el.dataset.store] || '') : ''; });
-  if (prof && STORE_ID !== 'meibao') document.title = prof.displayName + ' POS功能（店家端）';
+  if (prof) document.title = prof.displayName + ' POS功能（店家端）';   // 11-14：店名從門市資料讀，不寫死
 }
 const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美1 花醬 牛肉培根 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美2 蜂蜜芥末 德式燻腸 捲餅"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美3 日式白醬 酥炸魚排 蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美4 雙層澳洲牛肉 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美5 雙層豬肉 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美6 清爽薯泥培根 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美7 泰式風味 鮮魚 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美8 日式咖哩 豬排 起司蛋堡"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美9 香濃雞排 起司法國土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美10 美味豬排 起司蛋總匯土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美11 千島醬 薯泥雞排 起司蛋土司"},{"category":"美式狂想套餐 SET MEALS ($129)","name":"美12 甜辣泰式 雞排 起司蛋捲餅"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"培根炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"香雞炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"火腿炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"烤肉炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"日式豬排炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"日式雞排炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"德式燻腸炒麵"},{"category":"PRIVATE FRIED NOODLES_私房炒麵系列","name":"泡菜燒肉炒麵"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定01 炒麵加蛋＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定02 美式湯餃＋烤肉蛋漢堡"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定03 炒麵加蛋＋雞塊"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定04 烤肉炒麵＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定05 卡拉雞腿起司巧巴達(原/辣)＋玉米濃湯"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定06 玉米起司特酥蛋餅＋米花雞球"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定07 烤肉蛋漢堡＋鍋貼"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定08 烤肉炒麵＋黃金香酥雞"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定09 炒麵加蛋＋黃金香酥雞"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定10 烤肉炒麵＋米花雞球"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定11 美式湯餃＋雞塊"},{"category":"A-BAO SELECTED SET_A-bao嚴選定食","name":"定12 玉米起司特酥蛋餅＋鍋貼"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜燒肉異國炒麵"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜豬排蛋堡"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜雞排捲"},{"category":"KIMCHI FESTIVAL_泡菜祭","name":"泡菜蛋餅"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"韓風玫瑰醬 鳳梨雞排堡"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"經典赤辣醬 鳳梨雞排堡"},{"category":"TROPICAL PINEAPPLE CHICKEN CHOP BURGER_熱帶鳳梨雞排堡","name":"蜂蜜芥末醬 鳳梨雞排堡"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"玉米起司"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"鮪魚玉米"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"鮪魚洋蔥"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"培根玉米起司"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"惡魔雙色拔絲"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"火腿肉鬆蔬食"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"火腿起司 佐花醬小黃瓜"},{"category":"CRISPY OMELETTE SERIES_特酥系列 x 超值自由配","name":"和洋豬排蔬食"},{"category":"BURGERS_漢堡","name":"玉米蛋"},{"category":"BURGERS_漢堡","name":"肉鬆蛋"},{"category":"BURGERS_漢堡","name":"豬肉蛋 (漢堡肉)"},{"category":"BURGERS_漢堡","name":"烤肉蛋 (里肌肉)"},{"category":"BURGERS_漢堡","name":"香雞蛋"},{"category":"BURGERS_漢堡","name":"牛肉蛋"},{"category":"BURGERS_漢堡","name":"總匯蛋 (里肌肉)"},{"category":"BURGERS_漢堡","name":"日式雞排蛋"},{"category":"BURGERS_漢堡","name":"日式豬排蛋"},{"category":"BURGERS_漢堡","name":"日式花枝排蛋"},{"category":"BURGERS_漢堡","name":"日式蝦排蛋"},{"category":"BURGERS_漢堡","name":"雞腿蛋 (原/辣)"},{"category":"TOAST_土司","name":"煎蛋"},{"category":"TOAST_土司","name":"玉米蛋"},{"category":"TOAST_土司","name":"肉鬆蛋"},{"category":"TOAST_土司","name":"起司蛋"},{"category":"TOAST_土司","name":"火腿蛋"},{"category":"TOAST_土司","name":"培根蛋"},{"category":"TOAST_土司","name":"鮪魚蛋"},{"category":"TOAST_土司","name":"烤肉蛋 (里肌肉)"},{"category":"TOAST_土司","name":"香雞蛋"},{"category":"TOAST_土司","name":"總匯蛋 (漢堡肉)"},{"category":"TOAST_土司","name":"雞腿蛋 (原/辣)"},{"category":"JAN SERIES_果醬磚研系列","name":"草莓"},{"category":"JAN SERIES_果醬磚研系列","name":"藍莓"},{"category":"JAN SERIES_果醬磚研系列","name":"奶酥"},{"category":"JAN SERIES_果醬磚研系列","name":"花生"},{"category":"JAN SERIES_果醬磚研系列","name":"奶油"},{"category":"JAN SERIES_果醬磚研系列","name":"巧克力"},{"category":"JAN SERIES_果醬磚研系列","name":"狠蒜"},{"category":"THICKCUT TOAST_厚片","name":"起司奶油"},{"category":"THICKCUT TOAST_厚片","name":"鮪魚洋蔥"},{"category":"THICKCUT TOAST_厚片","name":"燻雞起司"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"日式蔬食沙拉"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"日式咖哩"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"冰州魚排"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"大洋鮮魚"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"烤肉穀堡"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"孜然醬雞排"},{"category":"CEREAL GRAIN BURGERS_日式穀堡","name":"孜然醬豬排"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"火腿起司"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"蕃茄豬肉"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"苜蓿芽起司"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"陽光香雞"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"蔬食烤肉"},{"category":"SOFT FRENCH BREAD_法國麵包 ","name":"日式燻雞"},{"category":"BURRITO_蔬食捲餅","name":"香雞蕃茄"},{"category":"BURRITO_蔬食捲餅","name":"黃金烤肉"},{"category":"BURRITO_蔬食捲餅","name":"日式雞排"},{"category":"BURRITO_蔬食捲餅","name":"海味花枝"},{"category":"BURRITO_蔬食捲餅","name":"鮮味蝦排"},{"category":"BURRITO_蔬食捲餅","name":"美式雞腿 (原/辣)"},{"category":"PUFF PASTRY_起酥堡","name":"草莓起酥"},{"category":"PUFF PASTRY_起酥堡","name":"洋芋蔬食"},{"category":"PUFF PASTRY_起酥堡","name":"苜蓿芽玉米"},{"category":"PUFF PASTRY_起酥堡","name":"蕃茄蔬食"},{"category":"PUFF PASTRY_起酥堡","name":"蔬食烤肉"},{"category":"PAIN PERDU_法國土司 ","name":"日式培根"},{"category":"PAIN PERDU_法國土司 ","name":"深海鮪魚"},{"category":"PAIN PERDU_法國土司 ","name":"黃金烤肉"},{"category":"CHINESE OMELET_招牌蛋餅","name":"原味"},{"category":"CHINESE OMELET_招牌蛋餅","name":"肉鬆"},{"category":"CHINESE OMELET_招牌蛋餅","name":"玉米"},{"category":"CHINESE OMELET_招牌蛋餅","name":"起司"},{"category":"CHINESE OMELET_招牌蛋餅","name":"蔬食"},{"category":"CHINESE OMELET_招牌蛋餅","name":"洋蔥"},{"category":"CHINESE OMELET_招牌蛋餅","name":"火腿"},{"category":"CHINESE OMELET_招牌蛋餅","name":"培根"},{"category":"CHINESE OMELET_招牌蛋餅","name":"熱狗"},{"category":"CHINESE OMELET_招牌蛋餅","name":"鮪魚"},{"category":"CHINESE OMELET_招牌蛋餅","name":"烤肉"},{"category":"SALAD VEGETABLE_田園蔬果","name":"馬鈴薯土司"},{"category":"SALAD VEGETABLE_田園蔬果","name":"南瓜土司"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥蔬食鮪魚"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥苜蓿芽火腿"},{"category":"SALAD VEGETABLE_田園蔬果","name":"全麥蔬菜沙拉"},{"category":"SALAD VEGETABLE_田園蔬果","name":"田園蔬菜捲"},{"category":"CHINESE SNACKS_中式茶食","name":"荷包蛋"},{"category":"CHINESE SNACKS_中式茶食","name":"熱狗 (4條)"},{"category":"CHINESE SNACKS_中式茶食","name":"玉米濃湯"},{"category":"CHINESE SNACKS_中式茶食","name":"炒麵"},{"category":"CHINESE SNACKS_中式茶食","name":"鍋貼(5個)"},{"category":"CHINESE SNACKS_中式茶食","name":"雞塊 (4個)"},{"category":"CHINESE SNACKS_中式茶食","name":"蘿蔔糕 (2片)"},{"category":"CHINESE SNACKS_中式茶食","name":"薯餅 (4片)"},{"category":"CHINESE SNACKS_中式茶食","name":"米花雞球 (8個)"},{"category":"CHINESE SNACKS_中式茶食","name":"野菜豚炸餃(8個)"},{"category":"CHINESE SNACKS_中式茶食","name":"脆薯"},{"category":"CHINESE SNACKS_中式茶食","name":"美式湯麵"},{"category":"CHINESE SNACKS_中式茶食","name":"義響鐵板麵"},{"category":"CHINESE SNACKS_中式茶食","name":"黃金香酥雞"},{"category":"CHINESE SNACKS_中式茶食","name":"二折雞翅(3入/7入)"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"玄米檸檬綠茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨美人茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"檸檬黃金烏龍"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨美人鮮奶茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨烏龍鮮奶茶"},{"category":"FRESH FRUIT TEA COOL 2_果然鮮粹 Cool","name":"鳳梨玄米鮮奶綠"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"檸檬紅茶"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"檸檬綠茶"},{"category":"FRESH FRUIT TEA_鮮果茶 Cool","name":"蜜漬鳳梨紅茶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖豆漿"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖薏仁"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖奶茶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖紅茶牛奶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖牛奶"},{"category":"TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ","name":"虎斑黑糖檸檬飲"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀豆漿"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀紅茶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀紅茶豆漿"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀奶茶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀綠奶"},{"category":"SOYBEAN MILK WITH GRAINS_多穀系列","name":"多穀薏仁漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"研磨豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"紅茶豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"胚芽豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"薏仁豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"抹茶豆漿"},{"category":"SOYBEAN MILK_豆漿系列","name":"養生薏仁漿"},{"category":"PURE TEA_純味茶","name":"阿薩姆紅茶"},{"category":"PURE TEA_純味茶","name":"茉莉綠茶"},{"category":"PURE TEA_純味茶","name":"高山青茶"},{"category":"PURE TEA_純味茶","name":"東方美人 (現沏)"},{"category":"PURE TEA_純味茶","name":"黃金烏龍 (現沏)"},{"category":"PURE TEA_純味茶","name":"阿里山 (現沏)"},{"category":"PURE TEA_純味茶","name":"玄米玉露 (現沏)"},{"category":"PURE TEA_純味茶","name":"四季綠茶 (現沏)"},{"category":"MILK TEA_奶茶系列","name":"阿薩姆奶茶"},{"category":"MILK TEA_奶茶系列","name":"茉香奶綠"},{"category":"MILK TEA_奶茶系列","name":"高山青奶"},{"category":"MILK TEA_奶茶系列","name":"胚芽奶茶"},{"category":"MILK TEA_奶茶系列","name":"茶珠青奶"},{"category":"MILK TEA_奶茶系列","name":"茶珠綠奶"},{"category":"MILK TEA_奶茶系列","name":"茶珠奶茶"},{"category":"TEA LATTES_茶拿鐵","name":"東方拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"烏龍拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"阿里山拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"四季拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"玄米拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"紅茶拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"綠茶拿鐵"},{"category":"TEA LATTES_茶拿鐵","name":"青茶拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"豆奶拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"特調咖啡"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"義式咖啡"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"小農拿鐵"},{"category":"ITALIAN STYLE COFFEE_義式咖啡","name":"卡布奇諾"},{"category":"加購品項/配料選擇","name":"加起司"},{"category":"加購品項/配料選擇","name":"加二片起司"},{"category":"加購品項/配料選擇","name":"加蛋"},{"category":"加購品項/配料選擇","name":"加火腿"},{"category":"加購品項/配料選擇","name":"加培根"},{"category":"加購品項/配料選擇","name":"加麵"},{"category":"加購品項/配料選擇","name":"薯餅(6入)"},{"category":"加購品項/配料選擇","name":"雞塊(6入)"},{"category":"加購品項/配料選擇","name":"二折雞翅(3入)"},{"category":"加購品項/配料選擇","name":"茶珠"},{"category":"加購品項/配料選擇","name":"多穀"},{"category":"加購品項/配料選擇","name":"抹茶"},{"category":"加購品項/配料選擇","name":"胚芽"},{"category":"加購品項/配料選擇","name":"美式狂想 x 雙人脆薯"},{"category":"加購品項/配料選擇","name":"美式狂想 x 九塊雞塊"},{"category":"加購品項/配料選擇","name":"美式狂想 x 十粒鍋貼"},{"category":"加購品項/配料選擇","name":"加一份Espresso"},{"category":"加購品項/配料選擇","name":"加二份Espresso"},{"category":"加購品項/配料選擇","name":"多二匙奶"},{"category":"加購品項/配料選擇","name":"野菜豚炸餃"},{"category":"加購品項/配料選擇","name":"米花雞球"}];
 
@@ -643,7 +709,7 @@ function apiPost(payload) {
 // ---- POS權限設定(2026-09-25)：每個功能的最低角色由POS後台「POS管理→權限設定」決定 ----
 // 設成「夥伴」=不用PIN直接做；店長/老闆=先選人輸入PIN(後端也會再驗一次)。讀不到設定時用預設值(敏感功能預設店長，偏安全)
 const POS_ROLE_RANK_ = { '夥伴': 1, '店長': 2, '老闆': 3 };
-const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', voidOrder: '店長', closeRegister: '店長', printSettings: '店長' };
+const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', voidOrder: '店長', closeRegister: '店長', printSettings: '店長', reportView: '店長' };
 // 碰錢的動作每次都要輸入PIN；其他日常動作輸入一次後5分鐘內不用再輸(櫃台操作才不會一直被打斷)
 const POS_PERM_ALWAYS_ASK_ = ['refund', 'voidOrder', 'confirmPayment', 'grantVoucher', 'closeRegister'];
 const POS_PERM_SESSION_MS_ = 5 * 60000;
@@ -696,6 +762,7 @@ function checkPosDevice_() {
 let currentStoreStatus = { busy: false, paused: false, items: {} };
 
 function refreshStatusBanner() {
+  refreshMainStatusBar_();
   const banner = document.getElementById('status-banner');
   if (currentStoreStatus.paused) {
     banner.className = 'status-banner status-paused';
@@ -722,6 +789,21 @@ function pauseDetail_(st) {
   return parts.length ? '（' + parts.join('，') + '）' : '';
 }
 
+// 11-15：主畫面紅條(暫停)／橘條(忙碌)，正常時藏起來；文字跟上下架管理裡的一樣，多一句「點這裡管理」
+function refreshMainStatusBar_() {
+  const bar = document.getElementById('online-status-bar');
+  if (!bar) return;
+  const st = currentStoreStatus;
+  if (st.paused) {
+    bar.className = 'status-banner status-paused';
+    bar.textContent = '⛔ 線上點餐暫停接單中' + pauseDetail_(st) + '　點這裡管理';
+    bar.style.display = '';
+  } else if (st.busy) {
+    bar.className = 'status-banner status-busy';
+    bar.textContent = '⚠️ 線上點餐忙碌中（' + (st.busyBy ? st.busyBy + '，' : '') + '每' + (st.busyIntervalMinutes || 0) + '分鐘限接1張新單）　點這裡管理';
+    bar.style.display = '';
+  } else bar.style.display = 'none';
+}
 function loadStoreStatus() {
   return apiGet({ action: 'storeStatus', storeId: STORE_ID }).then(data => {
     if (data.status !== 'ok') return;
@@ -883,11 +965,11 @@ function loadRefundableOrders() {
       <div class="order-card">
         <div>
           <div><strong>${o.orderId}</strong> <span class="meta">[${o.channel}] ${o.status}</span>${o.printed ? '<span class="tag-printed">🖨已出單</span>' : ''}</div>
-          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>
+          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.twqr ? 'TWQR(退回顧客的手機錢包)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>
         </div>
         ${o.needsManual
           ? '<button class="btn" disabled style="opacity:.5;">無法自動退</button>'
-          : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.gateway ? 'true' : 'false'})">退款</button>`}
+          : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.twqr ? "'twqr'" : o.gateway ? 'true' : 'false'})">退款</button>`}
       </div>
     `).join('') + pendHtml;
   }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
@@ -895,6 +977,7 @@ function loadRefundableOrders() {
 
 function doRefund(orderId, amount, viaGateway) {
   const how = viaGateway === 'linepay' ? '這筆是 LINE Pay 付款，系統會直接退回顧客的 LINE Pay，不用退現金。'   // 10-23 線上LINEPay 也走這裡，不寫線下
+    : viaGateway === 'twqr' ? '這筆是 TWQR 付款，系統會直接退回顧客的手機錢包（全支付／台灣Pay…），不用退現金。'   // 11-18 (3d)
     : viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回顧客的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給顧客。';
   if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。')) return;
   withPosPerm_('refund', '退款', (staffName, staffPin) => {
@@ -989,7 +1072,7 @@ function closePosManageOverlay() {
   document.getElementById('pos-manage-overlay').classList.remove('open');
 }
 // 10-10 分組按鈕格：name=null 回按鈕格首頁；子頁面左上 ← 回首頁，首頁 ← 關閉
-const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', staff: '夥伴帳號說明', printer: '出單機設定' };
+const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', staff: '夥伴帳號說明', printer: '出單機設定', report: '今日報表' };
 let pmgCurrent_ = null;
 function pmgOpen_(name) {
   pmgCurrent_ = name;
@@ -999,6 +1082,47 @@ function pmgOpen_(name) {
   if (name === 'log') loadRegisterLog();
   if (name === 'ver') loadPmgCfgStatus_();
   if (name === 'printer') prnLoad_();
+  if (name === 'report') loadTabReport_();
+}
+// ---------- 11-13 今日報表(規格 報表設計_2026-11-13.md)：要「查看報表」權限(reportView，預設店長，純畫面控制)；只看今天、不匯出 ----------
+// 跟後台報表同一支 GET reportRows／reportItems；營業日＝取餐日，待付款、待收款、沒付成就作廢的單不算進營收
+function openTabReport_() { withPosPerm_('reportView', '查看報表', () => pmgOpen_('report')); }
+function loadTabReport_() {
+  const body = document.getElementById('tr-body');
+  body.innerHTML = '<div class="empty-hint">載入中...</div>';
+  Promise.all([apiGet({ action: 'reportRows', storeId: STORE_ID }), apiGet({ action: 'reportItems', storeId: STORE_ID })]).then(([a, b]) => {
+    if (!a || a.status !== 'ok') { body.innerHTML = '<div class="empty-hint">' + escapeHtml_((a && a.message) || '讀取失敗') + '</div>'; return; }
+    document.getElementById('tr-date').textContent = a.from + '（取餐日）';
+    const $ = v => '$' + Math.round(v).toLocaleString('en-US');
+    const s = { net: 0, disc: 0, n: 0, voidAmt: 0, voidN: 0, refAmt: 0, refN: 0, unsAmt: 0, unsN: 0 }, hours = {}, srcs = {};
+    a.rows.forEach(r => {
+      if (r.k === 'sale') {
+        s.net += r.total; s.disc += r.disc; s.n += r.n;
+        const h = hours[r.h] || (hours[r.h] = { net: 0, n: 0 }); h.net += r.total; h.n += r.n;
+        const g = srcs[r.src] || (srcs[r.src] = { net: 0, n: 0 }); g.net += r.total; g.n += r.n;
+      } else if (r.k === 'void') { s.voidAmt += r.total; s.voidN += r.n; }
+      else if (r.k === 'refund') { s.refAmt += r.refunded; s.refN += r.n; }
+      else if (r.k === 'unsettled') { s.unsAmt += r.total; s.unsN += r.n; }
+    });
+    const card = (t, v) => `<div class="tr-card"><div class="t">${t}</div><div class="v">${v}</div></div>`;
+    let h = '<div class="tr-cards">' + card('銷售淨額', $(s.net)) + card('結帳單量', s.n) + card('平均單價', $(s.n ? s.net / s.n : 0))
+      + card('折扣金額', $(s.disc)) + card('作廢 ' + s.voidN + ' 張', $(s.voidAmt)) + card('退款 ' + s.refN + ' 張', $(s.refAmt)) + '</div>';
+    if (s.unsN) h += `<div style="font-size:0.78rem;color:var(--muted);margin-top:4px;">待收款 ${s.unsN} 張 ${$(s.unsAmt)}（取餐付款還沒收，未算入）</div>`;
+    const srcRow = ['門市現場', '線上自取', '外送平台'].filter(k => srcs[k]).map(k => `${k} ${$(srcs[k].net)}／${srcs[k].n} 張`).join('　');
+    if (srcRow) h += `<div style="font-size:0.8rem;margin-top:6px;">${srcRow}</div>`;
+    const hs = Object.keys(hours).map(Number).sort((p, q) => p - q);
+    if (hs.length) {
+      const pad = n => String(n).padStart(2, '0');
+      h += '<div class="tr-h">每小時（下單時間）</div><table class="tr-table"><tr><th>時段</th><th>銷售淨額</th><th>單量</th></tr>'
+        + hs.map(x => `<tr><td>${pad(x)}:00-${pad(x + 1)}:00</td><td>${$(hours[x].net)}</td><td>${hours[x].n}</td></tr>`).join('') + '</table>';
+    }
+    const items = (b && b.status === 'ok' ? b.items : []).slice(0, 10);
+    if (items.length) h += '<div class="tr-h">人氣排行（前 10）</div><table class="tr-table"><tr><th>品項</th><th>份數</th><th>金額</th></tr>'
+      + items.map((i, n) => `<tr><td>${n + 1}. ${escapeHtml_(i.name)}${i.size ? ' ' + escapeHtml_(i.size) : ''}</td><td>${i.qty}</td><td>${$(i.amount)}</td></tr>`).join('') + '</table>';
+    if (!s.n && !s.voidN && !s.refN && !s.unsN) h += '<div class="empty-hint" style="margin-top:8px;">今天還沒有營收</div>';
+    h += '<div style="font-size:0.74rem;color:var(--muted);margin-top:10px;">看其他日期、收款方式報表、匯出 Excel → 後台「POS管理 → 報表」</div>';
+    body.innerHTML = h;
+  }).catch(() => { body.innerHTML = '<div class="empty-hint">連線失敗，請稍後再試</div>'; });
 }
 // ---------- 出單機設定(10-13)：每台平板自己選藍牙／網路出單機(填 IP)；設定存在這台平板，出單模組(iframe)照著送 ----------
 let prnPickedMode_ = 'net', lblPickedMode_ = 'off';
@@ -1006,7 +1130,20 @@ const PRN_IP_RE_ = /^(\d{1,3}\.){3}\d{1,3}(:\d{2,5})?$/;
 function prnFrame_() { try { const w = document.getElementById('printModuleFrame').contentWindow; return w && typeof w.printCfg_ === 'function' ? w : null; } catch (e) { return null; } }
 function prnCfg_() { const w = prnFrame_(); try { return w ? w.printCfg_() : null; } catch (e) { return null; } }
 // 回報給後台看的出單方式(跟著每分鐘查版本一起送)：網路|IP|連上1/0，或 藍牙||1/0
-function prnReport_() { const c = prnCfg_(); return c ? (c.mode === 'net' ? 'net|' + c.ip : 'bt|') + '|' + (c.linkUp ? 1 : 0) : ''; }
+// 11-16 (2i) 後面多 6 碼：自動找 1/0(藍牙空白)｜自動找到幾台｜杯貼機 o 不使用／u 連上／d 沒連上／n 還沒測｜接單列印 1/0｜上次自動改 IP 時間(秒)｜改之前的 IP
+//   後端 publish.js 的 PM 格式要跟著改；IP 只留數字、點、冒號，超過長度就不送那段(免得整串被後端當格式不對)
+function prnReport_() {
+  const c = prnCfg_();
+  if (!c) return '';
+  const ipOk = v => /^[0-9.:]{0,21}$/.test(String(v || '')) ? String(v || '') : '';
+  const net = c.mode === 'net';
+  const lbl = c.labelMode !== 'bt' ? 'o' : c.labelLinkUp ? 'u' : c.labelChecked ? 'd' : 'n';
+  const last = net && c.autoFindLast && c.autoFindLast.to === c.ip ? c.autoFindLast : null;
+  const at = last ? Math.floor(Number(last.at) / 1000) : 0;
+  return (net ? 'net|' + ipOk(c.ip) : 'bt|') + '|' + (c.linkUp ? 1 : 0) +
+    '|' + (net ? (c.autoFind ? 1 : 0) : '') + '|' + Math.min(9, (c.multi || []).length) + '|' + lbl + '|' + (c.running ? 1 : 0) +
+    '|' + (at > 0 && at < 1e10 ? at : '') + '|' + (last ? ipOk(last.from) : '');
+}
 function prnLoad_() {
   const c = prnCfg_();
   prnPickMode_(c ? c.mode : 'net');
@@ -1016,15 +1153,42 @@ function prnLoad_() {
   lblPickMode_(c && c.labelMode === 'bt' ? 'bt' : 'off');
   document.getElementById('lbl-bt').value = c && c.labelBt ? c.labelBt : '';
   document.getElementById('lbl-preview').style.display = 'none';
+  ['prn-bt-note', 'lbl-bt-note'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+  prnSnap_ = prnPicked_();
+  prnMarkDirty_();
   prnRenderStatus_();
 }
-function lblPickMode_(m) {
+// 11-16：畫面上選的 vs 平板已存的，不一樣就顯示「還沒儲存」；測試鈕用的是已存的設定，還沒存就先擋
+let prnSnap_ = '';
+function prnPicked_() {
+  return JSON.stringify([prnPickedMode_, prnPickedMode_ === 'net' ? document.getElementById('prn-ip').value.trim() : '',
+    prnPickedMode_ === 'net' ? document.getElementById('prn-autofind').checked : '', lblPickedMode_, lblPickedMode_ === 'bt' ? document.getElementById('lbl-bt').value.trim() : '']);
+}
+function prnIsDirty_() { return !!prnSnap_ && prnPicked_() !== prnSnap_; }
+function prnMarkDirty_() { const el = document.getElementById('prn-dirty'); if (el) el.style.display = prnIsDirty_() ? '' : 'none'; }
+function prnBlockIfDirty_() {
+  if (!prnIsDirty_()) return false;
+  alert('設定改了還沒儲存：請先按「💾 儲存設定」，測試才會用新的設定');
+  return true;
+}
+function prnShowNote_(id, text) { const el = document.getElementById(id); el.textContent = text; el.style.display = text ? '' : 'none'; }
+function lblPickMode_(m, byUser) {
   lblPickedMode_ = m === 'bt' ? 'bt' : 'off';
   document.getElementById('lbl-mode-off').classList.toggle('active', lblPickedMode_ === 'off');
   document.getElementById('lbl-mode-bt').classList.toggle('active', lblPickedMode_ === 'bt');
   document.getElementById('lbl-bt-row').style.display = lblPickedMode_ === 'bt' ? '' : 'none';
+  if (byUser) {
+    prnShowNote_('lbl-bt-note', '');
+    // 11-16：平板一次只能連一台藍牙 → 選藍牙杯貼機時，出單機自動改網路出單機（不用等按儲存才被擋）
+    if (lblPickedMode_ === 'bt' && prnPickedMode_ === 'bt') {
+      prnPickMode_('net');
+      prnShowNote_('prn-bt-note', '因為杯貼機選了藍牙，出單機已自動改成「網路出單機」（平板一次只能連一台藍牙印表機）。請填出單機 IP 或按「🔎 自動搜尋」。');
+    }
+    prnMarkDirty_();
+  }
 }
 async function lblTest_() {
+  if (prnBlockIfDirty_()) return;
   const w = prnFrame_();
   if (!w || typeof w.printTestLabel_ !== 'function') { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
   const b = document.getElementById('lbl-test-btn');
@@ -1040,39 +1204,77 @@ async function lblTest_() {
 function prnRenderStatus_() {
   const c = prnCfg_(), el = document.getElementById('prn-status');
   if (!c) { el.textContent = '⚠️ 出單模組還沒載入（要用 Fully 開這頁）'; return; }
-  const mode = c.mode === 'net' ? '網路出單機 ' + (c.ip || '（還沒設定 IP）') : '藍牙';
-  el.innerHTML = '目前：<b>' + escapeHtml_(mode) + '</b>｜' + (c.linkUp ? '<span style="color:#2e7d32">✅ 已連線</span>' : '<span style="color:#c62828">⚠️ 沒連上</span>') +
-    (c.running ? '' : '｜<span style="color:#c62828">接單列印還沒開始</span>') +
+  const ok = t => '<span style="color:#2e7d32">✅ ' + t + '</span>', bad = t => '<span style="color:#c62828">⚠️ ' + t + '</span>';
+  const mode = c.mode === 'net' ? '網路 ' + (c.ip || '（還沒設定 IP）') : '藍牙';
+  // 11-16：三行——出單機、杯貼機（以前看不到有沒有連上）、接單列印
+  let lbl = '不使用';
+  if (c.labelMode === 'bt') lbl = '藍牙 ' + escapeHtml_(c.labelBt || '（沒填名稱）') + '　' +
+    (c.labelLinkUp ? ok('已連線') : c.labelChecked ? bad('沒連上') : '<span style="color:var(--muted)">還沒測（按「印測試杯貼」）</span>');
+  el.innerHTML = '出單機：<b>' + escapeHtml_(mode) + '</b>　' + (c.linkUp ? ok('已連線') : bad('沒連上')) +
     (c.mode === 'net' && c.multi && c.multi.length ? '<br><span style="color:#c62828">⚠️ 自動找到 ' + c.multi.length + ' 台出單機（' + escapeHtml_(c.multi.join('、')) + '），請按「🔎 自動搜尋」選一台後儲存</span>' : '') +
     (c.mode === 'net' && c.autoFindLast && c.autoFindLast.to === c.ip ? '<br><span style="color:var(--muted)">上次自動改 IP：' + escapeHtml_(new Date(c.autoFindLast.at).toLocaleString('zh-TW', { hour12: false })) + '　' + escapeHtml_(c.autoFindLast.from) + ' → ' + escapeHtml_(c.autoFindLast.to) + '</span>' : '') +
-    '<br>杯貼：<b>' + (c.labelMode === 'bt' ? '藍牙 ' + escapeHtml_(c.labelBt || '（沒填名稱）') : '不使用') + '</b>';
+    '<br>杯貼機：<b>' + lbl + '</b>' +
+    '<br>接單列印：' + (c.running ? ok('執行中') : bad('還沒開始（客人的單不會自動印）'));
 }
-function prnPickMode_(m) {
+function prnPickMode_(m, byUser) {
   prnPickedMode_ = m === 'bt' ? 'bt' : 'net';
   document.getElementById('prn-mode-net').classList.toggle('active', prnPickedMode_ === 'net');
   document.getElementById('prn-mode-bt').classList.toggle('active', prnPickedMode_ === 'bt');
   document.getElementById('prn-ip-row').style.display = prnPickedMode_ === 'net' ? '' : 'none';
+  if (byUser) {
+    prnShowNote_('prn-bt-note', '');
+    // 11-16：出單機改藍牙時，藍牙杯貼機就不能用 → 杯貼機自動改不使用
+    if (prnPickedMode_ === 'bt' && lblPickedMode_ === 'bt') {
+      lblPickMode_('off');
+      prnShowNote_('lbl-bt-note', '因為出單機選了藍牙，杯貼機已自動改成「不使用」（平板一次只能連一台藍牙印表機；要印杯貼，出單機請用網路出單機）。');
+    }
+    prnMarkDirty_();
+  }
 }
 function prnSave_() {
   const w = prnFrame_();
   if (!w) { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
   const ip = document.getElementById('prn-ip').value.trim();
-  if (prnPickedMode_ === 'net' && !PRN_IP_RE_.test(ip)) { alert('出單機 IP 格式不對，例如 192.168.1.50'); return; }
+  if (prnPickedMode_ === 'net' && !PRN_IP_RE_.test(ip)) { alert('出單機 IP 格式不對，例如 192.168.1.50（不知道號碼就按「🔎 自動搜尋」）'); return; }
   const lblBt = document.getElementById('lbl-bt').value.trim();
-  // 10-13 Fully 一次只能連一台藍牙：標籤機用藍牙，出單機就要是網路出單機
+  // 10-13 Fully 一次只能連一台藍牙：標籤機用藍牙，出單機就要是網路出單機（11-16 起選的時候就會自動切，這裡留著當保險）
   if (lblPickedMode_ === 'bt' && prnPickedMode_ !== 'net') { alert('平板只能連一台藍牙：要用藍牙標籤機，出單機要先改成「網路出單機」'); return; }
-  if (lblPickedMode_ === 'bt' && !lblBt) { alert('請填標籤機的藍牙名稱'); return; }
+  if (lblPickedMode_ === 'bt' && !lblBt) { alert('請填杯貼機的藍牙名稱（照平板藍牙清單上顯示的填）'); return; }
   withPosPerm_('printSettings', '出單機設定', async (staffName) => {
-    document.getElementById('prn-status').textContent = '儲存並連線中…';
+    document.getElementById('prn-status').textContent = '儲存中，正在試連出單機' + (lblPickedMode_ === 'bt' ? '和杯貼機' : '') + '…（約 5～10 秒）';
     let r = null;
     try { r = await w.printSetCfg_({ mode: prnPickedMode_, ip, autoFind: document.getElementById('prn-autofind').checked, labelMode: lblPickedMode_, labelBt: lblBt, by: staffName }); } catch (e) {}
+    prnSnap_ = prnPicked_(); prnMarkDirty_();
+    ['prn-bt-note', 'lbl-bt-note'].forEach(id => prnShowNote_(id, ''));
     prnRenderStatus_();
     checkCfgVersion_();   // 馬上回報後台
-    if (r && r.ok) alert('已儲存，出單機連線正常');
-    else alert('已儲存，但出單機連不上：請確認出單機電源、' + (prnPickedMode_ === 'net' ? '網路線、IP 是否正確（第一次要在 Fully 開「Ignore SSL Errors」）' : '藍牙配對'));
+    const lines = ['已儲存。'];
+    lines.push(r && r.ok ? '出單機：✅ 連線正常' : '出單機：⚠️ 連不上，請確認出單機電源、' + (prnPickedMode_ === 'net' ? '網路線、IP 是否正確（第一次要在 Fully 開「Ignore SSL Errors」）' : '藍牙配對'));
+    if (lblPickedMode_ === 'bt') lines.push(r && r.labelLinkUp ? '杯貼機：✅ 連線正常' : '杯貼機：⚠️ 連不上，請確認杯貼機電源、平板藍牙有配對、名稱一個字都沒差');
+    alert(lines.join('\n'));
   });
 }
-// 11-03 🔎 自動搜尋：在這台平板連的 Wi-Fi 網段找出單機，找到就填進 IP 欄(只填不存，店長按「儲存並連線」才生效)
+// 11-16 ③ 掃碼槍測試：掃碼槍是平板系統當鍵盤連的，網頁看不到連線狀態 → 點格子、掃一下，看收到什麼
+let scanTestTimer_ = null, scanTestDebounce_ = null;
+function scanTestSay_(html, color) { const el = document.getElementById('scan-test-res'); el.innerHTML = html; el.style.color = color || 'var(--muted)'; }
+function scanTestFocus_() {
+  scanTestSay_('等待掃描…（掃碼槍對準條碼按一下）');
+  clearTimeout(scanTestTimer_);
+  scanTestTimer_ = setTimeout(() => {
+    if (!document.getElementById('scan-test-input').value) scanTestSay_('⏳ 8 秒都沒收到：確認掃碼槍有開機（按一下會亮）、平板「設定 → 藍牙」有連上掃碼槍；連上後再點一次這格、再掃一次', '#b35c00');
+  }, 8000);
+}
+function scanTestBlur_() { clearTimeout(scanTestTimer_); }
+function scanTestInput_() { clearTimeout(scanTestTimer_); clearTimeout(scanTestDebounce_); scanTestDebounce_ = setTimeout(scanTestCheck_, 400); }
+function scanTestKey_(e) { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(scanTestDebounce_); scanTestCheck_(); } }
+function scanTestCheck_() {
+  const el = document.getElementById('scan-test-input'), v = el.value.trim();
+  if (!v) return;
+  el.value = '';
+  if (/[^\x20-\x7e]/.test(v)) scanTestSay_('⚠️ 收到「' + escapeHtml_(v) + '」，裡面有中文字或特殊字：平板左邊小條要切成「A」（英文），再掃一次', '#c62828');
+  else scanTestSay_('✅ 收到「' + escapeHtml_(v) + '」（' + v.length + ' 個字），掃碼槍正常、英文模式正確', '#2e7d32');
+}
+// 11-03 🔎 自動搜尋：在這台平板連的 Wi-Fi 網段找出單機，找到就填進 IP 欄(只填不存，店長按「💾 儲存設定」才生效)
 async function prnScan_() {
   const w = prnFrame_();
   if (!w || typeof w.printScan_ !== 'function') { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
@@ -1091,7 +1293,8 @@ async function prnScan_() {
   if (found.length === 1) {
     prnPickMode_('net');
     document.getElementById('prn-ip').value = found[0];
-    res.innerHTML = '<span style="color:#2e7d32">✅ 找到出單機 <b>' + escapeHtml_(found[0]) + '</b>，已填入，請按「儲存並連線」。</span>';
+    prnMarkDirty_();
+    res.innerHTML = '<span style="color:#2e7d32">✅ 找到出單機 <b>' + escapeHtml_(found[0]) + '</b>，已填入，請按「💾 儲存設定」。</span>';
     return;
   }
   res.innerHTML = '找到 ' + found.length + ' 台出單機，請點要用的那台（可以先各印一張測試單確認）：<br>' +
@@ -1100,9 +1303,11 @@ async function prnScan_() {
 function prnPickFound_(ip) {
   prnPickMode_('net');
   document.getElementById('prn-ip').value = ip;
-  document.getElementById('prn-scan-res').innerHTML = '<span style="color:#2e7d32">已選 <b>' + escapeHtml_(ip) + '</b>，請按「儲存並連線」。</span>';
+  prnMarkDirty_();
+  document.getElementById('prn-scan-res').innerHTML = '<span style="color:#2e7d32">已選 <b>' + escapeHtml_(ip) + '</b>，請按「💾 儲存設定」。</span>';
 }
 async function prnTest_() {
+  if (prnBlockIfDirty_()) return;
   const w = prnFrame_();
   if (!w) { alert('出單模組還沒載入（要用 Fully 開這頁）'); return; }
   const b = document.getElementById('prn-test-btn');
@@ -1210,9 +1415,40 @@ function doOpenRegister() {
     apiPost({ action: 'openRegister', storeId: STORE_ID, staffName: staffName || openBy, staffPin }).then(data => {
       if (data.status !== 'ok') { alert(data.message || '開帳失敗'); return; }
       document.getElementById('pos-manage-result').textContent = '已開帳（' + new Date().toLocaleTimeString('zh-TW', { hour12: false }) + '）';
+      posRegOpenedDay_ = todayYmd_();
       loadRegisterLog();
     });
   });
+}
+
+// 11-17 (2q) 老闆選「提醒不擋」：開帳只是記錄、結帳不檢查；今天第一次按「確認結帳」時還沒開帳→跳提醒，
+//   可以先去開帳，也可以先結帳（這台平板今天不再提醒）。讀不到開帳記錄、斷網時不提醒（不能因為提醒卡住結帳）
+let posRegOpenedDay_ = '', posRegCheckedDay_ = '';
+const POS_REG_SKIP_KEY_ = 'abao_pos_reg_skip_' + STORE_ID;
+function posRegNote_(logs) {   // 開關帳記錄（新到舊）裡今天有沒有「開帳」
+  const t = todayYmd_();
+  posRegCheckedDay_ = t;
+  const ymd = ms => { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  if ((logs || []).some(l => l.type === '開帳' && ymd(l.time) === t)) posRegOpenedDay_ = t;
+}
+function posRegCheck_() {
+  if (posRegOpenedDay_ === todayYmd_() || posOffline_()) return;
+  apiGet({ action: 'registerLog', storeId: STORE_ID }).then(d => { if (d && d.status === 'ok') posRegNote_(d.logs); }).catch(() => {});
+}
+setTimeout(posRegCheck_, 3000);
+setInterval(posRegCheck_, 5 * 60 * 1000);   // 平板整天開著、跨日也會重新確認
+// 回 true＝先去開帳了（這次不結帳）
+function posRegRemind_() {
+  const t = todayYmd_();
+  if (posRegOpenedDay_ === t || posRegCheckedDay_ !== t || posOffline_()) return false;
+  let skip = ''; try { skip = localStorage.getItem(POS_REG_SKIP_KEY_) || ''; } catch (e) {}
+  if (skip === t) return false;
+  if (confirm('📅 今天還沒開帳\n\n按「確定」先去開帳\n按「取消」先結帳（今天不再提醒）')) {
+    openPosManageOverlay(); pmgOpen_('open');
+    return true;
+  }
+  try { localStorage.setItem(POS_REG_SKIP_KEY_, t); } catch (e) {}
+  return false;
 }
 
 let registerLogUnlocked_ = false;
@@ -1226,6 +1462,7 @@ function loadRegisterLog() {
   }
   apiGet({ action: 'registerLog', storeId: STORE_ID }).then(data => {
     renderPmgToday_(data && data.status === 'ok' ? data.logs : []);
+    if (data && data.status === 'ok') posRegNote_(data.logs);   // 11-17 (2q)
     const container = document.getElementById('register-log-list');
     if (!container) return;
     if (data.status !== 'ok' || data.logs.length === 0) {
@@ -1291,7 +1528,8 @@ function confirmCloseRegister() {
   apiPost({ action: 'closeRegister', storeId: STORE_ID, staffName, staffPin }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '關帳失敗'); return; }
     closeCloseRegisterPreview();
-    document.getElementById('pos-manage-result').textContent = '已關帳（作廢' + data.voidedCount + '張未處理訂單）';
+    document.getElementById('pos-manage-result').textContent = '已關帳（作廢' + data.voidedCount + '張未處理訂單）'
+      + (data.twqrUnknown && data.twqrUnknown.length ? '；有 ' + data.twqrUnknown.length + ' 張 TWQR 查不到付款結果，留在上方紅條（先不要做餐）' : '');   // 11-18 (3d)
     loadRegisterLog();
     loadOrders();
     loadStuckPaymentOrders();
@@ -1321,8 +1559,8 @@ let itemStatusExpandedCats = new Set();
 function posItemStatusList_() {
   const list = [];
   Object.entries(CATALOG || {}).forEach(([cat, items]) => (items || []).forEach(it => list.push({ category: cat, name: it.name })));
-  if (!list.length) return ITEM_LIST;
-  return list.concat(ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY));
+  if (!list.length) return STORE_ID === 'meibao' ? ITEM_LIST : [];   // 11-16 (15b)：菜單還沒讀到時只有培英退回舊快照，別家店空著等菜單
+  return list.concat(posAddonNames_().map(name => ({ category: POS_LOCAL_ADDON_STATUS_CATEGORY, name })));
 }
 
 function renderMergedItemStatusList() {
@@ -1448,7 +1686,8 @@ function applyPromoSettings_(data) {
       : p.mode === 'order'
         ? { mode: 'order', pct: p.amount, exclusive: !!p.exclusive }
         : { mode: 'item', effect: p.effect, minQty: p.minQty, autoAddItem: p.autoAddItem || null, pct: p.amount, targetItem: p.targetItem || '', targetSize: p.targetSize || '',
-            requireCat: p.requireCat || '', requireItem: p.requireItem || '', exclusive: !!p.exclusive };   // 需搭配/不併用：第四波 4-1 按鈕檢查用
+            requireCat: p.requireCat || '', requireItem: p.requireItem || '', exclusive: !!p.exclusive,
+            setOnly: String(p.requireOpts || '').split('、').some(t => t.trim() === '套餐') };   // 11-14 只算套餐(16d)：限定選項有「套餐」   // 需搭配/不併用：第四波 4-1 按鈕檢查用
     // 等級優惠(2026-09-25)結帳自動套用，不放成手動按鈕(避免店員再按一次重複折)
     if (p.showAsButton && !isTierPerkPromo_(p) && isPromoInPeriod_(p)) DIRECT_DISCOUNT_TYPES.push(p.name);   // 期間外不顯示按鈕
     if (p.manualGrantable && isPromoInPeriod_(p)) MANUAL_GRANT_VOUCHER_TYPES.push(p.name);                     // 期間外不能再贈送
@@ -1611,11 +1850,45 @@ function isValidPhone_(phone) {
 
 // 輸滿10碼合法格式自動查詢(2026-09-17新增)，不用店員自己再點一次查詢鈕
 function onMemberPhoneInput_() {
-  const phone = document.getElementById('member-phone-input').value.trim();
+  const inp = document.getElementById('member-phone-input');
+  if (posConfirmShown_()) { const typed = inp.value; posAutoNewOrder_(); inp.value = typed; }   // 11-16 (2n) 留住剛打／剛掃的電話
+  const phone = inp.value.trim();
   if (isValidPhone_(phone)) lookupMember();
 }
 
+// 11-16 (2o) 會員電話大數字鍵(老闆：同一格有時跳撥號鍵盤、有時整排英文)。電話格 inputmode="none" 不叫系統鍵盤；
+// 掃碼槍照樣打得進來(實體按鍵不受 inputmode 影響)。按數字＝補到最後面再走 onMemberPhoneInput_(滿 10 碼自動查詢＋2n 自動開新單)
+function posNumpadShow_() { document.getElementById('pos-numpad').style.display = 'grid'; }
+function posNumpadHide_(blur) {
+  document.getElementById('pos-numpad').style.display = 'none';
+  if (blur) document.getElementById('member-phone-input').blur();
+}
+// 11-17 (2o) 老闆實測：Fully 平板不理 inputmode="none"，照樣跳撥號鍵盤跟大數字鍵打架→電話格改 readonly(系統鍵盤一定不跳)；
+// readonly 收不到打字，掃碼槍／實體鍵盤改在這裡接按鍵(readonly 不接輸入法，注音也不會把數字變ㄅㄉ)
+function posPhoneKey_(e) {
+  if (e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (/^[0-9]$/.test(e.key)) { e.preventDefault(); posNumpadKey_(e.key); }
+  else if (e.key === 'Backspace') { e.preventDefault(); posNumpadKey_('back'); }
+  else if (e.key === 'Enter') { e.preventDefault(); lookupMember(); }
+}
+function posNumpadKey_(k) {
+  const inp = document.getElementById('member-phone-input');
+  if (k === 'clear') inp.value = '';
+  else if (k === 'back') inp.value = inp.value.slice(0, -1);
+  else if (inp.value.length < 10) inp.value += k;
+  else inp.value = k;   // 已經滿 10 碼(上一位的電話)再打／再掃＝換一支新號碼，從頭開始
+  inp.focus();
+  if (k === 'clear' || k === 'back') { document.getElementById('member-info').innerHTML = ''; return; }
+  onMemberPhoneInput_();
+}
+// 點電話格／大數字鍵以外的地方就收起來
+document.addEventListener('pointerdown', e => {
+  const pad = document.getElementById('pos-numpad');
+  if (pad && pad.style.display !== 'none' && !e.target.closest('#member-phone-wrap')) posNumpadHide_(false);
+}, true);
+
 function lookupMember() {
+  posNumpadHide_(true);   // 11-16 (2o) 開始查詢就收起大數字鍵
   const phone = document.getElementById('member-phone-input').value.trim();
   if (!phone) return;
   if (!isValidPhone_(phone)) {
@@ -1632,7 +1905,7 @@ function lookupMember() {
       el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div><div id="member-voucher-panel"></div>`;
       loadMemberVouchers();
       renderPosCart(); // 會員等級權益依等級自動套用
-    } else if (data.status === 'not_found' && LINE_MEMBER_REGISTER) {
+    } else if (data.status === 'not_found' && LINE_MEMBER_REGISTER && lineRegisterUrl_()) {   // 11-16 (15c)：這間店沒填 LIFF 就退回門市直接建會員
       selectedMember = null;
       renderPosCart();
       el.innerHTML = `
@@ -1663,19 +1936,21 @@ function lookupMember() {
 // 2026-09-29 LINE 登入(設計見 LINE登入設計_2026-09-28.md)：老闆定案門市不再用手機直接建會員，改請顧客掃 QR 用 LINE 註冊。
 // 正式上線(點餐頁 LINE_LOGIN_OPEN、後端 LINE_LOGIN_REQUIRED_ 一起)時改 true；之前照舊用手機建會員
 const LINE_MEMBER_REGISTER = true;
-const LINE_REGISTER_URL = 'https://liff.line.me/2011773510-WG4YyKFL';
+// 11-16 (15c) 去寫死：LINE 註冊 QR 用這間店的 LIFF 編號、提示用官方帳號（門市資料 lineLiffId／lineOaId，SQL 40）
+function lineRegisterUrl_() { const id = STORE_PROFILE_ && STORE_PROFILE_.lineLiffId; return id ? 'https://liff.line.me/' + id : ''; }
+function lineOaText_() { const oa = STORE_PROFILE_ && STORE_PROFILE_.lineOaId; return oa ? '加 LINE 好友 ' + oa + ' 後從選單註冊' : '請洽店長'; }
 function showLineRegisterQr_() {
   const draw = () => {
     const box = document.getElementById('member-line-qr');
     if (!box) return;
     box.innerHTML = '';
-    new QRCode(box, { text: LINE_REGISTER_URL, width: 180, height: 180 });
+    new QRCode(box, { text: lineRegisterUrl_(), width: 180, height: 180 });
   };
   if (window.QRCode) { draw(); return; }
   const s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
   s.onload = draw;
-  s.onerror = () => { const box = document.getElementById('member-line-qr'); if (box) box.textContent = 'QR 載入失敗，請顧客加 LINE 好友 @056bofyb 後從選單註冊'; };
+  s.onerror = () => { const box = document.getElementById('member-line-qr'); if (box) box.textContent = 'QR 載入失敗，請顧客' + lineOaText_(); };
   document.head.appendChild(s);
 }
 
@@ -2063,12 +2338,18 @@ function posDiscountTypesNow_() {
   return POS_ALL_PROMOS.filter(p => p.status !== '停用' && p.showAsButton && !isTierPerkPromo_(p) && isPromoInPeriod_(p) && posActDayOk_(p.name)).map(p => p.name);
 }
 function posCatShort_(cat) { return String(cat || '').split('_').pop(); }
+// 11-14 只算套餐(16d)：有單點／套餐可選的品項，這一列選了單點(基準價不是套餐價)就不算；沒有單點／套餐之分的照算。
+// 後端 orders.js single、點餐頁 lineIsSingle_ 同一套
+function posLineIsSingle_(c) {
+  const item = (CATALOG[c.cat] || []).find(it => it.name === c.baseName);
+  return !!(item && item.price_set) && c.basePrice !== item.price_set;
+}
 // 按下活動鍵前的檢查：通過回 true；不通過跳提示回 false
 function posDiscountPrecheck_(type) {
   const b = VOUCHER_BEHAVIOR[type] || {};
   if (!posActDayOk_(type)) { alert(`今天不是「${type}」的活動日`); return false; }
   if (posMemberOnlyToday_(type) && !selectedMember) { alert(`「${type}」限會員使用，請先在上方查詢會員`); return false; }
-  if (b.requireCat && !posCart.some(c => c.cat === b.requireCat)) { alert(`「${type}」要搭配「${posCatShort_(b.requireCat)}」的餐點，請先點一份`); return false; }
+  if (b.requireCat && !posCart.some(c => c.cat === b.requireCat && !(b.setOnly && posLineIsSingle_(c)))) { alert(`「${type}」要搭配「${posCatShort_(b.requireCat)}」的${b.setOnly ? '套餐（單點不算）' : '餐點'}，請先點一份`); return false; }
   if (b.requireItem && !posCart.some(c => c.baseName === b.requireItem)) { alert(`「${type}」要搭配「${b.requireItem}」，請先點一份`); return false; }
   // 不併用：新按的是不併用、或訂單裡已經有不併用的 → 問店員要留哪一個
   const others = directDiscounts.map(d => d.type).concat(appliedVouchers.map(v => v.type)).filter(t => t !== type);
@@ -2362,9 +2643,26 @@ function closePosLocalItemStatusManager() {
 // 加購品項/配料選擇這個分類底下的名稱，同時對應到好幾組客製化選項(bread_addon/omelet_addon/drink_topping...)，
 // 用同一個key管理，只要選項名稱相同(例如"加起司")就共用同一個上下架狀態
 const POS_LOCAL_ADDON_STATUS_CATEGORY = '加購品項/配料選擇';
-const POS_LOCAL_ADDON_STATUS_NAMES = new Set(
-  ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY).map(it => it.name)
-);
+// 11-16 (15b) 去寫死：加購／配料上下架名單改從選項庫(OPTION_GROUPS)即時產生，跟後台「品項上下架」同一套規則(後台 ADDON_STATUS_GROUP_CODES)：
+//   下面這幾組選項全部算＋奶茶濃淡(milk_tea_richness)裡要加錢的(多二匙奶)；培英算出來跟原本寫死的 21 項一模一樣。
+//   選項庫還沒讀到時，培英才退回舊快照 ITEM_LIST，別家店空著
+const POS_ADDON_GROUP_CODES_ = ['bread_addon', 'omelet_addon', 'salad_addon', 'noodle_addon',
+  'dine_set_addon', 'coffee_strength', 'drink_topping', 'deluxe_upgrade', 'noodle_snack_choice'];
+const POS_ADDON_PRICED_ONLY_CODES_ = ['milk_tea_richness'];
+let posAddonCache_ = { src: null, names: [] };
+function posAddonNames_() {
+  if (posAddonCache_.src && posAddonCache_.src === OPTION_GROUPS) return posAddonCache_.names;
+  const names = [];
+  const add = (code, pricedOnly) => {
+    const g = OPTION_GROUPS && OPTION_GROUPS[code];
+    if (g && g.options) g.options.forEach(o => { if ((!pricedOnly || Number(o.price) > 0) && !names.includes(o.name)) names.push(o.name); });
+  };
+  POS_ADDON_GROUP_CODES_.forEach(c => add(c, false));
+  POS_ADDON_PRICED_ONLY_CODES_.forEach(c => add(c, true));
+  if (names.length) { posAddonCache_ = { src: OPTION_GROUPS, names }; return names; }
+  return STORE_ID === 'meibao' ? ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY).map(it => it.name) : [];
+}
+const POS_LOCAL_ADDON_STATUS_NAMES = { has: n => posAddonNames_().includes(n) };
 
 // 大麥POS參考版面：左欄分類清單，點分類才在中欄顯示該分類品項格線（不是全部分類一次全部攤開）
 function renderPosMenu() {
@@ -2434,7 +2732,7 @@ function goToPosDiscountCategory() {
     const card = document.createElement('div');
     card.className = 'pos-grid-card pos-discount-card';
     card.innerHTML = `<div class="name">${type}</div>`;
-    card.onclick = () => (type === '活動飲品升級' ? showDrinkUpgradePicker() : applyDirectDiscount(type));
+    card.onclick = () => { posAutoNewOrder_(); type === '活動飲品升級' ? showDrinkUpgradePicker() : applyDirectDiscount(type); };   // 11-16 (2n)
     grid.appendChild(card);
   });
   itemsCol.appendChild(grid);
@@ -2625,7 +2923,7 @@ function goToPosCategory(i) {
       card.innerHTML = `<div class="name">${cardNameHtml}</div><div class="price" style="color:#A32D2D;">${localStatus === '永久下架' ? '已下架' : '本日售完'}</div>`;
     } else {
       card.innerHTML = `<div class="name">${cardNameHtml}</div><div class="price">${priceLabel}</div>`;
-      card.onclick = () => openPosItemModal(cat, key, item);
+      card.onclick = () => { posAutoNewOrder_(); openPosItemModal(cat, key, item); };   // 11-16 (2n)
     }
     grid.appendChild(card);
   });
@@ -3058,6 +3356,7 @@ function closePosItemModal() {
 
 function confirmAddToPosCart() {
   if (!currentPosModal) return;
+  posAutoNewOrder_();   // 11-16 (2n) 保險：客製化畫面在結帳前就開著、結帳完才按「加入訂單」
   for (const gKey of groupsForCategory(currentPosModal.cat, currentPosModal.item.name)) {
     const g = OPTION_GROUPS[gKey];
     if (g.required && (!currentPosModal.groups[gKey] || currentPosModal.groups[gKey].length === 0)) {
@@ -3298,6 +3597,18 @@ function backToPosCart() {
   document.getElementById('pos-checkout-panel').style.display = 'none';
   document.getElementById('pos-checkout-btn').style.display = 'block';
 }
+// 11-16 (2n) 老闆定「自動開新單」：結帳完成畫面還開著(沒按「開始新訂單」)，就點餐點／活動鍵／點會員電話格／打電話
+// → 先自動 closePosCartAll()，上一張的餐點、會員、付款方式、取餐時間不會帶進下一張。
+// 線上結帳、離線結帳、LINE Pay 成功(lpSuccess_)三條最後都停在 pos-confirm-panel，所以接這一個判斷就全部接住
+function posConfirmShown_() {
+  const p = document.getElementById('pos-confirm-panel');
+  return !!p && p.style.display !== 'none';
+}
+function posAutoNewOrder_() {
+  if (!posConfirmShown_()) return false;
+  closePosCartAll();
+  return true;
+}
 function closePosCartAll() {
   posCart = [];
   memberVouchers = [];
@@ -3456,6 +3767,7 @@ function submitPosOrder() {
   }
   const btn = document.getElementById('pos-submit-order-btn');
   if (btn.disabled) return;
+  if (posRegRemind_()) return;   // 11-17 (2q) 今天還沒開帳：提醒不擋
   withPosPerm_('checkout', '結帳', (staffName, staffPin) => submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, pickupTime, staffName, staffPin));
 }
 // 這張單所有折扣逐項：兌換券、門市活動按鈕(負數＝加價，例如舊的活動飲品加價)、會員等級權益
@@ -3496,6 +3808,13 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     if (posOffline_()) { alert('網路中斷時不能用 LINE Pay 掃碼，請改收現金或用 LINEPay mini'); restoreBtn(); return; }
     restoreBtn();
     lpOpenScan_({ payload });
+    return;
+  }
+  // 11-18 (3d) 線下TWQR：開 QR 視窗(斷網不能用)
+  if (paymentMethod === TQ_POS_METHOD_) {
+    if (posOffline_()) { alert('網路中斷時不能用 TWQR，請改收現金或用 LINEPay mini'); restoreBtn(); return; }
+    restoreBtn();
+    tqOpen_({ payload });
     return;
   }
   // 10-13 離線收銀：已判定離線就直接存平板＋直接印(兌換券要雲端核銷，離線不能用)
@@ -3575,6 +3894,9 @@ function tryApplyCfgUpdate_() {
 Promise.all([menuCmsDataReady, promoSettingsReady, drinkUpgradeRulesReady]).then(checkCfgVersion_);
 setInterval(checkCfgVersion_, CFG_POLL_MS);
 setInterval(tryApplyCfgUpdate_, 10000);
+// 11-15：主畫面暫停／忙碌提示——開機讀一次，之後每 60 秒讀一次門市狀態(後台或別台暫停的也看得到)
+loadStoreStatus().catch(() => {});
+setInterval(() => { loadStoreStatus().catch(() => {}); }, 60000);
 
 // ---------- 線上單確認接單(2026-10-12 老闆定案) ----------
 // 線上點餐的單(預訂單、即時單都一樣)後端先標「待確認」，不會出單；這裡每 15 秒讀一次待確認清單，
@@ -3598,7 +3920,7 @@ function ocLoad_() {
   if (ocLoading_ || !posDeviceToken_()) return;
   ocLoading_ = true;
   apiGet({ action: 'pendingConfirmOrders', storeId: STORE_ID }).then(d => {
-    if (d && d.status === 'ok') { ocOrders_ = d.orders || []; ocRender_(); lpPending_ = d.linePayPending || []; lpRender_(); }
+    if (d && d.status === 'ok') { ocOrders_ = d.orders || []; ocRender_(); lpPending_ = d.linePayPending || []; tqPending_ = d.twqrPending || []; lpRender_(); }
   }).catch(() => {}).finally(() => { ocLoading_ = false; });
 }
 function ocRender_() {
@@ -3658,7 +3980,7 @@ setInterval(ocLoad_, OC_POLL_MS_);
 let lpScanEnabled_ = false, lpPending_ = [], lpCtx_ = null;
 function loadLinePaySettings_() {
   return apiGet({ action: 'paymentMethodSettings', storeId: STORE_ID }).then(d => {
-    if (d && d.status === 'ok') { lpScanEnabled_ = !!d.linePayScanEnabled; lpScanBtnRefresh_(); }
+    if (d && d.status === 'ok') { lpScanEnabled_ = !!d.linePayScanEnabled; tqEnabled_ = !!d.twqrEnabled; lpScanBtnRefresh_(); }
   }).catch(() => {});
 }
 function lpScanBtnRefresh_() {
@@ -3671,6 +3993,7 @@ function lpScanBtnRefresh_() {
   b.style.opacity = off ? '0.4' : '';
   b.title = off ? '網路中斷時不能用 LINE Pay 掃碼' : '';
   if ((!lpScanEnabled_ || off) && document.getElementById('pos-payment-method').value === LP_POS_METHOD_) setPosPaymentMethod_(posDefaultPayMethod_());
+  try { tqBtnRefresh_(); } catch (e) {}   // 11-18 (3d) TWQR 按鈕跟著一起(斷網反灰)
 }
 setTimeout(loadLinePaySettings_, 0);
 setInterval(loadLinePaySettings_, 300000);   // 後台改開關，5 分鐘內跟上
@@ -3689,13 +4012,13 @@ function posPayBtnsRender_() {
   // 10-23 LINEPay mini 是備援：後台停用時按鈕留著、變灰不能按(店員知道它還在)；其他停用的直接消失
   const miniOff = !on.includes('LINEPay mini') && list.some(m => m.name === 'LINEPay mini');
   const names = (on.includes('LINEPay mini') || miniOff ? ['LINEPay mini'] : []).concat(['現金'],
-    on.filter(n => OFFPM_BUILTIN_.indexOf(n) === -1 && n !== '現金' && n !== LP_POS_METHOD_),
+    on.filter(n => OFFPM_BUILTIN_.indexOf(n) === -1 && n !== '現金' && n !== LP_POS_METHOD_ && n !== '線下TWQR'),
     OFFPM_BUILTIN_.slice(1).filter(n => on.indexOf(n) !== -1));
   const key = names.join('|') + (miniOff ? '|mini-off' : '');
   if (key === offPmShown_) return;   // 沒變就不動，避免結帳到一半按鈕閃
   offPmShown_ = key;
   const g = document.getElementById('pos-payment-method-group');
-  g.querySelectorAll('.pos-pay-btn:not(#pos-pay-lpscan)').forEach(b => b.remove());
+  g.querySelectorAll('.pos-pay-btn:not(#pos-pay-lpscan):not(#pos-pay-twqr)').forEach(b => b.remove());
   names.forEach(n => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -3710,7 +4033,7 @@ function posPayBtnsRender_() {
     g.appendChild(b);
   });
   const cur = document.getElementById('pos-payment-method').value;
-  if (cur === LP_POS_METHOD_ || posPayEnabled_(cur)) g.querySelectorAll('.pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-method') === cur));
+  if (cur === LP_POS_METHOD_ || cur === '線下TWQR' || posPayEnabled_(cur)) g.querySelectorAll('.pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-method') === cur));
   else { try { setPosPaymentMethod_(posDefaultPayMethod_()); } catch (e) {} }
 }
 // 10-23 第三方收款(快速出單的外送平台)：後台「第三方收款」關掉的不出現；沒讀過就三個全開
@@ -3872,18 +4195,279 @@ function lpCloseScan_(keep) {
   lpCtx_ = null;
   ocLoad_();
 }
+// ---------------------------------------------------------------
+// 11-18 (3d) 線下TWQR(規格 線下TWQR正式版規格_2026-11-18.md)：平板顯示 QR，顧客用手機錢包掃。
+// 後端每一步都先問 ezPay(改收現金／取消／重新產生前一定先把舊 QR 刪掉)，這裡只照回應顯示；「狀態不明」時不給改現金。
+// SOP：只認平板的「收款成功」，不看顧客手機畫面。QR 圖由平板自己畫(qrcode-generator，cdnjs；網路斷了本來就不能用 TWQR)
+// ---------------------------------------------------------------
+const TQ_POS_METHOD_ = '線下TWQR';
+const TQ_POLL_MS_ = 3000, TQ_LIFE_MS_ = 180000;
+const TQ_QR_LIB_ = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+let tqEnabled_ = false, tqPending_ = [], tqCtx_ = null, tqPollTimer_ = null, tqTickTimer_ = null, tqLibP_ = null;
+function tqLoadLib_() {
+  if (window.qrcode) return Promise.resolve();
+  if (!tqLibP_) tqLibP_ = new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = TQ_QR_LIB_;
+    sc.onload = () => (window.qrcode ? res() : rej());
+    sc.onerror = () => { tqLibP_ = null; sc.remove(); rej(); };
+    document.head.appendChild(sc);
+  });
+  return tqLibP_;
+}
+function tqBtnRefresh_() {
+  const b = document.getElementById('pos-pay-twqr');
+  if (!b) return;
+  let off = false;
+  try { off = posOffline_(); } catch (e) {}
+  b.style.display = tqEnabled_ ? '' : 'none';
+  b.disabled = off;
+  b.style.opacity = off ? '0.4' : '';
+  b.title = off ? '網路中斷時不能用 TWQR' : '';
+  if ((!tqEnabled_ || off) && document.getElementById('pos-payment-method').value === TQ_POS_METHOD_) setPosPaymentMethod_(posDefaultPayMethod_());
+  if (tqEnabled_ && !off) tqLoadLib_().catch(() => {});   // 先載好畫 QR 的程式，結帳時不用等
+}
+// 中文照 UTF-8 編(不加 BOM)：qrcode-generator 預設一個字只取 1 個位元組，所以先轉成「每個位元組一個字」
+function tqBytes_(s) { let out = ''; new TextEncoder().encode(String(s)).forEach(x => { out += String.fromCharCode(x); }); return out; }
+function tqDrawQr_(text) {
+  const box = document.getElementById('tq-qr');
+  box.innerHTML = '<span style="color:var(--muted)">QR 產生中…</span>';
+  return tqLoadLib_().then(() => {
+    const q = qrcode(0, 'M');
+    q.addData(tqBytes_(text), 'Byte');
+    q.make();
+    box.innerHTML = q.createSvgTag({ cellSize: 6, margin: 4, scalable: true });
+    const svg = box.querySelector('svg');
+    if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; }
+  }).catch(() => { box.innerHTML = '<span style="color:#c0392b;font-size:0.9rem">QR 畫不出來（網路不穩），請按「取消這張單」後再結帳一次，或改用其他付款方式</span>'; });
+}
+// ezPay 到期時間是台北時間「2026-11-18 10:03:00」；平板時鐘不準時改用「現在＋3 分鐘」
+function tqExpireMs_(t) {
+  const ms = t ? Date.parse(String(t).trim().replace(' ', 'T') + '+08:00') : NaN;
+  return isFinite(ms) && ms > Date.now() && ms <= Date.now() + TQ_LIFE_MS_ + 20000 ? ms : Date.now() + TQ_LIFE_MS_;
+}
+// QR 視窗：ctx＝{ payload }(結帳)或 { orderId, total }(紅條「重新產生 QR」)
+function tqOpen_(ctx) {
+  tqCtx_ = Object.assign({ orderId: null, busy: false, polling: false, expireAt: 0, state: '' }, ctx, { total: ctx.payload ? ctx.payload.totalAmount : ctx.total });
+  document.getElementById('tq-amount').textContent = '$' + tqCtx_.total;
+  document.getElementById('tq-overlay').classList.add('open');
+  tqCreate_();
+}
+// 產生(或拿回還有效的同一張) QR：結帳第一次帶整張單＋結帳鍵；之後只帶訂單號
+function tqCreate_() {
+  if (!tqCtx_ || tqCtx_.busy) return;
+  tqCtx_.busy = true;
+  tqState_('creating');
+  const req = tqCtx_.orderId ? { action: 'posTwqrCheckout', storeId: STORE_ID, orderId: tqCtx_.orderId }
+    : Object.assign({}, tqCtx_.payload, { action: 'posTwqrCheckout' });
+  apiPost(req).then(tqHandle_)
+    .catch(() => tqState_('unknown', '網路不穩，不知道 QR 有沒有產生成功，請按「重新查詢」'))
+    .finally(() => { if (tqCtx_) tqCtx_.busy = false; });
+}
+function tqHandle_(d) {
+  if (!tqCtx_) return;
+  if (d && d.orderId) tqCtx_.orderId = d.orderId;
+  if (d && d.status === 'ok' && d.state === 'paid') { tqSuccess_(d); return; }
+  if (d && d.status === 'ok' && d.state === 'waiting' && d.qr) {
+    tqCtx_.expireAt = tqExpireMs_(d.expireTime);
+    tqState_('waiting');
+    tqDrawQr_(d.qr);
+    return;
+  }
+  if (d && d.status === 'unknown') { tqState_('unknown', d.message); ocLoad_(); return; }
+  tqState_('failed', (d && d.message) || '產生 QR 失敗，請再試一次');
+  ocLoad_();
+}
+function tqStopTimers_() { clearInterval(tqPollTimer_); clearInterval(tqTickTimer_); tqPollTimer_ = null; tqTickTimer_ = null; }
+function tqState_(state, msg) {
+  tqStopTimers_();
+  if (!tqCtx_) return;
+  tqCtx_.state = state;
+  const m = document.getElementById('tq-msg'), b = document.getElementById('tq-btns'), box = document.getElementById('tq-qr');
+  const btn = (label, fn, cls) => `<button type="button" class="btn ${cls || 'btn-secondary'}" style="padding:10px" onclick="${fn}">${label}</button>`;
+  const fromCart = !!tqCtx_.payload;
+  document.getElementById('tq-timer').textContent = '';
+  box.style.opacity = state === 'waiting' || state === 'creating' ? '' : '0.12';   // QR 失效後淡掉，避免顧客還去掃
+  if (state === 'creating') {
+    box.innerHTML = '<span style="color:var(--muted)">QR 產生中…</span>';
+    m.innerHTML = '<b>正在跟 ezPay 產生 QR…</b>';
+    b.innerHTML = '';
+  } else if (state === 'busy') {
+    m.innerHTML = '<b>處理中，請稍候…</b>';
+    b.innerHTML = '';
+  } else if (state === 'waiting') {
+    m.innerHTML = '<span style="color:var(--muted)">顧客付款後會自動顯示「收款成功」。<b>只認平板畫面，不看顧客手機</b></span>';
+    b.innerHTML = (fromCart ? btn('改用其他付款方式', 'tqOther_()') : '') + btn('取消這張單', 'tqCancel_()') + btn('先關掉，稍後處理', 'tqClose_()');
+    tqTick_();
+    tqTickTimer_ = setInterval(tqTick_, 1000);
+    tqPollTimer_ = setInterval(() => tqPoll_(false), TQ_POLL_MS_);
+  } else if (state === 'expired') {
+    m.innerHTML = `<span style="color:#c0392b">${escapeHtml_(msg || 'QR 已失效，顧客沒有付款')}</span>`;
+    b.innerHTML = btn('重新產生 QR', 'tqCreate_()', 'btn-primary') + btn('改收現金', 'tqToCash_()') + (fromCart ? btn('改用其他付款方式', 'tqOther_()') : '') + btn('取消這張單', 'tqCancel_()');
+  } else if (state === 'failed') {
+    m.innerHTML = `<span style="color:#c0392b">${escapeHtml_(msg || '產生 QR 失敗')}</span>`;
+    b.innerHTML = btn('再產生一次', 'tqCreate_()', 'btn-primary') + (fromCart ? btn('改用其他付款方式', 'tqOther_()') : '')
+      + (tqCtx_.orderId ? btn('取消這張單', 'tqCancel_()') : btn('關閉', 'tqClose_(true)'));
+  } else {   // unknown
+    m.innerHTML = `<b style="color:#c0392b">${escapeHtml_(msg || '付款狀態不明')}</b><div style="font-size:0.95rem;color:#c0392b;font-weight:700;margin-top:4px">不要收現金</div><div style="font-size:0.8rem;color:var(--muted);margin-top:4px">系統會自動再查，這張單會留在上方紅條，先不要做餐。</div>`;
+    b.innerHTML = btn('重新查詢', 'tqRecheck_()', 'btn-primary') + btn('先關掉，稍後處理', 'tqClose_(true)');
+  }
+}
+function tqTick_() {
+  if (!tqCtx_ || tqCtx_.state !== 'waiting') return;
+  const left = Math.ceil((tqCtx_.expireAt - Date.now()) / 1000), el = document.getElementById('tq-timer');
+  if (left > 0) { el.textContent = `QR 剩 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} 失效`; return; }
+  el.textContent = 'QR 已失效，確認中…';
+  tqStopTimers_();
+  tqPoll_(true);
+}
+// 等付款時每 3 秒問一次；final＝倒數到 0 的最後一問(ezPay 可能還沒標逾時，就給「重新產生／改收現金」，後端會先刪單才做)
+function tqPoll_(final) {
+  if (!tqCtx_ || !tqCtx_.orderId || tqCtx_.polling) return;
+  tqCtx_.polling = true;
+  const id = tqCtx_.orderId;
+  apiPost({ action: 'posTwqrStatus', storeId: STORE_ID, orderId: id }).then(d => {
+    if (!tqCtx_ || tqCtx_.orderId !== id || (tqCtx_.state !== 'waiting' && !final)) return;
+    if (d && d.status === 'ok' && d.state === 'paid') { tqSuccess_(d); return; }
+    if (d && d.status === 'ok' && d.state === 'notPaid') { tqState_('expired', d.message ? 'ezPay：' + d.message + '，顧客沒有付款' : ''); return; }
+    if (final) tqState_(d && d.status === 'unknown' ? 'unknown' : 'expired', d && d.message);
+  }).catch(() => { if (final && tqCtx_ && tqCtx_.orderId === id) tqState_('unknown', '網路不穩，請按「重新查詢」'); })
+    .finally(() => { if (tqCtx_) tqCtx_.polling = false; });
+}
+function tqSuccess_(d) {
+  const fromCart = !!(tqCtx_ && tqCtx_.payload), total = tqCtx_ ? tqCtx_.total : 0;
+  tqStopTimers_();
+  document.getElementById('tq-overlay').classList.remove('open');
+  tqCtx_ = null;
+  ocLoad_();
+  loadRevenue();
+  const how = d.paidByTwqr ? 'TWQR 收款成功（顧客其實已經付了，不用收現金）'
+    : d.asCash ? `已改收現金，請跟顧客收 $${total}` : 'TWQR 收款成功' + (d.bankName ? '（' + d.bankName + '）' : '');
+  if (!fromCart) { alert('✅ ' + how + '，已出單（' + d.orderId + '）'); return; }
+  document.getElementById('pos-confirm-order-no').textContent = d.orderId;
+  const notes = [how];
+  if (d.pointsEarned) notes.push(`本次消費獲得 ${d.pointsEarned} 點`);
+  document.getElementById('pos-confirm-points').textContent = notes.join('　');
+  document.getElementById('pos-checkout-panel').style.display = 'none';
+  document.getElementById('pos-confirm-panel').style.display = 'block';
+}
+function tqRecheck_() {
+  if (!tqCtx_) return;
+  if (!tqCtx_.orderId) { tqCreate_(); return; }   // 第一次送出就斷線、還不知道訂單號：用同一把結帳鍵再送(後端認同一張，QR 還有效就回同一張)
+  tqState_('busy');
+  apiPost({ action: 'posTwqrRecheck', storeId: STORE_ID, orderId: tqCtx_.orderId }).then(d => {
+    if (d && d.status === 'ok' && d.state === 'paid') { tqSuccess_(d); return; }
+    if (d && d.status === 'ok' && d.state === 'waiting') { tqCreate_(); return; }   // 還沒付、QR 還有效：拿回同一張繼續等
+    if (d && d.status === 'ok' && d.state === 'notPaid') { tqState_('expired', 'ezPay 確認這張 QR 沒有付款，可以重新產生 QR'); return; }
+    tqState_('unknown', (d && d.message) || '還查不到結果');
+  }).catch(() => tqState_('unknown', '網路不穩，請稍後再按「重新查詢」'));
+}
+function tqToCash_() {
+  if (!tqCtx_ || !tqCtx_.orderId) return;
+  if (!confirm(`改收現金 $${tqCtx_.total}？\n系統會先跟 ezPay 確認這張 QR 已刪除、不會再扣款，成功後再跟顧客收現金。`)) return;
+  tqState_('busy');
+  apiPost({ action: 'posTwqrToCash', storeId: STORE_ID, orderId: tqCtx_.orderId }).then(d => {
+    if (d && d.status === 'ok') { tqSuccess_(d); return; }
+    if (d && d.status === 'unknown') { tqState_('unknown', d.message); return; }
+    tqState_('expired', (d && d.message) || '改收現金失敗');
+  }).catch(() => tqState_('unknown', '網路不穩，不知道有沒有改成功，請按「重新查詢」'));
+}
+// 改用其他付款方式：後端確認 ezPay 不會收到錢→作廢這張待付款單→回結帳畫面(購物車還在，換一把新的結帳鍵)
+function tqOther_() {
+  if (!tqCtx_) return;
+  const back = () => { tqStopTimers_(); document.getElementById('tq-overlay').classList.remove('open'); tqCtx_ = null; posCheckoutKey_ = null; setPosPaymentMethod_(posDefaultPayMethod_()); };
+  if (!tqCtx_.orderId) { back(); return; }
+  tqState_('busy');
+  apiPost({ action: 'posTwqrCancel', storeId: STORE_ID, orderId: tqCtx_.orderId, reason: 'other' }).then(d => {
+    if (d && d.status === 'ok') { back(); ocLoad_(); alert('已取消 TWQR 收款，請選其他付款方式再按一次「確認結帳」'); return; }
+    if (d && d.code === 'paid') { tqRecheck_(); return; }
+    tqState_(d && d.status === 'unknown' ? 'unknown' : 'expired', (d && d.message) || '取消失敗');
+  }).catch(() => tqState_('unknown', '網路不穩，請稍後再試'));
+}
+function tqCancel_() {
+  if (!tqCtx_) return;
+  const fromCart = !!tqCtx_.payload;
+  if (!tqCtx_.orderId) { tqClose_(true); return; }
+  if (!confirm('確定取消這張單？\n（系統會先跟 ezPay 確認這張 QR 已刪除、沒有扣款；用掉的兌換券會退回）')) return;
+  tqState_('busy');
+  apiPost({ action: 'posTwqrCancel', storeId: STORE_ID, orderId: tqCtx_.orderId, reason: 'cancel' }).then(d => {
+    if (d && d.status === 'ok') {
+      tqStopTimers_();
+      document.getElementById('tq-overlay').classList.remove('open');
+      tqCtx_ = null;
+      ocLoad_();
+      if (fromCart) closePosCartAll();
+      return;
+    }
+    if (d && d.code === 'paid') { tqRecheck_(); return; }
+    tqState_(d && d.status === 'unknown' ? 'unknown' : 'expired', (d && d.message) || '取消失敗');
+  }).catch(() => tqState_('unknown', '網路不穩，請稍後再試'));
+}
+function tqClose_(keep) {
+  if (tqCtx_ && tqCtx_.busy) return;
+  if (tqCtx_ && tqCtx_.orderId && !keep && !confirm('這張單還沒收到款，關掉後會留在上方紅條，之後再處理。確定關掉？')) return;
+  tqStopTimers_();
+  document.getElementById('tq-overlay').classList.remove('open');
+  tqCtx_ = null;
+  ocLoad_();
+}
+// 紅條清單裡的 TWQR 單(跟 LINE Pay 同一個清單)
+function tqRenderRows_() {
+  return tqPending_.map(o => {
+    const id = escapeHtml_(o.orderId);
+    const t = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    return `<div style="border:2px solid #e57373;border-radius:10px;padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${id} <span style="font-size:0.75rem;font-weight:400;padding:1px 8px;border-radius:999px;background:#fde8e8;color:#a32d2d">TWQR</span></b><b>$${Number(o.total) || 0}</b></div>
+      <div style="font-size:0.8rem;color:var(--muted);margin:2px 0 8px">結帳 ${t}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button type="button" class="btn btn-primary" onclick="tqListAct_('recheck','${id}',this)">重新查詢</button>
+        <button type="button" class="btn btn-secondary" onclick="tqListRegen_('${id}')">重新產生 QR</button>
+        <button type="button" class="btn btn-secondary" onclick="tqListAct_('cash','${id}',this)">改收現金</button>
+        <button type="button" class="btn btn-danger" onclick="tqListAct_('void','${id}',this)">作廢</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function tqListRegen_(orderId) {
+  const o = tqPending_.find(x => x.orderId === orderId);
+  if (!o) return;
+  lpCloseList_();
+  tqOpen_({ orderId: o.orderId, total: o.total });
+}
+function tqListAct_(kind, orderId, btn) {
+  const o = tqPending_.find(x => x.orderId === orderId) || { total: 0 };
+  if (kind === 'cash' && !confirm(`改收現金 $${o.total}？\n系統會先跟 ezPay 確認這張 QR 已刪除、不會再扣款，成功後再跟顧客收現金。`)) return;
+  if (kind === 'void' && !confirm(`確定作廢 ${orderId}？\n（系統會先跟 ezPay 確認沒有扣款；用掉的兌換券會退回）`)) return;
+  const action = { recheck: 'posTwqrRecheck', cash: 'posTwqrToCash', void: 'posTwqrCancel' }[kind];
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '處理中…';
+  apiPost({ action, storeId: STORE_ID, orderId, reason: 'cancel' }).then(d => {
+    if (d && d.status === 'ok') {
+      if (kind === 'recheck') alert(d.state === 'paid' ? '✅ 顧客已付款成功，已轉成正式訂單並補印出單'
+        : d.state === 'waiting' ? '顧客還沒付款（QR 還在有效時間內）。可以按「重新產生 QR」給顧客掃' : 'ezPay 確認「沒有付款」。可以按「重新產生 QR」請顧客重新付款，或改收現金／作廢');
+      else if (kind === 'cash') alert(d.paidByTwqr ? '✅ ' + d.message : `已改成現金收款並出單，請跟顧客收 $${o.total}`);
+      else alert('已作廢' + (d.vouchersRestored ? `，退回兌換券 ${d.vouchersRestored} 張` : ''));
+      ocLoad_();
+      loadRevenue();
+    } else alert((d && d.message) || '處理失敗，請再按一次');
+  }).catch(() => alert('網路不穩，請稍後再按一次')).finally(() => { btn.disabled = false; btn.textContent = label; });
+}
 // 收款未完成紅條／清單
 function lpRender_() {
   const b = document.getElementById('lp-banner');
   if (!b) return;
   if (document.getElementById('lp-overlay').classList.contains('open')) lpRenderList_();
-  if (!lpPending_.length) { b.style.display = 'none'; return; }
-  b.textContent = `⚠️ 有 ${lpPending_.length} 張 LINE Pay 收款未完成：按這裡處理（先不要做餐）`;
+  if (!lpPending_.length && !tqPending_.length) { b.style.display = 'none'; return; }
+  b.textContent = !tqPending_.length ? `⚠️ 有 ${lpPending_.length} 張 LINE Pay 收款未完成：按這裡處理（先不要做餐）`
+    : `⚠️ 有 ${lpPending_.length + tqPending_.length} 張收款未完成（${[lpPending_.length ? 'LINE Pay ' + lpPending_.length + ' 張' : '', 'TWQR ' + tqPending_.length + ' 張'].filter(Boolean).join('、')}）：按這裡處理（先不要做餐）`;
   b.style.display = 'block';
 }
 function lpRenderList_() {
   const el = document.getElementById('lp-list');
-  if (!lpPending_.length) { el.innerHTML = '<div class="empty-hint">沒有收款未完成的單 ✅</div>'; return; }
+  const ttl = document.getElementById('lp-list-title');
+  if (ttl) ttl.textContent = tqPending_.length ? '⚠️ 收款未完成' : '⚠️ LINE Pay 收款未完成';
+  if (!lpPending_.length && !tqPending_.length) { el.innerHTML = '<div class="empty-hint">沒有收款未完成的單 ✅</div>'; return; }
   el.innerHTML = lpPending_.map(o => {
     const id = escapeHtml_(o.orderId);
     const t = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
@@ -3897,7 +4481,7 @@ function lpRenderList_() {
         <button type="button" class="btn btn-danger" onclick="lpListAct_('void','${id}',this)">作廢</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + tqRenderRows_();
 }
 function lpOpenList_() { lpRenderList_(); document.getElementById('lp-overlay').classList.add('open'); ocLoad_(); }
 function lpCloseList_() { document.getElementById('lp-overlay').classList.remove('open'); }
@@ -4153,7 +4737,8 @@ const offlineBuildTicketLines_ = offlineTicketKit_.lines, offlineBuildCupLabels_
 // 離線時結帳存在這台平板、自己排版直接送出單機印，網路恢復後一張張補傳(posSyncOffline)，補傳完出單模組才繼續向雲端領單
 const NET_OFFLINE_AFTER_MS_ = 30000, NET_PROBE_MS_ = 10000, OFFLINE_SYNC_MS_ = 15000;
 const OFFLINE_Q_KEY_ = 'abao_pos_offline_q_' + STORE_ID, OFFLINE_SEQ_KEY_ = 'abao_pos_offline_seq_' + STORE_ID;
-let netLastOk_ = Date.now(), netFails_ = 0, netOffline_ = false, offlineSyncing_ = false;
+// 11-16 (2f)：頁面是斷網時從平板存的那份打開的(pos_offline_sw.js 會標記)→當作從沒連上過，開機讀資料失敗 2 次就直接進離線，不用等 30 秒
+let netLastOk_ = window.__ABAO_PAGE_FROM_CACHE__ ? 0 : Date.now(), netFails_ = 0, netOffline_ = false, offlineSyncing_ = false;
 function posOffline_() { return netOffline_; }
 function netOk_() {
   netLastOk_ = Date.now(); netFails_ = 0;
@@ -4397,6 +4982,10 @@ function actQuotaOfflineLeft_(actId) {
   return { limit: c.limit, left: c.left - used };
 }
 offlineRender_();
+// 11-16 (2f) 斷網重開也打得開：登記離線快取(pos_offline_sw.js，只存平板收銀頁＋出單模組；有網路永遠抓最新版，斷網才用存的那份)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('pos_offline_sw.js').catch(err => console.warn('離線快取登記失敗(不影響收銀，只是斷網重開會打不開)', err)); });
+}
 </script>
 </body>
 </html>

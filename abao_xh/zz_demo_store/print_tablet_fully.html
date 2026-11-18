@@ -69,7 +69,7 @@
 'use strict';
 // ---------- 設定 ----------
 // 後端網址(2026-11-08 前端切換準備)：切換日用 05_腳本/切換後端.mjs 一次改 8 個檔(new 新後端／old 退回舊後端／check 檢查)，不要手改下面這行網址
-const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/"; // @@後端網址@@（測試版：固定指新後端）
+const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/"; // @@後端網址@@
 // 本機預覽測試口：只有在本機(localhost／直接開檔)網址加 ?api=new 才改打新後端、加 ?store=店代號 改測別間店(例 zz_demo_store)；正式網域一律忽略這兩個參數
 const DEV_QS_ = (location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) ? new URLSearchParams(location.search) : new URLSearchParams();
 const ORDER_BACKEND_URL = DEV_QS_.get('api') === 'new' ? 'https://abao-api.billy05012003.workers.dev/' : BACKEND_URL_SET_;
@@ -285,7 +285,7 @@ function startLinkMonitor() {
         if (getIp() !== ipAtStart || !isNet()) return;
         if (r.ok) setLink(true); else { setLink(false, r.why); beep(); }
         // 只有出單機的回應(含沒紙、上蓋)才算連得到；號碼被 Wi-Fi 機等其他設備拿走也要自動找
-        if (r.printer) unreachSince = 0; else if (!unreachSince) unreachSince = Date.now();
+        if (r.printer) { unreachSince = 0; autoFindRetryUsed = false; autoFindRetrySoon = false; } else if (!unreachSince) unreachSince = Date.now();
       } finally { netProbing = false; }
       maybeAutoFind_();   // 11-03 整台連不到太久 → 區網自動找出單機(背景跑，不卡連線檢查)
       return;
@@ -348,6 +348,8 @@ async function eposRequest(inner, ipOverride, waitMs) {
 const LAN_SCAN_CONC = 32, LAN_SCAN_WAIT_MS = 3000;
 const AUTO_FIND_AFTER_MS = 15000;      // 整台連不到超過這麼久才自動找(沒紙／上蓋打開有回應，不算)
 const AUTO_FIND_COOLDOWN_MS = 180000;  // 找過一次後至少隔 3 分鐘才再找，出單機只是關機時不會一直掃
+const AUTO_FIND_RETRY_MS = 30000;      // 11-16 (2g)：自動找一台都沒找到(出單機可能剛好還在開機、還沒拿到號碼)→30 秒後補找一次；
+                                       // 每次斷線只補一次，還是沒有就回到 3 分鐘一次
 function getAutoFind() { try { return localStorage.getItem('abao_print_autofind') !== '0'; } catch (e) { return true; } }
 function getAutoFindLast() { try { return JSON.parse(localStorage.getItem('abao_print_autofind_last') || 'null'); } catch (e) { return null; } }
 function tabletIp4_() { const F = getF(); try { return F && typeof F.getIp4Address === 'function' ? String(F.getIp4Address() || '') : ''; } catch (e) { return ''; } }
@@ -358,6 +360,7 @@ function lanNets_() {
   return nets;
 }
 let lanScanPromise = null, lastLanScanAt = 0, lanMulti = [], unreachSince = 0;
+let autoFindRetrySoon = false, autoFindRetryUsed = false;   // (2g) 下一輪等 30 秒就好／這次斷線已經補找過
 // 同一時間只掃一輪：自動掃描中店長又按搜尋，就等同一輪的結果。回傳找到的 IP 陣列；找不到網段回 null
 function lanScan_(why) {
   if (!lanScanPromise) lanScanPromise = lanScanRun_(why).finally(() => { lanScanPromise = null; lastLanScanAt = Date.now(); });
@@ -390,10 +393,17 @@ async function lanScanRun_(why) {
 async function maybeAutoFind_() {
   if (!isNet() || !getAutoFind() || lanScanPromise || printing) return;
   if (!unreachSince || Date.now() - unreachSince < AUTO_FIND_AFTER_MS) return;
-  if (lastLanScanAt && Date.now() - lastLanScanAt < AUTO_FIND_COOLDOWN_MS) return;
+  if (lastLanScanAt && Date.now() - lastLanScanAt < (autoFindRetrySoon ? AUTO_FIND_RETRY_MS : AUTO_FIND_COOLDOWN_MS)) return;
+  const isRetry = autoFindRetrySoon;
+  autoFindRetrySoon = false;
   const before = getIp();
-  const found = await lanScan_('出單機 ' + before + ' 連不到 ' + Math.round((Date.now() - unreachSince) / 1000) + ' 秒');
+  const found = await lanScan_('出單機 ' + before + ' 連不到 ' + Math.round((Date.now() - unreachSince) / 1000) + ' 秒' + (isRetry ? '，補找一次' : ''));
   if (!found || getIp() !== before || !isNet()) return;   // 掃描中店長改了設定 → 以店長的為準
+  if (!found.length && !autoFindRetryUsed) {   // (2g) 一台都沒找到 → 30 秒後補找一次(只補一次)
+    autoFindRetryUsed = autoFindRetrySoon = true;
+    log('🔎 出單機可能還在開機，30 秒後再找一次', 'y');
+    return;
+  }
   if (found.includes(before)) { lanMulti = []; return; }   // 原本的號碼又通了
   if (found.length === 1) {
     try {
@@ -431,7 +441,7 @@ const TSPL_BLACK_BIT = 0;   // TSPL BITMAP 這一位元＝印黑點。實機印�
 function getLabelMode() { try { return localStorage.getItem('abao_label_mode') === 'bt' ? 'bt' : 'off'; } catch (e) { return 'off'; } }
 function getLabelBt() { try { return localStorage.getItem('abao_label_bt') || ''; } catch (e) { return ''; } }
 function labelOn() { return getLabelMode() === 'bt' && isNet() && !!getLabelBt(); }
-let labelOpened = false, labelLinkUp = false;
+let labelOpened = false, labelLinkUp = false, labelChecked = false;   // labelChecked：這次設定之後試過連標籤機沒（11-16 出單機設定頁顯示「還沒測」用）
 function refreshLabelState(msg, ok) {
   if (msg) { setState('stLabel', msg, ok ? 'ok' : 'bad'); return; }
   if (getLabelMode() !== 'bt') setState('stLabel', '不使用');
@@ -506,10 +516,10 @@ async function labelSend(bytes) {
   if (!hasF()) return false;
   const hex = toHex(bytes);
   if (!labelOpened) { labelOpen(); labelOpened = true; await sleep(3000); }
-  if (fullySend(hex)) { labelLinkUp = true; return true; }
+  if (fullySend(hex)) { labelLinkUp = true; labelChecked = true; return true; }
   log('杯貼送出失敗，重新連線標籤機再試一次', 'y');
   labelOpen(); await sleep(3000);
-  labelLinkUp = fullySend(hex);
+  labelLinkUp = fullySend(hex); labelChecked = true;
   return labelLinkUp;
 }
 // 這台平板印過哪些單的杯貼(老闆 10-13：廚房單補印時杯貼不跟著補，除非第一次沒印成；要補用 POS 頁「補印杯貼」挑杯印)
@@ -531,6 +541,18 @@ async function printLabels(labels, orderId, force) {
   log(ok ? (force ? '補印杯貼 ' : '已印杯貼 ') + labels.length + ' 張（' + orderId + '）' : '⚠ 杯貼沒印出來（' + orderId + '）：請確認標籤機電源、藍牙', ok ? 'g' : 'e');
   refreshLabelState(ok ? '藍牙 ' + getLabelBt() + '（正常）' : '⚠ 杯貼沒印出來', ok);
   return ok;
+}
+// 11-16 出單機設定按「儲存設定」順便試連標籤機：送 ESC ! ?（TSPL 查狀態指令，不會印、不會走紙），送得出去＝連得上
+const LABEL_PROBE_HEX = '1b213f';
+async function labelProbe() {
+  if (!labelOn() || !hasF()) return false;
+  if (!labelOpened) { labelOpen(); labelOpened = true; await sleep(3000); }
+  labelLinkUp = fullySend(LABEL_PROBE_HEX);
+  if (!labelLinkUp) { labelOpen(); await sleep(3000); labelLinkUp = fullySend(LABEL_PROBE_HEX); }
+  labelChecked = true;
+  log(labelLinkUp ? '標籤機試連成功（' + getLabelBt() + '）' : '⚠ 標籤機試連失敗（' + getLabelBt() + '）：請確認電源、藍牙配對、名稱', labelLinkUp ? 'g' : 'e');
+  refreshLabelState(labelLinkUp ? '藍牙 ' + getLabelBt() + '（正常）' : '⚠ 標籤機連不上', labelLinkUp);
+  return labelLinkUp;
 }
 const LABEL_SAMPLE = { no: '0030', time: '08:30', idx: 2, total: 3, name: '阿薩姆奶茶 L', opts: ['少冰', '半糖', '加茶珠'], note: '', who: '小美', price: '$45' };
 
@@ -673,7 +695,7 @@ window.printLocalLines_ = async function (lines, labels, orderId) {
   return ok;
 };
 // 10-13 給 POS 頁「出單機設定」用：讀設定、改設定(權限 POS 頁先驗過)、印測試單
-window.printCfg_ = () => ({ mode: getMode(), ip: getIp(), linkUp, running, fully: hasF(), key: !!getKey(), labelMode: getLabelMode(), labelBt: getLabelBt(), labelLinkUp,
+window.printCfg_ = () => ({ mode: getMode(), ip: getIp(), linkUp, running, fully: hasF(), key: !!getKey(), labelMode: getLabelMode(), labelBt: getLabelBt(), labelLinkUp, labelChecked,
   autoFind: getAutoFind(), scanning: !!lanScanPromise, multi: lanMulti.slice(), autoFindLast: getAutoFindLast() });
 // 11-03 出單機設定「🔎 自動搜尋」：只找不改，找到的給 POS 頁讓店長選、按儲存才生效
 window.printScan_ = async function () {
@@ -688,18 +710,19 @@ window.printSetCfg_ = async function (cfg) {
     if (cfg.labelMode) {   // 10-13 杯貼標籤機：藍牙(要出單機是網路)／不使用
       localStorage.setItem('abao_label_mode', cfg.labelMode === 'bt' ? 'bt' : 'off');
       if (cfg.labelMode === 'bt') localStorage.setItem('abao_label_bt', String(cfg.labelBt || '').trim());
-      labelOpened = false; labelLinkUp = false;
+      labelOpened = false; labelLinkUp = false; labelChecked = false;
     }
   } catch (e) { return { ok: false, why: '平板存不了設定' }; }
   log('出單方式改成「' + (isNet() ? '網路出單機 ' + getIp() + (getAutoFind() ? '' : '（不自動找出單機）') : '藍牙') + '」' + (cfg.by ? '（' + cfg.by + '）' : ''), 'g');
   linkUp = false; linkDownSince = 0; document.body.classList.remove('linkdown');
-  lanMulti = []; unreachSince = 0; lastLanScanAt = 0;   // 店長改過設定＝重新起算自動找出單機
+  lanMulti = []; unreachSince = 0; lastLanScanAt = 0; autoFindRetrySoon = false; autoFindRetryUsed = false;   // 店長改過設定＝重新起算自動找出單機
   refreshIfaceState();
   lastReconnectAt = 0;
   const ok = isNet() || hasF() ? await reconnect('改出單方式') : false;
   startLinkMonitor();
   if (getKey() && wantRun && !running) setRunning(true);
   refreshLabelState();
+  if (labelOn()) await labelProbe();   // 11-16 儲存時出單機、標籤機一起試連
   return Object.assign({ ok }, window.printCfg_());
 };
 // 補印杯貼(10-13)：POS 頁挑好的杯直接印(印過也印)
