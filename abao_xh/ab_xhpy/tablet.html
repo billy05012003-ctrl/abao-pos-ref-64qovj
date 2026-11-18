@@ -227,7 +227,7 @@
 <div class="pos-overlay" id="lp-overlay" onclick="if(event.target===this)lpCloseList_()">
   <div class="pos-sheet" style="max-width:560px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
-      <h2 style="margin:0;font-size:1.1rem">⚠️ LINE Pay 收款未完成</h2>
+      <h2 id="lp-list-title" style="margin:0;font-size:1.1rem">⚠️ LINE Pay 收款未完成</h2>
       <button type="button" class="btn btn-secondary" onclick="lpCloseList_()">關閉</button>
     </div>
     <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px">這些單還沒確定收到錢，<b>先不要做餐</b>。按「重新查詢」看顧客有沒有付款成功；系統每幾分鐘也會自動再查，查到已付款會自動補印出單。</div>
@@ -245,6 +245,18 @@
     </form>
     <div id="lp-scan-msg" style="min-height:2.6em;margin:10px 0;font-size:0.95rem"></div>
     <div id="lp-scan-btns" style="display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+</div>
+<!-- 11-18 (3d) 線下TWQR：平板顯示 QR，顧客用手機錢包(全支付、台灣Pay、街口…)掃 -->
+<div class="pos-overlay" id="tq-overlay">
+  <div class="pos-sheet" style="max-width:460px;text-align:center">
+    <h2 style="margin:0 0 2px;font-size:1.15rem">請顧客用手機錢包掃 QR 付款</h2>
+    <div style="font-size:0.8rem;color:var(--muted)">全支付、台灣Pay、街口、各家銀行 App 都可以掃</div>
+    <div id="tq-amount" style="font-size:1.6rem;font-weight:700;color:var(--brand);margin:6px 0"></div>
+    <div id="tq-qr" style="width:260px;height:260px;max-width:100%;margin:4px auto;display:flex;align-items:center;justify-content:center;background:#fff"></div>
+    <div id="tq-timer" style="font-size:0.95rem;color:var(--muted);min-height:1.3em"></div>
+    <div id="tq-msg" style="min-height:2.6em;margin:8px 0;font-size:0.95rem"></div>
+    <div id="tq-btns" style="display:flex;flex-direction:column;gap:6px"></div>
   </div>
 </div>
 <div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
@@ -290,6 +302,8 @@
       <div id="pos-payment-method-group" style="display:flex;flex-wrap:wrap;gap:8px;">
         <!-- 10-22 LINE Pay 門市反掃：後台「付款方式設定」開了才出現；斷網反灰 -->
         <button type="button" class="pos-pay-btn" id="pos-pay-lpscan" data-method="線下LINEPay" style="display:none" onclick="setPosPaymentMethod_('線下LINEPay')">線下LINEPay</button>
+        <!-- 11-18 (3d) 線下TWQR：後台開了、這間店有 ezPay 收款帳戶才出現；斷網反灰 -->
+        <button type="button" class="pos-pay-btn" id="pos-pay-twqr" data-method="線下TWQR" style="display:none" onclick="setPosPaymentMethod_('線下TWQR')">線下TWQR</button>
         <!-- 10-22 其餘按鈕由 posPayBtnsRender_() 依後台「線下收款」清單產生(現金永遠在) -->
       </div>
       <div id="pos-payatpickup-hint" style="display:none;font-size:0.75rem;color:#c0392b;margin-top:4px;">選這個顧客現在還沒付錢，到店取餐前要先在「待取餐訂單」標記已收款才能交餐。</div>
@@ -949,11 +963,11 @@ function loadRefundableOrders() {
       <div class="order-card">
         <div>
           <div><strong>${o.orderId}</strong> <span class="meta">[${o.channel}] ${o.status}</span>${o.printed ? '<span class="tag-printed">🖨已出單</span>' : ''}</div>
-          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>
+          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.twqr ? 'TWQR(退回顧客的手機錢包)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>
         </div>
         ${o.needsManual
           ? '<button class="btn" disabled style="opacity:.5;">無法自動退</button>'
-          : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.gateway ? 'true' : 'false'})">退款</button>`}
+          : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.twqr ? "'twqr'" : o.gateway ? 'true' : 'false'})">退款</button>`}
       </div>
     `).join('') + pendHtml;
   }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
@@ -961,6 +975,7 @@ function loadRefundableOrders() {
 
 function doRefund(orderId, amount, viaGateway) {
   const how = viaGateway === 'linepay' ? '這筆是 LINE Pay 付款，系統會直接退回顧客的 LINE Pay，不用退現金。'   // 10-23 線上LINEPay 也走這裡，不寫線下
+    : viaGateway === 'twqr' ? '這筆是 TWQR 付款，系統會直接退回顧客的手機錢包（全支付／台灣Pay…），不用退現金。'   // 11-18 (3d)
     : viaGateway ? '這筆是線上信用卡付款，系統會向藍新退回顧客的卡。' : '這筆是現場付款，系統只記錄退款，請店員當場把錢退給顧客。';
   if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。')) return;
   withPosPerm_('refund', '退款', (staffName, staffPin) => {
@@ -1511,7 +1526,8 @@ function confirmCloseRegister() {
   apiPost({ action: 'closeRegister', storeId: STORE_ID, staffName, staffPin }).then(data => {
     if (data.status !== 'ok') { alert(data.message || '關帳失敗'); return; }
     closeCloseRegisterPreview();
-    document.getElementById('pos-manage-result').textContent = '已關帳（作廢' + data.voidedCount + '張未處理訂單）';
+    document.getElementById('pos-manage-result').textContent = '已關帳（作廢' + data.voidedCount + '張未處理訂單）'
+      + (data.twqrUnknown && data.twqrUnknown.length ? '；有 ' + data.twqrUnknown.length + ' 張 TWQR 查不到付款結果，留在上方紅條（先不要做餐）' : '');   // 11-18 (3d)
     loadRegisterLog();
     loadOrders();
     loadStuckPaymentOrders();
@@ -3792,6 +3808,13 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     lpOpenScan_({ payload });
     return;
   }
+  // 11-18 (3d) 線下TWQR：開 QR 視窗(斷網不能用)
+  if (paymentMethod === TQ_POS_METHOD_) {
+    if (posOffline_()) { alert('網路中斷時不能用 TWQR，請改收現金或用 LINEPay mini'); restoreBtn(); return; }
+    restoreBtn();
+    tqOpen_({ payload });
+    return;
+  }
   // 10-13 離線收銀：已判定離線就直接存平板＋直接印(兌換券要雲端核銷，離線不能用)
   if (posOffline_()) {
     if (appliedVouchers.length) { alert('網路中斷時不能用兌換券，請先拿掉兌換券再結帳'); restoreBtn(); return; }
@@ -3895,7 +3918,7 @@ function ocLoad_() {
   if (ocLoading_ || !posDeviceToken_()) return;
   ocLoading_ = true;
   apiGet({ action: 'pendingConfirmOrders', storeId: STORE_ID }).then(d => {
-    if (d && d.status === 'ok') { ocOrders_ = d.orders || []; ocRender_(); lpPending_ = d.linePayPending || []; lpRender_(); }
+    if (d && d.status === 'ok') { ocOrders_ = d.orders || []; ocRender_(); lpPending_ = d.linePayPending || []; tqPending_ = d.twqrPending || []; lpRender_(); }
   }).catch(() => {}).finally(() => { ocLoading_ = false; });
 }
 function ocRender_() {
@@ -3955,7 +3978,7 @@ setInterval(ocLoad_, OC_POLL_MS_);
 let lpScanEnabled_ = false, lpPending_ = [], lpCtx_ = null;
 function loadLinePaySettings_() {
   return apiGet({ action: 'paymentMethodSettings', storeId: STORE_ID }).then(d => {
-    if (d && d.status === 'ok') { lpScanEnabled_ = !!d.linePayScanEnabled; lpScanBtnRefresh_(); }
+    if (d && d.status === 'ok') { lpScanEnabled_ = !!d.linePayScanEnabled; tqEnabled_ = !!d.twqrEnabled; lpScanBtnRefresh_(); }
   }).catch(() => {});
 }
 function lpScanBtnRefresh_() {
@@ -3968,6 +3991,7 @@ function lpScanBtnRefresh_() {
   b.style.opacity = off ? '0.4' : '';
   b.title = off ? '網路中斷時不能用 LINE Pay 掃碼' : '';
   if ((!lpScanEnabled_ || off) && document.getElementById('pos-payment-method').value === LP_POS_METHOD_) setPosPaymentMethod_(posDefaultPayMethod_());
+  try { tqBtnRefresh_(); } catch (e) {}   // 11-18 (3d) TWQR 按鈕跟著一起(斷網反灰)
 }
 setTimeout(loadLinePaySettings_, 0);
 setInterval(loadLinePaySettings_, 300000);   // 後台改開關，5 分鐘內跟上
@@ -3986,13 +4010,13 @@ function posPayBtnsRender_() {
   // 10-23 LINEPay mini 是備援：後台停用時按鈕留著、變灰不能按(店員知道它還在)；其他停用的直接消失
   const miniOff = !on.includes('LINEPay mini') && list.some(m => m.name === 'LINEPay mini');
   const names = (on.includes('LINEPay mini') || miniOff ? ['LINEPay mini'] : []).concat(['現金'],
-    on.filter(n => OFFPM_BUILTIN_.indexOf(n) === -1 && n !== '現金' && n !== LP_POS_METHOD_),
+    on.filter(n => OFFPM_BUILTIN_.indexOf(n) === -1 && n !== '現金' && n !== LP_POS_METHOD_ && n !== '線下TWQR'),
     OFFPM_BUILTIN_.slice(1).filter(n => on.indexOf(n) !== -1));
   const key = names.join('|') + (miniOff ? '|mini-off' : '');
   if (key === offPmShown_) return;   // 沒變就不動，避免結帳到一半按鈕閃
   offPmShown_ = key;
   const g = document.getElementById('pos-payment-method-group');
-  g.querySelectorAll('.pos-pay-btn:not(#pos-pay-lpscan)').forEach(b => b.remove());
+  g.querySelectorAll('.pos-pay-btn:not(#pos-pay-lpscan):not(#pos-pay-twqr)').forEach(b => b.remove());
   names.forEach(n => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -4007,7 +4031,7 @@ function posPayBtnsRender_() {
     g.appendChild(b);
   });
   const cur = document.getElementById('pos-payment-method').value;
-  if (cur === LP_POS_METHOD_ || posPayEnabled_(cur)) g.querySelectorAll('.pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-method') === cur));
+  if (cur === LP_POS_METHOD_ || cur === '線下TWQR' || posPayEnabled_(cur)) g.querySelectorAll('.pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-method') === cur));
   else { try { setPosPaymentMethod_(posDefaultPayMethod_()); } catch (e) {} }
 }
 // 10-23 第三方收款(快速出單的外送平台)：後台「第三方收款」關掉的不出現；沒讀過就三個全開
@@ -4169,18 +4193,279 @@ function lpCloseScan_(keep) {
   lpCtx_ = null;
   ocLoad_();
 }
+// ---------------------------------------------------------------
+// 11-18 (3d) 線下TWQR(規格 線下TWQR正式版規格_2026-11-18.md)：平板顯示 QR，顧客用手機錢包掃。
+// 後端每一步都先問 ezPay(改收現金／取消／重新產生前一定先把舊 QR 刪掉)，這裡只照回應顯示；「狀態不明」時不給改現金。
+// SOP：只認平板的「收款成功」，不看顧客手機畫面。QR 圖由平板自己畫(qrcode-generator，cdnjs；網路斷了本來就不能用 TWQR)
+// ---------------------------------------------------------------
+const TQ_POS_METHOD_ = '線下TWQR';
+const TQ_POLL_MS_ = 3000, TQ_LIFE_MS_ = 180000;
+const TQ_QR_LIB_ = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+let tqEnabled_ = false, tqPending_ = [], tqCtx_ = null, tqPollTimer_ = null, tqTickTimer_ = null, tqLibP_ = null;
+function tqLoadLib_() {
+  if (window.qrcode) return Promise.resolve();
+  if (!tqLibP_) tqLibP_ = new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = TQ_QR_LIB_;
+    sc.onload = () => (window.qrcode ? res() : rej());
+    sc.onerror = () => { tqLibP_ = null; sc.remove(); rej(); };
+    document.head.appendChild(sc);
+  });
+  return tqLibP_;
+}
+function tqBtnRefresh_() {
+  const b = document.getElementById('pos-pay-twqr');
+  if (!b) return;
+  let off = false;
+  try { off = posOffline_(); } catch (e) {}
+  b.style.display = tqEnabled_ ? '' : 'none';
+  b.disabled = off;
+  b.style.opacity = off ? '0.4' : '';
+  b.title = off ? '網路中斷時不能用 TWQR' : '';
+  if ((!tqEnabled_ || off) && document.getElementById('pos-payment-method').value === TQ_POS_METHOD_) setPosPaymentMethod_(posDefaultPayMethod_());
+  if (tqEnabled_ && !off) tqLoadLib_().catch(() => {});   // 先載好畫 QR 的程式，結帳時不用等
+}
+// 中文照 UTF-8 編(不加 BOM)：qrcode-generator 預設一個字只取 1 個位元組，所以先轉成「每個位元組一個字」
+function tqBytes_(s) { let out = ''; new TextEncoder().encode(String(s)).forEach(x => { out += String.fromCharCode(x); }); return out; }
+function tqDrawQr_(text) {
+  const box = document.getElementById('tq-qr');
+  box.innerHTML = '<span style="color:var(--muted)">QR 產生中…</span>';
+  return tqLoadLib_().then(() => {
+    const q = qrcode(0, 'M');
+    q.addData(tqBytes_(text), 'Byte');
+    q.make();
+    box.innerHTML = q.createSvgTag({ cellSize: 6, margin: 4, scalable: true });
+    const svg = box.querySelector('svg');
+    if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; }
+  }).catch(() => { box.innerHTML = '<span style="color:#c0392b;font-size:0.9rem">QR 畫不出來（網路不穩），請按「取消這張單」後再結帳一次，或改用其他付款方式</span>'; });
+}
+// ezPay 到期時間是台北時間「2026-11-18 10:03:00」；平板時鐘不準時改用「現在＋3 分鐘」
+function tqExpireMs_(t) {
+  const ms = t ? Date.parse(String(t).trim().replace(' ', 'T') + '+08:00') : NaN;
+  return isFinite(ms) && ms > Date.now() && ms <= Date.now() + TQ_LIFE_MS_ + 20000 ? ms : Date.now() + TQ_LIFE_MS_;
+}
+// QR 視窗：ctx＝{ payload }(結帳)或 { orderId, total }(紅條「重新產生 QR」)
+function tqOpen_(ctx) {
+  tqCtx_ = Object.assign({ orderId: null, busy: false, polling: false, expireAt: 0, state: '' }, ctx, { total: ctx.payload ? ctx.payload.totalAmount : ctx.total });
+  document.getElementById('tq-amount').textContent = '$' + tqCtx_.total;
+  document.getElementById('tq-overlay').classList.add('open');
+  tqCreate_();
+}
+// 產生(或拿回還有效的同一張) QR：結帳第一次帶整張單＋結帳鍵；之後只帶訂單號
+function tqCreate_() {
+  if (!tqCtx_ || tqCtx_.busy) return;
+  tqCtx_.busy = true;
+  tqState_('creating');
+  const req = tqCtx_.orderId ? { action: 'posTwqrCheckout', storeId: STORE_ID, orderId: tqCtx_.orderId }
+    : Object.assign({}, tqCtx_.payload, { action: 'posTwqrCheckout' });
+  apiPost(req).then(tqHandle_)
+    .catch(() => tqState_('unknown', '網路不穩，不知道 QR 有沒有產生成功，請按「重新查詢」'))
+    .finally(() => { if (tqCtx_) tqCtx_.busy = false; });
+}
+function tqHandle_(d) {
+  if (!tqCtx_) return;
+  if (d && d.orderId) tqCtx_.orderId = d.orderId;
+  if (d && d.status === 'ok' && d.state === 'paid') { tqSuccess_(d); return; }
+  if (d && d.status === 'ok' && d.state === 'waiting' && d.qr) {
+    tqCtx_.expireAt = tqExpireMs_(d.expireTime);
+    tqState_('waiting');
+    tqDrawQr_(d.qr);
+    return;
+  }
+  if (d && d.status === 'unknown') { tqState_('unknown', d.message); ocLoad_(); return; }
+  tqState_('failed', (d && d.message) || '產生 QR 失敗，請再試一次');
+  ocLoad_();
+}
+function tqStopTimers_() { clearInterval(tqPollTimer_); clearInterval(tqTickTimer_); tqPollTimer_ = null; tqTickTimer_ = null; }
+function tqState_(state, msg) {
+  tqStopTimers_();
+  if (!tqCtx_) return;
+  tqCtx_.state = state;
+  const m = document.getElementById('tq-msg'), b = document.getElementById('tq-btns'), box = document.getElementById('tq-qr');
+  const btn = (label, fn, cls) => `<button type="button" class="btn ${cls || 'btn-secondary'}" style="padding:10px" onclick="${fn}">${label}</button>`;
+  const fromCart = !!tqCtx_.payload;
+  document.getElementById('tq-timer').textContent = '';
+  box.style.opacity = state === 'waiting' || state === 'creating' ? '' : '0.12';   // QR 失效後淡掉，避免顧客還去掃
+  if (state === 'creating') {
+    box.innerHTML = '<span style="color:var(--muted)">QR 產生中…</span>';
+    m.innerHTML = '<b>正在跟 ezPay 產生 QR…</b>';
+    b.innerHTML = '';
+  } else if (state === 'busy') {
+    m.innerHTML = '<b>處理中，請稍候…</b>';
+    b.innerHTML = '';
+  } else if (state === 'waiting') {
+    m.innerHTML = '<span style="color:var(--muted)">顧客付款後會自動顯示「收款成功」。<b>只認平板畫面，不看顧客手機</b></span>';
+    b.innerHTML = (fromCart ? btn('改用其他付款方式', 'tqOther_()') : '') + btn('取消這張單', 'tqCancel_()') + btn('先關掉，稍後處理', 'tqClose_()');
+    tqTick_();
+    tqTickTimer_ = setInterval(tqTick_, 1000);
+    tqPollTimer_ = setInterval(() => tqPoll_(false), TQ_POLL_MS_);
+  } else if (state === 'expired') {
+    m.innerHTML = `<span style="color:#c0392b">${escapeHtml_(msg || 'QR 已失效，顧客沒有付款')}</span>`;
+    b.innerHTML = btn('重新產生 QR', 'tqCreate_()', 'btn-primary') + btn('改收現金', 'tqToCash_()') + (fromCart ? btn('改用其他付款方式', 'tqOther_()') : '') + btn('取消這張單', 'tqCancel_()');
+  } else if (state === 'failed') {
+    m.innerHTML = `<span style="color:#c0392b">${escapeHtml_(msg || '產生 QR 失敗')}</span>`;
+    b.innerHTML = btn('再產生一次', 'tqCreate_()', 'btn-primary') + (fromCart ? btn('改用其他付款方式', 'tqOther_()') : '')
+      + (tqCtx_.orderId ? btn('取消這張單', 'tqCancel_()') : btn('關閉', 'tqClose_(true)'));
+  } else {   // unknown
+    m.innerHTML = `<b style="color:#c0392b">${escapeHtml_(msg || '付款狀態不明')}</b><div style="font-size:0.95rem;color:#c0392b;font-weight:700;margin-top:4px">不要收現金</div><div style="font-size:0.8rem;color:var(--muted);margin-top:4px">系統會自動再查，這張單會留在上方紅條，先不要做餐。</div>`;
+    b.innerHTML = btn('重新查詢', 'tqRecheck_()', 'btn-primary') + btn('先關掉，稍後處理', 'tqClose_(true)');
+  }
+}
+function tqTick_() {
+  if (!tqCtx_ || tqCtx_.state !== 'waiting') return;
+  const left = Math.ceil((tqCtx_.expireAt - Date.now()) / 1000), el = document.getElementById('tq-timer');
+  if (left > 0) { el.textContent = `QR 剩 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} 失效`; return; }
+  el.textContent = 'QR 已失效，確認中…';
+  tqStopTimers_();
+  tqPoll_(true);
+}
+// 等付款時每 3 秒問一次；final＝倒數到 0 的最後一問(ezPay 可能還沒標逾時，就給「重新產生／改收現金」，後端會先刪單才做)
+function tqPoll_(final) {
+  if (!tqCtx_ || !tqCtx_.orderId || tqCtx_.polling) return;
+  tqCtx_.polling = true;
+  const id = tqCtx_.orderId;
+  apiPost({ action: 'posTwqrStatus', storeId: STORE_ID, orderId: id }).then(d => {
+    if (!tqCtx_ || tqCtx_.orderId !== id || (tqCtx_.state !== 'waiting' && !final)) return;
+    if (d && d.status === 'ok' && d.state === 'paid') { tqSuccess_(d); return; }
+    if (d && d.status === 'ok' && d.state === 'notPaid') { tqState_('expired', d.message ? 'ezPay：' + d.message + '，顧客沒有付款' : ''); return; }
+    if (final) tqState_(d && d.status === 'unknown' ? 'unknown' : 'expired', d && d.message);
+  }).catch(() => { if (final && tqCtx_ && tqCtx_.orderId === id) tqState_('unknown', '網路不穩，請按「重新查詢」'); })
+    .finally(() => { if (tqCtx_) tqCtx_.polling = false; });
+}
+function tqSuccess_(d) {
+  const fromCart = !!(tqCtx_ && tqCtx_.payload), total = tqCtx_ ? tqCtx_.total : 0;
+  tqStopTimers_();
+  document.getElementById('tq-overlay').classList.remove('open');
+  tqCtx_ = null;
+  ocLoad_();
+  loadRevenue();
+  const how = d.paidByTwqr ? 'TWQR 收款成功（顧客其實已經付了，不用收現金）'
+    : d.asCash ? `已改收現金，請跟顧客收 $${total}` : 'TWQR 收款成功' + (d.bankName ? '（' + d.bankName + '）' : '');
+  if (!fromCart) { alert('✅ ' + how + '，已出單（' + d.orderId + '）'); return; }
+  document.getElementById('pos-confirm-order-no').textContent = d.orderId;
+  const notes = [how];
+  if (d.pointsEarned) notes.push(`本次消費獲得 ${d.pointsEarned} 點`);
+  document.getElementById('pos-confirm-points').textContent = notes.join('　');
+  document.getElementById('pos-checkout-panel').style.display = 'none';
+  document.getElementById('pos-confirm-panel').style.display = 'block';
+}
+function tqRecheck_() {
+  if (!tqCtx_) return;
+  if (!tqCtx_.orderId) { tqCreate_(); return; }   // 第一次送出就斷線、還不知道訂單號：用同一把結帳鍵再送(後端認同一張，QR 還有效就回同一張)
+  tqState_('busy');
+  apiPost({ action: 'posTwqrRecheck', storeId: STORE_ID, orderId: tqCtx_.orderId }).then(d => {
+    if (d && d.status === 'ok' && d.state === 'paid') { tqSuccess_(d); return; }
+    if (d && d.status === 'ok' && d.state === 'waiting') { tqCreate_(); return; }   // 還沒付、QR 還有效：拿回同一張繼續等
+    if (d && d.status === 'ok' && d.state === 'notPaid') { tqState_('expired', 'ezPay 確認這張 QR 沒有付款，可以重新產生 QR'); return; }
+    tqState_('unknown', (d && d.message) || '還查不到結果');
+  }).catch(() => tqState_('unknown', '網路不穩，請稍後再按「重新查詢」'));
+}
+function tqToCash_() {
+  if (!tqCtx_ || !tqCtx_.orderId) return;
+  if (!confirm(`改收現金 $${tqCtx_.total}？\n系統會先跟 ezPay 確認這張 QR 已刪除、不會再扣款，成功後再跟顧客收現金。`)) return;
+  tqState_('busy');
+  apiPost({ action: 'posTwqrToCash', storeId: STORE_ID, orderId: tqCtx_.orderId }).then(d => {
+    if (d && d.status === 'ok') { tqSuccess_(d); return; }
+    if (d && d.status === 'unknown') { tqState_('unknown', d.message); return; }
+    tqState_('expired', (d && d.message) || '改收現金失敗');
+  }).catch(() => tqState_('unknown', '網路不穩，不知道有沒有改成功，請按「重新查詢」'));
+}
+// 改用其他付款方式：後端確認 ezPay 不會收到錢→作廢這張待付款單→回結帳畫面(購物車還在，換一把新的結帳鍵)
+function tqOther_() {
+  if (!tqCtx_) return;
+  const back = () => { tqStopTimers_(); document.getElementById('tq-overlay').classList.remove('open'); tqCtx_ = null; posCheckoutKey_ = null; setPosPaymentMethod_(posDefaultPayMethod_()); };
+  if (!tqCtx_.orderId) { back(); return; }
+  tqState_('busy');
+  apiPost({ action: 'posTwqrCancel', storeId: STORE_ID, orderId: tqCtx_.orderId, reason: 'other' }).then(d => {
+    if (d && d.status === 'ok') { back(); ocLoad_(); alert('已取消 TWQR 收款，請選其他付款方式再按一次「確認結帳」'); return; }
+    if (d && d.code === 'paid') { tqRecheck_(); return; }
+    tqState_(d && d.status === 'unknown' ? 'unknown' : 'expired', (d && d.message) || '取消失敗');
+  }).catch(() => tqState_('unknown', '網路不穩，請稍後再試'));
+}
+function tqCancel_() {
+  if (!tqCtx_) return;
+  const fromCart = !!tqCtx_.payload;
+  if (!tqCtx_.orderId) { tqClose_(true); return; }
+  if (!confirm('確定取消這張單？\n（系統會先跟 ezPay 確認這張 QR 已刪除、沒有扣款；用掉的兌換券會退回）')) return;
+  tqState_('busy');
+  apiPost({ action: 'posTwqrCancel', storeId: STORE_ID, orderId: tqCtx_.orderId, reason: 'cancel' }).then(d => {
+    if (d && d.status === 'ok') {
+      tqStopTimers_();
+      document.getElementById('tq-overlay').classList.remove('open');
+      tqCtx_ = null;
+      ocLoad_();
+      if (fromCart) closePosCartAll();
+      return;
+    }
+    if (d && d.code === 'paid') { tqRecheck_(); return; }
+    tqState_(d && d.status === 'unknown' ? 'unknown' : 'expired', (d && d.message) || '取消失敗');
+  }).catch(() => tqState_('unknown', '網路不穩，請稍後再試'));
+}
+function tqClose_(keep) {
+  if (tqCtx_ && tqCtx_.busy) return;
+  if (tqCtx_ && tqCtx_.orderId && !keep && !confirm('這張單還沒收到款，關掉後會留在上方紅條，之後再處理。確定關掉？')) return;
+  tqStopTimers_();
+  document.getElementById('tq-overlay').classList.remove('open');
+  tqCtx_ = null;
+  ocLoad_();
+}
+// 紅條清單裡的 TWQR 單(跟 LINE Pay 同一個清單)
+function tqRenderRows_() {
+  return tqPending_.map(o => {
+    const id = escapeHtml_(o.orderId);
+    const t = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    return `<div style="border:2px solid #e57373;border-radius:10px;padding:10px 12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;gap:8px"><b>${id} <span style="font-size:0.75rem;font-weight:400;padding:1px 8px;border-radius:999px;background:#fde8e8;color:#a32d2d">TWQR</span></b><b>$${Number(o.total) || 0}</b></div>
+      <div style="font-size:0.8rem;color:var(--muted);margin:2px 0 8px">結帳 ${t}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <button type="button" class="btn btn-primary" onclick="tqListAct_('recheck','${id}',this)">重新查詢</button>
+        <button type="button" class="btn btn-secondary" onclick="tqListRegen_('${id}')">重新產生 QR</button>
+        <button type="button" class="btn btn-secondary" onclick="tqListAct_('cash','${id}',this)">改收現金</button>
+        <button type="button" class="btn btn-danger" onclick="tqListAct_('void','${id}',this)">作廢</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function tqListRegen_(orderId) {
+  const o = tqPending_.find(x => x.orderId === orderId);
+  if (!o) return;
+  lpCloseList_();
+  tqOpen_({ orderId: o.orderId, total: o.total });
+}
+function tqListAct_(kind, orderId, btn) {
+  const o = tqPending_.find(x => x.orderId === orderId) || { total: 0 };
+  if (kind === 'cash' && !confirm(`改收現金 $${o.total}？\n系統會先跟 ezPay 確認這張 QR 已刪除、不會再扣款，成功後再跟顧客收現金。`)) return;
+  if (kind === 'void' && !confirm(`確定作廢 ${orderId}？\n（系統會先跟 ezPay 確認沒有扣款；用掉的兌換券會退回）`)) return;
+  const action = { recheck: 'posTwqrRecheck', cash: 'posTwqrToCash', void: 'posTwqrCancel' }[kind];
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '處理中…';
+  apiPost({ action, storeId: STORE_ID, orderId, reason: 'cancel' }).then(d => {
+    if (d && d.status === 'ok') {
+      if (kind === 'recheck') alert(d.state === 'paid' ? '✅ 顧客已付款成功，已轉成正式訂單並補印出單'
+        : d.state === 'waiting' ? '顧客還沒付款（QR 還在有效時間內）。可以按「重新產生 QR」給顧客掃' : 'ezPay 確認「沒有付款」。可以按「重新產生 QR」請顧客重新付款，或改收現金／作廢');
+      else if (kind === 'cash') alert(d.paidByTwqr ? '✅ ' + d.message : `已改成現金收款並出單，請跟顧客收 $${o.total}`);
+      else alert('已作廢' + (d.vouchersRestored ? `，退回兌換券 ${d.vouchersRestored} 張` : ''));
+      ocLoad_();
+      loadRevenue();
+    } else alert((d && d.message) || '處理失敗，請再按一次');
+  }).catch(() => alert('網路不穩，請稍後再按一次')).finally(() => { btn.disabled = false; btn.textContent = label; });
+}
 // 收款未完成紅條／清單
 function lpRender_() {
   const b = document.getElementById('lp-banner');
   if (!b) return;
   if (document.getElementById('lp-overlay').classList.contains('open')) lpRenderList_();
-  if (!lpPending_.length) { b.style.display = 'none'; return; }
-  b.textContent = `⚠️ 有 ${lpPending_.length} 張 LINE Pay 收款未完成：按這裡處理（先不要做餐）`;
+  if (!lpPending_.length && !tqPending_.length) { b.style.display = 'none'; return; }
+  b.textContent = !tqPending_.length ? `⚠️ 有 ${lpPending_.length} 張 LINE Pay 收款未完成：按這裡處理（先不要做餐）`
+    : `⚠️ 有 ${lpPending_.length + tqPending_.length} 張收款未完成（${[lpPending_.length ? 'LINE Pay ' + lpPending_.length + ' 張' : '', 'TWQR ' + tqPending_.length + ' 張'].filter(Boolean).join('、')}）：按這裡處理（先不要做餐）`;
   b.style.display = 'block';
 }
 function lpRenderList_() {
   const el = document.getElementById('lp-list');
-  if (!lpPending_.length) { el.innerHTML = '<div class="empty-hint">沒有收款未完成的單 ✅</div>'; return; }
+  const ttl = document.getElementById('lp-list-title');
+  if (ttl) ttl.textContent = tqPending_.length ? '⚠️ 收款未完成' : '⚠️ LINE Pay 收款未完成';
+  if (!lpPending_.length && !tqPending_.length) { el.innerHTML = '<div class="empty-hint">沒有收款未完成的單 ✅</div>'; return; }
   el.innerHTML = lpPending_.map(o => {
     const id = escapeHtml_(o.orderId);
     const t = o.createdAt ? new Date(o.createdAt).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
@@ -4194,7 +4479,7 @@ function lpRenderList_() {
         <button type="button" class="btn btn-danger" onclick="lpListAct_('void','${id}',this)">作廢</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + tqRenderRows_();
 }
 function lpOpenList_() { lpRenderList_(); document.getElementById('lp-overlay').classList.add('open'); ocLoad_(); }
 function lpCloseList_() { document.getElementById('lp-overlay').classList.remove('open'); }
