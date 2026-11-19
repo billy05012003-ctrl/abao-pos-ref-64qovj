@@ -387,6 +387,7 @@
     <button class="sub-item" id="mch-sub-btn-storeinfo" onclick="switchMerchantSubview('storeinfo')">店家資訊</button>
     <button class="sub-item" id="mch-sub-btn-schedule" onclick="switchMerchantSubview('schedule')">商店時段設定</button>
     <button class="sub-item" id="mch-sub-btn-payment" onclick="switchMerchantSubview('payment')">付款方式設定</button>
+    <button class="sub-item" id="mch-sub-btn-notify" onclick="switchMerchantSubview('notify')">訂單通知設定</button>
     <button class="sub-item" id="mch-sub-btn-payalert" style="display:none;" onclick="switchMerchantSubview('payalert')">金流告警 <span id="bo-payalert-badge" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span></button>
   </div>
   <!-- 飲品升級：規則存在各店(drink_upgrade_rules.store_id)，11-14 從「會員相關」移到「這間店」並顯示出來(優惠券清單裡的捷徑列照留) -->
@@ -597,6 +598,12 @@
   </div>
 </div>
 <!-- 11-08 前端切換準備：金流告警(只有打新後端時選單才出現；讀 paymentAlerts、按 resolvePaymentAlert) -->
+<!-- 11-20 (9g) 訂單通知設定：每間店自己的開關（老闆 11-20 定規格） -->
+<div id="view-notify" class="view" style="display:none;">
+  <div id="bo-owner-only-notify" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">訂單通知設定只有老闆可以修改，目前是唯讀。</div>
+  <p style="font-size:0.8rem;color:var(--muted);">線上點餐的單一律要門市平板按「確認接單」才會出單。這裡設定：顧客怎麼知道店家接單了，以及店裡太久沒確認時要怎麼提醒。每個開關點一下就存。</p>
+  <div id="notify-form"><div class="empty-hint">載入中...</div></div>
+</div>
 <div id="view-payalert" class="view" style="display:none;">
   <p style="font-size:0.8rem;color:var(--muted);">線上刷卡、LINE Pay、退款過程中系統自己處理不了、需要人工看一下的狀況，例如付款金額不符、訂單作廢後顧客才付款、同一張單付了兩次、店員人工標記已付款、退款帳務沒寫成功。看完、到藍新／LINE Pay 商家後台核對處理好之後，按「標記已處理」收起來。</p>
   <div id="bo-owner-only-payalert" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">只有老闆可以標記已處理，目前是唯讀。</div>
@@ -1872,8 +1879,68 @@ function checkBackupWarn_() {
 const PAY_ALERT_KIND_ = {
   amount_mismatch: '付款金額不符', late_payment: '訂單作廢後才付款', duplicate_payment: '同一張單付了兩次', store_mismatch: '付款通知的門市不符',
   not_found: '付款通知找不到訂單', voucher_failed: '兌換券核銷失敗', points_failed: '給點失敗', refund_book_failed: '退款成功但帳務沒寫成功',
-  refund_retry_failed: '退款重試到上限仍失敗', sha_mismatch: '付款通知簽章不對', decrypt_failed: '付款通知解不開', manual_confirm: '店員人工標記已付款'
+  refund_retry_failed: '退款重試到上限仍失敗', sha_mismatch: '付款通知簽章不對', decrypt_failed: '付款通知解不開', manual_confirm: '店員人工標記已付款',
+  twqr_refund_pending: 'TWQR 退款處理中', twqr_refund_failed: 'TWQR 退款失敗',
+  online_unconfirmed: '線上單太久沒確認接單', line_quota: 'LINE 免費訊息用完'   // 11-20 (9g)
 };
+// ---- 11-20 (9g) 訂單通知設定 ----
+let notifyData_ = null;
+const NOTIFY_ROWS_ = [
+  { sec: '顧客通知' },
+  { key: 'screenLive', name: '畫面即時更新', desc: '顧客停在「訂單完成」畫面或「我的訂單」時，店家一按確認接單就自己顯示「✅ 店家已確認接單」。不花錢、顧客不用加好友；顧客關掉畫面就看不到。' },
+  { key: 'lineConfirm', name: 'LINE 接單通知', line: true, desc: '店家按「確認接單」時，用官方帳號 LINE 通知顧客（附我的訂單連結）。每張單扣 1 則官方帳號訊息額度（免費方案每月 200 則，用完發不出去、不會收錢）；顧客要先加官方帳號好友才收得到。' },
+  { key: 'lineVoid', name: 'LINE 作廢退款通知', line: true, desc: '平板或後台把已付款的線上單退款／作廢時，LINE 通知顧客「訂單已取消、款項已退回」。很少發生，費用很少。' },
+  { sec: '店內提醒' },
+  { key: 'tabletAlert', name: '平板全螢幕提醒', desc: '線上單太久沒確認：現在下的單 10 分鐘、預訂單取餐前 15 分鐘 → 平板跳出全螢幕紅色視窗擋住收銀畫面，按確認接單才消失（購物車有東西、結帳中先不跳）。' },
+  { key: 'ownerLine', name: 'LINE 通知老闆', desc: '還是沒確認：現在下的單 20 分鐘、預訂單到了取餐時間 → 金流告警記一筆，並 LINE 通知下面「接收提醒的手機」（附訂單號、取餐時間、顧客電話）。每張單只通知一次。' },
+  { key: 'voidPhone', name: '作廢線上單跳顧客電話', desc: '平板退款／作廢線上單後，提醒店員「請打電話通知顧客：09xx-xxx-xxx」。' },
+];
+function loadNotifySettings_() {
+  const el = document.getElementById('notify-form');
+  if (!el) return;
+  if (!NEW_API_) { el.innerHTML = '<div class="empty-hint">目前的後端沒有這個功能</div>'; return; }
+  document.getElementById('bo-owner-only-notify').style.display = isBoOwner_() ? 'none' : 'block';
+  apiGet({ action: 'notifySettings', storeId: BO_HOME_STORE_ }).then(d => {
+    if (d.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(d.message || '') + '</div>'; return; }
+    notifyData_ = d;
+    renderNotifySettings_();
+  }).catch(() => { el.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+}
+function renderNotifySettings_() {
+  const d = notifyData_, el = document.getElementById('notify-form');
+  if (!d || !el) return;
+  const owner = isBoOwner_(), s = d.settings || {};
+  const top = (d.sqlReady === false ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 資料庫還沒更新（SQL 46），下面是預設值，暫時存不進去。</div>' : '')
+    + (!d.lineReady ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 還沒設定 LINE 發訊權杖：LINE 接單通知、LINE 作廢退款通知不能打開；「LINE 通知老闆」只會記在金流告警、不會發 LINE。</div>' : '');
+  const rows = NOTIFY_ROWS_.map(r => {
+    if (r.sec) return `<div style="font-weight:700;margin:14px 0 4px;">${r.sec}</div>`;
+    const on = !!s[r.key], lock = !owner || d.sqlReady === false || (r.line && !d.lineReady && !on);
+    return `<div class="sched-special-row">
+      <b>${r.name}</b>
+      <label style="display:flex;align-items:center;gap:4px;cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="notifyToggle_('${r.key}', this)">${on ? '🟢 啟用' : '🔴 停用'}</label>
+      <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">${r.desc}</div>
+    </div>`;
+  }).join('');
+  const owners = (d.owners || []).map(o => `<div class="ops-meta">${escapeHtml(o.phone)}　${o.member ? escapeHtml(o.name || '（會員）') + (o.line ? '　✅ 有綁 LINE，收得到' : '　⚠ 還沒用 LINE 登入過線上點餐，收不到') : '⚠ 不是會員，收不到'}</div>`).join('');
+  el.innerHTML = top + rows + `<div style="font-weight:700;margin:14px 0 4px;">接收提醒的手機（LINE 通知老闆用）</div>
+    <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">填會員手機，最多 5 支，用逗號分開。這支手機要用 LINE 登入過線上點餐（系統才知道是哪個 LINE），也要加官方帳號好友。</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input id="notify-phones" value="${escapeHtml((d.ownerPhones || []).join(', '))}" placeholder="例如 0912345678, 0987654321" style="flex:1;min-width:220px;padding:6px 8px;" ${owner && d.sqlReady !== false ? '' : 'disabled'}>
+      <button type="button" class="mc-save-btn" style="padding:6px 14px;" ${owner && d.sqlReady !== false ? '' : 'disabled'} onclick="notifySavePhones_()">儲存手機</button></div>
+    <div style="margin-top:6px;">${owners}</div>`;
+}
+function notifySave_(payload, el) {
+  return apiPost({ action: 'updateNotifySettings', storeId: BO_HOME_STORE_, ...payload }).then(d => {
+    if (d.status !== 'ok') { alert('儲存失敗：' + (d.message || '')); if (el) { el.checked = !el.checked; el.disabled = false; } return; }
+    notifyData_ = d;
+    renderNotifySettings_();
+  }).catch(() => { alert('網路異常，沒有儲存'); if (el) { el.checked = !el.checked; el.disabled = false; } });
+}
+function notifyToggle_(key, el) { el.disabled = true; notifySave_({ settings: { [key]: el.checked } }, el); }
+function notifySavePhones_() {
+  const v = document.getElementById('notify-phones').value;
+  const phones = v.split(/[,，、\s]+/).map(x => x.replace(/\D/g, '')).filter(Boolean);
+  notifySave_({ ownerPhones: phones }, null);
+}
 if (NEW_API_) {
   const b = document.getElementById('mch-sub-btn-payalert'); if (b) b.style.display = '';
   // 新後端沒有試算表，「POS夥伴」分頁那條路不在了(PIN 存雜湊，只能由另一個老闆帳號或系統管理員重設)
@@ -2159,6 +2226,7 @@ function switchBackofficeTab(name) {
   document.getElementById('view-schedule').style.display = (name === 'merchant' && currentMerchantSubview === 'schedule') ? 'block' : 'none';
   document.getElementById('view-payment').style.display = (name === 'merchant' && currentMerchantSubview === 'payment') ? 'block' : 'none';
   document.getElementById('view-payalert').style.display = (name === 'merchant' && currentMerchantSubview === 'payalert') ? 'block' : 'none';
+  document.getElementById('view-notify').style.display = (name === 'merchant' && currentMerchantSubview === 'notify') ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
   document.getElementById('view-member').style.display = name === 'member' ? 'block' : 'none';
   document.getElementById('view-posmanage').style.display = name === 'posmanage' ? 'block' : 'none';
@@ -2196,6 +2264,8 @@ function switchBackofficeTab(name) {
   document.getElementById('mch-sub-btn-payment').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'payment');
   document.getElementById('mch-sub-btn-payalert').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'payalert');
   if (name === 'merchant' && currentMerchantSubview === 'payalert') loadPayAlerts_();
+  document.getElementById('mch-sub-btn-notify').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'notify');
+  if (name === 'merchant' && currentMerchantSubview === 'notify') loadNotifySettings_();
   if (name === 'merchant') {
     document.getElementById('merchant-sublist').classList.add('open');
     document.getElementById('merchant-caret').classList.add('open');

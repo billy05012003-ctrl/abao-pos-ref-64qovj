@@ -643,7 +643,7 @@
       <h2>訂單完成</h2>
       <div class="order-no" id="order-no"></div>
       <p id="confirm-msg">付款已完成，取餐時請出示此訂單編號或本畫面。如需協助請來電<span data-store-svc>客服 0909-504662</span>。</p>
-      <p style="font-size:0.85rem;color:#a3620a;margin:-4px 0 8px;">店家確認接單後就會開始準備，可到「我的訂單」查看是否已確認。</p>
+      <p id="confirm-wait-tip" style="font-size:0.85rem;color:#a3620a;margin:-4px 0 8px;font-weight:600;">店家確認接單後就會開始準備，可到「我的訂單」查看是否已確認。</p>
       <pre id="order-summary"></pre>
       <button class="btn-primary" onclick="closeAll()">完成，關閉視窗</button>
       <button type="button" id="confirm-mine-btn" onclick="closeAll(); openMyOrdersTab_()" style="display:block;width:100%;margin-top:8px;padding:10px;border:1px solid var(--border);background:#fff;border-radius:10px;font-weight:700;color:var(--brand);">查看我的訂單</button>
@@ -933,7 +933,39 @@ async function initLineLogin_() {
 }
 // 訂單完成提醒加好友(10-16 老闆)：紙本菜單 QR 直接進點餐頁、不經官方帳號，第一次 LINE 登入沒勾「加入好友」的顧客在這裡補一次；
 // 已經是好友就不顯示(liff.getFriendship)，查不到好友狀態時照樣顯示
+// 11-20 (9g) 訂單完成畫面：店家一按「確認接單」就自己變成「✅ 店家已確認接單」（後台「訂單通知設定→畫面即時更新」開著、顧客有 LINE 登入才輪詢；
+// 每 10 秒問一次、最多 30 分鐘；離開畫面就停）
+let cwTimer_ = null;
+const CW_TEXT_DEFAULT_ = '店家確認接單後就會開始準備，可到「我的訂單」查看是否已確認。';
+function stopConfirmWatch_() { if (cwTimer_) { clearInterval(cwTimer_); cwTimer_ = null; } }
+function startConfirmWatch_() {
+  stopConfirmWatch_();
+  const tip = document.getElementById('confirm-wait-tip');
+  const id = String((document.getElementById('order-no') || {}).textContent || '').trim();
+  const setTip = (text, color) => { if (tip) { tip.textContent = text; tip.style.color = color; } };
+  if (!tip || !id || !lineSession_) { setTip(CW_TEXT_DEFAULT_, '#a3620a'); return; }
+  setTip('⏳ 等待店家確認接單…（確認後這裡會自動更新，不用重新整理）', '#a3620a');
+  const started = Date.now();
+  const tick = () => {
+    const view = document.getElementById('confirm-view');
+    if (!view || view.style.display === 'none' || Date.now() - started > 30 * 60000) { stopConfirmWatch_(); return; }
+    apiPost_({ action: 'myOrders', storeId: STORE_ID, light: 1 }).then(d => {
+      if (!d || d.status !== 'ok') return;
+      if (d.liveUpdate === false) { stopConfirmWatch_(); setTip(CW_TEXT_DEFAULT_, '#a3620a'); return; }
+      const o = (d.orders || []).find(x => x.orderId === id);
+      if (!o) return;
+      if (o.status === '已退款' || o.status === '已作廢' || o.status === '退款處理中') {
+        stopConfirmWatch_(); myOrdersAt_ = 0; setTip('這張訂單已取消，詳情請看「我的訂單」或來電門市。', '#c62828');
+      } else if (!o.waitConfirm && o.status !== '待付款') {
+        stopConfirmWatch_(); myOrdersAt_ = 0; setTip('✅ 店家已確認接單，開始準備您的餐點！', '#2e7d32');
+      }
+    }).catch(() => {});
+  };
+  tick();
+  cwTimer_ = setInterval(tick, 10000);
+}
 function showFriendPromo_() {
+  startConfirmWatch_();   // 11-20 (9g)：兩個顯示訂單完成的地方都會叫這裡
   const el = document.getElementById('confirm-friend');
   if (!el) return;
   el.style.display = 'none';
@@ -5437,17 +5469,35 @@ function openMyOrdersTab_() {
   myOrdersAt_ = 0;   // 剛下完單：一定重讀
   if (HOME_TABS_ON) switchHomeTab_('mine');
 }
-function loadMyOrders_(force) {
+// light＝11-20 (9g) 自動更新用：只重讀訂單、揪團紀錄沿用上一次的（少一趟資料庫）
+function loadMyOrders_(force, light) {
   if (!lineSession_) { renderMyOrdersPane_(); return; }
   if (myOrdersLoading_) return;
-  if (!force && myOrdersData_ && Date.now() - myOrdersAt_ < 20000) { renderMyOrdersPane_(); return; }
+  if (!force && myOrdersData_ && Date.now() - myOrdersAt_ < 20000) { renderMyOrdersPane_(); myLiveSchedule_(); return; }
+  const useLight = !!(light && myOrdersData_);
   myOrdersLoading_ = true; myOrdersErr_ = '';
   renderMyOrdersPane_();
-  apiPost_({ action: 'myOrders', storeId: STORE_ID }).then(d => {
-    if (d.status === 'ok') { myOrdersData_ = d; myOrdersAt_ = Date.now(); }
+  apiPost_({ action: 'myOrders', storeId: STORE_ID, ...(useLight ? { light: 1 } : {}) }).then(d => {
+    if (d.status === 'ok') {
+      if (d.light && myOrdersData_) d.groups = myOrdersData_.groups;
+      myOrdersData_ = d; myOrdersAt_ = Date.now();
+    }
     else myOrdersErr_ = d.code === 'line_not_member' ? '請先完成會員註冊，才看得到訂單紀錄' : (d.message || '讀取失敗，請稍後再試');
   }).catch(() => { myOrdersErr_ = '網路不穩，讀取失敗，請稍後再試'; })
-    .finally(() => { myOrdersLoading_ = false; renderMyOrdersPane_(); });
+    .finally(() => { myOrdersLoading_ = false; renderMyOrdersPane_(); myLiveSchedule_(); });
+}
+// 11-20 (9g) 我的訂單自動更新：有「等待店家確認」的單、停在我的訂單、畫面開著 → 15 秒後自己重讀（後台「畫面即時更新」關掉就不做）
+let myLiveTimer_ = null;
+function myLiveSchedule_() {
+  if (myLiveTimer_) { clearTimeout(myLiveTimer_); myLiveTimer_ = null; }
+  const d = myOrdersData_;
+  if (!d || d.liveUpdate === false || homeTab_ !== 'mine' || !(d.orders || []).some(o => o.waitConfirm)) return;
+  myLiveTimer_ = setTimeout(() => {
+    myLiveTimer_ = null;
+    if (homeTab_ !== 'mine') return;
+    if (document.visibilityState === 'hidden') { myLiveSchedule_(); return; }
+    loadMyOrders_(true, true);
+  }, 15000);
 }
 function myWhen_(ymd, hm) { return ymd ? `${homeMd_(ymd)}（${homeWd_(ymd)}）${hm ? ' ' + hm : ''}` : ''; }
 function renderMyOrdersPane_() {

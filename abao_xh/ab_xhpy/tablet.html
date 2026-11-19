@@ -210,6 +210,15 @@
     <div id="oc-list"></div>
   </div>
 </div>
+<!-- 11-20 (9g) 線上單太久沒確認：全螢幕提醒（擋住收銀畫面，按確認接單才會消失；購物車有東西、結帳中不跳；後台「訂單通知設定」可關） -->
+<div id="oc-alert" style="display:none;position:fixed;inset:0;z-index:70;background:rgba(183,28,28,0.97);color:#fff;overflow:auto;padding:24px 16px">
+  <div style="max-width:640px;margin:0 auto">
+    <div style="font-size:1.7rem;font-weight:800;margin-bottom:6px">⚠️ 線上訂單還沒確認接單</div>
+    <div style="font-size:1rem;line-height:1.6;margin-bottom:14px">顧客已經付款在等。請按「確認接單並出單」，出單機會馬上印出來。</div>
+    <div id="oc-alert-list"></div>
+    <div style="text-align:center;margin-top:10px"><button type="button" onclick="ocAlertSnooze_()" style="background:none;border:1px solid rgba(255,255,255,0.6);color:#fff;border-radius:8px;padding:8px 14px;font-size:0.9rem">做不出來、要退款 → 先關 3 分鐘（到「訂單退款」退款並打電話給顧客）</button></div>
+  </div>
+</div>
 <!-- 離線收銀(10-13)：斷網紅條／補傳中／上傳失敗 -->
 <div id="offline-banner" class="status-banner" style="display:none;color:#fff;font-size:1rem;cursor:pointer" onclick="openOfflineList_()"></div>
 <div class="pos-overlay" id="offline-overlay" onclick="if(event.target===this)closeOfflineList_()">
@@ -983,14 +992,22 @@ function doRefund(orderId, amount, viaGateway) {
       if (data.status !== 'ok') { alert('退款失敗：' + (data.message || '')); loadRefundableOrders(); return; }
       if (data.pending) {
         alert('退款已受理（還沒退到顧客的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。\n系統已先扣回點數與消費、退回兌換券，之後會自動退款，不用再操作，也請勿重複按退款。\n金額：$' + data.amount +
-              '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張');
+              '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張' + callCustomerNote_(data));
       } else {
         alert('退款完成\n方式：' + data.mode + '\n金額：$' + data.amount +
-              '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張');
+              '\n扣回點數：' + (data.pointsReverted || 0) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張' + callCustomerNote_(data));
       }
       loadRefundableOrders(); loadOrders(); loadRevenue();
     }).catch(() => alert('網路異常，退款結果不確定，請先到「訂單退款」重新整理確認這張單的狀態，不要重複退款'));
   });
+}
+
+// 11-20 (9g)：退款／作廢線上單後，後端回顧客電話（後台「訂單通知設定」開著才回）→ 提醒店員打電話通知顧客
+function callCustomerNote_(data) {
+  const p = String((data && data.customerPhone) || '').replace(/\D/g, '');
+  if (!p) return '';
+  const shown = p.length === 10 ? p.slice(0, 4) + '-' + p.slice(4, 7) + '-' + p.slice(7) : p;
+  return '\n\n📞 這是線上點餐的單，顧客可能還不知道，請打電話通知顧客：' + shown;
 }
 
 function manualConfirmPayment(orderId) {
@@ -1038,7 +1055,7 @@ function confirmVoidOrder() {
   withPosPerm_('voidOrder', '單筆作廢', (staffName, staffPin) => {
     apiPost({ action: 'voidOrder', orderId, reason, reasonNote, staffName, staffPin, storeId: STORE_ID }).then(data => {
       if (data.status !== 'ok') { alert('作廢失敗：' + (data.message || '')); return; }
-      alert('已作廢「' + orderId + '」' + (data.voidNotice ? '\n出單機會印一張「作廢通知」，請跟原單釘在一起' : '') + (data.vouchersRestored ? '\n已退回兌換券 ' + data.vouchersRestored + ' 張' : ''));
+      alert('已作廢「' + orderId + '」' + (data.voidNotice ? '\n出單機會印一張「作廢通知」，請跟原單釘在一起' : '') + (data.vouchersRestored ? '\n已退回兌換券 ' + data.vouchersRestored + ' 張' : '') + callCustomerNote_(data));
       voidOrderId_ = '';
       loadOrders(); loadRevenue();
     }).catch(() => alert('網路異常，作廢結果不確定，請重新整理「待取餐訂單」確認'));
@@ -3918,7 +3935,11 @@ function ocLoad_() {
   if (ocLoading_ || !posDeviceToken_()) return;
   ocLoading_ = true;
   apiGet({ action: 'pendingConfirmOrders', storeId: STORE_ID }).then(d => {
-    if (d && d.status === 'ok') { ocOrders_ = d.orders || []; ocRender_(); lpPending_ = d.linePayPending || []; tqPending_ = d.twqrPending || []; lpRender_(); }
+    if (d && d.status === 'ok') {
+      if (d.notify) ocNotify_ = d.notify;   // 11-20 (9g) 後台「訂單通知設定」的平板開關
+      if (d.now) ocSrvOffset_ = d.now - Date.now();   // 平板時鐘不準也照伺服器時間算提醒
+      ocOrders_ = d.orders || []; ocRender_(); lpPending_ = d.linePayPending || []; tqPending_ = d.twqrPending || []; lpRender_();
+    }
   }).catch(() => {}).finally(() => { ocLoading_ = false; });
 }
 function ocRender_() {
@@ -3929,7 +3950,53 @@ function ocRender_() {
   b.textContent = `🔔 有 ${n} 張線上單待確認（即時 ${now}／預訂 ${n - now}）：按這裡確認接單`;
   b.style.display = 'block';
   if (ocOrders_.some(ocUrgent_) && Date.now() - ocLastBeep_ >= OC_BEEP_EVERY_MS_ - 2000) { ocBeep_(); ocLastBeep_ = Date.now(); }
+  ocAlertCheck_();
 }
+// ---------- 11-20 (9g) 線上單太久沒確認：全螢幕提醒 ----------
+// 時間由後端算好（alertAt）：現在下的單 下單後 10 分鐘；預訂單 取餐前 15 分鐘。購物車有東西／結帳中先不跳，結束回到點餐畫面才跳
+let ocNotify_ = { tabletAlert: true, voidPhone: true }, ocSrvOffset_ = 0, ocSnoozeUntil_ = 0, ocAlertKey_ = '';
+function ocAlertDue_() {
+  if (ocNotify_.tabletAlert === false) return [];
+  const now = Date.now() + ocSrvOffset_;
+  return ocOrders_.filter(o => o.alertAt && now >= o.alertAt);
+}
+function ocAlertBlocked_() {
+  if ((typeof posCart !== 'undefined' && posCart.length) || (typeof currentPosModal !== 'undefined' && currentPosModal)) return true;
+  const shown = id => { const el = document.getElementById(id); return !!el && el.style.display !== 'none' && el.offsetParent !== null; };
+  return shown('pos-checkout-panel') || shown('pos-confirm-panel');
+}
+function ocAlertCheck_() {
+  const el = document.getElementById('oc-alert');
+  if (!el) return;
+  const due = ocAlertDue_(), open = el.style.display !== 'none';
+  if (!due.length) { if (open) { el.style.display = 'none'; ocAlertKey_ = ''; } return; }
+  if (!open && (Date.now() < ocSnoozeUntil_ || ocAlertBlocked_())) return;
+  const key = due.map(o => o.orderId).join(',');
+  if (key !== ocAlertKey_) {   // 清單有變才重畫（不然按到一半的「確認中…」會被蓋掉）
+    ocAlertKey_ = key;
+    const now = Date.now() + ocSrvOffset_;
+    document.getElementById('oc-alert-list').innerHTML = due.map(o => {
+      const waited = o.enqueuedAt ? Math.max(0, Math.round((now - o.enqueuedAt) / 60000)) : 0;
+      const items = (o.items || []).filter(it => !it.x2).map(it => `${it.qty} × ${escapeHtml_(it.name)}${it.size ? ' ' + escapeHtml_(it.size) : ''}`).join('、');
+      return `<div style="background:#fff;color:#222;border-radius:12px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <b style="font-size:1.25rem">${escapeHtml_(ocWhenText_(o))} 取餐</b>
+          <span style="color:#c62828;font-weight:700">${o.preorder ? '預訂單・快到取餐時間' : '已等 ' + waited + ' 分鐘'}</span>
+        </div>
+        <div style="font-size:0.9rem;color:#666;margin:2px 0 6px">${escapeHtml_(o.orderId)}・${escapeHtml_(o.name || '（未填姓名）')}・$${o.total}　${escapeHtml_(o.payText || '')}</div>
+        <div style="font-size:0.95rem;line-height:1.5;margin-bottom:10px">${items}</div>
+        <button type="button" class="btn btn-primary" style="width:100%;font-size:1.15rem;padding:14px" onclick="ocConfirm_('${escapeHtml_(o.orderId)}', this)">✅ 確認接單並出單</button>
+      </div>`;
+    }).join('');
+  }
+  if (!open) { el.style.display = 'block'; ocBeep_(); ocLastBeep_ = Date.now(); }
+}
+function ocAlertSnooze_() {
+  ocSnoozeUntil_ = Date.now() + 3 * 60000;
+  document.getElementById('oc-alert').style.display = 'none';
+  ocAlertKey_ = '';
+}
+setInterval(ocAlertCheck_, 5000);
 function ocWhenText_(o) {
   const d = new Date(o.pickupDate + 'T00:00:00'), wk = '星期' + '日一二三四五六'[d.getDay()];
   return (o.preorder ? `${d.getMonth() + 1}/${d.getDate()}（${wk}）` : '今天 ') + (o.pickupTime || '');
