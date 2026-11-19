@@ -949,7 +949,7 @@ function loadStuckPaymentOrders() {
       <div class="order-card">
         <div>
           <div><strong>${o.orderId}</strong></div>
-          <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}　${o.note || ''}</div>
+          <div class="meta">取餐時間 ${escapeHtml_(o.pickupTime)}　$${escapeHtml_(o.totalAmount)}　${escapeHtml_(o.note || '')}</div>
         </div>
         <button class="btn btn-primary" onclick="manualConfirmPayment('${o.orderId}')">標記已付款</button>
       </div>
@@ -1490,7 +1490,7 @@ function loadRegisterLog() {
       <div class="order-card">
         <div>
           <div><strong>${l.type}</strong></div>
-          <div class="meta">${new Date(l.time).toLocaleString('zh-TW', { hour12: false })}${l.note ? '　' + l.note : ''}</div>
+          <div class="meta">${new Date(l.time).toLocaleString('zh-TW', { hour12: false })}${l.note ? '　' + escapeHtml_(l.note) : ''}</div>
         </div>
       </div>
     `).join('');
@@ -1528,7 +1528,7 @@ function openCloseRegisterPreview() {
         <div class="order-card">
           <div>
             <div><strong>${o.orderId}</strong>　${o.status}</div>
-            <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}${o.note ? '　' + o.note : ''}</div>
+            <div class="meta">取餐時間 ${escapeHtml_(o.pickupTime)}　$${escapeHtml_(o.totalAmount)}${o.note ? '　' + escapeHtml_(o.note) : ''}</div>
           </div>
         </div>
       `).join('');
@@ -1919,7 +1919,7 @@ function lookupMember() {
     if (data.status === 'ok') {
       selectedMember = data.member;
       memberPanelOpen_ = false;
-      el.innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $${data.member.periodSpend}　累計點數 ${data.member.points}</div><div id="member-voucher-panel"></div>`;
+      el.innerHTML = `<div class="member-card"><strong>${escapeHtml_(data.member.name)}</strong>（${escapeHtml_(data.member.tier)}）<br>當期消費 $${escapeHtml_(data.member.periodSpend)}　累計點數 ${escapeHtml_(data.member.points)}</div><div id="member-voucher-panel"></div>`;   // 11-20 R5 資安：會員姓名是顧客自己填的，一定要跳脫
       loadMemberVouchers();
       renderPosCart(); // 會員等級權益依等級自動套用
     } else if (data.status === 'not_found' && LINE_MEMBER_REGISTER && lineRegisterUrl_()) {   // 11-16 (15c)：這間店沒填 LIFF 就退回門市直接建會員
@@ -1981,7 +1981,7 @@ function registerMemberSubmit_(phone, name, birthday, staffName, staffPin) {
   apiPost({ action: 'registerMember', phone: phone, name: name, birthday: birthday, staffName, staffPin }).then(data => {
     if (data.status === 'ok') {
       selectedMember = data.member;
-      document.getElementById('member-info').innerHTML = `<div class="member-card"><strong>${data.member.name}</strong>（${data.member.tier}）<br>當期消費 $0　累計點數 0</div><div id="member-voucher-panel"></div>`;
+      document.getElementById('member-info').innerHTML = `<div class="member-card"><strong>${escapeHtml_(data.member.name)}</strong>（${escapeHtml_(data.member.tier)}）<br>當期消費 $0　累計點數 0</div><div id="member-voucher-panel"></div>`;   // 11-20 R5 資安：會員姓名要跳脫
       loadMemberVouchers();
       renderPosCart();
     } else {
@@ -5033,7 +5033,7 @@ function offlineMember_(phone) {
   selectedMember = { phone, name: '會員 ' + phone, tier: '', points: 0, offline: true };
   memberVouchers = [];
   memberPanelOpen_ = false;
-  document.getElementById('member-info').innerHTML = `<div class="member-card">📴 離線中：已記下會員電話 <b>${phone}</b><br>網路恢復上傳時自動補點數（這張單不套會員折扣、不能用兌換券）</div>`;
+  document.getElementById('member-info').innerHTML = `<div class="member-card">📴 離線中：已記下會員電話 <b>${escapeHtml_(phone)}</b><br>網路恢復上傳時自動補點數（這張單不套會員折扣、不能用兌換券）</div>`;
   renderPosCart();
 }
 
