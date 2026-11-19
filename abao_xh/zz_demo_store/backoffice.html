@@ -1926,7 +1926,22 @@ function renderNotifySettings_() {
     <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">填會員手機，最多 5 支，用逗號分開。這支手機要用 LINE 登入過線上點餐（系統才知道是哪個 LINE），也要加官方帳號好友。</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input id="notify-phones" value="${escapeHtml((d.ownerPhones || []).join(', '))}" placeholder="例如 0912345678, 0987654321" style="flex:1;min-width:220px;padding:6px 8px;" ${owner && d.sqlReady !== false ? '' : 'disabled'}>
       <button type="button" class="mc-save-btn" style="padding:6px 14px;" ${owner && d.sqlReady !== false ? '' : 'disabled'} onclick="notifySavePhones_()">儲存手機</button></div>
-    <div style="margin-top:6px;">${owners}</div>`;
+    <div style="margin-top:6px;">${owners}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">
+      <button type="button" id="notify-test-btn" class="mc-save-btn" style="padding:6px 14px;" ${owner && d.lineReady && d.sqlReady !== false && (d.owners || []).some(o => o.line) ? '' : 'disabled'} onclick="notifyTestLine_()">📨 傳測試訊息到我的 LINE</button>
+      <span id="notify-test-msg" style="font-size:0.8rem;color:var(--muted);">${!d.lineReady ? '還沒設定 LINE 發訊權杖，不能測' : !(d.owners || []).some(o => o.line) ? '上面的手機要有一支「有綁 LINE」才能測' : '傳一則給上面有綁 LINE 的手機，確認收得到（用掉 1 則免費訊息）'}</span>
+    </div>`;
+}
+// 11-20 老闆要：按一下傳 LINE 測試訊息，確認權杖和綁定都對
+function notifyTestLine_() {
+  const btn = document.getElementById('notify-test-btn'), msg = document.getElementById('notify-test-msg');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true; msg.style.color = 'var(--muted)'; msg.textContent = '傳送中…';
+  const done = (ok, text) => { msg.style.color = ok ? '#2e7d32' : '#c0392b'; msg.textContent = text; setTimeout(() => { btn.disabled = false; }, 10000); };
+  apiPost({ action: 'notifyTestLine', storeId: BO_HOME_STORE_ }).then(d => {
+    if (d.status === 'ok') done(true, '✅ 已傳出 ' + (d.sent || 1) + ' 則，請看手機 LINE「官方帳號」有沒有收到');
+    else done(false, '❌ ' + (d.message || '傳送失敗'));
+  }).catch(() => done(false, '❌ 網路異常，請稍後再試'));
 }
 function notifySave_(payload, el) {
   return apiPost({ action: 'updateNotifySettings', storeId: BO_HOME_STORE_, ...payload }).then(d => {
