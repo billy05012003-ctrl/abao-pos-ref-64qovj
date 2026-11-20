@@ -655,9 +655,11 @@ async function tick() {
     const claim = await apiPost({ action: 'claimPrint', storeId: STORE_ID, printKey: key, limit: 3 });
     setState('stPoll', new Date().toLocaleTimeString('zh-TW', { hour12: false }));
     if (claim.status !== 'ok') { log('領單被拒：' + (claim.message || ''), 'e'); setState('stRun', '出單密碼有誤？', 'bad'); alarm(true); return; }
-    if (!claim.orders.length) { alarm(false); return; }
+    const invs = Array.isArray(claim.invoices) ? claim.invoices : [];   // 11-20 (3e) 電子發票證明聯（這間店沒開電子發票＝沒有這欄）
+    if (!claim.orders.length && !invs.length) { alarm(false); return; }
     gap = 0;
     for (const t of claim.orders) { if (!linkUp) break; await printOne(t); }   // 印到一半斷線就停，剩下的單等租約到期回佇列
+    for (const v of invs) { if (!linkUp) break; await printInvoiceProof_(v); }
   } catch (e) {
     log('查詢失敗（網路？）：' + e.message, 'e');
   } finally {
@@ -682,6 +684,117 @@ async function printOne(t) {
   await printLabels(t.labels, t.orderId);   // 10-13 飲料杯貼
 }
 function alarm(on) { document.body.classList.toggle('alarm', !!on); }
+
+// ---------- 11-20 (3e) 電子發票證明聯（財政部格式一：寬 5.7cm、QR 以上 9cm 內；設計：電子發票設計_2026-11-20.md 5-5）----------
+// 文字用 ESC/POS Big5；一維條碼（Code39，19 碼）和兩個 QR（第 6 版以上、容錯 L、各 1.5cm 以上、左右並排同大小）自己畫成點陣圖送出（GS v 0），
+// 不靠出單機內建條碼指令（內建 QR 會自動選版本、可能小於第 6 版）。QR 內容由 ezPay 回傳（含加密），這裡只照內容裡的「中文編碼參數」轉位元組。
+const EINV_QR_LIB = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+const EINV_W = 360;   // TM-T82III 58mm 紙列印寬 360 點（180dpi）；HIP-6666 384 點也放得下
+let einvQrLoading = null;
+function einvQrLib_() {
+  if (window.qrcode) return Promise.resolve();
+  if (!einvQrLoading) einvQrLoading = new Promise((res, rej) => {
+    const sc = document.createElement('script'); sc.src = EINV_QR_LIB;
+    sc.onload = () => (window.qrcode ? res() : rej(new Error('QR 程式載入失敗')));
+    sc.onerror = () => { einvQrLoading = null; rej(new Error('QR 程式載入失敗（網路？）')); };
+    document.head.appendChild(sc);
+  });
+  return einvQrLoading;
+}
+// QR 內容 → 位元組：左 QR 第 5 段是中文編碼參數（0＝Big5、1＝UTF-8、2＝Base64）；右 QR 跟著左邊
+function einvQrBytes_(text, enc) {
+  if (enc === '0') return encodeBig5(text).bytes;
+  if (enc === '1') return Array.from(new TextEncoder().encode(text));
+  return Array.from(text, ch => ch.charCodeAt(0) & 0xFF);
+}
+function einvQr_(bytes, type) {   // qrcode-generator 的 Byte 模式一個字取 1 個位元組 → 先轉成「每個位元組一個字」
+  const q = qrcode(type, 'L'); q.addData(String.fromCharCode.apply(null, bytes), 'Byte'); q.make(); return q;
+}
+function einvQrPair_(left, right) {
+  const enc = String(left).split(':')[4] || '1';
+  const lb = einvQrBytes_(left, enc), rb = einvQrBytes_(right || '**', enc);
+  for (let t = 6; t <= 15; t++) { try { return [einvQr_(lb, t), einvQr_(rb, t)]; } catch (e) { /* 放不下＝換大一號（兩個用同一版，大小一致）*/ } }
+  throw new Error('QR 內容太長');
+}
+// 點陣圖（黑＝1）→ GS v 0
+function einvRaster_(w, h, black) {
+  const wb = Math.ceil(w / 8), out = [0x1D, 0x76, 0x30, 0x00, wb & 255, wb >> 8, h & 255, h >> 8];
+  for (let y = 0; y < h; y++) for (let xb = 0; xb < wb; xb++) {
+    let v = 0;
+    for (let k = 0; k < 8; k++) { const x = xb * 8 + k; if (x < w && black(x, y)) v |= 0x80 >> k; }
+    out.push(v);
+  }
+  return out;
+}
+const CODE39 = { '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000', '4': '000110001', '5': '100110000', '6': '001110000', '7': '000100101', '8': '100100100', '9': '001100100',
+  A: '100001001', B: '001001001', C: '101001000', D: '000011001', E: '100011000', F: '001011000', G: '000001101', H: '100001100', I: '001001100', J: '000011100', K: '100000011', L: '001000011', M: '101000010',
+  N: '000010011', O: '100010010', P: '001010010', Q: '000000111', R: '100000110', S: '001000110', T: '000010110', U: '110000001', V: '011000001', W: '111000000', X: '010010001', Y: '110010000', Z: '011010000',
+  '-': '010000101', '.': '110000100', ' ': '011000100', '*': '010010100' };
+// Code39（窄 1 點、寬 3 點，放不下改寬 2 點；高 0.5cm 以上＝56 點）
+function einvCode39_(text) {
+  const s = '*' + String(text).toUpperCase().replace(/[^0-9A-Z\-. ]/g, '') + '*';
+  for (const wide of [3, 2]) {
+    const runs = [];
+    for (const ch of s) { const p = CODE39[ch]; for (let i = 0; i < 9; i++) runs.push([i % 2 === 0, p[i] === '1' ? wide : 1]); runs.push([false, 1]); }
+    const total = runs.reduce((a, r) => a + r[1], 0);
+    if (total + 20 > EINV_W && wide === 3) continue;
+    const x0 = Math.max(10, Math.floor((EINV_W - total) / 2)), cols = new Uint8Array(EINV_W);
+    let x = x0; for (const [bar, n] of runs) { for (let i = 0; i < n; i++, x++) if (bar && x < EINV_W) cols[x] = 1; }
+    return einvRaster_(EINV_W, 56, xx => cols[xx] === 1);
+  }
+}
+// 兩個 QR 左右並排：每格 3 點（41 格×3＝123 點≈1.7cm），中間留 30 點（各自四周留白≥0.2cm）
+function einvQrRow_(pair) {
+  const n = pair[0].getModuleCount(), m = 3, size = n * m, gap = 30;
+  const x0 = Math.max(14, Math.floor((EINV_W - size * 2 - gap) / 2)), x1 = x0 + size + gap;
+  return einvRaster_(EINV_W, size, (x, y) => {
+    const q = x >= x0 && x < x0 + size ? pair[0] : (x >= x1 && x < x1 + size ? pair[1] : null);
+    if (!q) return false;
+    const ox = q === pair[0] ? x0 : x1;
+    return q.isDark(Math.floor(y / m), Math.floor((x - ox) / m));
+  });
+}
+function einvText_(out, text) { out.push(...encodeBig5(text).bytes); }
+function einvProofBytes_(v) {
+  const pair = einvQrPair_(v.qrL, v.qrR);
+  const o = [0x1B, 0x40, 0x1C, 0x26, 0x1B, 0x61, 0x01];             // 初始化、中文模式、置中
+  const big = t => { o.push(0x1D, 0x21, 0x11, 0x1C, 0x21, 0x0C, 0x1B, 0x45, 0x01); einvText_(o, t + '\n'); o.push(0x1D, 0x21, 0x00, 0x1C, 0x21, 0x00, 0x1B, 0x45, 0x00); };
+  o.push(0x1D, 0x21, 0x01, 0x1C, 0x21, 0x08); einvText_(o, (v.sellerName || '') + '\n'); o.push(0x1D, 0x21, 0x00, 0x1C, 0x21, 0x00);   // ① 店家（倍高）
+  big('電子發票證明聯');                                              // ② 0.5cm 以上
+  big(v.period);                                                      // ③ 年期別（粗體）
+  big(v.number);                                                      // ④ 發票號碼（粗體）
+  o.push(0x1B, 0x61, 0x00);                                           // 以下靠左
+  einvText_(o, v.dateTime + (v.category === 'B2B' ? '      格式 25' : '') + '\n');   // ⑤ 交易日期時間（B2B 加申報格式代號）
+  einvText_(o, '隨機碼 ' + v.randomNum + '      總計 ' + v.total + '\n');            // ⑥⑦
+  einvText_(o, '賣方 ' + v.sellerTaxId + (v.buyerUbn ? '  買方 ' + v.buyerUbn : '') + '\n');   // ⑧⑨
+  if (v.reprint) { o.push(0x1B, 0x61, 0x01); einvText_(o, '補印\n'); o.push(0x1B, 0x61, 0x00); }   // 補印：一維條碼上方加註
+  o.push(0x1B, 0x4A, 6);
+  o.push(...einvCode39_(v.barcode));                                  // ⑪ 一維條碼
+  o.push(0x1B, 0x4A, 12);
+  o.push(...einvQrRow_(pair));                                        // ⑫ 兩個 QR
+  o.push(0x1B, 0x4A, 16);
+  if (v.test) einvText_(o, '（ezPay 測試站，不是正式發票）\n');
+  if (v.category === 'B2B') {                                         // 買方是營業人：QR 下面接著印明細（不切）
+    einvText_(o, '--------------------------------\n');
+    (v.items || []).forEach(it => einvText_(o, String(it.name).slice(0, 12) + ' ' + it.qty + 'x' + it.price + ' = ' + it.amount + ' TX\n'));
+    einvText_(o, '銷售額 ' + v.amt + '  稅額 ' + v.taxAmt + '  總計 ' + v.total + '\n');
+  }
+  o.push(0x1C, 0x2E, 0x1B, 0x64, 4);
+  if (isNet() || $('optCut').checked) o.push(0x1D, 0x56, 0x42, 0x00);
+  return new Uint8Array(o);
+}
+async function printInvoiceProof_(v) {
+  let data;
+  try { await einvQrLib_(); data = einvProofBytes_(v); }
+  catch (e) { log('發票證明聯 ' + (v.number || v.orderNo) + ' 沒印：' + e.message + '（2 分鐘後自動再領）', 'e'); return; }
+  const ok = await printerSend(data);
+  if (!ok) { log('發票證明聯 ' + v.number + ' 印出失敗，留在佇列（2 分鐘後自動再領）', 'e'); return; }
+  try {
+    const rep = await apiPost({ action: 'einvPrinted', id: v.id, ok: true, printKey: getKey() });
+    log('已印發票證明聯 ' + v.number + '（訂單 ' + v.orderNo + '）' + (v.reprint ? '【補印】' : '') + (rep.status === 'ok' ? '' : '；回報失敗：' + rep.message), rep.status === 'ok' ? 'g' : 'y');
+  } catch (e) { log('發票證明聯回報失敗 ' + v.number + '：' + e.message, 'e'); }
+}
+window.einvProofBytes_ = einvProofBytes_;   // 本機預覽／測試用
 
 // 10-13 離線收銀：POS 頁斷網時把自己排好的單直接送來印(不經雲端佇列)。成功回 true；出單機沒連上/不是 Fully 回 false
 window.printLocalLines_ = async function (lines, labels, orderId) {

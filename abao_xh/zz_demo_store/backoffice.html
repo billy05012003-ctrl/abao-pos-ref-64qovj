@@ -855,6 +855,7 @@
     <div class="pmg-grid">
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('report')"><span class="ic">📊</span>報表</button>
       <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
+      <button type="button" class="pmg-tile" id="pmg-einv-tile" disabled onclick="switchPosManageSubview('einv')"><span class="ic">🧾</span>電子發票設定<br><span class="pmg-soon" id="pmg-einv-soon">準備中</span></button>
     </div>
     <div class="pmg-grp">帳號與權限</div>
     <div class="pmg-grid">
@@ -865,7 +866,6 @@
     <div class="pmg-grp">系統</div>
     <div class="pmg-grid">
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('ver')"><span class="ic">🔄</span>資料版本／備份</button>
-      <button type="button" class="pmg-tile" disabled><span class="ic">🧾</span>電子發票設定<br><span class="pmg-soon">準備中</span></button>
       <!-- 10-13 每台門市平板用哪種出單方式(藍牙／網路＋IP)，只看不改(設定在平板 POS管理→出單機設定) -->
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('printer')"><span class="ic">🖨️</span>門市平板（出單方式）</button>
     </div>
@@ -874,6 +874,13 @@
   <div id="pmg-subview-linebind" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 會員 LINE 綁定 <span class="ops-refresh" onclick="loadBoLineBind_()">重新整理</span></div>
     <div id="bo-pmg-linebind"><div class="empty-hint">載入中...</div></div>
+  </div>
+  <!-- 11-20 (3e) 電子發票設定（ezPay 電子發票加值中心；設計 電子發票設計_2026-11-20.md）：總開關只限老闆；LINE Pay 支付載具從「付款方式設定→線下收款」搬來這裡 -->
+  <div id="pmg-subview-einv" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 電子發票設定 <span class="ops-refresh" onclick="loadBoEinv_()">重新整理</span></div>
+    <div id="bo-einv-form"><div class="empty-hint">載入中...</div></div>
+    <div style="font-weight:700;margin:18px 0 6px;">最近 3 天的發票 <span class="ops-refresh" onclick="loadBoEinvList_()">重新整理</span></div>
+    <div id="bo-einv-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pmg-subview-printer" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 門市平板（出單方式） <span class="ops-refresh" onclick="loadBoPrinterModes_()">重新整理</span></div>
@@ -2011,6 +2018,125 @@ function smsSave_(settings, el) {
     renderSmsSettings_();
   }).catch(() => { alert('網路異常，沒有儲存'); if (el) { el.checked = !el.checked; el.disabled = false; } renderSmsSettings_(); });
 }
+// ---- 11-20 (3e) 電子發票設定（後端 einvoiceSettings／updateEinvoiceSettings／einvoiceTest／einvoiceList；SQL 48；設計 電子發票設計_2026-11-20.md）----
+// 三層開關：①廠商在後端設這間店的 ezPay 電子發票金鑰（沒設＝總開關鎖住）②總開關（只限老闆）③每種付款方式開不開發票（3j）
+// 連動規則 c：「線下LINEPay」「線下TWQR」設成不開發票 → 它的支付載具鎖住
+let einvData_ = null, einvMethods_ = [];
+const EINV_ONLINE_PM_ = ['線上信用卡', '線上Apple Pay', '線上LINEPay', '取餐付款'];
+const EINV_POS_PM_ = ['現金', '線下LINEPay', '線下TWQR'];
+function einvMethodOnBo_(m) {
+  const map = (einvData_ && einvData_.methodInvoice) || {};
+  if (Object.prototype.hasOwnProperty.call(map, m)) return map[m] !== false;
+  return !/代收$/.test(m);
+}
+function loadBoEinv_() {
+  const el = document.getElementById('bo-einv-form');
+  if (!NEW_API_) { el.innerHTML = '<div class="empty-hint">目前的後端沒有這個功能</div>'; return; }
+  el.innerHTML = '<div class="empty-hint">載入中...</div>';
+  Promise.all([
+    apiGet({ action: 'einvoiceSettings', storeId: SCHED_STORE_ID }),
+    apiGet({ action: 'offlinePaymentMethods', storeId: SCHED_STORE_ID, kind: 'offline' }).catch(() => null),
+    apiGet({ action: 'offlinePaymentMethods', storeId: SCHED_STORE_ID, kind: 'thirdparty' }).catch(() => null),
+  ]).then(([d, off, third]) => {
+    if (!d || d.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml((d && d.message) || '') + '</div>'; return; }
+    einvData_ = d;
+    const names = [];
+    const add = n => { if (n && !names.includes(n)) names.push(n); };
+    EINV_POS_PM_.forEach(add);
+    ((off && off.methods) || []).forEach(m => add(m.name));
+    EINV_ONLINE_PM_.forEach(add);
+    ((third && third.methods) || []).forEach(m => add(m.name + '代收'));   // 外送平台的單付款方式記「熊貓代收」這種
+    einvMethods_ = names;
+    renderBoEinv_();
+  }).catch(() => { el.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+  loadBoEinvList_();
+}
+function einvRow_(key, name, on, lock, desc, warn) {
+  return `<div class="sched-special-row">
+      <b>${name}</b>
+      <label style="display:flex;align-items:center;gap:4px;cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="einvToggle_('${key}', this)">${on ? '🟢 啟用' : '🔴 停用'}</label>
+      ${desc ? `<div style="flex-basis:100%;font-size:0.76rem;color:${warn ? '#c0392b' : 'var(--muted)'};line-height:1.5;">${desc}</div>` : ''}
+    </div>`;
+}
+function renderBoEinv_() {
+  const d = einvData_, el = document.getElementById('bo-einv-form');
+  if (!d || !el) return;
+  const owner = isBoOwner_(), noKeys = !d.keysOk, sqlMiss = !!d.sqlMissing;
+  const lock = !owner || noKeys || sqlMiss;
+  const mi = d.methodInvoice || {};
+  const lpOff = mi['線下LINEPay'] === false, tqOff = mi['線下TWQR'] === false;
+  const top = (sqlMiss ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 資料庫還沒更新（SQL 48），暫時不能設定。</div>' : '')
+    + (noKeys ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ <b>這間店還沒設 ezPay 電子發票帳號，要廠商（BZ）設定後才能開。</b>每間店（每個統編）各自一組，不會用到別間店的。</div>'
+      : d.env === 'test' ? '<div style="font-size:0.85rem;margin-bottom:8px;">目前接的是 <b>ezPay 電子發票測試站</b>（商店代號 ' + escapeHtml(d.merchantId || '') + '）：開出來的不是真的發票，可以放心測。</div>'
+      : '<div style="font-size:0.85rem;color:#a32d2d;margin-bottom:8px;"><b>目前接的是 ezPay 正式站（商店代號 ' + escapeHtml(d.merchantId || '') + '）：打開就會真的開發票、上傳財政部。</b></div>')
+    + (!owner ? '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;">只有老闆可以修改這裡的設定。</div>' : '')
+    + `<div style="font-size:0.82rem;margin-bottom:10px;line-height:1.6;">發票上的賣方：<b>${escapeHtml(d.legalName || '（登記名稱還沒填）')}</b>　統編 <b>${escapeHtml(d.taxId || '（還沒填）')}</b>　證明聯最上面印：${escapeHtml(d.displayName || '')}</div>`;
+  const methods = einvMethods_.map(m => {
+    const on = einvMethodOnBo_(m);
+    return `<label style="display:inline-flex;align-items:center;gap:4px;margin:0 14px 6px 0;font-size:0.85rem;${lock ? 'opacity:.6;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="einvMethodToggle_(${escapeHtml(JSON.stringify(m))}, this)">${escapeHtml(m)}</label>`;
+  }).join('');
+  el.innerHTML = top
+    + einvRow_('enabled', '開立電子發票（總開關）', !!d.enabled, lock,
+      d.enabled ? '收款成功就自動開發票；紙本的出單機會另外印一張證明聯。關掉後新的單不開（之前沒開成的照樣自動補開）。'
+        : '打開後，從打開那一刻起收款的單才開發票（之前的舊單不補開）。關著時結帳、出單、退款跟現在完全一樣。')
+    + '<div style="font-weight:700;margin:14px 0 4px;">載具</div>'
+    + einvRow_('carrierScan', '手機條碼（掃碼槍掃）', d.carrierScan !== false, lock, '結帳畫面「手機載具」：用 DK-X9 掃顧客手機上的條碼（掃碼槍小條要顯示 A 英文）。')
+    + einvRow_('linePayCarrier', 'LINE Pay 支付載具', !!d.linePayCarrier, lock || !d.linePayScan || lpOff,
+      (lpOff ? '<b>「線下LINEPay」設成不開發票，這個不能開。</b>' : !d.linePayScan ? '<b>須先在「付款方式設定 → 線下收款」開啟「線下LINEPay」。</b>' : '')
+      + '顧客用 LINE Pay 付款時一併帶回他的手機條碼，發票直接存進去、不印證明聯。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。（11-20 從付款方式設定搬來這裡）', lpOff)
+    + einvRow_('twqrCarrier', 'TWQR 支付載具', !!d.twqrCarrier, lock || tqOff,
+      (tqOff ? '<b>「線下TWQR」設成不開發票，這個不能開。</b>' : '') + '顧客用 TWQR 付款、錢包有設手機條碼時，發票直接存進去、不印證明聯。', tqOff)
+    + einvRow_('donate', '捐贈碼', d.donate !== false, lock, '結帳畫面「捐贈」：輸入受贈單位的捐贈碼（3～7 碼）。下面可以設一組常用的，平板一按就帶入。')
+    + `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 8px;font-size:0.85rem;">常用捐贈碼 <input id="einv-love" type="text" inputmode="numeric" maxlength="7" value="${escapeHtml(d.loveCode || '')}" style="width:110px;padding:6px 8px;" ${lock ? 'disabled' : ''}>
+      <button type="button" class="mc-save-btn" style="padding:6px 14px;" ${lock ? 'disabled' : ''} onclick="einvSave_({ loveCode: document.getElementById('einv-love').value.trim() })">儲存</button></div>`
+    + einvRow_('b2b', '統編（公司報帳）', d.b2b !== false, lock, '結帳畫面「統編」：輸入 8 碼統一編號（系統會檢查對不對），證明聯會印買方統編和明細。')
+    + '<div style="font-weight:700;margin:14px 0 4px;">每種付款方式要不要開發票</div>'
+    + '<div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">打勾＝開。外送平台代收的單（熊貓、581…）由平台開，預設不開。設成不開的付款方式，平板結帳時不會出現發票選項。</div>'
+    + `<div>${methods}</div>`
+    + `<div style="margin-top:14px;"><button type="button" class="mc-save-btn" style="padding:6px 14px;" ${!owner || noKeys ? 'disabled' : ''} onclick="einvTest_(this)">測試連線（檢查 ezPay 金鑰）</button> <span id="einv-test-res" style="font-size:0.82rem;"></span></div>`
+    + (d.updatedBy ? `<div class="ops-meta" style="margin-top:10px;">最後修改：${escapeHtml(d.updatedBy)}</div>` : '');
+}
+function einvSave_(patch, el) {
+  if (el) el.disabled = true;
+  return apiPost({ action: 'updateEinvoiceSettings', storeId: SCHED_STORE_ID, ...patch }).then(d => {
+    if (d.status !== 'ok') { alert('沒有儲存：' + (d.message || '')); renderBoEinv_(); return; }
+    einvData_ = d;
+    renderBoEinv_();
+  }).catch(() => { alert('網路異常，沒有儲存'); renderBoEinv_(); });
+}
+function einvToggle_(key, el) {
+  if (key === 'enabled' && el.checked && einvData_ && einvData_.env === 'live' && !confirm('ezPay 正式站：打開後收款就會真的開發票、上傳財政部。確定要打開？')) { el.checked = false; return; }
+  einvSave_({ [key]: el.checked }, el);
+}
+function einvMethodToggle_(name, el) {
+  const map = Object.assign({}, (einvData_ && einvData_.methodInvoice) || {});
+  map[name] = el.checked;
+  einvSave_({ methodInvoice: map }, el);
+}
+function einvTest_(btn) {
+  const res = document.getElementById('einv-test-res');
+  btn.disabled = true; res.textContent = '測試中…';
+  apiPost({ action: 'einvoiceTest', storeId: SCHED_STORE_ID }).then(d => {
+    res.innerHTML = d.status === 'ok' ? (d.ok ? '✅ ' : '❌ ') + escapeHtml(d.message || '') : '❌ ' + escapeHtml(d.message || '測試失敗');
+  }).catch(() => { res.textContent = '❌ 網路異常'; }).finally(() => { btn.disabled = false; });
+}
+function loadBoEinvList_() {
+  const el = document.getElementById('bo-einv-list');
+  if (!NEW_API_) { el.innerHTML = ''; return; }
+  apiGet({ action: 'einvoiceList', storeId: SCHED_STORE_ID, days: 3 }).then(d => {
+    if (!d || d.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml((d && d.message) || '') + '</div>'; return; }
+    const list = d.invoices || [];
+    if (!list.length) { el.innerHTML = '<div class="empty-hint">最近 3 天沒有發票</div>'; return; }
+    el.innerHTML = '<div style="overflow-x:auto;"><table class="rpt-table" style="width:100%;font-size:0.8rem;border-collapse:collapse;"><tr><th style="text-align:left">訂單</th><th style="text-align:left">發票號碼</th><th>金額</th><th style="text-align:left">種類</th><th style="text-align:left">狀態</th></tr>'
+      + list.map(x => {
+        const kind = x.status === '不開立' ? '—' : x.category === 'B2B' ? '統編 ' + x.buyerUbn : x.carrierNum ? '載具' : x.loveCode ? '捐贈 ' + x.loveCode : '紙本';
+        const note = x.status === '不開立' || (x.lastError && x.status !== '已開立' && x.status !== '已作廢') ? x.lastError : (x.voidReason && x.status !== '已開立' ? '作廢原因：' + x.voidReason : '');
+        return `<tr><td>${escapeHtml(x.orderNo)}</td><td>${escapeHtml(x.invoiceNumber || '')}${x.env === 'test' ? ' <span style="color:var(--muted)">(測試)</span>' : ''}</td><td style="text-align:right">$${Number(x.totalAmt) || 0}</td><td>${escapeHtml(kind)}</td>
+          <td style="color:${x.status === '已開立' ? 'inherit' : x.status === '已作廢' || x.status === '不開立' ? '#888' : '#c0392b'}">${escapeHtml(x.status)}${note ? '<div style="font-size:0.72rem;color:var(--muted)">' + escapeHtml(note) + '</div>' : ''}</td></tr>`;
+      }).join('') + '</table></div>';
+  }).catch(() => { el.innerHTML = '<div class="empty-hint">網路異常</div>'; });
+}
+if (NEW_API_) { const t = document.getElementById('pmg-einv-tile'); if (t) { t.disabled = false; document.getElementById('pmg-einv-soon').style.display = 'none'; } }   // 11-20 (3e)
 if (NEW_API_) {
   const b = document.getElementById('mch-sub-btn-payalert'); if (b) b.style.display = '';
   const bs = document.getElementById('mch-sub-btn-sms'); if (bs) bs.style.display = '';   // 11-20 簡訊驗證碼
@@ -2312,6 +2438,8 @@ function switchBackofficeTab(name) {
   document.getElementById('pmg-subview-home').style.display = (name === 'posmanage' && currentPosManageSubview === 'home') ? 'block' : 'none';
   document.getElementById('pmg-subview-ver').style.display = (name === 'posmanage' && currentPosManageSubview === 'ver') ? 'block' : 'none';
   document.getElementById('pmg-subview-printer').style.display = (name === 'posmanage' && currentPosManageSubview === 'printer') ? 'block' : 'none';
+  document.getElementById('pmg-subview-einv').style.display = (name === 'posmanage' && currentPosManageSubview === 'einv') ? 'block' : 'none';   // 11-20 (3e)
+  if (name === 'posmanage' && currentPosManageSubview === 'einv') loadBoEinv_();
   document.getElementById('pmg-subview-report').style.display = (name === 'posmanage' && currentPosManageSubview === 'report') ? 'block' : 'none';
   if (name === 'posmanage' && currentPosManageSubview === 'report' && !rptLoadedOnce_) { rptLoadedOnce_ = true; rptPreset_('today'); }
   if (name === 'posmanage' && currentPosManageSubview === 'printer') loadBoPrinterModes_();
@@ -2870,8 +2998,10 @@ function loadLinePayScanSettings() {
     el.innerHTML =
       pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, noLp,
         (noLp ? PM_NO_LP_ : '') + '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。', noLp) +
-      pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
-        (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，顧客用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。') +
+      (NEW_API_ ? `<div class="sched-special-row"><b>LINE Pay 支付載具</b><span style="font-size:0.85rem;">${data.linePayCarrierEnabled ? '🟢 啟用' : '🔴 停用'}</span>
+        <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">11-20 起改到 <a style="cursor:pointer;color:var(--brand);text-decoration:underline;" onclick="switchPosManageSubview('einv')">POS管理 → 電子發票設定</a> 的「載具」那區開關。</div></div>`
+      : pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
+        (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，顧客用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。')) +   // 11-20 (3e) 新後端：搬到電子發票設定，這裡留一行指引
       (('twqrAccountOk' in data) ? pmSettingRow_('twqr', '線下TWQR（ezPay 簡單付）', data.twqrEnabled, !data.twqrAccountOk,
         (data.twqrAccountOk ? '' : PM_NO_TQ_) + '開啟後門市平板付款方式會多一顆「線下TWQR」：平板顯示 QR，顧客用全支付、台灣Pay、街口、銀行 App 掃碼付款，收款成功才出單；QR 3 分鐘失效。斷網時不能用（按鈕會反灰）。'
         + (data.twqrEnv === 'test' ? '<b>目前接的是 ezPay 測試站（不會真的收錢）。</b>' : data.twqrAccountOk ? '<b style="color:#a32d2d;">開了就會真的收錢，退款也是真的退。</b>' : '')

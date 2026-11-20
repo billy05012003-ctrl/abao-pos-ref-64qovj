@@ -617,6 +617,18 @@
         <option value="online">線上付款（信用卡）</option>
         <option value="linepay" hidden>LINE Pay</option>
       </select>
+      <!-- 11-20 (3e) 電子發票：店家後台打開才出現（關著跟以前一樣看不到） -->
+      <div id="checkout-einv" style="display:none;margin-top:10px;">
+        <label for="checkout-einv-type">發票</label>
+        <select id="checkout-einv-type" onchange="einvOnlineType_()">
+          <option value="無統編/無載具">紙本（取餐時跟餐點一起拿）</option>
+          <option value="有手機載具">存到手機條碼載具</option>
+          <option value="有公司統編">打統編（公司報帳）</option>
+          <option value="捐贈">捐贈發票</option>
+        </select>
+        <input type="text" id="checkout-einv-value" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="einvOnlineInput_()" style="display:none;width:100%;box-sizing:border-box;margin-top:6px;">
+        <div id="checkout-einv-hint" style="font-size:0.78rem;color:var(--muted);margin-top:4px;line-height:1.5;"></div>
+      </div>
       <!-- 2026-09-30 老闆：同意條款提前到「我的訂單」頁，跟「前往付款」按鈕一起顯示(揪團朋友走自己的同意框) -->
       <label id="agree-terms-row" style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:0.85rem; line-height:1.5; cursor:pointer; color:var(--text);">
         <input type="checkbox" id="agree-terms" style="width:20px; height:20px; margin-top:1px; flex:none;">
@@ -1349,14 +1361,79 @@ function loadPaymentMethodSettings_() {
     PAY_AT_PICKUP_ENABLED = !!resp.payAtPickupEnabled;
     LINEPAY_ONLINE_ENABLED = resp.linePayMode === 'LinePayAPI';
     APPLEPAY_ENABLED = !!resp.applePayEnabled;
+    EINV_CFG_ = resp.einvoice && resp.einvoice.enabled ? resp.einvoice : null;   // 11-20 (3e)
   }).catch(err => {
     console.warn('付款方式設定讀取失敗，「取餐現場付款」選項預設不顯示(維持現行行為)', err);
     PAY_AT_PICKUP_ENABLED = false;
     LINEPAY_ONLINE_ENABLED = false;
   }).then(payMethodSelectRefresh_);
 }
+// ---- 11-20 (3e) 電子發票（設計 電子發票設計_2026-11-20.md）：店家打開才出現發票選項；關著＝畫面、送出內容都跟以前一樣 ----
+// 顧客選的手機條碼／統編記在這支手機(下次自動帶入，只存在顧客自己的瀏覽器)；店家付款成功後自動開發票
+let EINV_CFG_ = null;
+const EINV_PAPER_ = '無統編/無載具';
+const EINV_PM_KEY_ = { online: '線上信用卡', linepay: '線上LINEPay', '取餐付款': '取餐付款' };
+function einvOnlineUbnOk_(s) {
+  if (!/^\d{8}$/.test(s)) return false;
+  const w = [1, 2, 1, 2, 1, 2, 4, 1]; let sum = 0;
+  for (let i = 0; i < 8; i++) { const p = Number(s[i]) * w[i]; sum += Math.floor(p / 10) + (p % 10); }
+  return sum % 5 === 0 || (s[6] === '7' && (sum + 1) % 5 === 0);
+}
+function einvOnlineShown_() { const b = document.getElementById('checkout-einv'); return !!b && b.style.display !== 'none'; }
+function einvOnlineRefresh_() {
+  const box = document.getElementById('checkout-einv'), sel = document.getElementById('checkout-einv-type');
+  if (!box || !sel) return;
+  const pmSel = document.getElementById('checkout-payment-method');
+  const key = EINV_PM_KEY_[(pmSel && pmSel.value) || 'online'] || '線上信用卡';
+  const map = (EINV_CFG_ && EINV_CFG_.methodInvoice) || {};
+  const on = !!EINV_CFG_ && (Object.prototype.hasOwnProperty.call(map, key) ? map[key] !== false : true);
+  box.style.display = on ? 'block' : 'none';
+  if (!on) return;
+  // iPhone 下拉選單不理 hidden → 沒開的選項直接拿掉、有開才放回去
+  if (!einvOnlineRefresh_.opts) {
+    einvOnlineRefresh_.opts = Array.from(sel.options);
+    try { const saved = JSON.parse(localStorage.getItem('abao_einv_' + STORE_ID) || 'null'); if (saved && saved.type) { sel.value = saved.type; document.getElementById('checkout-einv-value').value = saved.value || ''; } } catch (e) {}
+  }
+  const want = { [EINV_PAPER_]: true, '有手機載具': EINV_CFG_.carrierScan !== false, '有公司統編': EINV_CFG_.b2b !== false, '捐贈': EINV_CFG_.donate !== false };
+  const prev = sel.value;
+  einvOnlineRefresh_.opts.forEach(o => { if (want[o.value]) sel.appendChild(o); else if (o.parentNode) o.remove(); });
+  sel.value = want[prev] ? prev : EINV_PAPER_;
+  einvOnlineType_(true);
+}
+function einvOnlineType_(keep) {
+  const t = document.getElementById('checkout-einv-type').value, inp = document.getElementById('checkout-einv-value');
+  if (!keep) inp.value = t === '捐贈' && EINV_CFG_ ? (EINV_CFG_.loveCode || '') : '';
+  inp.style.display = t === EINV_PAPER_ ? 'none' : 'block';
+  inp.inputMode = t === '有手機載具' ? 'text' : 'numeric';
+  inp.placeholder = t === '有手機載具' ? '手機條碼（/ 開頭共 8 碼，例如 /ABC1234）' : t === '有公司統編' ? '8 碼統一編號' : '捐贈碼（3～7 碼數字）';
+  document.getElementById('checkout-einv-hint').textContent = t === EINV_PAPER_ ? '店家會在取餐時把發票證明聯跟餐點一起給你。'
+    : t === '有手機載具' ? '發票會存進你的手機條碼載具，不印紙本；可以在財政部統一發票兌獎 App 查。'
+    : t === '有公司統編' ? '取餐時會拿到印有統編的發票證明聯。' : '發票會直接捐給這個單位，不印紙本。';
+  einvOnlineInput_();
+}
+function einvOnlineInput_() {
+  const inp = document.getElementById('checkout-einv-value');
+  if (document.getElementById('checkout-einv-type').value === '有手機載具') { const up = inp.value.toUpperCase().replace(/\s/g, ''); if (up !== inp.value) inp.value = up; }
+  inp.style.borderColor = inp.value && einvOnlineCheck_() ? '#c0392b' : '';
+}
+function einvOnlineCheck_() {
+  if (!einvOnlineShown_()) return '';
+  const t = document.getElementById('checkout-einv-type').value, v = document.getElementById('checkout-einv-value').value.trim().toUpperCase();
+  if (t === '有手機載具' && !/^\/[0-9A-Z+\-.]{7}$/.test(v)) return '手機條碼格式不對：要「/」開頭、共 8 碼（例如 /ABC1234）';
+  if (t === '有公司統編' && !einvOnlineUbnOk_(v)) return '統一編號不正確，請再確認一次';
+  if (t === '捐贈' && !/^\d{3,7}$/.test(v)) return '捐贈碼要 3～7 碼數字';
+  return '';
+}
+function einvOnlinePayload_() {
+  if (!einvOnlineShown_()) return {};
+  const t = document.getElementById('checkout-einv-type').value, v = t === EINV_PAPER_ ? '' : document.getElementById('checkout-einv-value').value.trim().toUpperCase();
+  try { localStorage.setItem('abao_einv_' + STORE_ID, JSON.stringify({ type: t, value: v })); } catch (e) {}
+  return { invoiceType: t, invoiceNo: v };
+}
+document.addEventListener('DOMContentLoaded', () => { const s = document.getElementById('checkout-payment-method'); if (s) s.addEventListener('change', einvOnlineRefresh_); });
 // 付款方式選單：只有「取餐付款」或「LINE Pay」有開才出現(只剩信用卡就不用選)；揪團(請客)結帳不給選 LINE Pay(第一版照舊走藍新)
 function payMethodSelectRefresh_() {
+  try { setTimeout(einvOnlineRefresh_, 0); } catch (e) {}   // 11-20 (3e) 發票選項跟著付款方式
   const label = document.getElementById('checkout-paymethod-label');
   const select = document.getElementById('checkout-payment-method');
   if (!label || !select) return;
@@ -4179,6 +4256,9 @@ function submitOrder(e) {
   // 這裡讀不到值就當作沒選(走原本的線上付款流程)，跟目前行為完全一致
   const payAtPickupChosen = PAY_AT_PICKUP_ENABLED && document.getElementById('checkout-payment-method').value === '取餐付款';
   const linePayChosen = LINEPAY_ONLINE_ENABLED && !groupCheckoutMode && document.getElementById('checkout-payment-method').value === 'linepay';   // 10-23 線上LINEPay
+  const einvErr = einvOnlineCheck_();   // 11-20 (3e) 發票：載具／統編／捐贈碼格式（電子發票關著＝不檢查）
+  if (einvErr) { alert(einvErr); backToCart(); document.getElementById('checkout-einv-value').focus(); return false; }
+  const einvPayload = einvOnlinePayload_();
 
   const lines = cart.map(c => `- ${c.who ? '['+c.who+'] ' : ''}${c.name}${c.size ? '('+c.size+')' : ''} x${c.qty}　$${c.price * c.qty}`).join('\n');
   const discountLine = (groupAct ? `揪團活動優惠：-$${groupAct}\n` : '') + (perks.total ? `會員權益（${verifiedMember.tier}）：${tierPerkText_(perks)}\n` : '') + (voucherDiscount > 0 ? `已套用兌換券折抵：-$${voucherDiscount}\n` : '')
@@ -4218,6 +4298,7 @@ function submitOrder(e) {
     voucherIds: appliedVoucherIds,
     otherNeeds: otherNeeds.map(a => a.name),   // 只送名稱，金額由後端照後台正式版重算
     paymentMethod: payAtPickupChosen ? '取餐付款' : linePayChosen ? '線上LINEPay' : undefined,
+    ...einvPayload,   // 11-20 (3e) 發票選擇（電子發票關著＝空的，跟以前一樣）
     // 揪團結帳：後端改用揪團明細建單(不信任這裡的items)，並把訂單掛回揪團
     groupId: groupCheckoutMode && groupCtx ? groupCtx.groupId : undefined,
     hostToken: groupCheckoutMode && groupCtx ? groupCtx.hostToken : undefined,
