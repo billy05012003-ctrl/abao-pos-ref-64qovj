@@ -2389,10 +2389,26 @@ function osLoad_() {
         (st === 'prep' ? ` <button type="button" class="ops-btn" onclick="osRelease_('${escapeHtml(s.storeId)}')">✅ 正式開放</button>` : '');
       const url = st === 'new' ? '<span style="color:#aaa;">—</span>' : `<span style="font-size:0.75rem;color:#666;">/abao_xh/${escapeHtml(s.urlPath)}/</span>`;
       const unlic = s.licensed === false && !s.isHome ? ' <span class="os-badge new" title="11-17 廠商授權：開新店要先請系統廠商開通這間店">廠商還沒開通</span>' : '';   // licensed＝null（讀不到）不顯示
-      return `<tr><td><b>${escapeHtml(osName_(s))}</b>${s.isHome ? '（這間店）' : ''}${unlic}<br><span style="font-size:0.75rem;color:#888;">${escapeHtml(s.displayName || '')}　代號 ${escapeHtml(s.storeId)}</span></td><td>${badge}</td><td>${url}</td><td style="white-space:nowrap;">${btns}</td></tr>`;
+      return `<tr><td><b>${escapeHtml(osName_(s))}</b>${s.isHome ? '（這間店）' : ''}${unlic}<span id="os-line-${escapeHtml(s.storeId)}"></span><br><span style="font-size:0.75rem;color:#888;">${escapeHtml(s.displayName || '')}　代號 ${escapeHtml(s.storeId)}</span></td><td>${badge}</td><td>${url}</td><td style="white-space:nowrap;">${btns}</td></tr>`;
     }).join('') + '</table>' + (owner ? '' : '<p style="font-size:0.8rem;color:#a30000;">開新店、正式開放只有老闆可以按。</p>');
+    osCheckLine_(list);
   });
 }
+// 11-20 (12c／資安 R3)：每間店有沒有設 LINE 登入（門市資料 lineLiffId，SQL 40）。沒設的店：顧客不能 LINE 登入＝不能線上點餐、
+//   平板查不到會員會退回「店員打手機建會員」（還沒綁 LINE 的空窗期＝R3 冒綁風險）。只提醒不擋（老闆可能要先開只做門市的店）
+const osLineOk_ = {};   // 店代號 → true 有設／false 沒設（讀不到＝不記，不提醒）
+function osCheckLine_(list) {
+  list.forEach(s => {
+    apiGet({ action: 'storeProfile', storeId: s.storeId }).then(d => {
+      if (!d || d.status !== 'ok' || !d.profile) return;
+      const ok = !!d.profile.lineLiffId;
+      osLineOk_[s.storeId] = ok;
+      const el = document.getElementById('os-line-' + s.storeId);
+      if (el && !ok) el.innerHTML = ' <span class="os-badge new" title="這間店沒設 LINE 登入：顧客不能線上點餐，平板會退回店員打手機建會員（沒綁 LINE 的會員可能被冒綁）。設定方式：請 Claude 準備 SQL 填這間店的 LIFF 編號和官方帳號">還沒設 LINE 登入</span>';
+    }).catch(() => {});
+  });
+}
+const OS_LINE_WARN_ = '⚠ 這間店還沒設 LINE 登入：\n・顧客不能用 LINE 登入，所以不能線上點餐、不能開揪團\n・平板查不到會員時會改成「店員打手機建會員」，這些會員在顧客自己用 LINE 登入前，知道手機號碼的人就能把會員綁走\n設定方式：請 Claude 準備 SQL，填這間店的 LIFF 編號和 LINE 官方帳號。\n\n';
 function osOpenForm_(id) {
   const s = osStores_.find(x => x.storeId === id); if (!s) return;
   document.getElementById('os-result').innerHTML = '';
@@ -2441,13 +2457,15 @@ function osSubmit_(id) {
       <ol style="margin:4px 0 0 18px;padding:0;"><li>網頁要部署到 <code>/abao_xh/${escapeHtml(d.urlPath)}/</code>（請 Claude 部署）</li>
       <li>老闆用老闆帳號登入新店後台：${escapeHtml(osPageUrl_(ns, 'backoffice.html'))}，建店長／夥伴帳號、檢查付款方式</li>
       <li>新店平板開 ${escapeHtml(osPageUrl_(ns, 'tablet.html'))}，用老闆或店長 PIN 啟用，接出單機</li>
+      <li>設定 LINE 登入（LIFF 編號、官方帳號；請 Claude 準備 SQL）：沒設的話顧客不能線上點餐，平板會改成店員打手機建會員</li>
       <li>內部測試好了，回這頁按「✅ 正式開放」</li></ol></div></div>`;
     osLoad_();
   }).catch(() => { osBusy_ = false; if (go) { go.disabled = false; go.textContent = prep ? '🔁 重新抓' : '🏪 開新店'; } alert('網路異常，請稍後再試（可以再按一次）'); });
 }
 function osRelease_(id) {
   const s = osStores_.find(x => x.storeId === id); if (!s) return;
-  if (!confirm('正式開放：' + osName_(s) + '\n\n開放後顧客就能線上點餐、開揪團（付款方式照新店後台的設定）。\n確定店長／夥伴帳號、平板、出單機、付款方式都準備好了？')) return;
+  const lineWarn = osLineOk_[id] === false ? OS_LINE_WARN_ + '還沒設也要開放（只做門市）嗎？\n\n' : '';   // 11-20 (12c)
+  if (!confirm(lineWarn + '正式開放：' + osName_(s) + '\n\n開放後顧客就能線上點餐、開揪團（付款方式照新店後台的設定）。\n確定店長／夥伴帳號、平板、出單機、付款方式都準備好了？')) return;
   apiPost({ action: 'releaseStore', storeId: BO_HOME_STORE_, targetStoreId: id }).then(d => {
     if (!d || d.status !== 'ok') { alert((d && d.message) || '開放失敗'); return; }
     document.getElementById('os-result').innerHTML = '<div class="os-form" style="border-color:#bfe3c6;background:#f3fbf4;"><b>✅ ' + escapeHtml(osName_(s)) + ' 已正式開放</b>（其他平板／網頁最多 5 分鐘內生效）</div>';
