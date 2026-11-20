@@ -386,6 +386,7 @@
     <button class="sub-item" id="mch-sub-btn-schedule" onclick="switchMerchantSubview('schedule')">商店時段設定</button>
     <button class="sub-item" id="mch-sub-btn-payment" onclick="switchMerchantSubview('payment')">付款方式設定</button>
     <button class="sub-item" id="mch-sub-btn-notify" onclick="switchMerchantSubview('notify')">訂單通知設定</button>
+    <button class="sub-item" id="mch-sub-btn-sms" style="display:none;" onclick="switchMerchantSubview('sms')">簡訊驗證碼</button>
     <button class="sub-item" id="mch-sub-btn-payalert" style="display:none;" onclick="switchMerchantSubview('payalert')">金流告警 <span id="bo-payalert-badge" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span></button>
   </div>
   <!-- 飲品升級：規則存在各店(drink_upgrade_rules.store_id)，11-14 從「會員相關」移到「這間店」並顯示出來(優惠券清單裡的捷徑列照留) -->
@@ -601,6 +602,12 @@
   <div id="bo-owner-only-notify" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">訂單通知設定只有老闆可以修改，目前是唯讀。</div>
   <p style="font-size:0.8rem;color:var(--muted);">線上點餐的單一律要門市平板按「確認接單」才會出單。這裡設定：顧客怎麼知道店家接單了，以及店裡太久沒確認時要怎麼提醒。每個開關點一下就存。</p>
   <div id="notify-form"><div class="empty-hint">載入中...</div></div>
+</div>
+<!-- 11-20 簡訊驗證碼：LINE 註冊時要收手機簡訊驗證碼（每間店自己的開關，預設關；只限老闆） -->
+<div id="view-sms" class="view" style="display:none;">
+  <div id="bo-owner-only-sms" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">簡訊驗證碼設定只有老闆可以修改，目前是唯讀。</div>
+  <p style="font-size:0.8rem;color:var(--muted);">打開後，顧客第一次用 LINE 註冊會員時，要先收手機簡訊驗證碼才能完成註冊。可以擋住「有人用自己的 LINE 填別人的手機號碼註冊，或綁走在門市辦的會員」。店員在平板幫顧客建會員不受影響。關著＝跟以前一樣，不用驗證碼。</p>
+  <div id="sms-form"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-payalert" class="view" style="display:none;">
   <p style="font-size:0.8rem;color:var(--muted);">線上刷卡、LINE Pay、退款過程中系統自己處理不了、需要人工看一下的狀況，例如付款金額不符、訂單作廢後顧客才付款、同一張單付了兩次、店員人工標記已付款、退款帳務沒寫成功。看完、到藍新／LINE Pay 商家後台核對處理好之後，按「標記已處理」收起來。</p>
@@ -1954,8 +1961,57 @@ function notifySavePhones_() {
   const phones = v.split(/[,，、\s]+/).map(x => x.replace(/\D/g, '')).filter(Boolean);
   notifySave_({ ownerPhones: phones }, null);
 }
+// ---- 11-20 簡訊驗證碼（後端 smsSettings／updateSmsSettings；SQL 47） ----
+let smsData_ = null;
+function loadSmsSettings_() {
+  const el = document.getElementById('sms-form');
+  if (!el) return;
+  if (!NEW_API_) { el.innerHTML = '<div class="empty-hint">目前的後端沒有這個功能</div>'; return; }
+  document.getElementById('bo-owner-only-sms').style.display = isBoOwner_() ? 'none' : 'block';
+  apiGet({ action: 'smsSettings', storeId: BO_HOME_STORE_ }).then(d => {
+    if (d.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(d.message || '') + '</div>'; return; }
+    smsData_ = d;
+    renderSmsSettings_();
+  }).catch(() => { el.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+}
+function renderSmsSettings_() {
+  const d = smsData_, el = document.getElementById('sms-form');
+  if (!d || !el) return;
+  const s = d.settings || {}, rules = d.rules || {}, list = d.providers || [];
+  const canEdit = isBoOwner_() && d.sqlReady !== false;
+  const cur = list.find(p => p.id === s.provider);
+  const ready = !!(cur && cur.ready);
+  const lockOn = !canEdit || (!s.enabled && !ready);
+  const top = (d.sqlReady === false ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 資料庫還沒更新（SQL 47），下面是預設值，暫時存不進去。</div>' : '')
+    + (!list.length ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 還沒接任何簡訊商：選好簡訊商、申請帳號後，由系統管理員把簡訊商接上，這裡才選得到、開關才打得開。</div>' : '');
+  const opts = ['<option value="">（請選擇）</option>'].concat(list.map(p => `<option value="${escapeHtml(p.id)}" ${p.id === s.provider ? 'selected' : ''}>${escapeHtml(p.label)}${p.ready ? '' : '（金鑰還沒設定）'}</option>`)).join('');
+  el.innerHTML = top + `
+    <div class="sched-special-row">
+      <b>LINE 註冊要簡訊驗證碼</b>
+      <label style="display:flex;align-items:center;gap:4px;cursor:${lockOn ? 'not-allowed' : 'pointer'};${lockOn ? 'opacity:.45;' : ''}"><input type="checkbox" ${s.enabled ? 'checked' : ''} ${lockOn ? 'disabled' : ''} onchange="smsSave_({ enabled: this.checked }, this)">${s.enabled ? '🟢 啟用' : '🔴 停用'}</label>
+      <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">${s.enabled ? '顧客 LINE 註冊時要輸入簡訊驗證碼。' : (ready ? '點一下就打開。' : '先在下面選好簡訊商（金鑰設定好）才打得開。')}</div>
+    </div>
+    <div style="font-weight:700;margin:14px 0 4px;">簡訊商</div>
+    <select id="sms-provider" style="padding:6px 8px;min-width:220px;" ${canEdit ? '' : 'disabled'} onchange="smsSave_({ provider: this.value }, null)">${opts}</select>
+    <div style="font-weight:700;margin:14px 0 4px;">這間店每天最多發幾則</div>
+    <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">防止有人一直按「發送驗證碼」燒簡訊費。到上限當天就不再發，顧客會看到「請找店員協助註冊」。今天已發 <b>${Number(d.sentToday) || 0}</b> 則。</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input id="sms-limit" type="number" min="1" max="5000" value="${Number(s.dailyLimit) || 200}" style="width:110px;padding:6px 8px;" ${canEdit ? '' : 'disabled'}>
+      <button type="button" class="mc-save-btn" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'} onclick="smsSave_({ dailyLimit: Number(document.getElementById('sms-limit').value) }, null)">儲存上限</button></div>
+    <div style="font-weight:700;margin:14px 0 4px;">固定規則</div>
+    <div style="font-size:0.76rem;color:var(--muted);line-height:1.6;">驗證碼 ${rules.codeLen || 6} 位數、${Math.round((rules.ttlSec || 300) / 60)} 分鐘內有效；同一支手機 ${rules.cooldownSec || 60} 秒內不能重發；每支手機、每個 LINE 每天最多 ${rules.phoneDaily || 5} 次；輸錯 ${rules.maxAttempts || 5} 次要重新發送。驗證碼只存加密後的樣子，看不到原本的數字。</div>
+    ${d.updatedBy ? `<div class="ops-meta" style="margin-top:10px;">最後修改：${escapeHtml(d.updatedBy)}</div>` : ''}`;
+}
+function smsSave_(settings, el) {
+  if (el) el.disabled = true;
+  return apiPost({ action: 'updateSmsSettings', storeId: BO_HOME_STORE_, settings }).then(d => {
+    if (d.status !== 'ok') { alert('儲存失敗：' + (d.message || '')); if (el) { el.checked = !el.checked; el.disabled = false; } renderSmsSettings_(); return; }
+    smsData_ = d;
+    renderSmsSettings_();
+  }).catch(() => { alert('網路異常，沒有儲存'); if (el) { el.checked = !el.checked; el.disabled = false; } renderSmsSettings_(); });
+}
 if (NEW_API_) {
   const b = document.getElementById('mch-sub-btn-payalert'); if (b) b.style.display = '';
+  const bs = document.getElementById('mch-sub-btn-sms'); if (bs) bs.style.display = '';   // 11-20 簡訊驗證碼
   // 新後端沒有試算表，「POS夥伴」分頁那條路不在了(PIN 存雜湊，只能由另一個老闆帳號或系統管理員重設)
   const fg = document.getElementById('bo-login-forgot'); if (fg) fg.textContent = '忘記PIN：請老闆幫你重設；老闆自己忘記請另一位老闆重設，或聯絡系統管理員（小保）';
   // 11-11 老闆定：夥伴帳號(含PIN)只有老闆能新增或修改，店長不能幫別人改(新後端 upsertPosStaff 也擋)
@@ -2240,6 +2296,7 @@ function switchBackofficeTab(name) {
   document.getElementById('view-payment').style.display = (name === 'merchant' && currentMerchantSubview === 'payment') ? 'block' : 'none';
   document.getElementById('view-payalert').style.display = (name === 'merchant' && currentMerchantSubview === 'payalert') ? 'block' : 'none';
   document.getElementById('view-notify').style.display = (name === 'merchant' && currentMerchantSubview === 'notify') ? 'block' : 'none';
+  document.getElementById('view-sms').style.display = (name === 'merchant' && currentMerchantSubview === 'sms') ? 'block' : 'none';
   document.getElementById('view-menucms').style.display = name === 'menucms' ? 'block' : 'none';
   document.getElementById('view-member').style.display = name === 'member' ? 'block' : 'none';
   document.getElementById('view-posmanage').style.display = name === 'posmanage' ? 'block' : 'none';
@@ -2279,6 +2336,8 @@ function switchBackofficeTab(name) {
   if (name === 'merchant' && currentMerchantSubview === 'payalert') loadPayAlerts_();
   document.getElementById('mch-sub-btn-notify').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'notify');
   if (name === 'merchant' && currentMerchantSubview === 'notify') loadNotifySettings_();
+  document.getElementById('mch-sub-btn-sms').classList.toggle('active', name === 'merchant' && currentMerchantSubview === 'sms');
+  if (name === 'merchant' && currentMerchantSubview === 'sms') loadSmsSettings_();
   if (name === 'merchant') {
     document.getElementById('merchant-sublist').classList.add('open');
     document.getElementById('merchant-caret').classList.add('open');

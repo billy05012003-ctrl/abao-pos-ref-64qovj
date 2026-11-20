@@ -815,6 +815,7 @@ const QR_TO_LINE_ = (function () {
 const LINE_LOGIN_OPEN = true;
 const LINE_LOGIN_ON = LINE_LOGIN_OPEN || /\/line_test\.html$/.test(location.pathname) || new URLSearchParams(location.search).get('linetest') === '1';
 var lineSession_ = '';   // var：apiGet_/apiPost_ 可能在這行之前就被呼叫
+var lineSmsVerify_ = false;   // 11-20 簡訊驗證碼：後端 lineLogin 回 smsVerify:true（後台開關打開）才在註冊畫面顯示驗證碼欄；關著＝畫面跟以前一樣
 // 底部三分頁「新品推薦／會員好康／線上點餐」(2026-09-30 第一波)：正式開放前只有網址加 ?tabstest=1 看得到，
 // 老闆測過沒問題再把 HOME_TABS_OPEN 改成 true。var：會員列/購物車等函式可能在後面宣告前就被叫到
 var HOME_TABS_OPEN = true;   // 09-30 老闆說「打開開關」，所有顧客都看到底部三分頁
@@ -931,6 +932,7 @@ async function initLineLogin_() {
   try { sessionStorage.removeItem('abao_line_relogin'); } catch (e) {}
   if (!data.lineSession) { lineStatusHtml_(`<div style="color:#a30000;">${escapeHtml_(data.message || 'LINE 登入失敗，請重新整理頁面')}</div>`); return; }
   lineSession_ = data.lineSession;
+  lineSmsVerify_ = !!data.smsVerify;
   if (data.status === 'ok') applyLineMember_(data.member);
   else renderLineRegister_(data.lineName || '');
   if (homeTab_ === 'mine') loadMyOrders_(true);   // 我的訂單(10-08)：停在我的訂單時登入完成就讀
@@ -1017,14 +1019,21 @@ function showLineRegBar_() {
       <button type="button" onclick="openLineRegister_()" style="flex:none;background:#fff;color:#06C755;border:none;border-radius:6px;padding:6px 12px;font-weight:700;">完成註冊</button>
     </div>`);
 }
-function openLineRegister_() {
+function openLineRegister_(keep) {
   if (!lineRegPending_) return;
   const nmEl = document.getElementById('cust-name');
-  const name = (nmEl && nmEl.value.trim()) || lineRegName_;
+  const name = (keep && keep.name) || (nmEl && nmEl.value.trim()) || lineRegName_;
+  smsStopCountdown_();
   document.getElementById('reg-body').innerHTML = `
     <div style="color:var(--muted);font-size:0.84rem;margin:0 0 10px;line-height:1.5;">填好手機就完成（免費，立即生效），之後用這個 LINE 點餐都會自動認得你，還能累積點數、使用優惠券。<b style="color:var(--text);">在門市辦過會員的，填同一支手機會自動帶入點數與等級。</b></div>
     <label style="margin-top:0;">手機</label>
-    <input type="tel" id="line-reg-phone" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="09xxxxxxxx">
+    <input type="tel" id="line-reg-phone" maxlength="10" inputmode="numeric" autocomplete="tel" placeholder="09xxxxxxxx" value="${escapeHtml_((keep && keep.phone) || '')}">
+    ${lineSmsVerify_ ? `
+    <div style="color:var(--muted);font-size:0.8rem;margin-top:6px;line-height:1.5;">為了確認是本人，會傳簡訊驗證碼到這支手機。</div>
+    <button type="button" class="btn-secondary" id="line-sms-btn" onclick="sendLineSmsCode_()" style="margin-top:6px;">發送驗證碼</button>
+    <label>簡訊驗證碼（6 位數字）</label>
+    <input type="tel" id="line-sms-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="收到簡訊後輸入">
+    <div id="line-sms-tip" style="color:var(--muted);font-size:0.8rem;margin-top:4px;line-height:1.5;"></div>` : ''}
     <label>姓名（取餐時叫號用）</label>
     <input type="text" id="line-reg-name" maxlength="20" autocomplete="name" value="${escapeHtml_(name)}">
     <div id="line-reg-msg" style="color:#a30000;font-size:0.82rem;margin-top:6px;"></div>
@@ -1035,7 +1044,52 @@ function openLineRegister_() {
 }
 function closeLineRegister_() {
   regThenPay_ = false;   // 自己關掉的就不自動接著付款，之後在購物車按付款會再跳出來
+  smsStopCountdown_();
   document.getElementById('reg-overlay').classList.remove('open');
+}
+// 11-20 簡訊驗證碼（後台開關打開才會用到）：按「發送驗證碼」→ 後端發簡訊 → 60 秒內不能重發（按鈕倒數）
+// 測試模式（只有示範門市）後端會回 testCode，直接顯示在畫面上，不用真的收簡訊
+var smsTimer_ = null;   // var：openLineRegister_ 可能在這行之前就被呼叫
+function smsStopCountdown_() { if (smsTimer_) { clearInterval(smsTimer_); smsTimer_ = null; } }
+function smsCountdown_(sec) {
+  smsStopCountdown_();
+  const btn = document.getElementById('line-sms-btn');
+  if (!btn) return;
+  let left = Math.max(1, Number(sec) || 60);
+  const tick = () => {
+    const b = document.getElementById('line-sms-btn');
+    if (!b) { smsStopCountdown_(); return; }
+    if (left <= 0) { smsStopCountdown_(); b.disabled = false; b.textContent = '重新發送驗證碼'; return; }
+    b.disabled = true; b.textContent = '重新發送（' + left + ' 秒）'; left--;
+  };
+  tick();
+  smsTimer_ = setInterval(tick, 1000);
+}
+function sendLineSmsCode_() {
+  const phone = document.getElementById('line-reg-phone').value.trim();
+  const msg = document.getElementById('line-reg-msg');
+  const tip = document.getElementById('line-sms-tip');
+  const btn = document.getElementById('line-sms-btn');
+  if (!isValidPhone_(phone)) { msg.textContent = '手機號碼格式不正確，請輸入09開頭的10碼數字'; return; }
+  msg.textContent = '';
+  btn.disabled = true; btn.textContent = '發送中…';
+  apiPost_({ action: 'lineSmsSend', phone }).then(data => {
+    if (data.status === 'ok') {
+      tip.innerHTML = '驗證碼已傳到 ' + escapeHtml_(phone) + '，' + Math.round((data.expiresIn || 300) / 60) + ' 分鐘內有效。收不到？等倒數結束可以重新發送，還是不行請找店員協助。'
+        + (data.testCode ? `<div style="margin-top:4px;color:#a3620a;font-weight:700;">🧪 測試模式驗證碼：${escapeHtml_(data.testCode)}</div>` : '');
+      smsCountdown_(data.resendAfter || 60);
+      const c = document.getElementById('line-sms-code'); if (c) c.focus();
+      return;
+    }
+    if (data.code === 'sms_off') {   // 店家剛把簡訊驗證關掉：拿掉驗證碼欄，直接註冊
+      lineSmsVerify_ = false;
+      openLineRegister_({ phone, name: document.getElementById('line-reg-name').value.trim() });
+      return;
+    }
+    msg.textContent = data.message || '驗證碼發送失敗，請稍後再試';
+    if (data.code === 'sms_cooldown') smsCountdown_(data.wait);
+    else { btn.disabled = false; btn.textContent = '發送驗證碼'; }
+  }).catch(() => { msg.textContent = '驗證碼發送失敗，請確認網路連線後再試'; btn.disabled = false; btn.textContent = '發送驗證碼'; });
 }
 // 建好會員：結帳途中登入的直接接著付款；還沒勾同意條款就捲到同意框提醒，不跳警告
 function continueToPayAfterReg_() {
@@ -1057,16 +1111,26 @@ function submitLineRegister_() {
   const msg = document.getElementById('line-reg-msg');
   if (!isValidPhone_(phone)) { msg.textContent = '手機號碼格式不正確，請輸入09開頭的10碼數字'; return; }
   if (!name) { msg.textContent = '請輸入姓名'; return; }
+  const codeEl = document.getElementById('line-sms-code');
+  const smsCode = codeEl ? codeEl.value.trim() : '';
+  if (lineSmsVerify_ && codeEl && !/^\d{6}$/.test(smsCode)) { msg.textContent = '請先按「發送驗證碼」，再輸入簡訊裡的 6 位數字'; return; }
   const btn = document.getElementById('line-reg-btn');
   btn.disabled = true;
   msg.textContent = '';
-  apiPost_({ action: 'lineRegister', phone, name }).then(data => {
+  apiPost_({ action: 'lineRegister', phone, name, ...(lineSmsVerify_ ? { smsCode } : {}) }).then(data => {
+    if (data.status !== 'ok' && data.code === 'sms_required' && !codeEl) {   // 店家剛打開簡訊驗證（登入時還沒開）：補上驗證碼欄
+      lineSmsVerify_ = true;
+      openLineRegister_({ phone, name });
+      document.getElementById('line-reg-msg').textContent = '這間店需要簡訊驗證，請按「發送驗證碼」';
+      return;
+    }
     if (data.status !== 'ok') {
       msg.textContent = (data.message || '建立會員失敗') + ((data.code === 'phone_exists' || data.code === 'phone_bound_other') ? '（' + svcText_() + '）' : '');
       btn.disabled = false;
       return;
     }
     lineRegPending_ = false;
+    smsStopCountdown_();
     const thenPay = regThenPay_;
     regThenPay_ = false;
     document.getElementById('reg-overlay').classList.remove('open');
