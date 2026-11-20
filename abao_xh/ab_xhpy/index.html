@@ -383,6 +383,8 @@
     flex-shrink: 0;
     vertical-align: middle;
   }
+  /* 資安健檢 R4 補 B：備註打到要加價的選項時的提醒 */
+  .note-unpaid-warn { margin-top: 4px; padding: 6px 10px; border-radius: 8px; background: #fff8e6; color: #8a5300; font-size: 0.8rem; line-height: 1.45; }
 </style>
 </head>
 <body>
@@ -556,6 +558,7 @@
       <label style="display:block; font-size:0.85rem; margin:10px 0 4px; color:var(--muted)">特殊需求（選填）</label>
       <textarea id="item-modal-note" rows="2" style="width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem;" maxlength="100" placeholder="例如：不要洋蔥" oninput="updateItemModalNoteCount_()"></textarea>
       <div id="item-modal-note-count" style="text-align:right; font-size:0.75rem; color:var(--muted); margin-top:2px;">0/100</div>
+      <div id="item-modal-note-warn" class="note-unpaid-warn" style="display:none;"></div>
     </div>
     <div id="item-modal-qty-row" style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:14px;">
       <button type="button" class="qty-btn" onclick="itemModalQty(-1)" style="width:34px;height:34px;font-size:1.2rem;">-</button>
@@ -587,7 +590,8 @@
       <div id="cart-otherneeds"></div>
       <div id="cust-note-box">
         <label>備註（選填，其他需求未滿足）</label>
-        <textarea id="cust-note" rows="2" placeholder="例如：外帶請幫我多裝一個袋子"></textarea>
+        <textarea id="cust-note" rows="2" placeholder="例如：外帶請幫我多裝一個袋子" oninput="noteUnpaidWarn_('cust-note', 'cust-note-warn', '餐點')"></textarea>
+        <div id="cust-note-warn" class="note-unpaid-warn" style="display:none;"></div>
       </div>
       <div id="group-cart-box" style="display:none;margin:10px 0;padding:10px;border:1px solid #b9dcff;border-radius:10px;background:#f4faff;">
         <div id="group-cart-hint" style="font-size:0.85rem;color:#0c447c;margin-bottom:6px;"></div>
@@ -1520,6 +1524,28 @@ function updateItemModalNoteCount_() {
   const el = document.getElementById('item-modal-note-count');
   el.textContent = `${len}/100`;
   el.style.color = len >= 100 ? '#c0392b' : 'var(--muted)';
+  noteUnpaidWarn_('item-modal-note', 'item-modal-note-warn', '上面的');
+}
+// 資安健檢 R4 補 B（11-20 老闆定）：備註是自由填寫、不算錢；顧客打到要加價的選項名稱（加蛋、加起司…）或加價購商品時即時提醒去勾選項。
+// 只提醒、不擋（「不要加蛋」也會出現提醒，看得懂就好）；門市平板與出單上顧客備註會標「未收費」
+function notePaidNames_() {
+  const set = new Set();
+  Object.keys(OPTION_GROUPS || {}).forEach(gk => {
+    const g = OPTION_GROUPS[gk];
+    if (!g || g.onlineVisible === false) return;
+    (g.options || []).forEach(o => { if (o.onlineVisible !== false && ((Number(o.price) || 0) > 0 || (Number(o.priceM) || 0) > 0 || (Number(o.priceL) || 0) > 0)) set.add(o.name); });
+  });
+  (SHOP_ADDONS || []).forEach(a => { if (a.type === 'x1' && a.status !== '停用') set.add(a.name); });
+  return [...set].filter(n => n && n.length >= 2);
+}
+function noteUnpaidWarn_(inputId, warnId, where) {
+  const inp = document.getElementById(inputId), el = document.getElementById(warnId);
+  if (!inp || !el) return;
+  const text = inp.value || '';
+  const hits = text ? notePaidNames_().filter(n => text.includes(n)) : [];
+  if (!hits.length) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.textContent = `「${hits.slice(0, 3).join('」「')}」是要加價的選項：備註不會算錢，店家可能不會照做，要加請在${where}選項裡勾選。`;
+  el.style.display = 'block';
 }
 
 // ---------------------------------------------------------------
