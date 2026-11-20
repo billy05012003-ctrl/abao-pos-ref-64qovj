@@ -1544,7 +1544,7 @@ function noteUnpaidWarn_(inputId, warnId, where) {
   const text = inp.value || '';
   const hits = text ? notePaidNames_().filter(n => text.includes(n)) : [];
   if (!hits.length) { el.style.display = 'none'; el.textContent = ''; return; }
-  el.textContent = `「${hits.slice(0, 3).join('」「')}」是要加價的選項：備註不會算錢，店家可能不會照做，要加請在${where}選項裡勾選。`;
+  el.textContent = `「${hits.slice(0, 3).join('」「')}」是要加價的選項：備註不會收費，店家不會依備註加料。要加請在${where}選項裡勾選。`;
   el.style.display = 'block';
 }
 
