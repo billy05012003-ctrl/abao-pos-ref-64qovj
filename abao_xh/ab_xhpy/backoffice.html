@@ -200,6 +200,17 @@
   .hb-rule summary::before { content:'ⓘ '; }
   .hb-rule[open] summary { margin-bottom:4px; }
   .hb-rule ul { margin:0; padding-left:18px; } .hb-rule li { margin:2px 0; }
+  /* 11-21 老闆：說明文字精簡，留一句重點，其餘收進「說明 ▸」（寫字不用符號，預設收起） */
+  .bo-lead { font-size:0.8rem; color:var(--muted); margin:0 0 2px; line-height:1.5; }
+  .bo-help { font-size:0.78rem; color:var(--muted); margin:0 0 12px; }
+  .bo-help > summary { display:inline-block; cursor:pointer; color:var(--brand); font-weight:600; list-style:none; padding:2px 0; }
+  .bo-help > summary::-webkit-details-marker { display:none; }
+  .bo-help > summary::after { content:' ▸'; }
+  .bo-help[open] > summary::after { content:' ▾'; }
+  .bo-help > summary:focus { outline:none; }
+  .bo-help > summary:focus-visible { outline:2px solid var(--brand); outline-offset:2px; border-radius:3px; }
+  .bo-help > div { margin-top:4px; padding:8px 10px; background:#faf7f2; border:1px solid var(--border); border-radius:6px; line-height:1.6; }
+  .bo-help ul { margin:0; padding-left:18px; } .bo-help li { margin:2px 0; }
   /* 11-14 老闆：「正在改哪一邊」每頁都看得到；品牌範本整條換紫色 */
   .edit-target-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; padding:8px 12px; border-radius:8px; background:#fff3ea; border:1px solid #f3c9ad; font-size:0.85rem; color:#7a3d14; }
   .edit-target-bar select { padding:5px 8px; border-radius:6px; border:1px solid #e0b090; font-family:inherit; font-weight:600; }
@@ -405,7 +416,7 @@
     <button class="sub-item" id="pmg-sub-btn-partner" onclick="switchPosManageSubview('partner')">夥伴帳號管理</button>
     <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">角色權限設定</button>
   </div>
-  <div class="nav-sec switch" data-sec="switch" role="button" tabindex="0" title="點一下收合／展開">🔀 品牌範本→門市<span class="sec-caret">▼</span><small>頁內「正在改：」切換</small></div>
+  <div class="nav-sec switch" data-sec="switch" role="button" tabindex="0" title="點一下收合／展開">🔀 品牌範本→門市<span class="sec-caret">▼</span><small>在頁面上方切換</small></div>
   <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
     <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
   </button>
@@ -534,7 +545,7 @@
   <div id="availability-list"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-storeinfo" class="view" style="display:none;">
-  <p style="font-size:0.8rem;color:var(--muted);">點餐頁「店家資訊」與「自取規則」的內容，存了立刻生效。營業時間會照「商店時段設定」自動顯示，不用在這裡填。</p>
+  <p style="font-size:0.8rem;color:var(--muted);">點餐頁的店家資訊、自取規則，存了立刻生效；營業時間會自動帶，不用填。</p>
   <div id="storeinfo-form" style="max-width:560px;">
     <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">顯示店名</label>
     <input type="text" id="si-f-name" maxlength="30" style="width:100%;padding:8px;box-sizing:border-box;">
@@ -549,7 +560,7 @@
 </div>
 <div id="view-schedule" class="view" style="display:none;">
   <p style="font-size:0.8rem;color:var(--muted);">
-    這裡管理線上點餐的營業時間/接單時間/取餐設定，改完立刻生效。只影響<b>線上點餐</b>，不影響POS功能現場點餐。
+    <b>線上點餐</b>的營業、接單、取餐時間，改完立刻生效，不影響門市平板。
   </p>
   <div class="sched-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
     <button type="button" class="sched-tab-btn active" id="sched-tab-btn-hours" onclick="switchSchedSubview('hours')">營業時間設定</button>
@@ -558,11 +569,12 @@
     <button type="button" class="sched-tab-btn" id="sched-tab-btn-special" onclick="switchSchedSubview('special')">特殊營業時段</button>
   </div>
   <div id="sched-subview-hours">
-    <p style="font-size:0.78rem;color:var(--muted);">每天可以設定多段時間（例如中間留午休空檔）。這是給顧客看的營業時間，也是取餐時段選單的範圍依據。</p>
+    <p style="font-size:0.78rem;color:var(--muted);">可以設多段（例如中間午休）；顧客看到的營業時間、取餐時段都照這個。</p>
     <div id="sched-hours-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="sched-subview-order" style="display:none;">
-    <p style="font-size:0.78rem;color:var(--muted);">這組決定「現在這個時間點顧客能不能送出訂單」，<b>跟營業時間分開設定</b>——例如可以設晚上21:00~23:00也開放下單，訂隔天的餐。跟營業時間沒有關聯，不會互相限制。</p>
+    <p class="bo-lead">顧客什麼時間能送出訂單，<b>跟營業時間分開設</b>。</p>
+    <details class="bo-help"><summary>說明</summary><div>這組決定「現在這個時間點顧客能不能送出訂單」，<b>跟營業時間分開設定</b>——例如可以設晚上21:00~23:00也開放下單，訂隔天的餐。跟營業時間沒有關聯，不會互相限制。</div></details>
     <div id="sched-order-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="sched-subview-pickup" style="display:none;">
@@ -596,11 +608,13 @@
     <button type="button" class="sched-tab-btn" id="pm-tab-btn-tablescan" onclick="switchPmSubview('tablescan')">桌邊掃碼點餐</button>
   </div>
   <div id="pm-subview-online">
-    <p style="font-size:0.8rem;color:var(--muted);">控制線上點餐結帳頁要開放哪些付款方式：線上信用卡、線上Apple Pay 走藍新；線上LINEPay 直接串 LINE Pay（不經藍新）。這裡的營收算日報表「線上點餐」。</p>
+    <p class="bo-lead">線上點餐結帳頁開放哪些付款方式。</p>
+    <details class="bo-help"><summary>說明</summary><div>控制線上點餐結帳頁要開放哪些付款方式：線上信用卡、線上Apple Pay 走藍新；線上LINEPay 直接串 LINE Pay（不經藍新）。這裡的營收算日報表「線上點餐」。</div></details>
     <div id="payment-method-form"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pm-subview-thirdparty" style="display:none;">
-    <p style="font-size:0.8rem;color:var(--muted);">外送平台的訂單：門市平板「快速出單」用的來源。這裡<b>啟用</b>的才會出現在快速出單（改完 5 分鐘內平板會跟上）。營收不算進日報表的「線上點餐」「線下結帳」，對應平台業績。以後真的串接外送平台也放這裡。</p>
+    <p class="bo-lead">平板「快速出單」的外送平台，<b>啟用</b>的才會出現；改完 5 分鐘內平板會跟上。</p>
+    <details class="bo-help"><summary>說明</summary><div>外送平台的訂單：門市平板「快速出單」用的來源。這裡<b>啟用</b>的才會出現在快速出單（改完 5 分鐘內平板會跟上）。營收不算進日報表的「線上點餐」「線下結帳」，對應平台業績。以後真的串接外送平台也放這裡。</div></details>
     <div id="thirdparty-pm-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <div id="pm-subview-offline" style="display:none;">
@@ -609,7 +623,8 @@
       <div style="font-weight:600;margin-bottom:6px;">線下LINEPay（門市反掃，系統串接）</div>
       <div id="lp-scan-form"><div class="empty-hint">載入中...</div></div>
     </div>
-    <p style="font-size:0.8rem;color:var(--muted);">門市平板的付款按鈕：這裡<b>啟用</b>的才會出現在平板上，<b>停用</b>就藏起來（改完 5 分鐘內平板會跟上，斷網時平板沿用上次的設定）。「現金」永遠都在，不用設定。內建的 LINEPay mini／其他／取餐付款不能改名或刪除，不用就改成停用（<b>LINEPay mini 是備援：停用時平板上變灰色、不能按</b>；<b>取餐付款停用時，線上點餐的取餐付款也跟著關</b>）；自己新增的（例如全支付）啟用後平板會多一顆按鈕，跟 LINEPay mini 一樣只做記錄，店員用那家的 App 收款。</p>
+    <p class="bo-lead">平板上的付款按鈕，<b>啟用</b>的才會出現；「現金」永遠都在。</p>
+    <details class="bo-help"><summary>說明</summary><div>門市平板的付款按鈕：這裡<b>啟用</b>的才會出現在平板上，<b>停用</b>就藏起來（改完 5 分鐘內平板會跟上，斷網時平板沿用上次的設定）。「現金」永遠都在，不用設定。內建的 LINEPay mini／其他／取餐付款不能改名或刪除，不用就改成停用（<b>LINEPay mini 是備援：停用時平板上變灰色、不能按</b>；<b>取餐付款停用時，線上點餐的取餐付款也跟著關</b>）；自己新增的（例如全支付）啟用後平板會多一顆按鈕，跟 LINEPay mini 一樣只做記錄，店員用那家的 App 收款。</div></details>
     <div id="offline-payment-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" class="mc-add-btn" onclick="offlinePmAdd()">+ 新增線下收款方式</button>
     <div id="offline-pm-form" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:8px;">
@@ -633,17 +648,19 @@
 <!-- 11-20 (9g) 訂單通知設定：每間店自己的開關（老闆 11-20 定規格） -->
 <div id="view-notify" class="view" style="display:none;">
   <div id="bo-owner-only-notify" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">訂單通知設定只有老闆可以修改，目前是唯讀。</div>
-  <p style="font-size:0.8rem;color:var(--muted);">線上點餐的單一律要門市平板按「確認接單」才會出單。這裡設定：顧客怎麼知道店家接單了，以及店裡太久沒確認時要怎麼提醒。每個開關點一下就存。</p>
+  <p style="font-size:0.8rem;color:var(--muted);">線上單要平板按「確認接單」才出單；這裡設怎麼通知顧客、太久沒確認怎麼提醒。開關點一下就存。</p>
   <div id="notify-form"><div class="empty-hint">載入中...</div></div>
 </div>
 <!-- 11-20 簡訊驗證碼：LINE 註冊時要收手機簡訊驗證碼（每間店自己的開關，預設關；只限老闆） -->
 <div id="view-sms" class="view" style="display:none;">
   <div id="bo-owner-only-sms" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">簡訊驗證碼設定只有老闆可以修改，目前是唯讀。</div>
-  <p style="font-size:0.8rem;color:var(--muted);">打開後，顧客第一次用 LINE 註冊會員時，要先收手機簡訊驗證碼才能完成註冊。可以擋住「有人用自己的 LINE 填別人的手機號碼註冊，或綁走在門市辦的會員」。店員在平板幫顧客建會員不受影響。關著＝跟以前一樣，不用驗證碼。</p>
+  <p class="bo-lead">打開後，顧客第一次用 LINE 註冊要先收簡訊驗證碼。</p>
+  <details class="bo-help"><summary>說明</summary><div>打開後，顧客第一次用 LINE 註冊會員時，要先收手機簡訊驗證碼才能完成註冊。可以擋住「有人用自己的 LINE 填別人的手機號碼註冊，或綁走在門市辦的會員」。店員在平板幫顧客建會員不受影響。關著＝跟以前一樣，不用驗證碼。</div></details>
   <div id="sms-form"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-payalert" class="view" style="display:none;">
-  <p style="font-size:0.8rem;color:var(--muted);">線上刷卡、LINE Pay、退款過程中系統自己處理不了、需要人工看一下的狀況，例如付款金額不符、訂單作廢後顧客才付款、同一張單付了兩次、店員人工標記已付款、退款帳務沒寫成功。看完、到藍新／LINE Pay 商家後台核對處理好之後，按「標記已處理」收起來。</p>
+  <p class="bo-lead">系統自己處理不了、要人工看的金流狀況；處理好按「標記已處理」。</p>
+  <details class="bo-help"><summary>說明</summary><div>線上刷卡、LINE Pay、退款過程中系統自己處理不了、需要人工看一下的狀況，例如付款金額不符、訂單作廢後顧客才付款、同一張單付了兩次、店員人工標記已付款、退款帳務沒寫成功。看完、到藍新／LINE Pay 商家後台核對處理好之後，按「標記已處理」收起來。</div></details>
   <div id="bo-owner-only-payalert" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">只有老闆可以標記已處理，目前是唯讀。</div>
   <div style="margin-bottom:10px;"><button type="button" class="mc-add-btn" style="width:auto;padding:6px 16px;" onclick="loadPayAlerts_()">重新整理</button></div>
   <div id="payalert-list"><div class="empty-hint">載入中...</div></div>
@@ -654,10 +671,11 @@
     <select id="mc-store-select" onchange="mcSwitchStore(this.value)"></select>
     <span id="mc-target-hint">這間店的草稿，按「發布到正式版」才生效</span>
   </div>
-  <p style="font-size:0.8rem;color:var(--muted);">
+  <p class="bo-lead">這裡改的是<b>草稿</b>，按「發布到正式版」才生效。</p>
+  <details class="bo-help"><summary>說明</summary><div>
     這裡改的是<b>草稿</b>版本，不會馬上讓顧客/POS看到——改完要按「發布到正式版」才會真的生效。
     品牌範本則是用來推送給分店的來源，本身不會直接被顧客看到。
-  </p>
+  </div></details>
   <div id="mc-publish-row" style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
     <button type="button" id="mc-publish-btn" class="mc-save-btn" onclick="publishMcStore()">發布到正式版</button>
     <div id="mc-publish-diff" style="flex:1;min-width:240px;"></div>
@@ -673,21 +691,23 @@
   <div style="margin-bottom:16px;">
     <button type="button" class="mc-add-btn" onclick="toggleSnapshotPanel()">📜 版本回溯</button>
     <div id="mc-snapshot-panel" style="display:none;margin-top:8px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
-      <p style="font-size:0.78rem;color:var(--muted);margin:0 0 8px;">每次「同步」「發布」「回復」真的覆蓋資料之前，系統都會自動存一份快照，最近10份。回復本身也會先自動備份，可以再復原回去。</p>
+      <p style="font-size:0.78rem;color:var(--muted);margin:0 0 8px;">同步、發布、回復前都會自動存快照（最近 10 份），回復錯了也能再復原。</p>
       <div id="mc-snapshot-list"><div class="empty-hint">載入中...</div></div>
     </div>
   </div>
   <div id="mc-subview-categories" style="display:block;">
-    <p style="font-size:0.8rem;color:var(--muted);">
+    <p class="bo-lead">改品項名稱、價格、新增刪除；改的是<b>草稿</b>，要發布才生效。</p>
+    <details class="bo-help"><summary>說明</summary><div>
       改品項名稱/價格、新增/刪除品項、調整品項要用哪些客製化選項都在這裡。改的是<b>草稿</b>，要按上面的「發布到正式版」顧客和門市POS才看得到(發布後線上馬上換新，門市平板閒置時會自動更新)。點分類可以展開/收合看底下的品項，點品項會彈出視窗編輯。
-    </p>
+    </div></details>
     <div id="mc-cat-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" class="mc-add-btn" onclick="mcAddCategory()">+ 新增分類</button>
   </div>
   <div id="mc-subview-options" style="display:none;">
-    <p style="font-size:0.8rem;color:var(--muted);">
+    <p class="bo-lead">全部品項共用的選項組（例如甜度），改了會影響所有用到它的品項。</p>
+    <details class="bo-help"><summary>說明</summary><div>
       這裡是全部品項共用的「客製化選項庫」，例如「麵包醬料選擇」「甜度選擇」這種選項組本身。改這裡會影響所有掛載這個群組的品項。跟品項分類一樣改的是<b>草稿</b>，要到「品項分類」按「發布到正式版」才會生效。
-    </p>
+    </div></details>
     <div class="mc-layout">
       <div class="mc-col">
         <h4>客製化選項庫</h4>
@@ -703,7 +723,8 @@
 <div id="view-member" class="view" style="display:none;">
   <!-- 11-16 (9b) 會員清單（對照大麥「品牌會員列表」）：只看不改；電話老闆看完整、店長看遮罩；後端 GET memberList -->
   <div id="mb-subview-members" style="display:none;">
-    <p style="font-size:0.8rem;color:var(--muted);">會員全部門市共用。這一頁<b>只能看</b>：要改會員資料、點數，請在門市平板或「POS管理 → 會員 LINE 綁定」處理。等級、半年累積是會員最後一次查詢或消費時算的，很久沒來的會員可能還是舊等級。</p>
+    <p class="bo-lead">會員全部門市共用，這頁<b>只能看</b>。</p>
+    <details class="bo-help"><summary>說明</summary><div>會員全部門市共用。這一頁<b>只能看</b>：要改會員資料、點數，請在門市平板或「POS管理 → 會員 LINE 綁定」處理。等級、半年累積是會員最後一次查詢或消費時算的，很久沒來的會員可能還是舊等級。</div></details>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
       <input id="ml-q" type="search" placeholder="搜尋姓名，或電話（至少 3 碼）" maxlength="30" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onkeydown="if(event.key==='Enter')loadMemberList_(true)">
       <select id="ml-tier" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onchange="loadMemberList_(true)"><option value="">全部等級</option></select>
@@ -715,8 +736,9 @@
   </div>
   <!-- 11-16 一鍵開新店（多店化第 4＋5 段，規格 一鍵開新店設計_2026-11-16.md）：後端 GET brandStores、POST openNewStore／releaseStore（只限老闆） -->
   <div id="mb-subview-openstore" style="display:none;">
-    <p style="font-size:0.85rem;color:#444;margin-top:0;">從<b id="os-from-name">這間店</b>複製設定，再把<b>品牌範本</b>的菜單、優惠帶過去，一次開好一間新店。新店先是「<b>籌備中</b>」：顧客還不能線上點餐，平板可以結帳做內部測試；準備好再按「正式開放」。<b>只有老闆可以按。</b></p>
-    <details style="font-size:0.82rem;margin-bottom:10px;"><summary style="cursor:pointer;color:#4b2a86;">會複製什麼／不會複製什麼</summary>
+    <p style="font-size:0.85rem;color:#444;margin-top:0;">從<b id="os-from-name">這間店</b>複製設定、帶入<b>品牌範本</b>，一次開好新店；先是「<b>籌備中</b>」，準備好再按「正式開放」。<b>只有老闆可以按。</b></p>
+    <details class="bo-help"><summary>說明</summary><div>
+      <div style="margin-bottom:4px;">新店「籌備中」時顧客還不能線上點餐，平板可以結帳做內部測試。會複製什麼、不會複製什麼：</div>
       <ul class="os-list">
         <li>✅ 從這間店複製：營業時間、接單時間、取餐設定、飲品升級規則、角色權限、線下／第三方收款清單、自取規則（新店沒填才帶）</li>
         <li>✅ 從品牌範本帶入並發布：菜單（分類、品項、客製化）、優惠券、集點禮、加價購、區塊配置</li>
@@ -724,16 +746,17 @@
         <li>❌ 不複製：店長／夥伴帳號（老闆帳號全品牌通用，店長、夥伴到新店後台建）、店休日、售完狀態、訂單、平板</li>
         <li>🔁 「籌備中」的店可以再按一次，重新抓這間店最新的設定和品牌範本；營業中的店（啟用而且有訂單）不能按</li>
       </ul>
-    </details>
+    </div></details>
     <div id="os-list"><div class="empty-hint">載入中...</div></div>
     <div id="os-form-box"></div>
     <div id="os-result"></div>
   </div>
   <div id="mb-subview-tiers">
-    <p style="font-size:0.8rem;color:var(--muted);">
+    <p class="bo-lead">升等門檻、點數倍率，改完立刻生效。</p>
+    <details class="bo-help"><summary>說明</summary><div>
       升等/續等門檻、點數倍率都在這裡改，改完立刻生效，會直接套用到所有會員下次查詢/消費時的等級判定。
       <b>「一般會員」是新會員註冊的預設等級，不能刪除、不能調整順序，只能改名稱。</b>
-    </p>
+    </div></details>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
         <h4>等級（可拖曳排序，一般會員鎖在最前）</h4>
@@ -748,7 +771,7 @@
   </div>
   <div id="mb-subview-birthday" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      會員生日當月自動發放（每人每年限一次），跟LINE無關、不用串接。「發放後第幾天生效」「發放後第幾天到期」都是從發放當天起算，0＝當天。
+      生日當月自動發，每人每年一次；生效、到期天數從發放當天算，0＝當天。
     </p>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
@@ -764,7 +787,7 @@
   </div>
   <div id="mb-subview-register" style="display:none;">
     <p style="font-size:0.8rem;color:var(--muted);">
-      新會員一註冊就自動發放（可多筆），跟LINE無關、不用串接。「發放後第幾天生效」「發放後第幾天到期」都是從註冊當天起算，0＝當天。
+      新會員一註冊就自動發（可多筆）；生效、到期天數從註冊當天算，0＝當天。
     </p>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
@@ -843,9 +866,7 @@
     </div>
   </div>
   <div id="mb-subview-drinkupgrade" style="display:none;">
-    <p style="font-size:0.8rem;color:var(--muted);">
-      設定「這個分類的飲品可以升級成哪個目標飲品、加多少錢」。POS功能選了會直接把購物車品項換成目標飲品(含正確加價)，不再只是店員手動輸入一筆加價金額。
-    </p>
+    <p style="font-size:0.8rem;color:var(--muted);">設定哪類飲品能升級成什麼、加多少錢；平板會直接換成升級後的飲品。</p>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
         <h4>升級規則清單</h4>
@@ -860,11 +881,12 @@
   </div>
 </div>
 <div id="view-group" class="view" style="display:none;">
-  <p style="font-size:0.8rem;color:var(--muted);">
+  <p class="bo-lead">最近的揪團和每人明細（只能看）。</p>
+  <details class="bo-help"><summary>說明</summary><div>
     線上點餐的「揪團」：團主開團分享連結，朋友免登入加餐，團主結單後一次付清，出單時每個人的餐點分開印名字。
     這裡唯讀，列出最近的揪團與每人明細。付款模式由團主開團時選：<b>請客</b>=團主結單後一次付清，全團一張訂單(訂單編號見右側)、點數歸團主；
     <b>各付各的</b>=每人付自己那份、每人一張訂單、各自拿點數(每人付款狀態見明細)。付款成立後都是一般線上訂單，退款照一般訂單流程處理。揪團一律需要會員。
-  </p>
+  </div></details>
   <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
     <select id="grp-days" onchange="loadGroupList()" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
       <option value="1">今天</option><option value="3" selected>最近 3 天</option><option value="7">最近 7 天</option><option value="31">最近 31 天</option>
@@ -932,9 +954,7 @@
   </div>
   <div id="pmg-subview-log">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 開關帳記錄</div>
-    <p style="font-size:0.8rem;color:var(--muted);">
-      POS功能「開帳／關帳」的歷史記錄，唯讀。實際操作(開帳/關帳按鈕)在POS功能那邊，這裡只是給老闆/店長事後查看。
-    </p>
+    <p style="font-size:0.8rem;color:var(--muted);">平板開帳、關帳的紀錄，只能看。</p>
     <div id="pmg-log-list"><div class="empty-hint">載入中...</div></div>
   </div>
   <!-- 11-13 報表（規格 報表設計_2026-11-13.md）：營業銷售報表＋收款方式報表，照大麥版面；營業日＝取餐日、待收款不算、作廢退款分開 -->
@@ -979,10 +999,11 @@
   </div>
   <div id="pmg-subview-perm" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 角色權限設定</div>
-    <p style="font-size:0.8rem;color:var(--muted);">
+    <p class="bo-lead">每個功能最低要什麼角色才能做；設成店長、老闆的要輸入 PIN。</p>
+    <details class="bo-help"><summary>說明</summary><div>
       每個POS功能選「最低要什麼角色」才能做：<b>夥伴</b>=任何人都能做、不用PIN；<b>店長</b>／<b>老闆</b>=POS上會跳出輸入PIN，角色不夠會被擋(後端也會再檢查一次)。
       日常操作輸入一次PIN後5分鐘內不用再輸；退款、人工標記已付款、贈送兌換券、關帳每次都要輸入。標「僅畫面」的項目只控制POS畫面。
-    </p>
+    </div></details>
     <div style="font-size:0.8rem;color:#a32d2d;margin-bottom:6px;">只有老闆可以修改角色權限設定。</div>
     <div id="perm-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" class="mc-add-btn" style="width:auto;padding:8px 20px;" onclick="savePosPermissions()">儲存角色權限設定</button>
@@ -990,12 +1011,13 @@
   </div>
   <div id="pmg-subview-partner" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 夥伴帳號管理</div>
-    <p id="ps-intro" style="font-size:0.8rem;color:var(--muted);">
+    <p class="bo-lead">三種角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>；夥伴帳號只有老闆能新增或修改。</p>
+    <details class="bo-help"><summary>說明</summary><div id="ps-intro">
       3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>夥伴帳號（含PIN碼）只有老闆能新增或修改</b>，店長只能看名單。
       建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設（點名字 →「修改PIN碼」填新的4碼 → 儲存，不用輸入舊PIN）；老闆自己忘記請另一位老闆重設，或聯絡系統廠商。
       <b>哪些功能要什麼角色，到「角色權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
       <b>還沒建立任何夥伴之前，權限不會生效</b>(退款、人工標記已付款除外，這兩項一定要先建店長/老闆)。
-    </p>
+    </div></details>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
         <h4>夥伴清單</h4>
@@ -1941,16 +1963,18 @@ const PAY_ALERT_KIND_ = {
 let notifyData_ = null;
 const NOTIFY_ROWS_ = [
   { sec: '顧客通知' },
-  { key: 'screenLive', name: '畫面即時更新', desc: '顧客停在「訂單完成」畫面或「我的訂單」時，店家一按確認接單就自己顯示「✅ 店家已確認接單」。不花錢、顧客不用加好友；顧客關掉畫面就看不到。' },
-  { key: 'lineConfirm', name: 'LINE 接單通知', line: true, desc: '店家按「確認接單」時，用官方帳號 LINE 通知顧客（附我的訂單連結）。每張單扣 1 則官方帳號訊息額度（免費方案每月 200 則，用完發不出去、不會收錢）；顧客要先加官方帳號好友才收得到。' },
-  { key: 'lineVoid', name: 'LINE 作廢退款通知', line: true, desc: '平板或後台把已付款的線上單退款／作廢時，LINE 通知顧客「訂單已取消、款項已退回」。很少發生，費用很少。' },
+  { key: 'screenLive', name: '畫面即時更新', short: '顧客停在「訂單完成」或「我的訂單」畫面時，店家一接單就自動顯示，不花錢。', desc: '顧客停在「訂單完成」畫面或「我的訂單」時，店家一按確認接單就自己顯示「✅ 店家已確認接單」。不花錢、顧客不用加好友；顧客關掉畫面就看不到。' },
+  { key: 'lineConfirm', name: 'LINE 接單通知', line: true, short: '店家按「確認接單」時 LINE 通知顧客，每張單扣 1 則官方帳號額度。', desc: '店家按「確認接單」時，用官方帳號 LINE 通知顧客（附我的訂單連結）。每張單扣 1 則官方帳號訊息額度（免費方案每月 200 則，用完發不出去、不會收錢）；顧客要先加官方帳號好友才收得到。' },
+  { key: 'lineVoid', name: 'LINE 作廢退款通知', line: true, short: '線上單退款／作廢時 LINE 通知顧客，很少發生。', desc: '平板或後台把已付款的線上單退款／作廢時，LINE 通知顧客「訂單已取消、款項已退回」。很少發生，費用很少。' },
   // 11-21 老闆：先做、預設關（SQL 50）
-  { key: 'lineReady', name: 'LINE 取餐通知', line: true, desc: '店家按「取餐通知」時，用官方帳號 LINE 通知顧客餐點好了。每次扣 1 則官方帳號訊息額度（免費方案每月 200 則）；顧客要先加官方帳號好友才收得到。打開後平板「待取餐訂單」每張單會多一顆「取餐通知」按鈕（顧客沒綁 LINE 的單按鈕是灰的）；「畫面即時更新」開著時，顧客的「我的訂單」也會顯示「🍳 餐點好了，可以來拿」。' },
+  { key: 'lineReady', name: 'LINE 取餐通知', line: true, short: '店家按「取餐通知」時 LINE 告訴顧客餐點好了，每次扣 1 則官方帳號額度。', desc: '店家按「取餐通知」時，用官方帳號 LINE 通知顧客餐點好了。每次扣 1 則官方帳號訊息額度（免費方案每月 200 則）；顧客要先加官方帳號好友才收得到。打開後平板「待取餐訂單」每張單會多一顆「取餐通知」按鈕（顧客沒綁 LINE 的單按鈕是灰的）；「畫面即時更新」開著時，顧客的「我的訂單」也會顯示「🍳 餐點好了，可以來拿」。' },
   { sec: '店內提醒' },
-  { key: 'tabletAlert', name: '平板全螢幕提醒', desc: '線上單太久沒確認：現在下的單 10 分鐘、預訂單取餐前 15 分鐘 → 平板跳出全螢幕紅色視窗擋住收銀畫面，按確認接單才消失（購物車有東西、結帳中先不跳）。' },
-  { key: 'ownerLine', name: 'LINE 通知老闆', desc: '還是沒確認：現在下的單 20 分鐘、預訂單到了取餐時間 → 金流告警記一筆，並 LINE 通知下面「接收提醒的手機」（附訂單號、取餐時間、顧客電話）。每張單只通知一次。電子發票開不出來、一直連不上 ezPay、開立失敗、快到作廢期限還沒作廢、要人工處理、證明聯印不出來時也會通知（同一種問題在後台按「標記已處理」之前只通知一次）。' },
+  { key: 'tabletAlert', name: '平板全螢幕提醒', short: '線上單太久沒確認，平板跳出全螢幕紅色提醒。', desc: '線上單太久沒確認：現在下的單 10 分鐘、預訂單取餐前 15 分鐘 → 平板跳出全螢幕紅色視窗擋住收銀畫面，按確認接單才消失（購物車有東西、結帳中先不跳）。' },
+  { key: 'ownerLine', name: 'LINE 通知老闆', short: '線上單一直沒確認、或電子發票出問題時，LINE 通知下面「接收提醒的手機」。', desc: '還是沒確認：現在下的單 20 分鐘、預訂單到了取餐時間 → 金流告警記一筆，並 LINE 通知下面「接收提醒的手機」（附訂單號、取餐時間、顧客電話）。每張單只通知一次。電子發票開不出來、一直連不上 ezPay、開立失敗、快到作廢期限還沒作廢、要人工處理、證明聯印不出來時也會通知（同一種問題在後台按「標記已處理」之前只通知一次）。' },
   { key: 'voidPhone', name: '作廢線上單跳顧客電話', desc: '平板退款／作廢線上單後，提醒店員「請打電話通知顧客：09xx-xxx-xxx」。' },
 ];
+// 11-21 老闆：說明收進「說明 ▸」（寫字不用符號，預設收起）；html 由呼叫的人負責跳脫
+function boHelp_(html) { return '<details class="bo-help" style="margin:2px 0 0;"><summary>說明</summary><div>' + html + '</div></details>'; }
 function loadNotifySettings_() {
   const el = document.getElementById('notify-form');
   if (!el) return;
@@ -1974,7 +1998,7 @@ function renderNotifySettings_() {
     return `<div class="sched-special-row">
       <b>${r.name}</b>
       <label style="display:flex;align-items:center;gap:4px;cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="notifyToggle_('${r.key}', this)">${on ? '🟢 啟用' : '🔴 停用'}</label>
-      <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">${r.desc}</div>
+      <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">${r.short ? r.short + boHelp_(r.desc) : r.desc}</div>
     </div>`;
   }).join('');
   const owners = (d.owners || []).map(o => `<div class="ops-meta">${escapeHtml(o.phone)}　${o.member ? escapeHtml(o.name || '（會員）') + (o.line ? '　✅ 有綁 LINE，收得到' : '　⚠ 還沒用 LINE 登入過線上點餐，收不到') : '⚠ 不是會員，收不到'}</div>`).join('');
@@ -2178,7 +2202,7 @@ function renderBoEinv_() {
     + einvRow_('carrierScan', '手機條碼（掃碼槍掃）', d.carrierScan !== false, lock, '結帳畫面「手機載具」：用 DK-X9 掃顧客手機上的條碼（掃碼槍小條要顯示 A 英文）。')
     + einvRow_('linePayCarrier', 'LINE Pay 支付載具', !!d.linePayCarrier, lock || !d.linePayScan || lpOff,
       (lpOff ? '<b>「線下LINEPay」設成不開發票，這個不能開。</b>' : !d.linePayScan ? '<b>須先在「付款方式設定 → 線下收款」開啟「線下LINEPay」。</b>' : '')
-      + '顧客用 LINE Pay 付款時一併帶回他的手機條碼，發票直接存進去、不印證明聯。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。（11-20 從付款方式設定搬來這裡）', lpOff)
+      + '顧客用 LINE Pay 付款時一併帶回手機條碼，發票直接存進去。' + boHelp_('顧客用 LINE Pay 付款時一併帶回他的手機條碼，發票直接存進去、不印證明聯。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。（11-20 從付款方式設定搬來這裡）'), lpOff)
     + einvRow_('twqrCarrier', 'TWQR 支付載具', !!d.twqrCarrier, lock || tqOff,
       (tqOff ? '<b>「線下TWQR」設成不開發票，這個不能開。</b>' : '') + '顧客用 TWQR 付款、錢包有設手機條碼時，發票直接存進去、不印證明聯。', tqOff)
     + einvRow_('donate', '捐贈碼', d.donate !== false, lock, '結帳畫面「捐贈」：輸入受贈單位的捐贈碼（3～7 碼）。下面可以設一組常用的，平板一按就帶入。')
@@ -2324,7 +2348,7 @@ function loadBoCfgStatus_() {
     const notYet = '今天起開始記錄，下次發布後顯示';
     const bk = backupState_(d);
     // 11-08 前端切換準備：新後端的備份改成每晚台北 03:30 自動備份到 GitHub(還原演練＋加密)，失敗 GitHub 會寄信，這裡不顯示時間
-    const bkNew = `<div class="ops-card"><h3>自動備份</h3><div class="ops-meta">資料庫每晚台北 03:30 自動備份（備份完會自動做一次還原演練、加密保存；每晚的留 30 天、每月 1 號的永久保留）。失敗時 GitHub 會寄信通知老闆。</div></div>`;
+    const bkNew = `<div class="ops-card"><h3>自動備份</h3><div class="ops-meta">每晚 03:30 自動備份並演練還原，失敗會寄信通知老闆。</div></div>`;
     box.innerHTML = (NEW_API_ ? bkNew : '') + `<div class="ops-card" style="${NEW_API_ ? 'display:none;' : ''}"><h3>自動備份</h3>
         <div class="pmg-kv">
           <div>上次備份</div><div style="${bk.bad ? 'color:#a32d2d;' : 'color:#1f7a3d;'}">${d.backupAt ? (bk.bad ? '⚠️ ' : '✅ ') + boFmtMs_(d.backupAt) + '（' + ago(d.backupAt) + '）' : '⚠️ 還沒有備份紀錄'}</div>
@@ -2689,11 +2713,11 @@ function osCheckLine_(list) {
       const ok = !!d.profile.lineLiffId;
       osLineOk_[s.storeId] = ok;
       const el = document.getElementById('os-line-' + s.storeId);
-      if (el && !ok) el.innerHTML = ' <span class="os-badge new" title="這間店沒設 LINE 登入：顧客不能線上點餐，平板會退回店員打手機建會員（沒綁 LINE 的會員可能被冒綁）。設定方式：請 Claude 準備 SQL 填這間店的 LIFF 編號和官方帳號">還沒設 LINE 登入</span>';
+      if (el && !ok) el.innerHTML = ' <span class="os-badge new" title="這間店沒設 LINE 登入：顧客不能線上點餐，平板會退回店員打手機建會員（沒綁 LINE 的會員可能被冒綁）。設定方式：請系統廠商設定這間店的 LIFF 編號和官方帳號">還沒設 LINE 登入</span>';
     }).catch(() => {});
   });
 }
-const OS_LINE_WARN_ = '⚠ 這間店還沒設 LINE 登入：\n・顧客不能用 LINE 登入，所以不能線上點餐、不能開揪團\n・平板查不到會員時會改成「店員打手機建會員」，這些會員在顧客自己用 LINE 登入前，知道手機號碼的人就能把會員綁走\n設定方式：請 Claude 準備 SQL，填這間店的 LIFF 編號和 LINE 官方帳號。\n\n';
+const OS_LINE_WARN_ = '⚠ 這間店還沒設 LINE 登入：\n・顧客不能用 LINE 登入，所以不能線上點餐、不能開揪團\n・平板查不到會員時會改成「店員打手機建會員」，這些會員在顧客自己用 LINE 登入前，知道手機號碼的人就能把會員綁走\n設定方式：請系統廠商設定這間店的 LIFF 編號和 LINE 官方帳號。\n\n';
 function osOpenForm_(id) {
   const s = osStores_.find(x => x.storeId === id); if (!s) return;
   document.getElementById('os-result').innerHTML = '';
@@ -2739,10 +2763,10 @@ function osSubmit_(id) {
       <ul class="os-list"><li>營業／接單時段 ${d.copied.hours} 筆、收款清單 ${d.copied.offlineMethods} 筆、飲品升級 ${d.copied.upgradeRules} 筆、權限 ${d.copied.permissions} 筆</li>
       <li>菜單、優惠已從品牌範本同步並發布</li><li>付款方式線上收款、LINE Pay、取餐付款都是關的</li></ul>
       <div style="font-size:0.82rem;margin-top:8px;"><b>接下來：</b>
-      <ol style="margin:4px 0 0 18px;padding:0;"><li>網頁要部署到 <code>/abao_xh/${escapeHtml(d.urlPath)}/</code>（請 Claude 部署）</li>
+      <ol style="margin:4px 0 0 18px;padding:0;"><li>網頁要部署到 <code>/abao_xh/${escapeHtml(d.urlPath)}/</code>（請系統廠商部署）</li>
       <li>老闆用老闆帳號登入新店後台：${escapeHtml(osPageUrl_(ns, 'backoffice.html'))}，建店長／夥伴帳號、檢查付款方式</li>
       <li>新店平板開 ${escapeHtml(osPageUrl_(ns, 'tablet.html'))}，用老闆或店長 PIN 啟用，接出單機</li>
-      <li>設定 LINE 登入（LIFF 編號、官方帳號；請 Claude 準備 SQL）：沒設的話顧客不能線上點餐，平板會改成店員打手機建會員</li>
+      <li>設定 LINE 登入（LIFF 編號、官方帳號；請系統廠商設定）：沒設的話顧客不能線上點餐，平板會改成店員打手機建會員</li>
       <li>內部測試好了，回這頁按「✅ 正式開放」</li></ol></div></div>`;
     osLoad_();
   }).catch(() => { osBusy_ = false; if (go) { go.disabled = false; go.textContent = prep ? '🔁 重新抓' : '🏪 開新店'; } alert('網路異常，請稍後再試（可以再按一次）'); });
@@ -3093,15 +3117,15 @@ function loadLinePayScanSettings() {
     const noLp = data.linePayAccountOk === false;
     el.innerHTML =
       pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, noLp,
-        (noLp ? PM_NO_LP_ : '') + '開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。' + lpEnvNote_(data) + '改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。', noLp) +
+        (noLp ? PM_NO_LP_ : '') + '平板會多一顆「線下LINEPay」，掃顧客的 LINE Pay 付款碼收款。' + lpEnvNote_(data) + boHelp_('開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。'), noLp) +
       (NEW_API_ ? `<div class="sched-special-row"><b>LINE Pay 支付載具</b><span style="font-size:0.85rem;">${data.linePayCarrierEnabled ? '🟢 啟用' : '🔴 停用'}</span>
         <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">11-20 起改到 <a style="cursor:pointer;color:var(--brand);text-decoration:underline;" onclick="switchPosManageSubview('einv')">POS管理 → 電子發票設定</a> 的「載具」那區開關。</div></div>`
       : pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
         (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，顧客用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。')) +   // 11-20 (3e) 新後端：搬到電子發票設定，這裡留一行指引
       (('twqrAccountOk' in data) ? pmSettingRow_('twqr', '線下TWQR（ezPay 簡單付）', data.twqrEnabled, !data.twqrAccountOk,
-        (data.twqrAccountOk ? '' : PM_NO_TQ_) + '開啟後門市平板付款方式會多一顆「線下TWQR」：平板顯示 QR，顧客用全支付、台灣Pay、街口、銀行 App 掃碼付款，收款成功才出單；QR 3 分鐘失效。斷網時不能用（按鈕會反灰）。'
+        (data.twqrAccountOk ? '' : PM_NO_TQ_) + '平板會多一顆「線下TWQR」，顧客掃平板上的 QR 付款。'
         + (data.twqrEnv === 'test' ? '<b>目前接的是 ezPay 測試站（不會真的收錢）。</b>' : data.twqrAccountOk ? '<b style="color:#a32d2d;">開了就會真的收錢，退款也是真的退。</b>' : '')
-        + '改完門市平板 5 分鐘內會跟上。', !data.twqrAccountOk) : '');   // 11-18 (3d)；舊後端沒帶這欄＝不顯示
+        + boHelp_('開啟後門市平板付款方式會多一顆「線下TWQR」：平板顯示 QR，顧客用全支付、台灣Pay、街口、銀行 App 掃碼付款，收款成功才出單；QR 3 分鐘失效。斷網時不能用（按鈕會反灰）。改完門市平板 5 分鐘內會跟上。'), !data.twqrAccountOk) : '');   // 11-18 (3d)；舊後端沒帶這欄＝不顯示
   });
 }
 const PM_NO_TQ_ = '<b>這間店還沒有自己的 ezPay 收款帳戶，要廠商（BZ）設定後才能開</b>（避免錢收進別間店的帳戶）。';
@@ -4891,7 +4915,7 @@ function renderPromoDomainControls() {
     <div style="margin-bottom:16px;">
       <button type="button" class="mc-add-btn" onclick="togglePromoSnapshotPanel(this)">📜 版本回溯</button>
       <div class="promo-snapshot-panel" style="display:none;margin-top:8px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;">
-        <p style="font-size:0.78rem;color:var(--muted);margin:0 0 8px;">每次「同步」「發布」「回復」真的覆蓋資料之前，系統都會自動存一份快照，最近10份。回復本身也會先自動備份，可以再復原回去。</p>
+        <p style="font-size:0.78rem;color:var(--muted);margin:0 0 8px;">同步、發布、回復前都會自動存快照（最近 10 份），回復錯了也能再復原。</p>
         <div class="promo-snapshot-list"><div class="empty-hint">載入中...</div></div>
       </div>
     </div>
