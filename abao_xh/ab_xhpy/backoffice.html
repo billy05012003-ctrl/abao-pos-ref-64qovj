@@ -173,8 +173,8 @@
   .mc-save-btn:disabled, .mc-delete-btn:disabled { opacity:.45; cursor:not-allowed; }
   /* 11-21 電子發票設定頁：鎖住的輸入框改灰底；「最近 3 天的發票」點過標題不留黑框（用鍵盤操作時才顯示） */
   #bo-einv-form input:disabled { background:#f0f0f0; color:#999; border:1px solid #ddd; cursor:not-allowed; }
-  #bo-einv-list-box > summary:focus { outline:none; }
-  #bo-einv-list-box > summary:focus-visible { outline:2px solid var(--brand); outline-offset:2px; border-radius:4px; }
+  #bo-einv-list-box > summary:focus, #bo-einv-log-box > summary:focus { outline:none; }
+  #bo-einv-list-box > summary:focus-visible, #bo-einv-log-box > summary:focus-visible { outline:2px solid var(--brand); outline-offset:2px; border-radius:4px; }
   .sched-tab-btn { padding:8px 14px; border-radius:7px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:0.82rem; cursor:pointer; }
   .sched-tab-btn.active { background:var(--brand); color:#fff; border-color:var(--brand); }
   .sched-day-row { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
@@ -915,6 +915,11 @@
       <summary style="font-weight:700;cursor:pointer;padding:6px 0;">最近 3 天的發票 <span id="bo-einv-list-count" style="font-weight:400;color:var(--muted);font-size:0.85rem;"></span>
         <span class="ops-refresh" onclick="event.preventDefault();loadBoEinvList_()">重新整理</span></summary>
       <div id="bo-einv-list"><div class="empty-hint">載入中...</div></div>
+    </details>
+    <!-- 11-21 老闆「要，照建議加」：設定變更紀錄（只限老闆、預設收起、打開才讀；後端 einvSettingsLog／SQL 51） -->
+    <details id="bo-einv-log-box" style="margin-top:12px;display:none;" ontoggle="if(this.open)loadBoEinvLog_()">
+      <summary style="font-weight:700;cursor:pointer;padding:6px 0;">設定變更紀錄（最近 30 筆） <span class="ops-refresh" onclick="event.preventDefault();loadBoEinvLog_()">重新整理</span></summary>
+      <div id="bo-einv-log"><div class="empty-hint">載入中...</div></div>
     </details>
   </div>
   <div id="pmg-subview-printer" style="display:none;">
@@ -2083,8 +2088,39 @@ function einvMethodOnBo_(m) {
   if (Object.prototype.hasOwnProperty.call(map, m)) return map[m] !== false;
   return !/代收$/.test(m);
 }
+// 11-21 電子發票設定變更紀錄：只限老闆看（後端也只給老闆）；每次進設定頁收起來，打開才讀
+function boEinvLogInit_() {
+  const box = document.getElementById('bo-einv-log-box');
+  if (!box) return;
+  box.style.display = NEW_API_ && isBoOwner_() ? '' : 'none';
+  box.open = false;
+}
+function einvLogVal_(v) {
+  if (v === true) return '開';
+  if (v === false) return '關';
+  if (v === null || v === undefined || v === '') return '（沒設）';   // 常用捐贈碼沒設時後端給空字串
+  return escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v));
+}
+function loadBoEinvLog_() {
+  const el = document.getElementById('bo-einv-log');
+  if (!el) return;
+  el.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'einvSettingsLog', storeId: SCHED_STORE_ID }).then(d => {
+    if (!d || d.status !== 'ok') {
+      el.innerHTML = '<div class="empty-hint">' + (d && d.code === 'sql_missing' ? '資料庫還沒更新（SQL 51），還沒有紀錄' : '讀取失敗：' + escapeHtml((d && d.message) || '')) + '</div>';
+      return;
+    }
+    const logs = d.logs || [];
+    if (!logs.length) { el.innerHTML = '<div class="empty-hint">還沒有人改過電子發票設定</div>'; return; }
+    el.innerHTML = logs.map(x => `<div style="border-bottom:1px solid #eee;padding:8px 0;font-size:0.84rem;line-height:1.6;">
+      <div><b>${escapeHtml(isNaN(Date.parse(x.at)) ? String(x.at || '') : boFmtMs_(Date.parse(x.at)))}</b>　${escapeHtml(x.by || '')}</div>
+      ${(x.changes || []).map(c => `<div style="color:#444;">・${escapeHtml(c.label || c.key || '')}：${einvLogVal_(c.before)} → <b>${einvLogVal_(c.after)}</b></div>`).join('')}
+    </div>`).join('');
+  }).catch(() => { el.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+}
 function loadBoEinv_() {
   boEinvListInit_();   // 11-21
+  boEinvLogInit_();    // 11-21 設定變更紀錄
   const el = document.getElementById('bo-einv-form');
   if (!NEW_API_) { el.innerHTML = '<div class="empty-hint">目前的後端沒有這個功能</div>'; return; }
   el.innerHTML = '<div class="empty-hint">載入中...</div>';
