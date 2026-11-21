@@ -753,32 +753,56 @@ function einvQrRow_(pair) {
   });
 }
 function einvText_(out, text) { out.push(...encodeBig5(text).bytes); }
+// 一行左右兩段（右邊靠右）：57mm 一行 32 個半形字寬，中文算 2 格
+const einvW_ = s => Array.from(String(s)).reduce((n, ch) => n + (ch.charCodeAt(0) > 0xFF ? 2 : 1), 0);
+const einvLR_ = (l, r) => l + ' '.repeat(Math.max(1, 32 - einvW_(l) - einvW_(r))) + r;
+// 11-21 證明聯至少 10 公分（老闆量大麥的：背面是財政部公版「領獎收據」預印紙、跟廚房單同一台出單機，一張 10 公分）：
+//   公版背面沿整捲重複印，不用對齊格子，只要每張夠長、背面含一整格領獎收據。203dpi＝8 點／公釐 → 800 點。
+//   行距自己設（一般 30 點、大字 54 點）好算高度；不夠補空白（ESC J），太長照實際。出單機印字頭到切刀那段會再多一點（寧可長一點）
+const EINV_MIN_DOTS = 800, EINV_LH = 30, EINV_LH_BIG = 54;
 function einvProofBytes_(v) {
   const pair = einvQrPair_(v.qrL, v.qrR);
-  const o = [0x1B, 0x40, 0x1C, 0x26, 0x1B, 0x61, 0x01];             // 初始化、中文模式、置中
-  const big = t => { o.push(0x1D, 0x21, 0x11, 0x1C, 0x21, 0x0C, 0x1B, 0x45, 0x01); einvText_(o, t + '\n'); o.push(0x1D, 0x21, 0x00, 0x1C, 0x21, 0x00, 0x1B, 0x45, 0x00); };
-  o.push(0x1D, 0x21, 0x01, 0x1C, 0x21, 0x08); einvText_(o, (v.sellerName || '') + '\n'); o.push(0x1D, 0x21, 0x00, 0x1C, 0x21, 0x00);   // ① 店家（倍高）
+  const o = [0x1B, 0x40, 0x1C, 0x26, 0x1B, 0x61, 0x01, 0x1B, 0x33, EINV_LH];   // 初始化、中文模式、置中、行距 30 點
+  let h = 0;                                                         // 目前印了幾點高（算最短長度用）
+  const line = t => { einvText_(o, t + '\n'); h += EINV_LH; };
+  const feed = n => { o.push(0x1B, 0x4A, n); h += n; };
+  const big = t => { o.push(0x1B, 0x33, EINV_LH_BIG, 0x1D, 0x21, 0x11, 0x1C, 0x21, 0x0C, 0x1B, 0x45, 0x01); einvText_(o, t + '\n'); o.push(0x1D, 0x21, 0x00, 0x1C, 0x21, 0x00, 0x1B, 0x45, 0x00, 0x1B, 0x33, EINV_LH); h += EINV_LH_BIG; };
+  // 11-21 老闆對照大麥的證明聯：最上面印營業登記名稱（＝營業人名稱；沒填才用門市顯示名稱），門市名稱＋單號移到 QR 下面
+  const top = v.legalName || v.sellerName || '';
+  o.push(0x1B, 0x33, EINV_LH_BIG, 0x1D, 0x21, 0x01, 0x1C, 0x21, 0x08); einvText_(o, top + '\n'); o.push(0x1D, 0x21, 0x00, 0x1C, 0x21, 0x00, 0x1B, 0x33, EINV_LH); h += EINV_LH_BIG;   // ① 營業人名稱（倍高）
   big('電子發票證明聯');                                              // ② 0.5cm 以上
   big(v.period);                                                      // ③ 年期別（粗體）
   big(v.number);                                                      // ④ 發票號碼（粗體）
   o.push(0x1B, 0x61, 0x00);                                           // 以下靠左
-  einvText_(o, v.dateTime + (v.category === 'B2B' ? '      格式 25' : '') + '\n');   // ⑤ 交易日期時間（B2B 加申報格式代號）
-  einvText_(o, '隨機碼 ' + v.randomNum + '      總計 ' + v.total + '\n');            // ⑥⑦
-  einvText_(o, '賣方 ' + v.sellerTaxId + (v.buyerUbn ? '  買方 ' + v.buyerUbn : '') + '\n');   // ⑧⑨
-  if (v.reprint) { o.push(0x1B, 0x61, 0x01); einvText_(o, '補印\n'); o.push(0x1B, 0x61, 0x00); }   // 補印：一維條碼上方加註
-  o.push(0x1B, 0x4A, 6);
-  o.push(...einvCode39_(v.barcode));                                  // ⑪ 一維條碼
-  o.push(0x1B, 0x4A, 12);
-  o.push(...einvQrRow_(pair));                                        // ⑫ 兩個 QR
-  o.push(0x1B, 0x4A, 16);
-  if (v.test) einvText_(o, '（ezPay 測試站，不是正式發票）\n');
-  if (v.category === 'B2B') {                                         // 買方是營業人：QR 下面接著印明細（不切）
+  line(v.category === 'B2B' ? einvLR_(v.dateTime, '格式:25') : v.dateTime);   // ⑤ 交易日期時間（B2B 加申報格式代號）
+  line(einvLR_('隨機碼:' + v.randomNum, '總計:' + v.total));          // ⑥⑦ 隨機碼靠左、總計靠右（照大麥）
+  line('賣方:' + v.sellerTaxId + (v.buyerUbn ? '  買方:' + v.buyerUbn : ''));   // ⑧⑨
+  if (v.reprint) { o.push(0x1B, 0x61, 0x01); line('補印'); o.push(0x1B, 0x61, 0x00); }   // 補印：一維條碼上方加註
+  feed(6);
+  o.push(...einvCode39_(v.barcode)); h += 56;                         // ⑪ 一維條碼（56 點高）
+  feed(12);
+  o.push(...einvQrRow_(pair)); h += pair[0].getModuleCount() * 3;     // ⑫ 兩個 QR（每格 3 點）
+  feed(16);
+  // 11-21 照大麥：QR 下面一行「門市名稱＋單號」，顧客回來拿或對帳一眼就知道是哪張單（門市名稱跟最上面一樣就不重複）
+  const store = v.storeName && v.storeName !== top ? v.storeName + ' ' : '';
+  line(store + '單號:' + (v.orderNo || ''));
+  if (v.test) line('（ezPay 測試站，不是正式發票）');
+  for (let pad = EINV_MIN_DOTS - h - 4 * EINV_LH; pad > 0; pad -= 255) o.push(0x1B, 0x4A, Math.min(255, pad));   // 不到 10 公分補空白
+  const cut = () => { o.push(0x1C, 0x2E, 0x1B, 0x64, 4); if (isNet() || $('optCut').checked) o.push(0x1D, 0x56, 0x42, 0x00); };
+  cut();
+  if (v.category === 'B2B') {                                         // 買方是營業人：明細切開另印一張（背面預印領獎收據的紙一張固定長度，明細接在下面會超出）
+    o.push(0x1B, 0x40, 0x1C, 0x26, 0x1B, 0x61, 0x01);
+    einvText_(o, '交易明細\n');
+    o.push(0x1B, 0x61, 0x00);
+    einvText_(o, '發票 ' + v.number + '  ' + v.dateTime.slice(0, 10) + '\n');
+    einvText_(o, '賣方:' + v.sellerTaxId + '  買方:' + v.buyerUbn + '\n');
     einvText_(o, '--------------------------------\n');
     (v.items || []).forEach(it => einvText_(o, String(it.name).slice(0, 12) + ' ' + it.qty + 'x' + it.price + ' = ' + it.amount + ' TX\n'));
+    einvText_(o, '--------------------------------\n');
     einvText_(o, '銷售額 ' + v.amt + '  稅額 ' + v.taxAmt + '  總計 ' + v.total + '\n');
+    einvText_(o, store + '單號:' + (v.orderNo || '') + '\n');
+    cut();
   }
-  o.push(0x1C, 0x2E, 0x1B, 0x64, 4);
-  if (isNet() || $('optCut').checked) o.push(0x1D, 0x56, 0x42, 0x00);
   return new Uint8Array(o);
 }
 async function printInvoiceProof_(v) {
