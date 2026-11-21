@@ -879,8 +879,12 @@
   <div id="pmg-subview-einv" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 電子發票設定 <span class="ops-refresh" onclick="loadBoEinv_()">重新整理</span></div>
     <div id="bo-einv-form"><div class="empty-hint">載入中...</div></div>
-    <div style="font-weight:700;margin:18px 0 6px;">最近 3 天的發票 <span class="ops-refresh" onclick="loadBoEinvList_()">重新整理</span></div>
-    <div id="bo-einv-list"><div class="empty-hint">載入中...</div></div>
+    <!-- 11-21 老闆：最近 3 天的發票要能收起來（記住上次開或關） -->
+    <details id="bo-einv-list-box" style="margin-top:18px;" ontoggle="boEinvListToggle_(this)">
+      <summary style="font-weight:700;cursor:pointer;padding:6px 0;">最近 3 天的發票 <span id="bo-einv-list-count" style="font-weight:400;color:var(--muted);font-size:0.85rem;"></span>
+        <span class="ops-refresh" onclick="event.preventDefault();loadBoEinvList_()">重新整理</span></summary>
+      <div id="bo-einv-list"><div class="empty-hint">載入中...</div></div>
+    </details>
   </div>
   <div id="pmg-subview-printer" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 門市平板（出單方式） <span class="ops-refresh" onclick="loadBoPrinterModes_()">重新整理</span></div>
@@ -2030,6 +2034,7 @@ function einvMethodOnBo_(m) {
   return !/代收$/.test(m);
 }
 function loadBoEinv_() {
+  boEinvListInit_();   // 11-21
   const el = document.getElementById('bo-einv-form');
   if (!NEW_API_) { el.innerHTML = '<div class="empty-hint">目前的後端沒有這個功能</div>'; return; }
   el.innerHTML = '<div class="empty-hint">載入中...</div>';
@@ -2070,7 +2075,7 @@ function renderBoEinv_() {
       : d.env === 'test' ? '<div style="font-size:0.85rem;margin-bottom:8px;">目前接的是 <b>ezPay 電子發票測試站</b>（商店代號 ' + escapeHtml(d.merchantId || '') + '）：開出來的不是真的發票，可以放心測。</div>'
       : '<div style="font-size:0.85rem;color:#a32d2d;margin-bottom:8px;"><b>目前接的是 ezPay 正式站（商店代號 ' + escapeHtml(d.merchantId || '') + '）：打開就會真的開發票、上傳財政部。</b></div>')
     + (!owner ? '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;">只有老闆可以修改這裡的設定。</div>' : '')
-    + `<div style="font-size:0.82rem;margin-bottom:10px;line-height:1.6;">發票上的賣方：<b>${escapeHtml(d.legalName || '（登記名稱還沒填）')}</b>　統編 <b>${escapeHtml(d.taxId || '（還沒填）')}</b>　證明聯最上面印：${escapeHtml(d.displayName || '')}</div>`;
+    + `<div style="font-size:0.82rem;margin-bottom:10px;line-height:1.6;">發票的賣方統編：<b>以 ezPay 帳號登記的統編為準</b>（證明聯照 ezPay 回傳的印，不會印錯）　證明聯最上面印：<b>${escapeHtml(d.displayName || '')}</b></div>`;
   const methods = einvMethods_.map(m => {
     const on = einvMethodOnBo_(m);
     return `<label style="display:inline-flex;align-items:center;gap:4px;margin:0 14px 6px 0;font-size:0.85rem;${lock ? 'opacity:.6;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="einvMethodToggle_(${escapeHtml(JSON.stringify(m))}, this)">${escapeHtml(m)}</label>`;
@@ -2121,19 +2126,23 @@ function einvTest_(btn) {
     res.innerHTML = d.status === 'ok' ? (d.ok ? '✅ ' : '❌ ') + escapeHtml(d.message || '') : '❌ ' + escapeHtml(d.message || '測試失敗');
   }).catch(() => { res.textContent = '❌ 網路異常'; }).finally(() => { btn.disabled = false; });
 }
+// 11-21 發票清單收合：記住上次（每台電腦各自記）
+function boEinvListToggle_(el) { try { localStorage.setItem('bo_einv_list_open', el.open ? '1' : '0'); } catch (e) {} }
+function boEinvListInit_() { const box = document.getElementById('bo-einv-list-box'); if (!box) return; let v = null; try { v = localStorage.getItem('bo_einv_list_open'); } catch (e) {} box.open = v === '1'; }
 function loadBoEinvList_() {
   const el = document.getElementById('bo-einv-list');
   if (!NEW_API_) { el.innerHTML = ''; return; }
   apiGet({ action: 'einvoiceList', storeId: SCHED_STORE_ID, days: 3 }).then(d => {
     if (!d || d.status !== 'ok') { el.innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml((d && d.message) || '') + '</div>'; return; }
     const list = d.invoices || [];
+    const cnt = document.getElementById('bo-einv-list-count'); if (cnt) cnt.textContent = '（' + list.length + ' 張）';
     if (!list.length) { el.innerHTML = '<div class="empty-hint">最近 3 天沒有發票</div>'; return; }
     el.innerHTML = '<div style="overflow-x:auto;"><table class="rpt-table" style="width:100%;font-size:0.8rem;border-collapse:collapse;"><tr><th style="text-align:left">訂單</th><th style="text-align:left">發票號碼</th><th>金額</th><th style="text-align:left">種類</th><th style="text-align:left">狀態</th></tr>'
       + list.map(x => {
         const kind = x.status === '不開立' ? '—' : x.category === 'B2B' ? '統編 ' + x.buyerUbn : x.carrierNum ? '載具' : x.loveCode ? '捐贈 ' + x.loveCode : '紙本';
         const note = x.status === '不開立' || (x.lastError && x.status !== '已開立' && x.status !== '已作廢') ? x.lastError : (x.voidReason && x.status !== '已開立' ? '作廢原因：' + x.voidReason : '');
-        return `<tr><td>${escapeHtml(x.orderNo)}</td><td>${escapeHtml(x.invoiceNumber || '')}${x.env === 'test' ? ' <span style="color:var(--muted)">(測試)</span>' : ''}</td><td style="text-align:right">$${Number(x.totalAmt) || 0}</td><td>${escapeHtml(kind)}</td>
-          <td style="color:${x.status === '已開立' ? 'inherit' : x.status === '已作廢' || x.status === '不開立' ? '#888' : '#c0392b'}">${escapeHtml(x.status)}${note ? '<div style="font-size:0.72rem;color:var(--muted)">' + escapeHtml(note) + '</div>' : ''}</td></tr>`;
+        return `<tr><td style="text-align:left">${escapeHtml(x.orderNo)}</td><td style="text-align:left">${escapeHtml(x.invoiceNumber || '')}${x.env === 'test' ? ' <span style="color:var(--muted)">(測試)</span>' : ''}</td><td style="text-align:right">$${Number(x.totalAmt) || 0}</td><td style="text-align:left">${escapeHtml(kind)}</td>
+          <td style="text-align:left;color:${x.status === '已開立' ? 'inherit' : x.status === '已作廢' || x.status === '不開立' ? '#888' : '#c0392b'}">${escapeHtml(x.status)}${note ? '<div style="font-size:0.72rem;color:var(--muted)">' + escapeHtml(note) + '</div>' : ''}</td></tr>`;
       }).join('') + '</table></div>';
   }).catch(() => { el.innerHTML = '<div class="empty-hint">網路異常</div>'; });
 }
