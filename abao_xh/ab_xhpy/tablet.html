@@ -5128,7 +5128,8 @@ async function offlineCheckout_(p, clientKey) {
   const o = {
     orderId: offlineNextId_(), clientKey, createdAt: new Date().toISOString(), storeId: STORE_ID,
     items: p.items, totalAmount: p.totalAmount, paymentMethod: p.paymentMethod, pickupDate: p.pickupDate, pickupTime: p.pickupTime,
-    memberPhone: p.memberPhone, discounts: p.discounts, staffName: p.staffName, printed: false, syncedAt: null
+    memberPhone: p.memberPhone, discounts: p.discounts, staffName: p.staffName, printed: false, syncedAt: null,
+    ...(p.invoiceType ? { invoiceType: p.invoiceType, invoiceNo: p.invoiceNo || '' } : {})   // 11-21 (3e) 發票選擇一起存，補傳時照這個開
   };
   q.push(o);
   if (!offlineSaveAll_(q)) { alert('平板儲存空間不足，離線單存不進去，請改用手寫單'); return; }   // 先存再印：印失敗也不會漏單
@@ -5142,6 +5143,7 @@ function offlineShowDone_(o) {
   document.getElementById('pos-confirm-order-no').textContent = o.orderId;
   const notes = ['📴 離線單：網路恢復後自動上傳'];
   if (o.memberPhone) notes.push('會員點數上傳時補發');
+  if (o.invoiceType) notes.push('🧾 電子發票網路恢復後才開' + (o.invoiceType === '有手機載具' ? '（存進手機載具）' : o.invoiceType === '捐贈' ? '（捐贈）' : '（證明聯到時出單機會補印，請顧客稍後再拿或留電話）'));   // 11-21 (3e)
   if (o.paymentMethod === '取餐付款') notes.push('⚠️顧客尚未付款：來付錢時點上方紅條→離線單→按「已收款」');
   if (!o.printed) notes.push('⚠️出單機沒有印出來：按下面「重印」，或手寫這張單給廚房');
   document.getElementById('pos-confirm-points').textContent = notes.join('　');
