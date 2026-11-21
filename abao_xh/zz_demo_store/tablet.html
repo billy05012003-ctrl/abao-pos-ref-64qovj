@@ -334,6 +334,8 @@
         <div id="pos-einv-types" style="display:flex;flex-wrap:wrap;gap:8px;">
           <button type="button" class="pos-pay-btn" data-einv="無統編/無載具" onclick="setPosEinvType_('無統編/無載具')">紙本</button>
           <button type="button" class="pos-pay-btn" data-einv="有手機載具" onclick="setPosEinvType_('有手機載具')">手機載具</button>
+          <!-- 11-21 (3f) 查到的會員之前用過手機條碼才出現；店員問過顧客再按（不自動選） -->
+          <button type="button" class="pos-pay-btn" data-einv="會員載具" id="pos-einv-member" style="display:none" onclick="setPosEinvType_('會員載具')">會員載具</button>
           <button type="button" class="pos-pay-btn" data-einv="有公司統編" onclick="setPosEinvType_('有公司統編')">統編</button>
           <button type="button" class="pos-pay-btn" data-einv="捐贈" onclick="setPosEinvType_('捐贈')">捐贈</button>
         </div>
@@ -3710,6 +3712,7 @@ function refreshPosCheckoutInfo_() {
     : selectedMember
     ? `已選會員：${selectedMember.name}（${selectedMember.tier}，本次預估可得 ${Math.floor(total / 100) * (MEMBER_TIER_MULTIPLIER[selectedMember.tier] || 1)} 點）`
     : '未選會員（不累計點數）';
+  try { einvMemberSync_(); } catch (e) {}   // 11-21 (3f) 會員上次用的手機條碼
   if (document.getElementById('pos-payment-method').value === '現金') { renderPosCashQuick_(); updatePosCashChange_(); }   // 金額變了：快速按鈕/找零跟著新金額
 }
 function backToPosCart() {
@@ -4170,6 +4173,7 @@ function loadLinePaySettings_() {
 // 開不出來不擋結帳(後端標「待補開」，排程自動補)；POS管理 → 電子發票 可補印證明聯、按重試
 // ---------------------------------------------------------------
 let einvCfg_ = null, einvType_ = '無統編/無載具';
+let einvMemberPhone_ = '', einvMemberMasked_ = '';   // 11-21 (3f) 目前會員、他上次用的手機條碼（遮住的，後端只給這個）
 const EINV_PAPER_ = '無統編/無載具';
 function einvUbnOk_(s) {   // 統編檢查碼(財政部 112 年新規則：加權和能被 5 整除；第 7 碼是 7 時加 1 也算)
   if (!/^\d{8}$/.test(s)) return false;
@@ -4195,7 +4199,10 @@ function einvRefresh_() {
   const show = !!einvCfg_ && m !== '取餐付款' && einvMethodOn_(m);   // 取餐付款：收款時才開(照訂單上的選擇)
   box.style.display = show ? 'block' : 'none';
   if (!show) return;
-  const allow = { [EINV_PAPER_]: true, '有手機載具': einvCfg_.carrierScan !== false, '有公司統編': einvCfg_.b2b !== false, '捐贈': einvCfg_.donate !== false };
+  let off = false; try { off = posOffline_(); } catch (e) {}
+  const memberOk = einvCfg_.carrierScan !== false && !!einvMemberMasked_ && !off && !!selectedMember && !selectedMember.offline && selectedMember.phone === einvMemberPhone_;   // 11-21 (3f)
+  const allow = { [EINV_PAPER_]: true, '有手機載具': einvCfg_.carrierScan !== false, '會員載具': memberOk, '有公司統編': einvCfg_.b2b !== false, '捐贈': einvCfg_.donate !== false };
+  const mb = document.getElementById('pos-einv-member'); if (mb) mb.textContent = '會員載具 ' + einvMemberMasked_;
   document.querySelectorAll('#pos-einv-types .pos-pay-btn').forEach(b => { b.style.display = allow[b.getAttribute('data-einv')] ? '' : 'none'; });
   if (!allow[einvType_]) einvType_ = EINV_PAPER_;
   setPosEinvType_(einvType_, true);
@@ -4206,14 +4213,15 @@ function setPosEinvType_(t, keep) {
   document.querySelectorAll('#pos-einv-types .pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-einv') === t));
   const inp = document.getElementById('pos-einv-value');
   if (changed || !keep) inp.value = t === '捐贈' && einvCfg_ ? (einvCfg_.loveCode || '') : '';
-  inp.style.display = t === EINV_PAPER_ ? 'none' : 'block';
+  inp.style.display = t === EINV_PAPER_ || t === '會員載具' ? 'none' : 'block';   // 11-21 (3f) 會員載具不用掃
   inp.inputMode = t === '有手機載具' ? 'text' : 'numeric';
   inp.placeholder = t === '有手機載具' ? '用掃碼槍掃顧客手機條碼（/ 開頭 8 碼）' : t === '有公司統編' ? '輸入 8 碼統一編號' : '捐贈碼（3～7 碼數字）';
   const m = document.getElementById('pos-payment-method').value;
   const payCarrier = (m === LP_POS_METHOD_ && einvCfg_ && einvCfg_.linePayCarrier) || (m === TQ_POS_METHOD_ && einvCfg_ && einvCfg_.twqrCarrier);
   document.getElementById('pos-einv-hint').textContent = t === EINV_PAPER_ ? (payCarrier ? '顧客的錢包有設手機條碼的話，發票會自動存進去、不印證明聯；沒有才印紙本。' : '收款後出單機會另外印一張發票證明聯給顧客。')
-    : t === '有公司統編' ? '會印證明聯（含買方統編），請交給顧客。' : '不印證明聯。';
-  if (t !== EINV_PAPER_ && !keep) setTimeout(() => inp.focus(), 50);   // 掃碼槍直接掃(記得掃碼槍小條要顯示 A 英文)
+    : t === '有公司統編' ? '會印證明聯（含買方統編），請交給顧客。'
+    : t === '會員載具' ? '存進這位會員上次用的手機條碼 ' + einvMemberMasked_ + '，不印證明聯（請先問顧客要不要存載具）。' : '不印證明聯。';
+  if (t !== EINV_PAPER_ && t !== '會員載具' && !keep) setTimeout(() => inp.focus(), 50);   // 掃碼槍直接掃(記得掃碼槍小條要顯示 A 英文)
   onPosEinvInput_();
 }
 function onPosEinvInput_() {
@@ -4225,6 +4233,7 @@ function onPosEinvInput_() {
 function posEinvCheck_() {
   const box = document.getElementById('pos-einv');
   if (!box || box.style.display === 'none' || einvType_ === EINV_PAPER_) return '';
+  if (einvType_ === '會員載具') return einvMemberMasked_ ? '' : '查不到這位會員上次用的手機條碼，請改按「手機載具」掃條碼';   // 11-21 (3f)
   const v = document.getElementById('pos-einv-value').value.trim().toUpperCase();
   if (einvType_ === '有手機載具' && !/^\/[0-9A-Z+\-.]{7}$/.test(v)) return '手機條碼格式不對：要「/」開頭、共 8 碼。\n（掃碼槍旁邊的小條要顯示「A」英文，中文模式會掃成注音）';
   if (einvType_ === '有公司統編' && !einvUbnOk_(v)) return '統一編號不正確，請再跟顧客確認一次';
@@ -4235,16 +4244,32 @@ function posEinvCheck_() {
 function posEinvPayload_() {
   const box = document.getElementById('pos-einv');
   if (!box || box.style.display === 'none') return {};
+  if (einvType_ === '會員載具') return { invoiceType: '有手機載具', invoiceNo: '', memberCarrier: true };   // 11-21 (3f) 後端照會員電話補上完整條碼
   return { invoiceType: einvType_, invoiceNo: einvType_ === EINV_PAPER_ ? '' : document.getElementById('pos-einv-value').value.trim().toUpperCase() };
 }
-function posEinvReset_() { einvType_ = EINV_PAPER_; const inp = document.getElementById('pos-einv-value'); if (inp) inp.value = ''; }
+function posEinvReset_() { einvType_ = EINV_PAPER_; einvMemberPhone_ = ''; einvMemberMasked_ = ''; const inp = document.getElementById('pos-einv-value'); if (inp) inp.value = ''; }
+// 11-21 (3f) 結帳畫面開著、會員換了 → 查他上次用的手機條碼（遮住的）；查到才在發票那一排多一顆「會員載具」
+function einvMemberSync_() {
+  if (!einvCfg_) return;
+  const phone = selectedMember && !selectedMember.offline ? String(selectedMember.phone || '') : '';
+  if (phone === einvMemberPhone_) return;
+  einvMemberPhone_ = phone; einvMemberMasked_ = '';
+  if (einvType_ === '會員載具') einvType_ = EINV_PAPER_;
+  einvRefresh_();
+  if (!phone) return;
+  apiGet({ action: 'einvMemberCarrier', phone }).then(d => {
+    if (einvMemberPhone_ !== phone) return;   // 查的時候又換了會員
+    einvMemberMasked_ = d && d.status === 'ok' ? String(d.masked || '') : '';
+    einvRefresh_();
+  }).catch(() => {});
+}
 // 結帳完成畫面的一句話
 function posEinvNote_(inv) {
   if (!inv) return '';
   const no = inv.number ? (inv.number.slice(0, 2) + '-' + inv.number.slice(2)) : '';
   if (inv.state === 'issued') {
     if (inv.category === 'B2B') return '🧾 發票 ' + no + '（統編，出單機會印證明聯）';
-    if (inv.carrierNum) return '🧾 發票 ' + no + ' 已存手機載具 ' + inv.carrierNum;
+    if (inv.carrierNum) return '🧾 發票 ' + no + ' 已存手機載具 ' + String(inv.carrierNum).slice(0, 3) + '•••' + String(inv.carrierNum).slice(-2);   // 11-21 (3f) 遮住中間（會員載具的完整條碼不顯示在平板）
     if (inv.loveCode) return '🧾 發票 ' + no + ' 已捐贈（' + inv.loveCode + '）';
     return '🧾 發票 ' + no + '（出單機會印證明聯）';
   }
@@ -5214,7 +5239,8 @@ async function offlineCheckout_(p, clientKey) {
     orderId: offlineNextId_(), clientKey, createdAt: new Date().toISOString(), storeId: STORE_ID,
     items: p.items, totalAmount: p.totalAmount, paymentMethod: p.paymentMethod, pickupDate: p.pickupDate, pickupTime: p.pickupTime,
     memberPhone: p.memberPhone, discounts: p.discounts, staffName: p.staffName, printed: false, syncedAt: null,
-    ...(p.invoiceType ? { invoiceType: p.invoiceType, invoiceNo: p.invoiceNo || '' } : {})   // 11-21 (3e) 發票選擇一起存，補傳時照這個開
+    ...(p.invoiceType ? { invoiceType: p.invoiceType, invoiceNo: p.invoiceNo || '' } : {}),   // 11-21 (3e) 發票選擇一起存，補傳時照這個開
+    ...(p.memberCarrier ? { memberCarrier: true } : {})   // 11-21 (3f) 會員載具：補傳時後端照會員電話補上條碼
   };
   q.push(o);
   if (!offlineSaveAll_(q)) { alert('平板儲存空間不足，離線單存不進去，請改用手寫單'); return; }   // 先存再印：印失敗也不會漏單
