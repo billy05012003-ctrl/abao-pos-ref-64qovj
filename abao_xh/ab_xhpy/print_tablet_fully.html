@@ -761,7 +761,8 @@ const einvLR_ = (l, r) => l + ' '.repeat(Math.max(1, 32 - einvW_(l) - einvW_(r))
 //   行距自己設（一般 30 點、大字 54 點）好算高度；不夠補空白（ESC J），太長照實際。出單機印字頭到切刀那段會再多一點（寧可長一點）
 //   11-21 示範門市實印只有 9 公分：這台出單機 ESC J／行距的單位比 1 點小，補的空白不夠 → 補空白改印「一段白色點陣圖」（點陣圖高度一定是點，各台一樣準），
 //   目標拉到 880 點（約 11 公分；行距實際比算的短也還有 10 公分以上）
-const EINV_MIN_DOTS = 880, EINV_LH = 30, EINV_LH_BIG = 54;
+//   11-21 實印 880 點＝10.5 公分 → 老闆要 10 公分：少 40 點（點陣圖補的空白 8 點＝1 公釐，很準）
+const EINV_MIN_DOTS = 840, EINV_LH = 30, EINV_LH_BIG = 54;
 function einvProofBytes_(v) {
   const pair = einvQrPair_(v.qrL, v.qrR);
   const o = [0x1B, 0x40, 0x1C, 0x26, 0x1B, 0x61, 0x01, 0x1B, 0x33, EINV_LH];   // 初始化、中文模式、置中、行距 30 點
