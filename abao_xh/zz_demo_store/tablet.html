@@ -343,6 +343,11 @@
         <div id="pos-einv-hint" style="font-size:0.75rem;color:var(--muted);margin-top:4px;"></div>
       </div>
 
+      <!-- 11-21 老闆（參考大麥出單）：門市單分內用／外帶，預設外帶、內用再按；出單印在取餐那行、報表門市底下分開算（SQL 53） -->
+      <div style="display:flex;gap:8px;margin:12px 0 0;">
+        <button type="button" class="pos-pay-btn active" id="pos-dine-out" onclick="setPosDineMode_('外帶')">外帶</button>
+        <button type="button" class="pos-pay-btn" id="pos-dine-in" onclick="setPosDineMode_('內用')">內用</button>
+      </div>
       <input type="checkbox" id="pos-schedule-toggle" style="display:none;" onchange="onPosScheduleToggle()">
       <div style="display:flex;gap:8px;margin:12px 0 4px;">
         <button type="button" class="pos-pay-btn active" id="pos-schedule-mode-now" onclick="setPosScheduleMode_(false)">現場取餐</button>
@@ -358,6 +363,11 @@
           <select id="pos-pickup-hour" style="flex:1;min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;"></select>
           <select id="pos-pickup-minute" style="flex:1;min-width:0;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;"></select>
         </div>
+        <!-- 11-21 老闆：電話預約必填顧客電話末三碼（只打 3 碼；有查會員自動帶）→ 出單印在訂單號後面 -->
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;">電話末三碼
+          <input type="text" id="pos-phone-tail" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="例 914" oninput="this.value=this.value.replace(/\D/g,'').slice(0,3);this.dataset.auto=''" style="width:90px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:1rem;letter-spacing:2px;">
+          <span style="font-size:0.75rem;color:var(--muted);">必填，印在出單上</span>
+        </label>
       </div>
 
       <button class="btn btn-primary" id="pos-submit-order-btn" style="width:100%;padding:10px;margin-top:10px;" onclick="submitPosOrder()">確認結帳</button>
@@ -3713,6 +3723,7 @@ function refreshPosCheckoutInfo_() {
     ? `已選會員：${selectedMember.name}（${selectedMember.tier}，本次預估可得 ${Math.floor(total / 100) * (MEMBER_TIER_MULTIPLIER[selectedMember.tier] || 1)} 點）`
     : '未選會員（不累計點數）';
   try { einvMemberSync_(); } catch (e) {}   // 11-21 (3f) 會員上次用的手機條碼
+  try { posPhoneTailSync_(); } catch (e) {}   // 11-21 電話預約末三碼跟著會員
   if (document.getElementById('pos-payment-method').value === '現金') { renderPosCashQuick_(); updatePosCashChange_(); }   // 金額變了：快速按鈕/找零跟著新金額
 }
 function backToPosCart() {
@@ -3754,6 +3765,8 @@ function closePosCartAll() {
   setPosScheduleMode_(false);
   document.getElementById('pos-schedule-fields').removeAttribute('data-initialized');
   document.getElementById('pos-pickup-date').value = '';
+  setPosDineMode_('外帶');   // 11-21 新訂單回到外帶
+  { const t = document.getElementById('pos-phone-tail'); t.value = ''; t.dataset.auto = ''; }
   setPosStep('categories');
 }
 
@@ -3838,6 +3851,21 @@ function setPosPickupDateQuick_(daysFromToday) {
   document.getElementById('pos-pickup-date').value = d.toISOString().slice(0, 10);
 }
 
+// 11-21 內用／外帶（預設外帶）
+let posDineMode_ = '外帶';
+function setPosDineMode_(m) {
+  posDineMode_ = m === '內用' ? '內用' : '外帶';
+  document.getElementById('pos-dine-out').classList.toggle('active', posDineMode_ === '外帶');
+  document.getElementById('pos-dine-in').classList.toggle('active', posDineMode_ === '內用');
+}
+// 11-21 電話末三碼：有查會員就自動帶會員電話後 3 碼（店員自己改過就不蓋掉）
+function posPhoneTailSync_() {
+  const el = document.getElementById('pos-phone-tail');
+  if (!el || (el.value && !el.dataset.auto)) return;
+  const p = selectedMember ? String(selectedMember.phone || '').replace(/\D/g, '') : '';
+  el.value = p.length >= 3 ? p.slice(-3) : '';
+  el.dataset.auto = el.value ? '1' : '';
+}
 function setPosScheduleMode_(scheduled) {
   document.getElementById('pos-schedule-toggle').checked = scheduled;
   document.getElementById('pos-schedule-mode-now').classList.toggle('active', !scheduled);
@@ -3849,6 +3877,7 @@ function onPosScheduleToggle() {
   const on = document.getElementById('pos-schedule-toggle').checked;
   const fields = document.getElementById('pos-schedule-fields');
   fields.style.display = on ? 'flex' : 'none';
+  if (on) posPhoneTailSync_();   // 11-21
   // 每個新訂單週期(見closePosCartAll清掉data-initialized)只自動帶一次預設值，避免店員手動調整後
   // 不小心關掉勾選再打開又被蓋回預設
   if (on && !fields.dataset.initialized) {
@@ -3888,6 +3917,8 @@ function submitPosOrder() {
     if (!pickupDate) { alert('請填寫取餐日期'); return; }
     const todayStr = new Date().toISOString().slice(0, 10);
     if (pickupDate < todayStr) { alert('取餐日期不可早於今天，請重新選擇'); return; }
+    const tailEl = document.getElementById('pos-phone-tail');   // 11-21 老闆：電話預約必填末三碼
+    if (!/^\d{3}$/.test(tailEl.value)) { alert('電話預約請填顧客電話末三碼（3 碼數字）'); tailEl.focus(); return; }
   }
   const btn = document.getElementById('pos-submit-order-btn');
   if (btn.disabled) return;
@@ -3926,6 +3957,8 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     // 折扣明細＋會員等級(2026-09-26)：出單在合計上面逐行印，訂單表也存一份供報表
     discounts: posDiscountLines_(),
     memberTier: selectedMember ? selectedMember.tier : '',
+    dineMode: posDineMode_,   // 11-21 內用／外帶
+    ...(pickupDate ? { phoneTail: document.getElementById('pos-phone-tail').value } : {}),   // 11-21 電話預約末三碼
     ...posEinvPayload_()   // 11-20 (3e) 發票選擇（電子發票關著＝不帶，跟以前一樣）
   };
   payload.clientKey = posCheckoutKeyFor_(payload);   // 10-13：卡頓重按/離線補傳時雲端認同一張
@@ -5001,12 +5034,19 @@ function buildTicketLines_(r, printCount) {
   else if (channel === '線上') payLine = '付款：線上付款（已付款）'; // 後端沒指定付款方式時預設寫LinePay，但實際走藍新信用卡，不能照抄欄位值
   else payLine = '付款：' + (r[10] || '') + '（已付款）';
 
+  // 11-21 老闆（參考大麥）：跟雲端 ticket.js 同一套新樣式——待付款黑底白字、備註框、品名加高、末三碼、內用外帶（出單機指令直接放在文字行裡）
+  var ESC_ = { tallOn: '\x1D\x21\x01\x1C\x21\x08', tallOff: '\x1D\x21\x00\x1C\x21\x00', invOn: '\x1D\x42\x01', invOff: '\x1D\x42\x00' };
+  var tall_ = function (t) { return ESC_.tallOn + t + ESC_.tallOff; };
+  var tailSrc = String(r[38] || '').replace(/\D/g, ''), memSrc = String(r[11] || '').replace(/\D/g, '');
+  var tail = tailSrc.length === 3 ? tailSrc : (memSrc.length >= 3 ? memSrc.slice(-3) : '');
+  var dine = channel !== '線上' ? String(r[37] || '') : '';
   var lines = [];
   if (printCount > 1) lines.push('*** 補印 *** (第' + printCount + '次)');
+  if (status === '待收款') lines.push(ESC_.invOn + ESC_.tallOn + padRight_(' 待付款 $' + total, W) + ESC_.tallOff + ESC_.invOff);
   lines.push('== ' + storeName + ' ==');
-  lines.push('訂單 ' + r[1] + '  [' + (channel || '') + ']');
-  lines.push('取餐 ' + dateShort + ' ' + pickupTime);
-  lines.push(payLine);
+  lines.push('訂單 ' + r[1] + (tail ? '  末3碼 ' + tail : ''));
+  lines.push('取餐 ' + dateShort + ' ' + pickupTime + '  [' + (channel || '') + ']' + (dine ? ' ' + dine : ''));
+  if (status !== '待收款') lines.push(payLine);
   // 揪團單(2026-09-24)：品項帶who=名字，每人分一段印【名字】，方便分餐；同一人的品項排在一起(保持第一次出現的順序)
   var whoOrder = [], byWho = {};
   items.forEach(function (it) { var w = it && it.who ? String(it.who) : ''; if (!(w in byWho)) { byWho[w] = []; whoOrder.push(w); } byWho[w].push(it); });
@@ -5047,7 +5087,7 @@ function buildTicketLines_(r, printCount) {
     if (dispWidth_(labelLines[lastIdx] + qtyPart) <= avail) labelLines[lastIdx] += qtyPart;
     else labelLines.push(qtyPart.replace(/^ /, ''));
     for (var k = 0; k < labelLines.length; k++) {
-      lines.push(k === labelLines.length - 1 && pricePart ? padRight_(labelLines[k], avail) + padLeft_(pricePart, W - avail) : labelLines[k]);
+      lines.push(tall_(k === labelLines.length - 1 && pricePart ? padRight_(labelLines[k], avail) + padLeft_(pricePart, W - avail) : labelLines[k]));
     }
     // 套餐配料分層(2026-09-29 老闆定案，跟點餐頁套餐流程的頁面順序一致)：
     //   第一層＝飲料之前的頁(第一頁餐點特製、升級套餐的點心)；第二層＝飲料頁(飲料名稱＋冰塊甜度，兩行對齊，不印「飲料：」)；
@@ -5086,7 +5126,13 @@ function buildTicketLines_(r, printCount) {
     });
   }
   lines.push(new Array(W + 1).join('-'));
-  if (parsed.note) { var nl = wrapByWidth_('備註：' + parsed.note, W); for (var j = 0; j < nl.length; j++) lines.push(nl[j]); }
+  if (parsed.note) {   // 11-21 備註框（同 ticket.js noteBox）
+    var lab = ' 備註 ', inner = W - 4;
+    var nb = ['┌─' + lab + new Array((inner - dispWidth_(lab)) / 2).join('─') + '┐'];
+    wrapByWidth_(parsed.note, inner).forEach(function (l) { nb.push(tall_('│' + padRight_(l, inner) + '│')); });
+    nb.push('└' + new Array(inner / 2 + 1).join('─') + '┘');
+    nb.forEach(function (l) { lines.push(l); });
+  }
   // 會員等級＋折扣明細(2026-09-26)：合計上面逐行印「折扣名稱  -$金額」，品項原價加總才對得上合計。
   // 舊訂單沒有明細欄：品項加總比合計多的話印一行「優惠折抵」補差額
   var tierName = r[ORDER_COL_TIER_ - 1] ? String(r[ORDER_COL_TIER_ - 1]) : '';
@@ -5206,6 +5252,7 @@ function offlineTicketLines_(o) {
   r[5] = JSON.stringify(o.items || []); r[6] = o.totalAmount; r[7] = '';
   r[8] = o.paymentMethod === '取餐付款' ? '待收款' : (o.pickupDate ? '未取餐' : '已取餐');
   r[9] = 'POS'; r[10] = o.paymentMethod;
+  r[11] = o.memberPhone || ''; r[37] = o.dineMode || ''; r[38] = o.phoneTail || '';   // 11-21 末三碼、內用外帶（同雲端出單）
   r[32] = (o.discounts || []).length ? JSON.stringify(o.discounts) : '';
   r[33] = '';
   return ['【離線單】網路恢復後自動上傳'].concat(offlineBuildTicketLines_(r, 1));
@@ -5239,6 +5286,7 @@ async function offlineCheckout_(p, clientKey) {
     orderId: offlineNextId_(), clientKey, createdAt: new Date().toISOString(), storeId: STORE_ID,
     items: p.items, totalAmount: p.totalAmount, paymentMethod: p.paymentMethod, pickupDate: p.pickupDate, pickupTime: p.pickupTime,
     memberPhone: p.memberPhone, discounts: p.discounts, staffName: p.staffName, printed: false, syncedAt: null,
+    dineMode: p.dineMode || '', phoneTail: p.phoneTail || '',   // 11-21 內用外帶、電話預約末三碼（補傳時後端補記）
     ...(p.invoiceType ? { invoiceType: p.invoiceType, invoiceNo: p.invoiceNo || '' } : {}),   // 11-21 (3e) 發票選擇一起存，補傳時照這個開
     ...(p.memberCarrier ? { memberCarrier: true } : {})   // 11-21 (3f) 會員載具：補傳時後端照會員電話補上條碼
   };

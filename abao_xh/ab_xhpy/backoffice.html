@@ -976,7 +976,7 @@
         <div class="rpt-box"><div class="rpt-box-h">銷售額排行 <span class="rpt-seg"><button type="button" class="active" onclick="rptRankKind_('amount',false,this)">餐點</button><button type="button" onclick="rptRankKind_('amount',true,this)">套餐</button></span></div><div id="rpt-rank-amount"></div></div>
       </div>
       <div class="rpt-two">
-        <div class="rpt-box"><div class="rpt-box-h">取餐方式銷售淨額 <span class="ops-meta">（先用通路代替）</span></div><div id="rpt-bar-src"></div></div>
+        <div class="rpt-box"><div class="rpt-box-h">取餐方式銷售淨額</div><div id="rpt-bar-src"></div></div>
         <div class="rpt-box"><div class="rpt-box-h">結帳單來源銷售淨額</div><div id="rpt-bar-ch"></div></div>
       </div>
       <div class="rpt-box">
@@ -987,7 +987,7 @@
       </div>
     </div>
     <div id="rpt-pay" style="display:none;">
-      <div class="rpt-bar">取餐方式 <select id="rpt-pay-src" onchange="renderRptPay_()"><option value="">所有取餐方式</option><option>門市現場</option><option>線上自取</option><option>外送平台</option></select></div>
+      <div class="rpt-bar">取餐方式 <select id="rpt-pay-src" onchange="renderRptPay_()"><option value="">所有取餐方式</option><option value="門市">門市（內用＋外帶）</option><option>門市內用</option><option>門市外帶</option><option>線上自取</option><option>外送平台</option></select></div>
       <div id="rpt-pay-methods" class="rpt-cols"></div>
       <div class="ops-meta">整段都沒有金額的收款方式不會出現；取餐付款的單照到店實際收的方式算；佔比＝佔該列銷售淨額。</div>
       <div class="rpt-box">
@@ -1582,7 +1582,8 @@ function renderRptHbars_() {
       return `<div class="rpt-hbar"><span>${escapeHtml(nameOf(k))}</span><div class="rpt-bar-track" style="height:14px;margin:0;"><div class="rpt-bar-fill" style="height:14px;width:${Math.max(1, o.net / max * 100)}%"></div></div><span style="text-align:right;">${rptMoney_(o.net)}／${o.n} 張</span></div>`;
     }).join('') : '<div class="empty-hint">沒有資料</div>';
   };
-  draw('rpt-bar-src', r => r.src, ['門市現場', '線上自取', '外送平台'], k => k);
+  // 11-21 老闆：門市底下分內用、外帶（SQL 53）；之前的單沒記＝「門市現場」
+  draw('rpt-bar-src', r => r.src, ['門市內用', '門市外帶', '門市現場', '線上自取', '外送平台'], k => (k === '門市現場' ? '門市（沒分內用外帶）' : k));
   draw('rpt-bar-ch', r => r.ch, ['POS', '門市', '線上', '揪團', ...quick], k => RPT_CH_NAME_[k] || k);
 }
 function rptSalesTableData_() {
@@ -1618,7 +1619,7 @@ function rptMethodsOf_(rows, quick) {
 function rptPayTableData_() {
   const { from, to } = rptData_, quick = rptData_.quickSources || [], v = rptState_.view.pay;
   const src = document.getElementById('rpt-pay-src').value;
-  const sale = rptData_.rows.filter(r => r.k === 'sale' && (!src || r.src === src));
+  const sale = rptData_.rows.filter(r => r.k === 'sale' && (!src || r.src === src || (src === '門市' && r.src.indexOf('門市') === 0)));   // 11-21「門市」＝內用＋外帶＋沒分的
   const all = rptMethodsOf_(sale, quick), ms = all.filter(m => !rptState_.payOff.has(m));
   const line = (label, rs) => {
     const by = {}; let net = 0, n = 0;
