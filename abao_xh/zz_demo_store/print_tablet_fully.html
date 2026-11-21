@@ -785,10 +785,12 @@ function einvProofBytes_(v) {
 }
 async function printInvoiceProof_(v) {
   let data;
+  // 11-21 健檢 B 批：確定沒印成要回報（ok:false）→ 後台知道「沒印成」不標補印；連續 5 次沒印成會停下來告警。沒回報的（印好但網路斷）後台下次標「補印」
+  const failed = () => apiPost({ action: 'einvPrinted', id: v.id, ok: false, printKey: getKey() }).catch(() => {});
   try { await einvQrLib_(); data = einvProofBytes_(v); }
-  catch (e) { log('發票證明聯 ' + (v.number || v.orderNo) + ' 沒印：' + e.message + '（2 分鐘後自動再領）', 'e'); return; }
+  catch (e) { log('發票證明聯 ' + (v.number || v.orderNo) + ' 沒印：' + e.message + '（2 分鐘後自動再領）', 'e'); await failed(); return; }
   const ok = await printerSend(data);
-  if (!ok) { log('發票證明聯 ' + v.number + ' 印出失敗，留在佇列（2 分鐘後自動再領）', 'e'); return; }
+  if (!ok) { log('發票證明聯 ' + v.number + ' 印出失敗，留在佇列（2 分鐘後自動再領）', 'e'); if (!isNet()) await failed(); return; }   // 網路出單機逾時可能其實印了 → 不回報，讓後台下次標「補印」
   try {
     const rep = await apiPost({ action: 'einvPrinted', id: v.id, ok: true, printKey: getKey() });
     log('已印發票證明聯 ' + v.number + '（訂單 ' + v.orderNo + '）' + (v.reprint ? '【補印】' : '') + (rep.status === 'ok' ? '' : '；回報失敗：' + rep.message), rep.status === 'ok' ? 'g' : 'y');
