@@ -789,8 +789,11 @@ function einvProofBytes_(v) {
   const store = v.storeName && v.storeName !== top ? v.storeName + ' ' : '';
   line(store + '單號:' + (v.orderNo || ''));
   if (v.test) line('（ezPay 測試站，不是正式發票）');
-  const pad = EINV_MIN_DOTS - h - 4 * EINV_LH;   // 不到 10 公分補空白：印一段 8 點寬的白色點陣圖（每行 1 個位元組，很小）
-  if (pad > 0) o.push(...einvRaster_(8, pad, () => false));
+  // 不到 10 公分補空白：印一段 8 點寬的點陣圖（每行 1 個位元組，很小）。
+  //   11-21 示範門市印白色點陣圖還是 9 公分（出單機有自動切紙＝資料都有送到）→ 出單機「省紙模式」把整行全白的縮掉了
+  //   → 最左邊 1 點印成黑的（一條 0.125mm 的細直線，在紙邊幾乎看不到），每一行都有東西就不會被縮
+  const pad = EINV_MIN_DOTS - h - 4 * EINV_LH;
+  if (pad > 0) o.push(...einvRaster_(8, pad, x => x === 0));
   const cut = () => { o.push(0x1C, 0x2E, 0x1B, 0x64, 4); if (isNet() || $('optCut').checked) o.push(0x1D, 0x56, 0x42, 0x00); };
   cut();
   if (v.category === 'B2B') {                                         // 買方是營業人：明細切開另印一張（背面預印領獎收據的紙一張固定長度，明細接在下面會超出）
