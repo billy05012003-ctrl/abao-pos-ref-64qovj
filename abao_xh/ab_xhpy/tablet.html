@@ -734,9 +734,9 @@ function apiPost(payload) {
 // ---- POS權限設定(2026-09-25)：每個功能的最低角色由POS後台「POS管理→權限設定」決定 ----
 // 設成「夥伴」=不用PIN直接做；店長/老闆=先選人輸入PIN(後端也會再驗一次)。讀不到設定時用預設值(敏感功能預設店長，偏安全)
 const POS_ROLE_RANK_ = { '夥伴': 1, '店長': 2, '老闆': 3 };
-const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', voidOrder: '店長', closeRegister: '店長', printSettings: '店長', reportView: '店長' };
+const POS_PERM_DEFAULTS_ = { pause: '店長', busy: '店長', itemStatus: '店長', grantVoucher: '店長', confirmPayment: '店長', refund: '店長', voidOrder: '店長', closeRegister: '店長', printSettings: '店長', reportView: '店長', einvReissue: '店長' };
 // 碰錢的動作每次都要輸入PIN；其他日常動作輸入一次後5分鐘內不用再輸(櫃台操作才不會一直被打斷)
-const POS_PERM_ALWAYS_ASK_ = ['refund', 'voidOrder', 'confirmPayment', 'grantVoucher', 'closeRegister'];
+const POS_PERM_ALWAYS_ASK_ = ['refund', 'voidOrder', 'confirmPayment', 'grantVoucher', 'closeRegister', 'einvReissue'];   // 11-21 重開發票每次輸 PIN
 const POS_PERM_SESSION_MS_ = 5 * 60000;
 let POS_PERMS = Object.assign({}, POS_PERM_DEFAULTS_);
 let posPermSession_ = null;   // {name, pin, role, until}
@@ -1082,13 +1082,13 @@ function confirmVoidOrder() {
 
 // 「取餐付款」訂單顧客到店先結帳的標記(2026-09-16新增)：待收款→未取餐，之後才能按「可以取餐」
 function markCollected(orderId) {
-  pickCollectMethod_('「' + orderId + '」顧客已經在現場付完款了嗎？', collectMethod => withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
-    apiPost({ action: 'markOrderCollected', orderId: orderId, collectMethod, staffName, staffPin }).then(data => {
+  pickCollectMethod_('「' + orderId + '」顧客已經在現場付完款了嗎？', (collectMethod, inv) => withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
+    apiPost({ action: 'markOrderCollected', orderId: orderId, collectMethod, staffName, staffPin, ...(inv || {}) }).then(data => {   // 11-21 收款時選的發票（沒改＝照訂單）
       if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
       loadOrders();
       loadRevenue();
     });
-  }));
+  }), { einv: true });
 }
 
 // ---- POS管理：開帳／關帳(2026-09-16新增) ----
@@ -4179,12 +4179,16 @@ function loadPmgEinv_() {
       const no = x.invoiceNumber ? x.invoiceNumber.slice(0, 2) + '-' + x.invoiceNumber.slice(2) : '（還沒有號碼）';
       const kind = x.category === 'B2B' ? '統編 ' + x.buyerUbn : x.carrierNum ? '載具 ' + x.carrierNum : x.loveCode ? '捐贈 ' + x.loveCode : '紙本';
       const color = x.status === '已開立' ? 'var(--brand)' : (x.status === '已作廢' ? '#888' : '#c0392b');
-      const btn = x.status === '已開立' && x.printFlag ? `<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem" onclick="pmgEinvReprint_('${escapeHtml_(x.orderNo)}')">補印證明聯</button>`
-        : (x.status === '待補開' || x.status === '開立中') ? `<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem" onclick="pmgEinvRetry_('${escapeHtml_(x.orderNo)}')">馬上重試</button>` : '';
+      const bs = [], sb = (label, fn) => `<button type="button" class="btn btn-secondary" style="padding:4px 10px;font-size:0.8rem;margin-left:4px" onclick="${fn}">${label}</button>`;
+      if (x.status === '已開立' && x.printFlag) bs.push(sb('補印證明聯', `pmgEinvReprint_('${escapeHtml_(x.orderNo)}')`));
+      if (x.status === '待補開' || x.status === '開立中') bs.push(sb('馬上重試', `pmgEinvRetry_('${escapeHtml_(x.orderNo)}')`));
+      if (x.status === '已開立' || x.status === '開立失敗') bs.push(sb('重開', `pmgEinvReissue_('${escapeHtml_(x.orderNo)}','${escapeHtml_(x.invoiceNumber || '')}')`));   // 11-21 統編打錯等
+      const btn = bs.join('');
       return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:0.85rem">
         <div style="display:flex;justify-content:space-between;gap:6px"><b>${escapeHtml_(no)}</b><span style="color:${color}">${escapeHtml_(x.status)}</span></div>
         <div style="color:var(--muted);font-size:0.78rem">訂單 ${escapeHtml_(x.orderNo)}　$${Number(x.totalAmt) || 0}　${escapeHtml_(kind)}${x.env === 'test' ? '　（測試站）' : ''}</div>
         ${x.lastError && x.status !== '已開立' && x.status !== '已作廢' ? `<div style="color:#c0392b;font-size:0.75rem">${escapeHtml_(x.lastError)}</div>` : ''}
+        ${x.voidReason && (x.status === '已作廢' || x.status === '待作廢') ? `<div style="color:var(--muted);font-size:0.75rem">作廢原因：${escapeHtml_(x.voidReason)}</div>` : ''}
         ${btn ? `<div style="text-align:right;margin-top:4px">${btn}</div>` : ''}</div>`;
     }).join('');
   }).catch(() => { body.innerHTML = '<div class="empty-hint">讀取失敗（網路？）</div>'; });
@@ -4194,6 +4198,35 @@ function pmgEinvReprint_(orderNo) {
   apiPost({ action: 'einvReprint', storeId: STORE_ID, orderId: orderNo }).then(d => {
     alert(d && d.status === 'ok' ? '已排進出單機，等一下就會印出' + (d.reprint ? '（加印「補印」）' : '') : ((d && d.message) || '補印失敗'));
   }).catch(() => alert('送出失敗（網路？）'));
+}
+// 11-21 重開發票：原發票作廢（原因「重開」）→ 照新的選擇開一張（店長以上，每次輸 PIN）
+function pmgEinvReissue_(orderNo, invNo) {
+  if (!einvCfg_) { alert('這間店的電子發票沒有開'); return; }
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML = `<div style="background:#fff;border-radius:12px;padding:16px;max-width:380px;width:100%;">
+    <div style="font-weight:600;margin-bottom:4px;">重開發票：訂單 ${escapeHtml_(orderNo)}</div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:8px;">${invNo ? '原發票 ' + escapeHtml_(invNo.slice(0, 2) + '-' + invNo.slice(2)) + ' 會作廢，' : ''}照下面的選擇開一張新的（金額、品項不變）。</div>
+    <div class="re-einv"></div>
+    <div style="display:flex;gap:8px;margin-top:12px;"><button type="button" class="btn btn-secondary re-cancel" style="flex:1;padding:10px;">取消</button>
+      <button type="button" class="btn btn-primary re-ok" style="flex:1;padding:10px;">作廢並重開</button></div></div>`;
+  const read = einvChoiceMount_(ov.querySelector('.re-einv'), false, '有公司統編');
+  ov.querySelector('.re-cancel').onclick = () => ov.remove();
+  ov.querySelector('.re-ok').onclick = () => {
+    const c = read();
+    if (c.error) { alert(c.error); return; }
+    ov.remove();
+    withPosPerm_('einvReissue', '重開發票', (staffName, staffPin) => {
+      apiPost({ action: 'einvReissue', storeId: STORE_ID, orderId: orderNo, invoiceType: c.invoiceType, invoiceNo: c.invoiceNo, staffName, staffPin }).then(d => {
+        if (!d || d.status !== 'ok') { alert('沒有重開：' + ((d && d.message) || '')); loadPmgEinv_(); return; }
+        const no = d.invoice && d.invoice.number ? '：' + d.invoice.number.slice(0, 2) + '-' + d.invoice.number.slice(2) : '';
+        alert((d.state === 'issued' ? '✅ 新發票開好了' + no : d.state === 'pending' ? '⚠️ 新發票稍後自動補開（不用再按）' : '⚠️ 新發票沒開成功，已通知老闆' + (d.message ? '（' + d.message + '）' : ''))
+          + (d.voidNote ? '\n' + d.voidNote : '') + (d.state === 'issued' && d.invoice && d.invoice.printFlag ? '\n出單機會印新的證明聯，請交給顧客' : ''));
+        loadPmgEinv_();
+      }).catch(() => alert('網路異常，結果不確定，請按「重新整理」確認'));
+    });
+  };
+  document.body.appendChild(ov);
 }
 function pmgEinvRetry_(orderNo) {
   apiPost({ action: 'einvRetry', storeId: STORE_ID, orderId: orderNo }).then(d => {
@@ -4276,19 +4309,65 @@ function loadOfflinePayMethods_() {
   ]);
 }
 // 10-23 取餐付款「已收款」要選錢實際怎麼收的(報表照這個歸線上／線下)：現金＋後台線下收款有開的人工收款(不含取餐付款)
-function pickCollectMethod_(title, cb) {
+// 11-21 發票選擇小區塊（收款視窗、重開視窗共用）：withKeep＝多一顆「照訂單」（預設，送出時不帶＝用顧客點餐時選的）
+// 回傳 read()：{keep:true}｜{error}｜{invoiceType, invoiceNo}
+function einvChoiceMount_(root, withKeep, initType) {
+  const cfg = einvCfg_ || {};
+  const types = (withKeep ? [['', '照訂單']] : []).concat([[EINV_PAPER_, '紙本'], ['有手機載具', '手機載具'], ['有公司統編', '統編'], ['捐贈', '捐贈']])
+    .filter(([t]) => !t || t === EINV_PAPER_ || (t === '有手機載具' ? cfg.carrierScan !== false : t === '有公司統編' ? cfg.b2b !== false : cfg.donate !== false));
+  root.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);margin:2px 0 6px;">發票</div><div class="ec-types" style="display:flex;flex-wrap:wrap;gap:6px;"></div>'
+    + '<input class="ec-val" type="text" autocomplete="off" style="display:none;width:100%;margin-top:6px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:1rem;box-sizing:border-box;">'
+    + '<div class="ec-hint" style="font-size:0.75rem;color:var(--muted);margin-top:4px;"></div>';
+  const inp = root.querySelector('.ec-val'), hint = root.querySelector('.ec-hint');
+  let cur = initType != null ? initType : (withKeep ? '' : EINV_PAPER_);
+  if (!types.some(([t]) => t === cur)) cur = types[0][0];
+  const set = t => {
+    cur = t;
+    root.querySelectorAll('.ec-types .pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-t') === t));
+    const need = t === '有手機載具' || t === '有公司統編' || t === '捐贈';
+    inp.style.display = need ? 'block' : 'none';
+    inp.value = t === '捐贈' ? (cfg.loveCode || '') : '';
+    inp.inputMode = t === '有手機載具' ? 'text' : 'numeric';
+    inp.placeholder = t === '有手機載具' ? '用掃碼槍掃顧客手機條碼（/ 開頭 8 碼）' : t === '有公司統編' ? '輸入 8 碼統一編號' : '捐贈碼（3～7 碼數字）';
+    hint.textContent = t === '' ? '照顧客點餐時選的開（沒選＝紙本）' : t === EINV_PAPER_ ? '出單機會印證明聯' : t === '有公司統編' ? '會印證明聯（含買方統編）' : '不印證明聯';
+    if (need) setTimeout(() => inp.focus(), 50);
+  };
+  types.forEach(([t, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pos-pay-btn'; b.setAttribute('data-t', t); b.textContent = label; b.onclick = () => set(t);
+    root.querySelector('.ec-types').appendChild(b);
+  });
+  inp.oninput = () => { if (cur === '有手機載具') { const up = inp.value.toUpperCase().replace(/\s/g, ''); if (up !== inp.value) inp.value = up; } };
+  set(cur);
+  return () => {
+    if (!cur) return { keep: true };
+    const v = inp.value.trim().toUpperCase();
+    if (cur === '有手機載具' && !/^\/[0-9A-Z+\-.]{7}$/.test(v)) return { error: '手機條碼格式不對：要「/」開頭、共 8 碼。\n（掃碼槍旁邊的小條要顯示「A」英文，中文模式會掃成注音）' };
+    if (cur === '有公司統編' && !einvUbnOk_(v)) return { error: '統一編號不正確，請再跟顧客確認一次' };
+    if (cur === '捐贈' && !/^\d{3,7}$/.test(v)) return { error: '捐贈碼要 3～7 碼數字' };
+    return { invoiceType: cur, invoiceNo: cur === EINV_PAPER_ ? '' : v };
+  };
+}
+function pickCollectMethod_(title, cb, opt) {
   const opts = ['現金'].concat(offPmList_().filter(m => m.status === '啟用' && m.name !== '取餐付款').map(m => m.name));
   const ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.innerHTML = `<div style="background:#fff;border-radius:12px;padding:16px;max-width:360px;width:100%;">
     <div style="font-weight:600;margin-bottom:6px;">${escapeHtml_(title)}</div>
-    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">顧客怎麼付的？</div>
+    <div class="cm-einv" style="margin-bottom:12px;"></div>
+    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:10px;">顧客怎麼付的？${opt && opt.einv && einvCfg_ ? '（先選好發票，再按付款方式）' : ''}</div>
     <div class="cm-opts" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
     <button type="button" class="btn btn-secondary cm-cancel" style="width:100%;margin-top:12px;padding:10px;">取消</button></div>`;
+  // 11-21 取餐付款收款時可以改發票（電子發票開著才出現；這種付款方式設成不開發票就不帶）
+  const readEinv = opt && opt.einv && einvCfg_ ? einvChoiceMount_(ov.querySelector('.cm-einv'), true) : null;
   opts.forEach(n => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'pos-pay-btn'; b.textContent = n;
-    b.onclick = () => { ov.remove(); cb(n); };
+    b.onclick = () => {
+      let inv = null;
+      if (readEinv && einvMethodOn_(n)) { const x = readEinv(); if (x.error) { alert(x.error); return; } if (!x.keep) inv = x; }
+      ov.remove(); cb(n, inv);
+    };
     ov.querySelector('.cm-opts').appendChild(b);
   });
   ov.querySelector('.cm-cancel').onclick = () => ov.remove();
