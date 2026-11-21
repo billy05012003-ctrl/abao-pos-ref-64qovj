@@ -1939,6 +1939,8 @@ const NOTIFY_ROWS_ = [
   { key: 'screenLive', name: '畫面即時更新', desc: '顧客停在「訂單完成」畫面或「我的訂單」時，店家一按確認接單就自己顯示「✅ 店家已確認接單」。不花錢、顧客不用加好友；顧客關掉畫面就看不到。' },
   { key: 'lineConfirm', name: 'LINE 接單通知', line: true, desc: '店家按「確認接單」時，用官方帳號 LINE 通知顧客（附我的訂單連結）。每張單扣 1 則官方帳號訊息額度（免費方案每月 200 則，用完發不出去、不會收錢）；顧客要先加官方帳號好友才收得到。' },
   { key: 'lineVoid', name: 'LINE 作廢退款通知', line: true, desc: '平板或後台把已付款的線上單退款／作廢時，LINE 通知顧客「訂單已取消、款項已退回」。很少發生，費用很少。' },
+  // 11-21 老闆：先做、預設關（SQL 50）
+  { key: 'lineReady', name: 'LINE 取餐通知', line: true, desc: '店家按「取餐通知」時，用官方帳號 LINE 通知顧客餐點好了。每次扣 1 則官方帳號訊息額度（免費方案每月 200 則）；顧客要先加官方帳號好友才收得到。打開後平板「待取餐訂單」每張單會多一顆「取餐通知」按鈕（顧客沒綁 LINE 的單按鈕是灰的）；「畫面即時更新」開著時，顧客的「我的訂單」也會顯示「🍳 餐點好了，可以來拿」。' },
   { sec: '店內提醒' },
   { key: 'tabletAlert', name: '平板全螢幕提醒', desc: '線上單太久沒確認：現在下的單 10 分鐘、預訂單取餐前 15 分鐘 → 平板跳出全螢幕紅色視窗擋住收銀畫面，按確認接單才消失（購物車有東西、結帳中先不跳）。' },
   { key: 'ownerLine', name: 'LINE 通知老闆', desc: '還是沒確認：現在下的單 20 分鐘、預訂單到了取餐時間 → 金流告警記一筆，並 LINE 通知下面「接收提醒的手機」（附訂單號、取餐時間、顧客電話）。每張單只通知一次。' },
@@ -1960,7 +1962,7 @@ function renderNotifySettings_() {
   if (!d || !el) return;
   const owner = isBoOwner_(), s = d.settings || {};
   const top = (d.sqlReady === false ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 資料庫還沒更新（SQL 46），下面是預設值，暫時存不進去。</div>' : '')
-    + (!d.lineReady ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 還沒設定 LINE 發訊權杖：LINE 接單通知、LINE 作廢退款通知不能打開；「LINE 通知老闆」只會記在金流告警、不會發 LINE。</div>' : '');
+    + (!d.lineReady ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 還沒設定 LINE 發訊權杖：LINE 接單通知、LINE 作廢退款通知、LINE 取餐通知不能打開；「LINE 通知老闆」只會記在金流告警、不會發 LINE。</div>' : '');
   const rows = NOTIFY_ROWS_.map(r => {
     if (r.sec) return `<div style="font-weight:700;margin:14px 0 4px;">${r.sec}</div>`;
     const on = !!s[r.key], lock = !owner || d.sqlReady === false || (r.line && !d.lineReady && !on);

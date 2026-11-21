@@ -85,6 +85,9 @@
   .status-ok { background:#e6f4ea; color:#1e7b34; }
   .status-busy { background:#fff4e0; color:#a3620a; }
   .status-paused { background:#fde8e8; color:#a32d2d; }
+  /* 11-21 老闆：取餐付款的單收完款、餐還在做 → 主畫面上方一條，做好交給顧客時直接按「已取餐」 */
+  .status-waitpick { background:#e8f1fd; color:#1a4f8a; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; padding:8px 12px; }
+  .status-waitpick .wp-btn { border:1px solid #1a4f8a; background:#fff; color:#1a4f8a; border-radius:8px; padding:6px 12px; font-size:0.88rem; font-weight:700; cursor:pointer; }
   section { background:#fff; margin:12px; border-radius:10px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
   section h2 { font-size:1rem; margin:0 0 10px; }
   .btn { border:none; border-radius:8px; padding:10px 14px; font-size:0.9rem; font-weight:600; cursor:pointer; }
@@ -271,6 +274,7 @@
 <div id="pos-device-banner" class="status-banner status-paused" style="display:none;cursor:pointer" onclick="activatePosDevice_()">🔒 這台平板尚未啟用：請店長／老闆按這裡輸入 PIN 啟用（沒啟用的話結帳、會員等功能會被擋）</div>
 <!-- 11-15 主畫面也看得到線上點餐暫停／忙碌(原本只在上下架管理裡)；點了打開上下架管理 -->
 <div id="online-status-bar" class="status-banner" style="display:none;cursor:pointer" onclick="openPosLocalItemStatusManager()"></div>
+<div id="wait-pick-bar" class="status-banner status-waitpick" style="display:none"></div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
   <div class="pos-col pos-col-items">
@@ -880,6 +884,8 @@ function unlockRevenue_() { withPosPerm_('revenue', '查看營收', () => { reve
 function loadOrders() {
   apiGet({ action: 'todayOrders', storeId: STORE_ID }).then(data => {
     if (data.status !== 'ok') return;
+    readyInfoSet_(data);   // 11-21 取餐通知：記下每張單能不能通知、上次通知時間（主畫面那條也用）
+    waitPickPrune_(data.orders);   // 11-21 主畫面「等顧客取餐」跟雲端清單對齊
     const container = document.getElementById('orders-list');
     if (data.orders.length === 0) {
       container.innerHTML = '<div class="empty-hint">目前沒有待取餐訂單</div>';
@@ -889,13 +895,41 @@ function loadOrders() {
       <div class="order-card">
         <div>
           <div><strong>${o.orderId}</strong>${o.unpaid ? ' <span style="color:#c0392b;font-weight:bold;">［取餐現場付款・待收款］</span>' : ''}</div>
-          <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}</div>
+          <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}${data.readyNotify && o.readyAt ? '　<span style="color:#1a4f8a;">🔔 已通知 ' + readyHm_(o.readyAt) + '</span>' : ''}</div>
         </div>
-        ${o.unpaid
-          ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;"><button class="btn btn-primary" onclick="markCollected('${o.orderId}')">標記已收款</button><button class="btn btn-secondary" onclick="openVoidOrder('${o.orderId}')">作廢</button></div>`
-          : `<button class="btn btn-primary" onclick="markReady('${o.orderId}')">可以取餐</button>`}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${readyBtn_(data.readyNotify, o)}${o.unpaid
+          ? `<button class="btn btn-primary" onclick="markCollected('${o.orderId}')">標記已收款</button><button class="btn btn-secondary" onclick="openVoidOrder('${o.orderId}')">作廢</button>`
+          : `<button class="btn btn-primary" onclick="markReady('${o.orderId}')">已取餐</button>`}</div>
       </div>
     `).join('');
+  });
+}
+
+// ---- 11-21 取餐通知（後台「訂單通知設定 → LINE 取餐通知」打開才出現；SQL 50）----
+//   按了用 LINE 通知顧客餐點好了，不結案；顧客沒綁 LINE 的單按鈕是灰的；按過再按會先問（每次扣 1 則官方帳號額度）
+let readyInfo_ = { on: false, map: {} };
+function readyInfoSet_(data) {
+  const map = {};
+  (data.orders || []).forEach(o => { map[o.orderId] = { canNotify: !!o.canNotify, readyAt: o.readyAt || '' }; });
+  readyInfo_ = { on: !!data.readyNotify, map };
+  renderWaitPickBar_();
+}
+function readyHm_(iso) { const d = new Date(iso); return isNaN(d) ? '' : String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function readyBtn_(on, o, small) {
+  if (!on) return '';
+  const cls = small ? 'wp-btn' : 'btn btn-secondary';
+  if (!o.canNotify) return `<button type="button" class="${cls}" disabled style="opacity:.45;cursor:not-allowed;" title="這位顧客沒有 LINE">取餐通知（沒有 LINE）</button>`;
+  return `<button type="button" class="${cls}" onclick="notifyReady_('${escapeHtml_(o.orderId)}')">🔔 取餐通知${o.readyAt && small ? ' ✓' : ''}</button>`;
+}
+function notifyReady_(orderId) {
+  const info = readyInfo_.map[orderId] || {};
+  if (info.readyAt && !confirm('「' + orderId + '」已經在 ' + readyHm_(info.readyAt) + ' 通知過了，確定要再通知一次嗎？\n（會再扣 1 則 LINE 官方帳號訊息額度）')) return;
+  withPosPerm_('readyNotify', '取餐通知', (staffName, staffPin) => {
+    apiPost({ action: 'notifyPickupReady', orderId, staffName, staffPin, storeId: STORE_ID }).then(d => {
+      if (d.status !== 'ok') { alert(d.message || '取餐通知失敗'); loadOrders(); return; }
+      alert(d.sent ? '已用 LINE 通知顧客「' + orderId + '」餐點好了' : (d.message || 'LINE 沒發出去'));
+      loadOrders();
+    }).catch(() => alert('網路異常，取餐通知不確定有沒有發出去，請重新整理「待取餐訂單」看「已通知」時間'));
   });
 }
 
@@ -1045,6 +1079,7 @@ function markReady(orderId) {
   withPosPerm_('pickupReady', '標記可以取餐', (staffName, staffPin) => {
     apiPost({ action: 'markPickupReady', orderId: orderId, staffName, staffPin }).then(data => {
       if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
+      waitPickRemove_(orderId);   // 11-21 主畫面「等顧客取餐」那條拿掉這張
       loadOrders();
       loadRevenue();
     });
@@ -1087,9 +1122,57 @@ function markCollected(orderId) {
       if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
       loadOrders();
       loadRevenue();
+      askPickedUp_(orderId);   // 11-21 老闆：收完款馬上問顧客拿走了沒
     });
   }), { einv: true });
 }
+
+// ---- 11-21 老闆：取餐付款的單「已收款」後馬上問「顧客拿走了嗎？」----
+//   已取餐＝照原本「可以取餐」結案（markReady，5 分鐘內輸過 PIN 不用再輸）；
+//   還在做＝記在這台平板，主畫面上方一條「已收款、等顧客取餐：[0006 已取餐]」，做好交給顧客直接按，不用再打開上下架管理找
+const WAIT_PICK_KEY_ = 'abao_pos_waitpick_' + STORE_ID;
+function waitPickList_() { try { const a = JSON.parse(localStorage.getItem(WAIT_PICK_KEY_) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string') : []; } catch (e) { return []; } }
+function waitPickSave_(a) { try { localStorage.setItem(WAIT_PICK_KEY_, JSON.stringify(a)); } catch (e) {} renderWaitPickBar_(); }
+function waitPickAdd_(id) { const a = waitPickList_(); if (a.indexOf(id) < 0) a.push(id); waitPickSave_(a); }
+function waitPickRemove_(id) { const a = waitPickList_(), i = a.indexOf(id); if (i >= 0) { a.splice(i, 1); waitPickSave_(a); } }
+function renderWaitPickBar_() {
+  const bar = document.getElementById('wait-pick-bar');
+  if (!bar) return;
+  const a = waitPickList_();
+  if (!a.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.innerHTML = '<span>🍳 已收款、等顧客取餐：</span>' + a.map(id => {
+    const info = (typeof readyInfo_ !== 'undefined' && readyInfo_.on && readyInfo_.map[id]) || null;   // 11-21 取餐通知開著才多一顆
+    return `<span style="display:inline-flex;gap:4px;"><button type="button" class="wp-btn" onclick="markReady('${escapeHtml_(id)}')">${escapeHtml_(id.slice(-4))} 已取餐</button>${info ? readyBtn_(true, { orderId: id, canNotify: info.canNotify, readyAt: info.readyAt }, true) : ''}</span>`;
+  }).join('');
+  bar.style.display = '';
+}
+// 對照雲端「待取餐訂單」：已經不在清單上的（別台按了已取餐、關帳作廢、退款）從這條拿掉
+function waitPickPrune_(orders) {
+  const a = waitPickList_();
+  if (!a.length || !Array.isArray(orders)) return;
+  const still = new Set(orders.filter(o => !o.unpaid).map(o => o.orderId));
+  const b = a.filter(id => still.has(id));
+  if (b.length !== a.length) waitPickSave_(b);
+}
+function waitPickRefresh_() {
+  if (!waitPickList_().length) { renderWaitPickBar_(); return; }
+  apiGet({ action: 'todayOrders', storeId: STORE_ID }).then(d => { if (d && d.status === 'ok') { readyInfoSet_(d); waitPickPrune_(d.orders); } }).catch(() => {});
+}
+function askPickedUp_(orderId) {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.innerHTML = `<div style="background:#fff;border-radius:12px;padding:18px 16px;max-width:360px;width:100%;">
+    <div style="font-weight:700;margin-bottom:4px;">✅ ${escapeHtml_(orderId)} 已收款</div>
+    <div style="font-size:0.95rem;margin-bottom:14px;">顧客已經拿走餐點了嗎？</div>
+    <button type="button" class="btn btn-primary ap-done" style="width:100%;padding:12px;font-size:1rem;">已取餐（結案）</button>
+    <button type="button" class="btn btn-secondary ap-later" style="width:100%;margin-top:8px;padding:12px;">還在做，稍後再按</button>
+    <div style="font-size:0.75rem;color:var(--muted);margin-top:8px;">選「稍後再按」，這張會顯示在主畫面上方，做好交給顧客時按「已取餐」。</div></div>`;
+  ov.querySelector('.ap-done').onclick = () => { ov.remove(); markReady(orderId); };
+  ov.querySelector('.ap-later').onclick = () => { ov.remove(); waitPickAdd_(orderId); };
+  document.body.appendChild(ov);
+}
+setTimeout(waitPickRefresh_, 0);
+setInterval(waitPickRefresh_, 60000);
 
 // ---- POS管理：開帳／關帳(2026-09-16新增) ----
 let posStaffListCache_ = [];

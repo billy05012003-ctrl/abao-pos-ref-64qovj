@@ -230,6 +230,7 @@
   .mo-st { flex: none; font-size: 0.74rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e9f6ec; color: #2d7a3a; }
   .mo-st.warn { background: #fff3e0; color: #c26a00; }
   .mo-st.off { background: #f1f1f1; color: #888; }
+  .mo-st.ready { background: #e3f0ff; color: #1a4f8a; }   /* 11-21 取餐通知：餐點好了 */
   .mo-title { font-weight: 800; font-size: 0.95rem; margin: 6px 0 4px; }
   .mo-tag { display: inline-block; font-size: 0.7rem; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; padding: 0 5px; margin-left: 6px; color: var(--muted); vertical-align: middle; }
   .mo-items { font-size: 0.85rem; line-height: 1.6; color: #444; }
@@ -5662,7 +5663,10 @@ let myLiveTimer_ = null;
 function myLiveSchedule_() {
   if (myLiveTimer_) { clearTimeout(myLiveTimer_); myLiveTimer_ = null; }
   const d = myOrdersData_;
-  if (!d || d.liveUpdate === false || homeTab_ !== 'mine' || !(d.orders || []).some(o => o.waitConfirm)) return;
+  // 11-21 取餐通知開著（readyWatch）：還有沒拿走、店家還沒按取餐通知的單也繼續自己重讀，按了就顯示「餐點好了」
+  const nd = new Date(), today = nd.getFullYear() + '-' + String(nd.getMonth() + 1).padStart(2, '0') + '-' + String(nd.getDate()).padStart(2, '0');
+  const waitReady = o => d.readyWatch && !o.readyAt && o.pickupDate === today && (o.status === '未取餐' || o.status === '待收款');   // 只看今天取餐的單（以前沒拿的舊單不讓畫面一直重讀）
+  if (!d || d.liveUpdate === false || homeTab_ !== 'mine' || !(d.orders || []).some(o => o.waitConfirm || waitReady(o))) return;
   myLiveTimer_ = setTimeout(() => {
     myLiveTimer_ = null;
     if (homeTab_ !== 'mine') return;
@@ -5691,6 +5695,8 @@ function renderMyOrdersPane_() {
 // 10-12：線上單要門市平板確認接單才出單，還沒確認的顯示「等待店家確認」，確認後照原本狀態(已成立・待取餐)
 function myOrderStatus_(o) {
   if (o.waitConfirm && (o.status === '未取餐' || o.status === '待收款')) return [(o.status === '待收款' ? '取餐時付款・' : '已付款・') + '等待店家確認', 'warn'];
+  // 11-21 取餐通知：店家按了「取餐通知」、還沒拿走 → 顯示餐點好了（後台「畫面即時更新」開著才有 readyAt）
+  if (o.readyAt && (o.status === '未取餐' || o.status === '待收款')) return ['🍳 餐點好了，可以來拿' + (o.status === '待收款' ? '・取餐時付款' : ''), 'ready'];
   return MY_ORDER_STATUS_[o.status] || [o.status, ''];
 }
 function myOrderCardHtml_(o) {
