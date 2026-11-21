@@ -2045,7 +2045,24 @@ function renderSmsSettings_() {
       <button type="button" class="mc-save-btn" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'} onclick="smsSave_({ dailyLimit: Number(document.getElementById('sms-limit').value) }, null)">儲存上限</button></div>
     <div style="font-weight:700;margin:14px 0 4px;">固定規則</div>
     <div style="font-size:0.76rem;color:var(--muted);line-height:1.6;">驗證碼 ${rules.codeLen || 6} 位數、${Math.round((rules.ttlSec || 300) / 60)} 分鐘內有效；同一支手機 ${rules.cooldownSec || 60} 秒內不能重發；每支手機、每個 LINE 每天最多 ${rules.phoneDaily || 5} 次；輸錯 ${rules.maxAttempts || 5} 次要重新發送。驗證碼只存加密後的樣子，看不到原本的數字。</div>
-    ${d.updatedBy ? `<div class="ops-meta" style="margin-top:10px;">最後修改：${escapeHtml(d.updatedBy)}</div>` : ''}`;
+    ${d.updatedBy ? `<div class="ops-meta" style="margin-top:10px;">最後修改：${escapeHtml(d.updatedBy)}</div>` : ''}
+    ${cur && !cur.testMode ? `<div style="font-weight:700;margin:14px 0 4px;">傳一則測試簡訊</div>
+    <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">不用打開開關，就能確認簡訊商和金鑰都設好了。填自己的手機，按一下會收到一則測試簡訊（每天最多 5 則，會扣 1 則簡訊費）。</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input id="sms-test-phone" type="tel" maxlength="10" inputmode="numeric" placeholder="09xxxxxxxx" style="width:140px;padding:6px 8px;" ${isBoOwner_() && ready ? '' : 'disabled'}>
+      <button type="button" id="sms-test-btn" class="mc-save-btn" style="padding:6px 14px;" ${isBoOwner_() && ready ? '' : 'disabled'} onclick="smsTestSend_()">📨 傳測試簡訊</button>
+      <span id="sms-test-msg" style="font-size:0.8rem;color:var(--muted);">${ready ? '' : '金鑰還沒設定好，不能測'}</span></div>` : ''}`;
+}
+// 11-21 傳一則測試簡訊（只限老闆；後端每店每天 5 則）
+function smsTestSend_() {
+  const btn = document.getElementById('sms-test-btn'), msg = document.getElementById('sms-test-msg');
+  const phone = (document.getElementById('sms-test-phone').value || '').trim();
+  if (!/^09\d{8}$/.test(phone)) { msg.style.color = '#c0392b'; msg.textContent = '手機要 09 開頭 10 碼'; return; }
+  btn.disabled = true; msg.style.color = 'var(--muted)'; msg.textContent = '傳送中…';
+  const done = (ok, text) => { msg.style.color = ok ? '#2e7d32' : '#c0392b'; msg.textContent = text; setTimeout(() => { btn.disabled = false; }, 10000); };
+  apiPost({ action: 'smsTestSend', storeId: BO_HOME_STORE_, phone }).then(d => {
+    if (d.status === 'ok') done(true, '✅ 已送出（今天第 ' + d.sentToday + '／' + d.dailyMax + ' 則），請看手機有沒有收到');
+    else done(false, '❌ ' + (d.message || '傳送失敗'));
+  }).catch(() => done(false, '❌ 網路異常，請稍後再試'));
 }
 function smsSave_(settings, el) {
   if (el) el.disabled = true;
