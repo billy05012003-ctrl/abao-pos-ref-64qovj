@@ -67,22 +67,18 @@
   #month-remind .mr-foot { padding:0 12px 9px; font-size:0.75rem; color:var(--muted); }
   #backup-warn { margin:12px 16px 0; background:#fdecea; border:1px solid #e0a19c; border-radius:10px; padding:9px 12px; font-size:0.85rem; color:#a32d2d; line-height:1.5; }
   #backup-warn button { margin-left:6px; background:none; border:1px solid currentColor; border-radius:6px; padding:1px 8px; font-size:0.78rem; color:inherit; cursor:pointer; }
+  /* 11-21 (B①) 手機：原本側欄變成一整排要左右滑、看不出後面還有兩段 → 改成「☰ 選單｜目前：xx」細列，點了從左邊滑出跟電腦版一樣的側欄（同一份按鈕，切換程式不動） */
+  #bo-mnav, #bo-mnav-mask { display:none; }
   @media (max-width: 640px) {
     .app-shell { flex-direction:column; }
-    .sidebar { flex-direction:row; width:100%; flex:none; border-right:none; border-bottom:1px solid #eee; overflow-x:auto; position:static; }
-    .sidebar button { border-left:none; border-bottom:3px solid transparent; white-space:nowrap; }
-    .sidebar button.active { border-left-color:transparent; border-bottom-color:var(--brand); }
-    .sidebar .sub-list.open { flex-direction:row; }
-    .sidebar .sub-item { border-left:none; border-bottom:3px solid transparent; }
-    .sidebar .sub-item.active { border-left-color:transparent; border-bottom-color:var(--brand); }
-    .sidebar .sub-item::before { display:none; }
-    .sidebar .nav-sec { align-self:center; white-space:nowrap; padding:4px 6px 4px 12px; border-top:none !important; margin-top:0 !important; border-left:1px solid #eee; }
-    .sidebar .nav-sec:first-child { border-left:none; }
-    .sidebar .nav-sec small { display:none; }
-    .sidebar .nav-sec { padding-right:22px; }
-    .sidebar .nav-sec .sec-caret { right:6px; top:6px; }
-    .sidebar .nav-sec.closed.has-active::after { display:none; }
-    .sidebar button.nav-brand.active { border-left-color:transparent; border-bottom-color:#6a3db8; }
+    #bo-mnav { display:flex; align-items:center; gap:10px; width:100%; box-sizing:border-box; position:sticky; top:0; z-index:900; background:#fff; border:none; border-bottom:1px solid #eee; padding:11px 16px; font:inherit; font-size:0.92rem; text-align:left; cursor:pointer; color:#333; }
+    #bo-mnav .mnav-ic { font-size:1.15rem; line-height:1; color:var(--brand); }
+    #bo-mnav .mnav-lbl { font-weight:700; color:var(--brand); }
+    #bo-mnav .mnav-cur { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+    .sidebar { position:fixed; top:0; left:0; bottom:0; width:min(280px, 82vw); flex:none; z-index:1100; overflow-y:auto; box-shadow:2px 0 14px rgba(0,0,0,.18); transform:translateX(-105%); transition:transform .2s ease; padding-bottom:24px; }
+    body.bo-mnav-open .sidebar { transform:translateX(0); }
+    body.bo-mnav-open #bo-mnav-mask { display:block; position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:1050; }
+    body.bo-mnav-open { overflow:hidden; }
   }
   .view { padding:12px 16px 40px; max-width:900px; margin:0; }
   /* 品項彈出視窗編輯用的modal */
@@ -174,6 +170,12 @@
   .pm-checks label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   .mc-save-btn, .mc-delete-btn { padding:9px 16px; border-radius:7px; border:none; font-size:0.85rem; cursor:pointer; margin-right:8px; }
   .mc-save-btn { background:var(--brand); color:#fff; }
+  /* 11-21 老闆看電子發票設定頁：按鈕鎖住（disabled）時還是橘色、看起來能按 → 全站的儲存／刪除鈕鎖住時一律變淡 */
+  .mc-save-btn:disabled, .mc-delete-btn:disabled { opacity:.45; cursor:not-allowed; }
+  /* 11-21 電子發票設定頁：鎖住的輸入框改灰底；「最近 3 天的發票」點過標題不留黑框（用鍵盤操作時才顯示） */
+  #bo-einv-form input:disabled { background:#f0f0f0; color:#999; border:1px solid #ddd; cursor:not-allowed; }
+  #bo-einv-list-box > summary:focus { outline:none; }
+  #bo-einv-list-box > summary:focus-visible { outline:2px solid var(--brand); outline-offset:2px; border-radius:4px; }
   .sched-tab-btn { padding:8px 14px; border-radius:7px; border:1px solid var(--border); background:#fff; color:var(--muted); font-size:0.82rem; cursor:pointer; }
   .sched-tab-btn.active { background:var(--brand); color:#fff; border-color:var(--brand); }
   .sched-day-row { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--border); }
@@ -372,10 +374,12 @@
     <input type="password" id="bo-login-pin" inputmode="numeric" maxlength="4" placeholder="4碼數字" style="width:100%;box-sizing:border-box;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:0.95rem;" onkeydown="if(event.key==='Enter')boLogin()">
     <div id="bo-login-err" style="font-size:0.8rem;color:#a32d2d;min-height:18px;margin:6px 0;"></div>
     <button type="button" onclick="boLogin()" style="width:100%;background:#e8632c;color:#fff;border:none;border-radius:8px;padding:10px;font-size:0.95rem;cursor:pointer;">登入</button>
-    <div id="bo-login-forgot" style="font-size:0.75rem;color:#aaa;margin-top:12px;">忘記PIN：請老闆幫你重設；老闆自己忘記請到Google試算表「POS夥伴」分頁修改</div>
+    <div id="bo-login-forgot" style="font-size:0.75rem;color:#aaa;margin-top:12px;">忘記PIN：請老闆幫你重設；老闆自己忘記請另一位老闆重設，或聯絡系統廠商</div>
   </div>
 </div>
 <div class="app-shell">
+<button type="button" id="bo-mnav" aria-controls="tabbar" aria-expanded="false"><span class="mnav-ic">☰</span><span class="mnav-lbl">選單</span><span class="mnav-cur" id="bo-mnav-cur"></span></button>
+<div id="bo-mnav-mask"></div>
 <nav class="sidebar" id="tabbar">
   <!-- 11-14 老闆：側欄照「範圍」分三段(門市在上、品牌在下)：這間店 → 品牌範本→門市(可切換) → 品牌・全部門市共用；原本「會員相關」一組裡三種範圍混在一起，拆到各段 -->
   <div class="nav-sec store" data-sec="store" role="button" tabindex="0" title="點一下收合／展開">🟠 這間店<span class="sec-caret">▼</span></div>
@@ -453,6 +457,35 @@
   // 換頁（按鈕的 active 變了）時重算「目前頁面在這段」
   new MutationObserver(() => secs.forEach(sec => { if (closed[sec.dataset.sec]) paint(sec); }))
     .observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+})();
+// 11-21 (B①) 手機「☰ 選單」：細列顯示目前頁面；點功能（會換頁的按鈕）後自動收起，點段落標題、展開子選單的按鈕不收
+(function () {
+  const nav = document.getElementById('tabbar');
+  const bar = document.getElementById('bo-mnav');
+  const mask = document.getElementById('bo-mnav-mask');
+  const cur = document.getElementById('bo-mnav-cur');
+  if (!nav || !bar || !mask || !cur) return;
+  const KEEP_OPEN = ['tab-btn-merchant', 'tab-btn-menucms'];   // 這兩顆只是展開／收合子選單
+  const setOpen = on => { document.body.classList.toggle('bo-mnav-open', on); bar.setAttribute('aria-expanded', on ? 'true' : 'false'); };
+  bar.addEventListener('click', () => setOpen(!document.body.classList.contains('bo-mnav-open')));
+  mask.addEventListener('click', () => setOpen(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') setOpen(false); });
+  nav.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || !nav.contains(b) || b.disabled || b.classList.contains('lic-locked') || KEEP_OPEN.indexOf(b.id) >= 0) return;
+    setTimeout(() => setOpen(false), 120);
+  });
+  function paintCur() {
+    const sub = nav.querySelector('.sub-item.active');
+    const top = nav.querySelector(':scope > button.active');
+    const el = sub || top;
+    let t = '';
+    if (el) { const c = (el.querySelector('.group-toggle') || el).cloneNode(true); c.querySelectorAll('[id$="-badge"], .group-caret').forEach(x => x.remove()); t = c.textContent; }   // 金流告警的件數小標不放進「目前：」
+    t = t.replace(/[▶▼]/g, '').replace(/\s+/g, ' ').trim();
+    cur.textContent = t ? '目前：' + t : '';
+  }
+  new MutationObserver(paintCur).observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  paintCur();
 })();
 </script>
 <main class="main-content">
@@ -955,8 +988,8 @@
   <div id="pmg-subview-partner" style="display:none;">
     <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 夥伴帳號管理</div>
     <p id="ps-intro" style="font-size:0.8rem;color:var(--muted);">
-      3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>店長只能管理夥伴帳號</b>，店長／老闆帳號只有老闆能改。
-      建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設，老闆忘記請到Google試算表「POS夥伴」分頁修改。用4碼PIN碼識別身份，
+      3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>夥伴帳號（含PIN碼）只有老闆能新增或修改</b>，店長只能看名單。
+      建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設（點名字 →「修改PIN碼」填新的4碼 → 儲存，不用輸入舊PIN）；老闆自己忘記請另一位老闆重設，或聯絡系統廠商。
       <b>哪些功能要什麼角色，到「角色權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。
       <b>還沒建立任何夥伴之前，權限不會生效</b>(退款、人工標記已付款除外，這兩項一定要先建店長/老闆)。
     </p>
@@ -2151,11 +2184,11 @@ if (NEW_API_) {
   const b = document.getElementById('mch-sub-btn-payalert'); if (b) b.style.display = '';
   const bs = document.getElementById('mch-sub-btn-sms'); if (bs) bs.style.display = '';   // 11-20 簡訊驗證碼
   // 新後端沒有試算表，「POS夥伴」分頁那條路不在了(PIN 存雜湊，只能由另一個老闆帳號或系統管理員重設)
-  const fg = document.getElementById('bo-login-forgot'); if (fg) fg.textContent = '忘記PIN：請老闆幫你重設；老闆自己忘記請另一位老闆重設，或聯絡系統管理員（小保）';
+  const fg = document.getElementById('bo-login-forgot'); if (fg) fg.textContent = '忘記PIN：請老闆幫你重設；老闆自己忘記請另一位老闆重設，或聯絡系統廠商';
   // 11-11 老闆定：夥伴帳號(含PIN)只有老闆能新增或修改，店長不能幫別人改(新後端 upsertPosStaff 也擋)
   const pi = document.getElementById('ps-intro'); if (pi) pi.innerHTML =
     '3層角色：<b>夥伴</b>、<b>店長</b>、<b>老闆</b>。後台限店長、老闆登入；<b>夥伴帳號（含PIN碼）只有老闆能新增或修改</b>，店長只能看名單。' +
-    '建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設（點名字 →「修改PIN碼」填新的4碼 → 儲存，不用輸入舊PIN）；老闆自己忘記請另一位老闆重設，或聯絡系統管理員（小保）。' +
+    '建議建立<b>兩個老闆帳號</b>互為備援。PIN連續輸錯5次鎖15分鐘；夥伴、店長忘記PIN由老闆重設（點名字 →「修改PIN碼」填新的4碼 → 儲存，不用輸入舊PIN）；老闆自己忘記請另一位老闆重設，或聯絡系統廠商。' +
     '<b>哪些功能要什麼角色，到「角色權限設定」調整</b>；設成夥伴的功能不用輸入PIN。PIN是輕量識別機制、不是真的資安防護，比照整個系統的密碼閘門同一個道理。' +
     '<b>還沒建立任何夥伴之前，權限不會生效</b>(退款、人工標記已付款除外，這兩項一定要先建店長/老闆)。';
 }
