@@ -72,7 +72,7 @@
   }
   .cat-list-item.active { color: var(--brand); font-weight: bold; }
   main { padding: 12px; max-width: 640px; margin: 0 auto; }
-  section.category { margin-bottom: 20px; }
+  section.category { margin-bottom: 20px; scroll-margin-top: 150px; }   /* 11-22 (19b) 點分類跳過去時標題不要被上面固定的店名列＋分類列蓋住（goToCategory 會照實際高度再調） */
   section.category h2 {
     font-size: 1rem;
     margin: 0 0 8px;
@@ -208,6 +208,7 @@
   .slide-pay-knob { position: absolute; left: 0; top: 0; width: 52px; height: 52px; border-radius: 10px; background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; cursor: grab; touch-action: none; }
   .slide-pay.back .slide-pay-knob, .slide-pay.back .slide-pay-fill { transition: transform 0.2s ease, width 0.2s ease; }
   .slide-pay.nudge .slide-pay-knob { animation: slidePayNudge 0.6s ease; }
+  .slide-pay.paused { opacity: 0.45; pointer-events: none; filter: grayscale(1); }   /* 11-22 (19d) 門市暫停接單 */
   @keyframes slidePayNudge { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(26px); } 60% { transform: translateX(6px); } }
   /* 首頁上方：取餐時間列＋地址＋揪團/自取規則(2026-09-30 老闆參考大麥定案，頁面少文字、說明集中到「訂餐資訊」) */
   #store-strip { background: #fff; border-bottom: 1px solid var(--border); padding: 10px 12px; }
@@ -635,6 +636,8 @@
         <input type="checkbox" id="agree-terms" style="width:20px; height:20px; margin-top:1px; flex:none;">
         <span>我已閱讀並同意<a href="javascript:void(0)" onclick="openStoreInfo_('rules')">自取規則</a>、<a href="info.html#refund" target="_blank" rel="noopener">退款政策</a>、<a href="info.html#terms" target="_blank" rel="noopener">服務條款</a>及<a href="info.html#privacy" target="_blank" rel="noopener">隱私權政策</a></span>
       </label>
+      <!-- 11-22 (19d)：打開購物車時重查門市暫停／忙碌（原本只在進頁面查一次）；暫停時付款鈕變灰（真正擋單仍是後端） -->
+      <div id="cart-store-status" style="display:none;margin-top:12px;padding:8px 10px;border-radius:8px;font-size:0.88rem;font-weight:600;line-height:1.5;"></div>
       <div class="slide-pay" id="go-checkout" role="button" tabindex="0" aria-label="滑動前往付款">
         <div class="slide-pay-fill"></div>
         <div class="slide-pay-text">滑動前往付款</div>
@@ -1632,12 +1635,27 @@ function loadCartSession() {
   }
 }
 
+let catJumpSeq_ = 0;   // 11-22 (19b) 分類跳轉後的對齊：顧客自己滑了就取消
 function goToCategory(i) {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('#category-list .cat-list-item').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-btn-' + i).classList.add('active');
   document.getElementById('cat-list-item-' + i).classList.add('active');
-  document.getElementById('cat-' + i).scrollIntoView({behavior: 'smooth', block: 'start'});
+  const sec = document.getElementById('cat-' + i), tabsEl = document.getElementById('tabs');
+  // 11-22 (19b)：照上面固定的店名列＋分類列實際高度留空，標題不被蓋住（手機寬度不同、分類列高度不同）
+  const top = tabsEl ? tabsEl.getBoundingClientRect().bottom : 0;
+  if (top > 0) sec.style.scrollMarginTop = Math.ceil(top + 8) + 'px';
+  sec.scrollIntoView({behavior: 'smooth', block: 'start'});
+  // 跳很遠時沿路照片才載入、頁面變長，停下來會偏掉：停下後再對齊（顧客自己開始滑就不動）
+  const jump = ++catJumpSeq_, want = top > 0 ? Math.ceil(top + 8) : 0;
+  const stop = () => { catJumpSeq_++; };
+  window.addEventListener('touchstart', stop, { once: true, passive: true }); window.addEventListener('wheel', stop, { once: true, passive: true });
+  [900, 1800, 3000].forEach(ms => setTimeout(() => {
+    if (jump !== catJumpSeq_) return;
+    const d = sec.getBoundingClientRect().top - want;
+    if (Math.abs(d) > 4) window.scrollBy(0, d);
+  }, ms));
+  setTimeout(() => { window.removeEventListener('touchstart', stop); window.removeEventListener('wheel', stop); }, 3100);
   closeCategoryMenu();
 }
 function openCategoryMenu() { document.getElementById('category-overlay').classList.add('open'); }
@@ -3903,24 +3921,37 @@ function comboOptionParts_(m) {
   return parts.concat(keys.filter(gk => WIZ_EXCLUSIVE_GROUPS.includes(gk)).map(plain));
 }
 
+// 11-22 (19c)：單頁品項必選漏選，alert 之後捲到那一題、標紅框（比照其他需求 otherNeedsReady_）；點了裡面的選項紅框就拿掉
+function flagMissingGroup_(gk) {
+  const box = gk === '__size__' ? document.getElementById('item-modal-size')
+    : document.querySelector('#item-modal-groups [data-gkey="' + gk + '"]') || document.querySelector('#item-modal-groups [data-gkey="combo_drink"]');
+  if (!box) return;
+  box.style.outline = '2px solid #c0392b'; box.style.outlineOffset = '4px'; box.style.borderRadius = '8px';
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const clear = () => { box.style.outline = ''; box.removeEventListener('change', clear); box.removeEventListener('click', clear); };
+  box.addEventListener('change', clear); box.addEventListener('click', clear);
+}
 function confirmAddToCart() {
   if (!currentModal) return;
   for (const gKey of groupsForCategory(currentModal.cat, currentModal.item.name)) {
     const g = OPTION_GROUPS[gKey];
     if (g.required && (!currentModal.groups[gKey] || currentModal.groups[gKey].length === 0)) {
       alert('請選擇「' + g.label.replace('*必選','') + '」');
+      flagMissingGroup_(gKey);
       return;
     }
     if (gKey === 'combo_drink' && currentModal.groups[gKey].length) {
       const prices = COMBO_DRINK_PRICES[currentModal.groups[gKey][0]];
       if (prices && prices.single == null && !currentModal.comboDrinkSize) {
         alert('請選擇飲料的「份量」（M/L）');
+        flagMissingGroup_('__size__');
         return;
       }
       for (const dgk of (currentModal.comboDrinkExtraGroups || [])) {
         const dg = OPTION_GROUPS[dgk];
         if (dg.required && (!currentModal.groups[dgk] || !currentModal.groups[dgk].length)) {
           alert('請選擇飲料的「' + dg.label + '」');
+          flagMissingGroup_(dgk);
           return;
         }
       }
@@ -3931,6 +3962,7 @@ function confirmAddToCart() {
     for (const gk of comboExtraGroupsForConfirm) {
       if (!currentModal.groups[gk] || !currentModal.groups[gk].length) {
         alert('請選擇「' + OPTION_GROUPS[gk].label + '」');
+        flagMissingGroup_(gk);
         return;
       }
       // small_drink選定後還要確認溫度/甜度也選了（防止使用者跳過確定按鈕直接送出）
@@ -3939,6 +3971,7 @@ function confirmAddToCart() {
           const dg = OPTION_GROUPS[dgk];
           if (dg.required && (!currentModal.groups[dgk] || !currentModal.groups[dgk].length)) {
             alert('請選擇飲料的「' + dg.label + '」');
+            flagMissingGroup_(dgk);
             return;
           }
         }
@@ -4126,6 +4159,37 @@ function openCart() {
   document.getElementById('checkout-form').style.display = 'none';
   document.getElementById('confirm-view').style.display = 'none';
   document.getElementById('cart-overlay').classList.add('open');
+  cartStoreStatusCheck_();
+}
+// 11-22 (19d)：打開購物車時重查門市暫停／忙碌（15 秒內查過就用上次的，避免一直開關購物車打太多次）；
+//   暫停＝付款鈕上方紅字＋付款鈕變灰；忙碌＝提醒可能要稍後再試、照常可以付款。查不到就不顯示、照常付款（後端送單時還會擋）
+let cartStoreStatus_ = null, cartStoreStatusAt_ = 0;
+function cartStoreStatusRender_(d) {
+  const el = document.getElementById('cart-store-status'), pay = document.getElementById('go-checkout');
+  if (!el || !pay) return;
+  const paused = !!(d && d.paused), busy = !!(d && !d.paused && d.busy && d.busyIntervalMinutes > 0);
+  pay.classList.toggle('paused', paused);
+  if (paused) {
+    el.textContent = '⛔ 門市目前暫停接單中，暫時無法送出訂單，請稍後再回來下單（購物車會幫你留著）。';
+    el.style.background = '#fdecea'; el.style.color = '#c0392b'; el.style.display = 'block';
+  } else if (busy) {
+    el.textContent = `⚠️ 門市目前忙碌中，每${d.busyIntervalMinutes}分鐘只能接 1 張線上單，送出時剛好額滿會請你稍後再試。`;
+    el.style.background = '#fff6e0'; el.style.color = '#7a4b00'; el.style.display = 'block';
+  } else el.style.display = 'none';
+  const top = document.getElementById('store-status-notice');   // 菜單上方那條也一起更新
+  if (top && d) {
+    if (paused) { top.textContent = '⛔ 門市目前暫停接單中，暫時無法送出訂單，請稍後再回來下單。'; top.style.display = 'block'; }
+    else if (busy) { top.textContent = `⚠️ 門市目前忙碌中，線上點餐每${d.busyIntervalMinutes}分鐘只能接受1張新單，送出訂單時若剛好額滿會請你稍後再試。`; top.style.display = 'block'; }
+    else top.style.display = 'none';
+  }
+}
+function cartStoreStatusCheck_() {
+  if (cartStoreStatus_ && Date.now() - cartStoreStatusAt_ < 15000) { cartStoreStatusRender_(cartStoreStatus_); return; }
+  apiGet_({ action: 'storeStatus', storeId: STORE_ID }).then(d => {
+    if (!d || d.status !== 'ok') return;
+    cartStoreStatus_ = d; cartStoreStatusAt_ = Date.now();
+    cartStoreStatusRender_(d);
+  }).catch(() => {});
 }
 function closeCart() {
   document.getElementById('cart-overlay').classList.remove('open');
@@ -4134,6 +4198,7 @@ function closeCart() {
 // 2026-09-30 老闆定案：拿掉「取餐資訊」頁，我的訂單直接前往付款(姓名/取餐時間在首頁「取餐資訊」視窗)
 function goToPayment_() {
   if (cart.length === 0) { alert('請先選購品項'); return; }
+  if (cartStoreStatus_ && cartStoreStatus_.paused && Date.now() - cartStoreStatusAt_ < 60000) { alert('門市目前暫停接單中，暫時無法送出訂單，請稍後再試。'); return; }   // 11-22 (19d)
   if (mpgPrevPaidGuard_()) return;   // 從藍新按 ‹ 回來的購物車：先確認上一筆沒付才付(10-12)
   const currentPhone = document.getElementById('cust-phone').value.trim();
   if (!verifiedMember || verifiedMember.phone !== currentPhone) {
@@ -4319,13 +4384,25 @@ function submitOrder(e) {
       // 後端拒絕(例如該時段剛好被別人搶滿) - 還原購物車讓顧客重新選時段，不能假裝訂單成立
       // 活動限量額滿(第三波)：這次把有限量的活動券拿掉(不然會自動再套上去、一直送不出去)，顧客照原價再送一次
       hidePayBusy_();
-      const full = /名額已經滿了/.test(data.message || '');
+      const failMsg = data.message || '';
+      const full = /名額已經滿了/.test(failMsg);
+      const slotFull = /取餐時段已額滿/.test(failMsg);   // 後端 slot_full：這個時段真的不能再收了
       if (full) actVouchersForPickup_().forEach(v => { const a = HOME_ACTS.find(x => x.id === v.actId); if (a && Number(a.limit) > 0) actFullBlocked_.add(v.voucherId); });
-      alert((data.message || '送出失敗，請重新選擇取餐時段') + (full ? '\n\n已幫你取消這個活動的優惠，請確認金額後再送出一次。' : ''));
+      alert((failMsg || '訂單送出失敗，請稍後再試一次') + (full ? '\n\n已幫你取消這個活動的優惠，請確認金額後再送出一次。' : ''));
       cart = cartBackup;
       saveCartSession();
-      populatePickupTime(document.getElementById('pickup-date').value);
+      // 11-22 (19a)：以前這裡一律重建時段格子＝取餐時間被偷偷改成最早一格，顧客再送一次就付了不是自己選的時間。
+      //   改成保留原本選的時段；原本的時段已經不能選（例如過了）就明講、請顧客重選；時段額滿就打開選時段視窗請顧客換一格。
+      //   （不能把時間留空：別的地方重算時會把空的自動補成最早一格）
+      const keepD = document.getElementById('pickup-date').value, keepT = document.getElementById('pickup-time').value;
+      let moved = false;
+      if (!gp) {
+        setCheckoutPickup_(keepD, keepT);
+        moved = !!keepT && (document.getElementById('pickup-date').value !== keepD || document.getElementById('pickup-time').value !== keepT);
+        if (moved) alert('原本選的取餐時間（' + keepT + '）已經不能選了，請重新選擇取餐時間。');
+      }
       openCart();
+      if (!gp && (slotFull || moved)) openPickupPicker_();
     }
   }).catch(err => {
     // 正式版：建單失敗(網路問題)不能讓顧客以為訂單成立，還原購物車並提示重試
