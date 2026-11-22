@@ -589,6 +589,8 @@
       <h2>購物車</h2>
       <div id="cart-lines"></div>
       <div class="cart-total"><span>總計</span><span id="cart-total">$0</span></div>
+      <!-- 11-22 (19f)：購物車直接有兌換券入口（以前只有首頁會員卡的小圓鈕 🎟） -->
+      <div id="cart-voucher-row" onclick="openWallet_('voucher')" style="display:none;align-items:center;gap:8px;margin-top:8px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:10px;font-size:0.9rem;cursor:pointer;"><span>🎟 兌換券</span><b id="cart-voucher-text" style="flex:1;font-weight:normal;color:var(--muted);"></b><span style="color:var(--brand);">›</span></div>
       <div id="cart-otherneeds"></div>
       <div id="cust-note-box">
         <label>備註（選填，其他需求未滿足）</label>
@@ -2933,6 +2935,20 @@ function renderCartTotals_(d) {
     : d.due > d.raw ? '應付 $' + d.due : '$' + d.raw;
   const barEl = document.getElementById('cart-total-bar');
   if (barEl) barEl.textContent = '$' + d.due;
+  // 11-22 (19h)：滑動付款鈕直接寫要付多少
+  const slideEl = document.querySelector('#go-checkout .slide-pay-text');
+  if (slideEl) slideEl.textContent = cart.length ? '滑動付款 $' + d.due : '滑動前往付款';
+  // 11-22 (19f)：購物車的兌換券入口（會員、不是請客團主結帳時才出現）
+  const vRow = document.getElementById('cart-voucher-row');
+  if (vRow) {
+    let gm = false; try { gm = groupCheckoutMode; } catch (e) {}   // 揪團那段在檔案後面才宣告，開頁最早那一刻還讀不到
+    const show = !!verifiedMember && !gm;
+    vRow.style.display = show ? 'flex' : 'none';
+    if (show) {
+      const n = checkoutMemberVouchers.length;
+      document.getElementById('cart-voucher-text').textContent = d.discount > 0 ? `已折 $${d.discount}` : (n ? `${voucherCountText_()} 張可用` : '目前沒有可用的券');
+    }
+  }
 }
 
 function updateCheckoutTotalDisplay() {
@@ -4388,9 +4404,13 @@ function submitOrder(e) {
       const full = /名額已經滿了/.test(failMsg);
       const slotFull = /取餐時段已額滿/.test(failMsg);   // 後端 slot_full：這個時段真的不能再收了
       if (full) actVouchersForPickup_().forEach(v => { const a = HOME_ACTS.find(x => x.id === v.actId); if (a && Number(a.limit) > 0) actFullBlocked_.add(v.voucherId); });
-      alert((failMsg || '訂單送出失敗，請稍後再試一次') + (full ? '\n\n已幫你取消這個活動的優惠，請確認金額後再送出一次。' : ''));
-      cart = cartBackup;
+      // 11-22 (19e)：「訂單金額異常，請重新整理頁面」照做沒用（購物車價格存在手機，重新整理不會重算）→ 改問要不要清空購物車重點
+      const amountBad = /訂單金額異常/.test(failMsg);
+      const clearCart = amountBad && confirm('購物車裡的價格跟店家現在的價格對不上（可能剛改過價格或優惠）。\n\n要清空購物車、重新點一次嗎？\n（按「取消」保留購物車，可以自己刪掉有問題的餐點）');
+      if (!amountBad) alert((failMsg || '訂單送出失敗，請稍後再試一次') + (full ? '\n\n已幫你取消這個活動的優惠，請確認金額後再送出一次。' : ''));
+      cart = clearCart ? [] : cartBackup;
       saveCartSession();
+      if (clearCart) updateCartBar();
       // 11-22 (19a)：以前這裡一律重建時段格子＝取餐時間被偷偷改成最早一格，顧客再送一次就付了不是自己選的時間。
       //   改成保留原本選的時段；原本的時段已經不能選（例如過了）就明講、請顧客重選；時段額滿就打開選時段視窗請顧客換一格。
       //   （不能把時間留空：別的地方重算時會把空的自動補成最早一格）
@@ -5006,7 +5026,8 @@ function populatePickupTime(dateValue, ids) {
     btn.onclick = () => selectPickupTime_(value, ids);
     grid.appendChild(btn);
   });
-  selectPickupTime_(firstValue, ids);
+  // 11-22 (19i)：只有今天才自動選最早一格；隔天以後的預訂讓顧客自己選（以前會自動選 05:30，顧客沒注意就訂到太早）
+  selectPickupTime_(Number(dateValue) === 0 ? firstValue : '', ids);
   applySlotCapacity(dateValue, ids);
 }
 
@@ -5038,7 +5059,8 @@ function applySlotCapacity(dateValue, ids) {
     });
     const currentValue = document.getElementById(ids.time).value;
     const currentBtn = buttons.find(b => b.dataset.value === currentValue);
-    if (!currentBtn || currentBtn.disabled) {
+    // 11-22 (19i)：隔天以後還沒選時段的不幫顧客選（今天照舊：選的那格額滿就換下一格）
+    if ((currentValue || Number(dateValue) === 0) && (!currentBtn || currentBtn.disabled)) {
       const nextAvailable = buttons.find(b => !b.disabled);
       selectPickupTime_(nextAvailable ? nextAvailable.dataset.value : '', ids);
     }
@@ -5785,6 +5807,7 @@ function myOrderCardHtml_(o) {
   return `<div class="mo-card">
     <div class="mo-head"><span>${myWhen_(o.pickupDate, o.pickupTime)}<span class="mo-tag">${escapeHtml_(o.channel)}</span>${o.group ? '<span class="mo-tag">揪團</span>' : ''}</span><span class="mo-st ${st[1]}">${escapeHtml_(st[0])}</span></div>
     <div class="mo-title">${escapeHtml_(o.orderId)}</div>
+    ${o.status === '待付款' ? '<div class="mo-note" style="color:#b35c00;margin:2px 0 4px;">還沒完成付款：30 分鐘內沒付款會自動取消、不會扣款，要吃請重新點一次。</div>' : ''}
     <div class="mo-items">${items.join('<br>')}${gifts.length ? `<br><span class="mo-note">🎁 ${gifts.join('、')}</span>` : ''}${o.needs.length ? `<br><span class="mo-note">其他需求：${o.needs.map(escapeHtml_).join('、')}</span>` : ''}</div>
     <div class="mo-foot"><span>實付 <b>$${o.total}</b>${o.points ? `<span class="mo-note">　+${o.points} 點</span>` : ''}</span>
       ${canReorder ? `<button type="button" class="mo-btn" onclick="reorderMyOrder_('${escapeHtml_(o.orderId)}')">再點一次</button>` : (why ? `<span class="mo-note">${why}不能再點一次</span>` : '')}</div>
@@ -6317,7 +6340,12 @@ const storeStatusReady = apiGet_({ action: 'storeStatus', storeId: STORE_ID }).t
 const menuReady_ = loadMenuCmsData();   // 先呼叫：決定 menuFromSaved_
 let savedStoreStatus_ = null;
 if (menuFromSaved_) { try { savedStoreStatus_ = JSON.parse(localStorage.getItem(STORE_STATUS_SAVE_KEY_) || 'null'); } catch (e) {} }
-Promise.all([menuReady_, Promise.race([storeStatusReady, new Promise(r => setTimeout(() => r(savedStoreStatus_), menuFromSaved_ ? 0 : 4000))])]).then(([, st]) => {
+Promise.all([menuReady_, Promise.race([storeStatusReady, new Promise(r => setTimeout(() => r(savedStoreStatus_), menuFromSaved_ ? 0 : 4000))])]).then(([menuOk, st]) => {
+  // 11-22 (19g)：第一次來又讀不到菜單（雲端＋手機裡存的都沒有）原本整片空白 → 顯示讀取失敗＋重新載入鈕
+  if (menuOk === false && !Object.keys(CATALOG || {}).length) {
+    document.getElementById('menu').innerHTML = '<div style="text-align:center;padding:40px 16px;color:var(--muted);line-height:1.8;">😥 菜單讀取失敗，可能是網路不穩<br><button type="button" class="btn-primary" style="width:auto;padding:10px 24px;margin-top:10px;" onclick="location.reload()">重新載入</button></div>';
+    return;
+  }
   if (st && st.status === 'ok' && st.items) { itemAvailabilityMap = st.items; rebuildOnlineCatalog_(); }
   document.getElementById('menu').innerHTML = ''; // 清掉「菜單載入中…」提示，renderMenu()本身只會附加不會清空
   renderMenu();

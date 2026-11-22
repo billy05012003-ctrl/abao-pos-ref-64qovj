@@ -8,7 +8,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>POS功能（店家端）</title>
 <style>
-  :root { --brand: #e8632c; --bg: #f5f5f5; --muted: #888; --border: #eee0d4; --card: #fff; }
+  :root { --brand: #e8632c; --bg: #f5f5f5; --muted: #666; --border: #dcc6b3; --card: #fff; }   /* 11-22 (19x) 灰字 #888→#666、框線 #eee0d4→#dcc6b3 加深，店裡光線下看得清楚 */
   * { box-sizing: border-box; }
   body { margin:0; font-family:-apple-system,"Microsoft JhengHei",sans-serif; background:var(--bg); color:#222; height:100vh; height:100dvh; overflow:hidden; display:flex; flex-direction:column; }
   header { background:var(--brand); color:#fff; padding:16px; flex:none; }
@@ -51,10 +51,19 @@
   .pos-cart-line { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
   /* 麥當勞式「變更」鈕放最右側(2026-09-27)；疊在數量鈕下方，不跟品名搶寬度(橫向訂單欄只有320px) */
   .pos-cart-line .chg-btn { border:1px solid #777; background:#fff; border-radius:999px; padding:3px 12px; font-size:0.8rem; white-space:nowrap; cursor:pointer; }
-  .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:30px; height:30px; border-radius:6px; font-size:1rem; line-height:1; padding:0; cursor:pointer; }   /* 2026-09-27由40px改小，讓品名多一點寬度 */
+  .pos-cart-line .qty-btn { border:1px solid var(--border); background:#fff; width:44px; height:44px; border-radius:8px; font-size:1.25rem; line-height:1; padding:0; cursor:pointer; }   /* 11-22 (19r) 30px→44px，手指好按（09-27 為了品名寬度改小過，按錯比較麻煩） */
+  .pos-cart-line .qty-btn.del { color:#c0392b; font-size:1.05rem; }
+  .pos-clear-cart { display:block; margin:6px 0 0 auto; border:1px solid #e0b4ac; background:#fff; color:#c0392b; border-radius:8px; padding:6px 12px; font-size:0.82rem; cursor:pointer; }   /* 2026-09-27由40px改小，讓品名多一點寬度 */
   .pos-cart-total { display:flex; justify-content:space-between; font-size:1.05rem; font-weight:bold; padding:10px 0; flex:none; }
   .pos-size-select { font-size:0.78rem; margin-top:4px; }
   .pos-size-select label { margin-right:6px; cursor:pointer; }
+  /* 11-22 (19t)：客製化選項、份量從小圓點小方框改成 44px 大按鈕，選到的橘框；!important 蓋過程式裡寫在元素上的排版 */
+  :is(#pos-item-modal-groups, #pos-drink-modal-body) label.pos-opt, .pos-size-select label { display:block !important; position:relative; min-height:44px; padding:11px 8px 11px 34px; margin:3px 0 !important; border:1px solid var(--border); border-radius:10px; background:#fff; font-size:0.86rem !important; line-height:1.3; cursor:pointer; box-sizing:border-box; }
+  :is(#pos-item-modal-groups, #pos-drink-modal-body) label.pos-opt input, .pos-size-select label input { position:absolute; left:8px; top:50%; transform:translateY(-50%); width:20px; height:20px; margin:0; accent-color:var(--brand); }
+  :is(#pos-item-modal-groups, #pos-drink-modal-body) label.pos-opt:has(input:checked), .pos-size-select label:has(input:checked) { border-color:var(--brand); background:#fff3ec; font-weight:700; }
+  .pos-size-select { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:4px 8px; }
+  .pos-grid-card.quick-added { animation: posQuickAdd 0.5s ease; }
+  @keyframes posQuickAdd { 0% { background:#ffe0cc; } 100% { background:#fff; } }
   .pos-empty-cart { color:var(--muted); text-align:center; padding:20px 0; }
   .pos-back-btn { display:none; border:none; background:none; color:var(--brand); font-size:0.85rem; font-weight:600; cursor:pointer; padding:4px 0 10px; }
   #pos-mobile-cartbar { display:none; }
@@ -97,7 +106,7 @@
   section h2 { font-size:1rem; margin:0 0 10px; }
   .btn { border:none; border-radius:8px; padding:10px 14px; font-size:0.9rem; font-weight:600; cursor:pointer; }
   .btn-primary { background:var(--brand); color:#fff; }
-  .btn-secondary { background:#eee; color:#333; }
+  .btn-secondary { background:#e6e6e6; color:#222; border:1px solid #ccc; }
   .btn-danger { background:#A32D2D; color:#fff; }
   .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
   .pos-pay-btn { flex:1 1 45%; min-width:80px; padding:10px 6px; border:1px solid var(--border); border-radius:8px; background:#fff; font-size:0.85rem; cursor:pointer; text-align:center; }
@@ -320,7 +329,7 @@
     <div id="pos-checkout-panel" style="display:none">
       <div id="pos-checkout-member" style="font-size:0.85rem;margin-bottom:8px;"></div>
       <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">付款方式</label>
-      <input type="hidden" id="pos-payment-method" value="LINEPay mini">
+      <input type="hidden" id="pos-payment-method" value="">
       <div id="pos-payment-method-group" style="display:flex;flex-wrap:wrap;gap:8px;">
         <!-- 10-22 LINE Pay 門市反掃：後台「付款方式設定」開了才出現；斷網反灰 -->
         <button type="button" class="pos-pay-btn" id="pos-pay-lpscan" data-method="線下LINEPay" style="display:none" onclick="setPosPaymentMethod_('線下LINEPay')">線下LINEPay</button>
@@ -332,8 +341,18 @@
       <div id="pos-cash-fields" style="display:none;margin-top:8px;">
         <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">實收金額（必填）</label>
         <div id="pos-cash-quick" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;"></div>
-        <input type="number" id="pos-cash-received" inputmode="numeric" min="0" placeholder="輸入顧客給的金額" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:1rem;" oninput="updatePosCashChange_()">
-        <div id="pos-cash-change-result" style="margin-top:6px;font-size:1.05rem;font-weight:700;"></div>
+        <!-- 11-22 (19q)：實收金額改用 POS 自己的大數字鍵（跟會員電話一樣不叫系統鍵盤）；找零字放大 -->
+        <div id="pos-cash-wrap" style="position:relative;">
+        <input type="text" id="pos-cash-received" readonly inputmode="none" autocomplete="off" placeholder="點這裡輸入顧客給的金額" onclick="posCashPadShow_()" onkeydown="posCashKeydown_(event)" style="width:100%;box-sizing:border-box;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:1.2rem;font-weight:700;">
+        <div id="pos-cash-numpad" class="pos-numpad" style="display:none;position:static;margin-top:6px;box-shadow:none;" onpointerdown="event.preventDefault()">
+          <button type="button" onclick="posCashKey_('1')">1</button><button type="button" onclick="posCashKey_('2')">2</button><button type="button" onclick="posCashKey_('3')">3</button>
+          <button type="button" onclick="posCashKey_('4')">4</button><button type="button" onclick="posCashKey_('5')">5</button><button type="button" onclick="posCashKey_('6')">6</button>
+          <button type="button" onclick="posCashKey_('7')">7</button><button type="button" onclick="posCashKey_('8')">8</button><button type="button" onclick="posCashKey_('9')">9</button>
+          <button type="button" class="fn" onclick="posCashKey_('clear')">清除</button><button type="button" onclick="posCashKey_('0')">0</button><button type="button" class="fn" onclick="posCashKey_('back')">⌫</button>
+          <button type="button" class="fn close" onclick="posCashPadHide_()">好了</button>
+        </div>
+        </div>
+        <div id="pos-cash-change-result" style="margin-top:8px;font-size:1.7rem;font-weight:800;"></div>
       </div>
       <!-- 11-20 (3e) 電子發票：後台「電子發票設定」打開、這種付款方式要開發票才出現（關著跟以前一樣看不到） -->
       <div id="pos-einv" style="display:none;margin-top:10px;">
@@ -386,7 +405,8 @@
 
     <div id="pos-confirm-panel" style="display:none;text-align:center;">
       <div style="font-size:1.2rem;font-weight:bold;color:var(--brand);margin:10px 0;" id="pos-confirm-order-no"></div>
-      <p id="pos-confirm-points" style="color:#888;font-size:0.85rem;"></p>
+      <div id="pos-confirm-change" style="display:none;font-size:1.8rem;font-weight:800;color:var(--brand);margin:6px 0 10px;"></div>
+      <p id="pos-confirm-points" style="color:#666;font-size:0.85rem;"></p>
       <button class="btn btn-secondary" id="pos-offline-reprint-btn" style="display:none;width:100%;padding:10px;margin-bottom:6px;">🖨 重印這張離線單</button>
       <button class="btn btn-primary" style="width:100%;padding:10px;" onclick="closePosCartAll()">開始新訂單</button>
     </div>
@@ -919,11 +939,11 @@ function loadOrders() {
     container.innerHTML = data.orders.map(o => `
       <div class="order-card">
         <div>
-          <div><strong>${o.orderId}</strong>${o.unpaid ? ' <span style="color:#c0392b;font-weight:bold;">［取餐現場付款・待收款］</span>' : ''}</div>
-          <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}${data.readyNotify && o.readyAt ? '　<span style="color:#1a4f8a;">🔔 已通知 ' + readyHm_(o.readyAt) + '</span>' : ''}</div>
+          <div><strong>${o.orderId}</strong>${o.tail ? ' <span style="font-weight:700;color:var(--brand);">末三碼 ' + escapeHtml_(o.tail) + '</span>' : ''}${posOrderName_(o.note) ? ' <span style="color:#444;">' + escapeHtml_(posOrderName_(o.note)) + '</span>' : ''}${o.unpaid ? ' <span style="color:#c0392b;font-weight:bold;">［取餐現場付款・待收款］</span>' : ''}</div>
+          <div class="meta">取餐時間 ${o.pickupTime}　$${o.totalAmount}${data.readyNotify && o.readyAt ? '　<span style="color:#1a4f8a;">🔔 已通知 ' + readyHm_(o.readyAt) + '</span>' : ''}</div>${o.items && o.items.length ? '<div class="meta" style="color:#333;margin-top:2px;">' + o.items.map(escapeHtml_).join('、') + '</div>' : ''}
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${readyBtn_(data.readyNotify, o)}${o.unpaid
-          ? `<button class="btn btn-primary" onclick="markCollected('${o.orderId}')">標記已收款</button><button class="btn btn-secondary" onclick="openVoidOrder('${o.orderId}')">作廢</button>`
+          ? `<button class="btn btn-primary" onclick="markCollected('${o.orderId}', ${Number(o.totalAmount) || 0})">💵 收款 $${o.totalAmount}</button><button class="btn btn-secondary" onclick="openVoidOrder('${o.orderId}')">作廢</button>`
           : `<button class="btn btn-primary" onclick="markReady('${o.orderId}')">已取餐</button>`}</div>
       </div>
     `).join('');
@@ -1141,8 +1161,10 @@ function confirmVoidOrder() {
 }
 
 // 「取餐付款」訂單顧客到店先結帳的標記(2026-09-16新增)：待收款→未取餐，之後才能按「可以取餐」
-function markCollected(orderId) {
-  pickCollectMethod_('「' + orderId + '」顧客已經在現場付完款了嗎？', (collectMethod, inv) => withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
+// 11-22 (19s)：待取餐卡片顯示末三碼、取餐人、品項；收款視窗帶應收金額；從線上單備註取出取餐人姓名
+function posOrderName_(note) { const m = /姓名:([^　\s]{1,20})/.exec(note || ''); return m ? m[1] : ''; }
+function markCollected(orderId, amount) {
+  pickCollectMethod_('「' + orderId + '」' + (amount ? '應收 $' + amount + '，' : '') + '顧客已經在現場付完款了嗎？', (collectMethod, inv) => withPosPerm_('collected', '標記已收款', (staffName, staffPin) => {
     apiPost({ action: 'markOrderCollected', orderId: orderId, collectMethod, staffName, staffPin, ...(inv || {}) }).then(data => {   // 11-21 收款時選的發票（沒改＝照訂單）
       if (data.status !== 'ok') { alert(data.message || '標記失敗'); return; }
       loadOrders();
@@ -3098,13 +3120,23 @@ function goToPosCategory(i) {
       card.innerHTML = `<div class="name">${cardNameHtml}</div><div class="price" style="color:#A32D2D;">${localStatus === '永久下架' ? '已下架' : '本日售完'}</div>`;
     } else {
       card.innerHTML = `<div class="name">${cardNameHtml}</div><div class="price">${priceLabel}</div>`;
-      card.onclick = () => { posAutoNewOrder_(); openPosItemModal(cat, key, item); };   // 11-16 (2n)
+      card.onclick = () => {   // 11-16 (2n)
+        posAutoNewOrder_();
+        openPosItemModal(cat, key, item);
+        if (posQuickAddable_(cat, item)) { confirmAddToPosCart(); card.classList.remove('quick-added'); void card.offsetWidth; card.classList.add('quick-added'); }   // 11-22 (19u)
+      };
     }
     grid.appendChild(card);
   });
   itemsCol.appendChild(grid);
 }
 
+// 11-22 (19u)：點一下直接加 1 份的條件——沒有份量要選（M/L、兩種價格、單點／套餐）、沒有要選的必選群組（只有一個選項的會自動勾）；
+//   有選填加料的也直接加，要加料點訂單上那一項「變更」
+function posQuickAddable_(cat, item) {
+  if ((item.price_m && item.price_l) || item.price_alt || item.price_set) return false;
+  return !groupsForCategory(cat, item.name).some(gk => { const g = OPTION_GROUPS[gk]; return g && g.required && !(g.type === 'single' && g.options.length === 1); });
+}
 // 大麥POS參考版面：點品項不跳彈窗，直接在右側「客製化」欄位就地展開
 function openPosItemModal(cat, key, item) {
   document.querySelectorAll('.pos-grid-card').forEach(c => c.classList.remove('active'));
@@ -3224,6 +3256,7 @@ function renderPosOptionGroup(container, gKey) {
   const wrap = document.createElement('div');
   wrap.style.marginTop = '12px';
   if (gKey === 'drink_topping') wrap.id = 'pos-option-group-drink_topping';
+  wrap.dataset.gkey = gKey;   // 11-22 (19v) 漏選時找得到這一組
   wrap.innerHTML = `<div style="font-size:0.85rem;color:var(--muted);margin-bottom:4px;">${g.label}${g.required ? ' <span style=\"color:#c94f1f\">*必選</span>' : ''}</div>`;
   const optWrap = document.createElement('div');
   const sizeForFilter = (currentPosModal.comboDrinkSize != null && currentPosModal.comboDrinkSize !== '') ? currentPosModal.comboDrinkSize.toUpperCase() : currentPosModal.size;
@@ -3248,6 +3281,7 @@ function renderPosOptionGroup(container, gKey) {
   visibleOptions.forEach((opt) => {
     const id = groupName + '_' + opt.name;
     const label = document.createElement('label');
+    label.className = 'pos-opt';   // 11-22 (19t) 大按鈕樣式
     // 欄位間距已經靠grid的column-gap處理，label自己的右margin是舊版inline-block排版留下來的多餘空間，
     // 3欄較窄時會白白吃掉每欄的可用寬度，改成靠grid gap本身留白即可，不再額外加margin-right
     label.style.cssText = cols === 1 ? 'display:block;margin:2px 0;font-size:0.82rem;' : 'display:inline-block;min-width:0;max-width:100%;margin:2px 0;font-size:0.82rem;';
@@ -3276,6 +3310,7 @@ function renderPosOptionGroup(container, gKey) {
   wrap.querySelectorAll('input').forEach(inp => {
     if (g.type === 'single') {
       inp.addEventListener('mousedown', () => { inp.dataset.wasChecked = inp.checked ? '1' : ''; });
+      const lb = inp.closest('label'); if (lb) lb.addEventListener('pointerdown', () => { inp.dataset.wasChecked = inp.checked ? '1' : ''; });   // 11-22 (19t) 按鈕變大後多半點到文字：點文字也要記得原本有沒有選
       inp.addEventListener('click', (e) => {
         if (inp.dataset.wasChecked === '1') {
           e.preventDefault();
@@ -3529,6 +3564,15 @@ function closePosItemModal() {
   setPosStep('items');
 }
 
+// 11-22 (19v)：漏選 alert 之後捲到那一組、標紅框（點了裡面的選項紅框就拿掉）
+function posFlagMissingGroup_(gk) {
+  const box = document.querySelector('#pos-item-modal-groups [data-gkey="' + gk + '"]') || document.querySelector('#pos-item-modal-groups [data-gkey="combo_drink"]') || document.querySelector('#pos-item-modal-groups [data-gkey="small_drink"]');
+  if (!box) return;
+  box.style.outline = '2px solid #c0392b'; box.style.outlineOffset = '4px'; box.style.borderRadius = '8px';
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const clear = () => { box.style.outline = ''; box.removeEventListener('change', clear); };
+  box.addEventListener('change', clear);
+}
 function confirmAddToPosCart() {
   if (!currentPosModal) return;
   posAutoNewOrder_();   // 11-16 (2n) 保險：客製化畫面在結帳前就開著、結帳完才按「加入訂單」
@@ -3536,18 +3580,21 @@ function confirmAddToPosCart() {
     const g = OPTION_GROUPS[gKey];
     if (g.required && (!currentPosModal.groups[gKey] || currentPosModal.groups[gKey].length === 0)) {
       alert('請選擇「' + g.label.replace('*必選','') + '」');
+      posFlagMissingGroup_(gKey);
       return;
     }
     if (gKey === 'combo_drink' && currentPosModal.groups[gKey].length) {
       const prices = COMBO_DRINK_PRICES[currentPosModal.groups[gKey][0]];
       if (prices && prices.single == null && !currentPosModal.comboDrinkSize) {
         alert('請選擇飲料的「份量」（M/L）');
+        posFlagMissingGroup_('combo_drink');
         return;
       }
       for (const dgk of (currentPosModal.comboDrinkExtraGroups || [])) {
         const dg = OPTION_GROUPS[dgk];
         if (dg.required && (!currentPosModal.groups[dgk] || !currentPosModal.groups[dgk].length)) {
           alert('請選擇飲料的「' + dg.label + '」');
+          posFlagMissingGroup_(dgk);
           return;
         }
       }
@@ -3558,6 +3605,7 @@ function confirmAddToPosCart() {
     for (const gk of comboExtraGroupsForConfirm) {
       if (!currentPosModal.groups[gk] || !currentPosModal.groups[gk].length) {
         alert('請選擇「' + OPTION_GROUPS[gk].label + '」');
+        posFlagMissingGroup_(gk);
         return;
       }
       if (gk === 'small_drink') {
@@ -3565,6 +3613,7 @@ function confirmAddToPosCart() {
           const dg = OPTION_GROUPS[dgk];
           if (dg.required && (!currentPosModal.groups[dgk] || !currentPosModal.groups[dgk].length)) {
             alert('請選擇飲料的「' + dg.label + '」');
+            posFlagMissingGroup_(dgk);
             return;
           }
         }
@@ -3674,7 +3723,7 @@ function renderPosCart() {
       <div class="pos-cart-line-name" style="cursor:${c.edit ? 'pointer' : 'default'};">${c.name}${c.size ? ' ('+c.size+')' : ''}${c.note ? '<br><span style=\"color:var(--muted);font-size:0.78rem\">備註：'+c.note+'</span>' : ''}<br><span style="color:var(--muted);font-size:0.8rem">$${c.price} x ${c.qty}</span></div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none;">
         <div style="display:flex;align-items:center;gap:4px;">
-          <button class="qty-btn" data-act="dec">-</button>
+          <button class="qty-btn${c.qty <= 1 ? ' del' : ''}" data-act="dec" title="${c.qty <= 1 ? '刪掉這項' : '減一份'}">${c.qty <= 1 ? '🗑' : '−'}</button>
           <span>${c.qty}</span>
           <button class="qty-btn" data-act="inc">+</button>
         </div>
@@ -3687,6 +3736,12 @@ function renderPosCart() {
     div.querySelector('[data-act="inc"]').onclick = () => changePosQty(c.lineKey, 1);
     linesEl.appendChild(div);
   });
+  if (posCart.length) {   // 11-22 (19r) 清空整單
+    const clr = document.createElement('button');
+    clr.type = 'button'; clr.className = 'pos-clear-cart'; clr.textContent = '🗑 清空整單';
+    clr.onclick = clearPosCart_;
+    linesEl.appendChild(clr);
+  }
   refreshOrderPctDiscounts_();
   const voucherEl = document.getElementById('pos-cart-voucher');
   if (voucherEl) {
@@ -3741,6 +3796,13 @@ function getPosCartFinalTotal() {
   return Math.max(0, rawTotal - discount);
 }
 
+// 11-22 (19r)：清空整單（品項、兌換券、門市活動折抵；查到的會員留著）
+function clearPosCart_() {
+  if (!posCart.length || !confirm('清空這張單的全部品項？')) return;
+  posCart = []; appliedVouchers = []; directDiscounts = [];
+  renderPosCart();
+  if (typeof renderMemberVoucherPanel === 'function') renderMemberVoucherPanel();
+}
 function changePosQty(lineKey, delta) {
   const idx = posCart.findIndex(c => c.lineKey === lineKey);
   if (idx === -1) return;
@@ -3802,7 +3864,7 @@ function closePosCartAll() {
   document.getElementById('pos-offline-reprint-btn').style.display = 'none';
   document.getElementById('pos-checkout-btn').style.display = 'block';
   posCheckoutKey_ = null;   // 10-13 新訂單換新的結帳鍵
-  // 每次開始新訂單都重置成安全預設值(LINEPay mini、非預約)，避免上一張選的「取餐付款」／指定取餐時間
+  // 每次開始新訂單都重置成安全預設值(11-22 起付款方式不預選、非預約)，避免上一張選的「取餐付款」／指定取餐時間
   // 殘留設定誤套到下一張現場立即結帳的訂單(10-22「LinePay現場」改名「LINEPay mini」)
   posEinvReset_();   // 11-20 (3e) 發票選擇回到紙本
   setPosPaymentMethod_(posDefaultPayMethod_());   // 10-22 LINEPay mini 被後台停用就預設現金
@@ -3842,7 +3904,36 @@ function renderPosCashQuick_() {
 }
 function setPosCashReceived_(a) {
   document.getElementById('pos-cash-received').value = a;
+  posCashPadHide_();
   updatePosCashChange_();
+}
+// 11-22 (19q)：實收金額大數字鍵（最多 5 位數）；實體鍵盤／掃碼槍照樣打得進去
+function posCashPadShow_() { const p = document.getElementById('pos-cash-numpad'); p.style.display = 'grid'; setTimeout(() => { const col = p.closest('.pos-col'), a = document.getElementById('pos-checkout-actions'); if (!col || !a) return; const d = p.getBoundingClientRect().bottom - a.getBoundingClientRect().top + 8; if (d > 0) col.scrollTop += d; }, 0); }   // 數字鍵排在實收格下面（不浮起來），捲到畫面中間，不會被底下固定的確認結帳鍵擋住
+function posCashPadHide_() { const p = document.getElementById('pos-cash-numpad'); if (p) p.style.display = 'none'; }
+function posCashKey_(k) {
+  const inp = document.getElementById('pos-cash-received');
+  if (k === 'clear') inp.value = '';
+  else if (k === 'back') inp.value = inp.value.slice(0, -1);
+  else if (inp.value.length < 5) inp.value = (inp.value === '0' ? '' : inp.value) + k;
+  updatePosCashChange_();
+}
+function posCashKeydown_(e) {
+  if (e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (/^[0-9]$/.test(e.key)) { e.preventDefault(); posCashKey_(e.key); }
+  else if (e.key === 'Backspace') { e.preventDefault(); posCashKey_('back'); }
+  else if (e.key === 'Enter') { e.preventDefault(); posCashPadHide_(); }
+}
+document.addEventListener('pointerdown', e => {
+  const pad = document.getElementById('pos-cash-numpad');
+  if (pad && pad.style.display !== 'none' && !e.target.closest('#pos-cash-wrap')) posCashPadHide_();
+}, true);
+// 11-22 (19q)：結帳完成畫面保留找零（以前一結完就看不到）
+function posConfirmChangeShow_(method) {
+  const el = document.getElementById('pos-confirm-change');
+  if (!el) return;
+  const t = method === '現金' ? document.getElementById('pos-cash-change-result').textContent : '';
+  el.textContent = t && /^找零/.test(t) ? '💵 ' + t : '';
+  el.style.display = el.textContent ? 'block' : 'none';
 }
 
 // 現金找零計算(2026-09-17新增)：顯示找零給店員看；10-13 起現金結帳實收金額必填(submitPosOrder 檢查)
@@ -3945,11 +4036,17 @@ function submitPosOrder() {
   // 2026-09-19：補送品項備註(note)供出單機廚房單使用
   const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '' }));
   const paymentMethod = document.getElementById('pos-payment-method').value;
+  if (!paymentMethod) {   // 11-22 (19p) 不預選：一定要按付款方式
+    alert('請先按付款方式（現金、LINE Pay…）');
+    const g = document.getElementById('pos-payment-method-group');
+    if (g) { g.scrollIntoView({ behavior: 'smooth', block: 'center' }); g.style.outline = '2px solid #c0392b'; g.style.outlineOffset = '4px'; g.style.borderRadius = '8px'; setTimeout(() => { g.style.outline = ''; }, 2500); }
+    return;
+  }
   if (paymentMethod === '現金') {   // 10-13：現金實收金額必填、不能少於應收
     const rv = document.getElementById('pos-cash-received').value;
     if (rv === '' || !(Number(rv) >= total)) {
       alert(rv === '' ? '現金結帳請輸入實收金額（可以按「剛好」或 $100／$500／$1000）' : `實收金額 $${Number(rv)} 少於應收 $${total}，請再確認`);
-      document.getElementById('pos-cash-received').focus();
+      posCashPadShow_();
       return;
     }
   }
@@ -4035,6 +4132,8 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
     if (paymentMethod === '取餐付款') notes.push('⚠️顧客尚未付款，取餐前請先在「待取餐訂單」標記已收款');
     if (data.invoice) notes.push(posEinvNote_(data.invoice));   // 11-20 (3e)
     document.getElementById('pos-confirm-points').textContent = notes.join('　');
+    posConfirmChangeShow_(paymentMethod);   // 11-22 (19q)
+    posFail_ = { key: '', n: 0 };
     document.getElementById('pos-checkout-panel').style.display = 'none';
     document.getElementById('pos-confirm-panel').style.display = 'block';
     loadRevenue();
@@ -4044,7 +4143,14 @@ function submitPosOrderAfterPerm_(btn, total, items, paymentMethod, pickupDate, 
       offlineCheckout_(payload, payload.clientKey);
       return;
     }
-    alert('送出失敗（網路不穩），請再按一次「確認結帳」');
+    // 11-22 (19w)：同一張單連續第二次送不出去（還沒被判定斷網）→ 直接問要不要改離線結帳，不用等網路燈變紅
+    posFail_ = posFail_.key === payload.clientKey ? { key: payload.clientKey, n: posFail_.n + 1 } : { key: payload.clientKey, n: 1 };
+    if (posFail_.n >= 2 && !appliedVouchers.length && confirm('又送不出去（網路不穩）。\n\n要改用「離線結帳」嗎？照常出單，網路恢復後自動上傳。\n（按「取消」可以再試一次）')) {
+      posFail_ = { key: '', n: 0 };
+      offlineCheckout_(payload, payload.clientKey);
+      return;
+    }
+    alert('送出失敗（網路不穩），請再按一次「確認結帳」' + (posFail_.n >= 2 && appliedVouchers.length ? '\n（有用兌換券不能離線結帳，要先拿掉兌換券）' : ''));
   }).finally(() => {
     btn.disabled = false;
     btn.textContent = btnOriginalText;
@@ -4457,7 +4563,8 @@ let offPm_ = null, offPmShown_ = '';
 try { offPm_ = JSON.parse(localStorage.getItem(OFFPM_CACHE_KEY_) || 'null'); } catch (e) {}
 function offPmList_() { return Array.isArray(offPm_) ? offPm_ : OFFPM_BUILTIN_.map(name => ({ name, status: '啟用' })); }
 function posPayEnabled_(name) { return name === '現金' || offPmList_().some(m => m.name === name && m.status === '啟用'); }
-function posDefaultPayMethod_() { return posPayEnabled_('LINEPay mini') ? 'LINEPay mini' : '現金'; }
+// 11-22 (19p) 老闆定：每張新單不預選付款方式（以前預設 LINEPay mini，收現金忘了切會記成 LINE Pay、關帳現金對不上）；沒按不能結帳
+function posDefaultPayMethod_() { return ''; }
 function posPayBtnsRender_() {
   const list = offPmList_(), on = list.filter(m => m.status === '啟用').map(m => m.name);
   // 10-23 LINEPay mini 是備援：後台停用時按鈕留著、變灰不能按(店員知道它還在)；其他停用的直接消失
@@ -5252,6 +5359,14 @@ const OFFLINE_Q_KEY_ = 'abao_pos_offline_q_' + STORE_ID, OFFLINE_SEQ_KEY_ = 'aba
 // 11-16 (2f)：頁面是斷網時從平板存的那份打開的(pos_offline_sw.js 會標記)→當作從沒連上過，開機讀資料失敗 2 次就直接進離線，不用等 30 秒
 let netLastOk_ = window.__ABAO_PAGE_FROM_CACHE__ ? 0 : Date.now(), netFails_ = 0, netOffline_ = false, offlineSyncing_ = false;
 function posOffline_() { return netOffline_; }
+let posFail_ = { key: '', n: 0 };   // 11-22 (19w) 同一把結帳鍵連續送不出去幾次
+// 11-22 (19w)：畫面下方小提示（幾秒後自己消失）
+function posToast_(msg, ms) {
+  let t = document.getElementById('pos-toast');
+  if (!t) { t = document.createElement('div'); t.id = 'pos-toast'; t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:10000;background:#1e7e34;color:#fff;padding:12px 20px;border-radius:12px;font-size:1rem;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,0.25);max-width:90vw;text-align:center;'; document.body.appendChild(t); }
+  t.textContent = msg; t.style.display = 'block';
+  clearTimeout(posToast_.tm); posToast_.tm = setTimeout(() => { t.style.display = 'none'; }, ms || 5000);
+}
 function netOk_() {
   netLastOk_ = Date.now(); netFails_ = 0;
   if (netOffline_) { netOffline_ = false; offlineRender_(); setTimeout(offlineSync_, 0); }
@@ -5357,6 +5472,7 @@ async function offlineCheckout_(p, clientKey) {
 }
 function offlineShowDone_(o) {
   document.getElementById('pos-confirm-order-no').textContent = o.orderId;
+  posConfirmChangeShow_(o.paymentMethod);   // 11-22 (19q)
   const notes = ['📴 離線單：網路恢復後自動上傳'];
   if (o.memberPhone) notes.push('會員點數上傳時補發');
   if (o.invoiceType) notes.push('🧾 電子發票網路恢復後才開' + (o.invoiceType === '有手機載具' ? '（存進手機載具）' : o.invoiceType === '捐贈' ? '（捐贈）' : '（證明聯到時出單機會補印，請顧客稍後再拿或留電話）'));   // 11-21 (3e)
@@ -5394,7 +5510,7 @@ async function offlineSync_() {
   } finally {
     offlineSyncing_ = false;
     offlineRender_();
-    if (synced) loadRevenue();
+    if (synced) { loadRevenue(); posToast_('✅ 離線單 ' + synced + ' 張已上傳' + (offlinePending_().length ? '（還有 ' + offlinePending_().length + ' 張等一下再傳）' : '')); }
   }
 }
 setInterval(() => { if (!netOffline_ && offlinePending_().length) offlineSync_(); }, OFFLINE_SYNC_MS_);
