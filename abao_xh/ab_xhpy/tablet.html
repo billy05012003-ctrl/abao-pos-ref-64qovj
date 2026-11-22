@@ -90,6 +90,9 @@
   /* 11-21 老闆：取餐付款的單收完款、餐還在做 → 主畫面上方一條，做好交給顧客時直接按「已取餐」 */
   .status-waitpick { background:#e8f1fd; color:#1a4f8a; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px; padding:8px 12px; }
   .status-waitpick .wp-btn { border:1px solid #1a4f8a; background:#fff; color:#1a4f8a; border-radius:8px; padding:6px 12px; font-size:0.88rem; font-weight:700; cursor:pointer; }
+  .status-preorder { background:#fff6e0; color:#7a4b00; }   /* 11-22 (6i) 預約單條 */
+  .status-preorder .wp-btn { border-color:#b8860b; color:#7a4b00; }
+  .status-preorder .wp-btn.late { border-color:#c62828; color:#c62828; background:#fdecea; }
   section { background:#fff; margin:12px; border-radius:10px; padding:14px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
   section h2 { font-size:1rem; margin:0 0 10px; }
   .btn { border:none; border-radius:8px; padding:10px 14px; font-size:0.9rem; font-weight:600; cursor:pointer; }
@@ -279,6 +282,8 @@
 <!-- 11-15 主畫面也看得到線上點餐暫停／忙碌(原本只在上下架管理裡)；點了打開上下架管理 -->
 <div id="online-status-bar" class="status-banner" style="display:none;cursor:pointer" onclick="openPosLocalItemStatusManager()"></div>
 <div id="wait-pick-bar" class="status-banner status-waitpick" style="display:none"></div>
+<!-- 11-22 (6i)：確認過的預約單（線上預訂、電話預約）取餐前 15 分鐘列在這裡，過了取餐時間還沒取餐的紅字；按單號打開待取餐訂單 -->
+<div id="preorder-bar" class="status-banner status-waitpick status-preorder" style="display:none"></div>
 <div id="view-pos" class="pos-layout">
   <div class="pos-col pos-col-categories" id="pos-col-categories"></div>
   <div class="pos-col pos-col-items">
@@ -905,6 +910,7 @@ function loadOrders() {
     if (data.status !== 'ok') return;
     readyInfoSet_(data);   // 11-21 取餐通知：記下每張單能不能通知、上次通知時間（主畫面那條也用）
     waitPickPrune_(data.orders);   // 11-21 主畫面「等顧客取餐」跟雲端清單對齊
+    preBarSet_(data.orders);       // 11-22 (6i) 主畫面「📅 預約單」也跟著更新
     const container = document.getElementById('orders-list');
     if (data.orders.length === 0) {
       container.innerHTML = '<div class="empty-hint">目前沒有待取餐訂單</div>';
@@ -1151,7 +1157,7 @@ function markCollected(orderId) {
 //   還在做＝記在這台平板，主畫面上方一條「已收款、等顧客取餐：[0006 已取餐]」，做好交給顧客直接按，不用再打開上下架管理找
 const WAIT_PICK_KEY_ = 'abao_pos_waitpick_' + STORE_ID;
 function waitPickList_() { try { const a = JSON.parse(localStorage.getItem(WAIT_PICK_KEY_) || '[]'); return Array.isArray(a) ? a.filter(x => typeof x === 'string') : []; } catch (e) { return []; } }
-function waitPickSave_(a) { try { localStorage.setItem(WAIT_PICK_KEY_, JSON.stringify(a)); } catch (e) {} renderWaitPickBar_(); }
+function waitPickSave_(a) { try { localStorage.setItem(WAIT_PICK_KEY_, JSON.stringify(a)); } catch (e) {} renderWaitPickBar_(); renderPreorderBar_(); }
 function waitPickAdd_(id) { const a = waitPickList_(); if (a.indexOf(id) < 0) a.push(id); waitPickSave_(a); }
 function waitPickRemove_(id) { const a = waitPickList_(), i = a.indexOf(id); if (i >= 0) { a.splice(i, 1); waitPickSave_(a); } }
 function renderWaitPickBar_() {
@@ -1165,6 +1171,39 @@ function renderWaitPickBar_() {
   }).join('');
   bar.style.display = '';
 }
+// ---- 11-22 (6i) 老闆：確認過的預約單取餐前 15 分鐘列在主畫面「📅 預約單」那條（原本只在上下架管理裡、主畫面沒提醒）----
+//   資料＝今天還沒取餐的單（todayOrders：未取餐／待收款）；還在紅條等確認的（ocOrders_）、已經在「🍳 等顧客取餐」那條的不重複列；
+//   過了取餐時間還沒按已取餐的繼續列、紅字；按單號打開「⚙ 上下架管理」裡的待取餐訂單（收款、已取餐都在那裡）
+const PRE_BAR_MIN_ = 15;
+let preOrders_ = [];
+function preBarSet_(orders) { preOrders_ = Array.isArray(orders) ? orders : []; renderPreorderBar_(); }
+function preBarLoad_() {
+  if (!posDeviceToken_()) return;
+  apiGet({ action: 'todayOrders', storeId: STORE_ID }).then(d => { if (d && d.status === 'ok') preBarSet_(d.orders); }).catch(() => {});
+}
+function renderPreorderBar_() {
+  const bar = document.getElementById('preorder-bar');
+  if (!bar) return;
+  let off = 0, pend = [];
+  try { off = ocSrvOffset_ || 0; pend = ocOrders_ || []; } catch (e) {}   // 確認接單那段在檔案後面才宣告，開機最早那一刻還讀不到
+  const now = Date.now() + off;
+  const pending = new Set(pend.map(o => o.orderId)), waiting = new Set(waitPickList_());
+  const base = new Date(now); base.setHours(0, 0, 0, 0);
+  const list = preOrders_.map(o => {
+    const m = /^(\d{1,2}):(\d{2})/.exec(o.pickupTime || '');
+    return m ? { o, at: base.getTime() + (Number(m[1]) * 60 + Number(m[2])) * 60000 } : null;
+  }).filter(x => x && !pending.has(x.o.orderId) && !waiting.has(x.o.orderId) && x.at - now <= PRE_BAR_MIN_ * 60000)
+    .sort((a, b) => a.at - b.at);
+  if (!list.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  bar.innerHTML = '<span>📅 預約單：</span>' + list.map(x => {
+    const late = x.at < now, id = x.o.orderId;
+    return `<button type="button" class="wp-btn${late ? ' late' : ''}" onclick="openPosLocalItemStatusManager()" title="${late ? '已過取餐時間' : '快到取餐時間'}">${escapeHtml_(id.slice(-4))} ${escapeHtml_(x.o.pickupTime.slice(0, 5))}${late ? ' 已過' : ''}${x.o.unpaid ? '・待收款' : ''}</button>`;
+  }).join('');
+  bar.style.display = '';
+}
+preBarLoad_();
+setInterval(preBarLoad_, 60000);         // 每分鐘讀一次雲端清單（別台按了已取餐也會消失）
+setInterval(renderPreorderBar_, 20000);  // 時間到了就出現，不用等下次讀
 // 對照雲端「待取餐訂單」：已經不在清單上的（別台按了已取餐、關帳作廢、退款）從這條拿掉
 function waitPickPrune_(orders) {
   const a = waitPickList_();
@@ -1175,7 +1214,7 @@ function waitPickPrune_(orders) {
 }
 function waitPickRefresh_() {
   if (!waitPickList_().length) { renderWaitPickBar_(); return; }
-  apiGet({ action: 'todayOrders', storeId: STORE_ID }).then(d => { if (d && d.status === 'ok') { readyInfoSet_(d); waitPickPrune_(d.orders); } }).catch(() => {});
+  apiGet({ action: 'todayOrders', storeId: STORE_ID }).then(d => { if (d && d.status === 'ok') { readyInfoSet_(d); waitPickPrune_(d.orders); preBarSet_(d.orders); } }).catch(() => {});
 }
 function askPickedUp_(orderId) {
   const ov = document.createElement('div');
@@ -4113,6 +4152,7 @@ function ocRender_() {
   b.style.display = 'block';
   if (ocOrders_.some(ocUrgent_) && Date.now() - ocLastBeep_ >= OC_BEEP_EVERY_MS_ - 2000) { ocBeep_(); ocLastBeep_ = Date.now(); }
   ocSoundTipRender_();
+  renderPreorderBar_();   // 11-22 (6i) 剛確認接單的預約單從紅條移到「📅 預約單」那條
   ocAlertCheck_();
 }
 // ---------- 11-20 (9g) 線上單太久沒確認：全螢幕提醒 ----------
