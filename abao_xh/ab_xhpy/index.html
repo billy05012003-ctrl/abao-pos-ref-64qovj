@@ -5798,6 +5798,13 @@ function myOrderStatus_(o) {
   if (o.readyAt && (o.status === '未取餐' || o.status === '待收款')) return ['🍳 餐點好了，可以來拿' + (o.status === '待收款' ? '・取餐時付款' : ''), 'ready'];
   return MY_ORDER_STATUS_[o.status] || [o.status, ''];
 }
+// 11-23 老闆：已退款（含退款處理中）的單，退款時點數已經扣回，不要再寫「+N 點」讓顧客以為點數還在 → 改「+N 點（已扣回）」
+// （作廢的單不會有點數：已發點的單資料庫不准作廢，要走退款）
+function myPointsNote_(o) {
+  if (!o || !o.points) return '';
+  const back = o.status === '已退款' || o.status === '退款處理中';
+  return `<span class="mo-note">　+${o.points} 點${back ? '（已扣回）' : ''}</span>`;
+}
 function myOrderCardHtml_(o) {
   const st = myOrderStatus_(o);
   const items = o.items.filter(i => !i.gift).map(i => `${i.who ? '<b>' + escapeHtml_(i.who) + '</b> ' : ''}${escapeHtml_(i.name)}${i.size ? ' ' + escapeHtml_(i.size) : ''} ×${i.qty}`);
@@ -5809,7 +5816,7 @@ function myOrderCardHtml_(o) {
     <div class="mo-title">${escapeHtml_(o.orderId)}</div>
     ${o.status === '待付款' ? '<div class="mo-note" style="color:#b35c00;margin:2px 0 4px;">還沒完成付款：30 分鐘內沒付款會自動取消、不會扣款，要吃請重新點一次。</div>' : ''}
     <div class="mo-items">${items.join('<br>')}${gifts.length ? `<br><span class="mo-note">🎁 ${gifts.join('、')}</span>` : ''}${o.needs.length ? `<br><span class="mo-note">其他需求：${o.needs.map(escapeHtml_).join('、')}</span>` : ''}</div>
-    <div class="mo-foot"><span>實付 <b>$${o.total}</b>${o.points ? `<span class="mo-note">　+${o.points} 點</span>` : ''}</span>
+    <div class="mo-foot"><span>實付 <b>$${o.total}</b>${myPointsNote_(o)}</span>
       ${canReorder ? `<button type="button" class="mo-btn" onclick="reorderMyOrder_('${escapeHtml_(o.orderId)}')">再點一次</button>` : (why ? `<span class="mo-note">${why}不能再點一次</span>` : '')}</div>
   </div>`;
 }
@@ -5819,7 +5826,7 @@ function myGroupCardHtml_(g) {
   // 自己付款的那張單(請客＝團主那張、各付各的＝自己那張)：補付款狀態與實付；請客的團員是團主付錢，沒有自己的單
   const paid = g.orderId ? ((myOrdersData_ || {}).orders || []).find(o => o.orderId === g.orderId) : null;
   const pst = paid ? myOrderStatus_(paid) : null;
-  const payLine = paid ? `<div class="mo-foot" style="margin-top:6px;"><span>${g.payMode === 'each' ? '我付的' : '全團'}實付 <b>$${paid.total}</b>${paid.points ? `<span class="mo-note">　+${paid.points} 點</span>` : ''}</span><span class="mo-st ${pst[1]}">${escapeHtml_(pst[0])}</span></div>` : '';
+  const payLine = paid ? `<div class="mo-foot" style="margin-top:6px;"><span>${g.payMode === 'each' ? '我付的' : '全團'}實付 <b>$${paid.total}</b>${myPointsNote_(paid)}</span><span class="mo-st ${pst[1]}">${escapeHtml_(pst[0])}</span></div>` : '';
   return `<div class="mo-card">
     <div class="mo-head"><span>${myWhen_(g.pickupDate, g.pickupTime)} 取餐<span class="mo-tag">${g.payMode === 'each' ? '各付各的' : '我請客'}</span><span class="mo-tag">${g.isHost ? '我是團主' : '團員'}</span></span><span class="mo-st ${cls}">${escapeHtml_(g.status)}</span></div>
     <div class="mo-title">${escapeHtml_(g.hostName)} 的揪團</div>
