@@ -1524,7 +1524,8 @@ function savePrintLabels_() {
   apiPost({ action: 'savePrintLabels', storeId: MC_STORE_ID, rows, reset }).then(d => {
     if (d && d.status === 'ok') {
       msg.style.color = '#1f7a3a';
-      msg.textContent = '✅ 已儲存：' + (plState_.scope === 'brand' ? '所有門市的預設（自己改過的店照那間店的）' : '只影響這間店') + '，下一張出的單就照新的印';
+      msg.textContent = plState_.scope === 'brand' ? '✅ 已儲存到品牌範本：所有門市都會照這個印（某間店自己改過的分類除外），下一張出的單就生效'
+        : '✅ 已儲存：只影響這間店，下一張出的單就生效';   // 11-23 老闆：說法改直白
       plState_.rows.forEach(r => { r.dirty = false; }); plState_.reset.clear();
     } else { msg.style.color = '#c62828'; msg.textContent = '⚠ 沒有成功：' + ((d && d.message) || '請重新整理後再試'); }
   }).catch(() => { msg.style.color = '#c62828'; msg.textContent = '⚠ 沒有成功：網路連線失敗，請再試一次'; });
