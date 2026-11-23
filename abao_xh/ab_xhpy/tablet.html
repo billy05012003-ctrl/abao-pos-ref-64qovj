@@ -533,7 +533,7 @@
 
     <hr style="margin:16px 0;border:none;border-top:1px solid var(--border);">
     <h2 style="font-size:1rem;margin:0 0 4px;">品項上下架</h2>
-    <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px;">點分類展開/收合。「線上點餐」跟「POS功能」是兩個獨立開關，互不影響。</div>
+    <div style="font-size:0.76rem; color:var(--muted); margin:0 0 10px;">點分類展開/收合。「線上點餐」跟「POS功能」兩邊狀態一樣時，改一邊另一邊會一起改（本日售完不會漏改線上）；刻意設成不一樣的（例如只在門市賣）只改你點的那一邊。</div>
     <div id="pos-item-status-list"></div>
   </div>
 </div>
@@ -1760,6 +1760,40 @@ function posItemStatusList_() {
   return list.concat(posAddonNames_().map(name => ({ category: POS_LOCAL_ADDON_STATUS_CATEGORY, name })));
 }
 
+// 11-23 UX 🟡c：線上點餐、POS功能兩份狀態各自獨立，店員標本日售完常常只改到一邊（線上照賣、顧客付了錢到店才知道沒有）
+//   → 兩邊狀態本來一樣：改一邊另一邊一起改（只問一次 PIN）；本來就不一樣（例如只在門市賣＝線上永久下架）只改點的那邊；
+//   加價購只有線上那邊。選「永久下架」先確認（不會自己恢復）
+function posAvailSet_(it, statusKey, side, val, selectEl, tCur, pCur) {
+  const cur = side === 'online' ? tCur : pCur;
+  if (val === cur) return;
+  const both = !it.statusKey && tCur === pCur;
+  if (val === '永久下架' && !confirm('確定要把「' + it.name + '」' + (both ? '線上點餐和 POS 都' : (side === 'online' ? '線上點餐' : 'POS功能')) + '設成「永久下架」嗎？\n\n永久下架不會自己恢復，之後要回來改成「供應中」。')) { selectEl.value = cur; return; }
+  const doOn = side === 'online' || both, doPos = side === 'pos' || both;
+  const pKey = posLocalStatusKey(it.category, it.name);
+  if (!currentStoreStatus.items) currentStoreStatus.items = {};
+  const setOn = v => { currentStoreStatus.items[statusKey] = v === '供應中' ? undefined : v; };
+  const setPos = v => { if (v === '供應中') delete posItemStatusMap[pKey]; else posItemStatusMap[pKey] = v; };
+  if (doOn) setOn(val);
+  if (doPos) setPos(val);
+  renderMergedItemStatusList();
+  const revert = () => { if (doOn) setOn(tCur); if (doPos) setPos(pCur); renderMergedItemStatusList(); };
+  withPosPerm_('itemStatus', '品項上下架', (staffName, staffPin) => {
+    const jobs = [];
+    if (doOn) jobs.push(apiPost({ action: 'setItemStatus', name: statusKey, status: val, staffName, staffPin })
+      .then(r => { if (r.status !== 'ok') throw new Error(r.message || '寫入失敗'); })
+      .catch(err => { setOn(tCur); throw new Error('線上點餐：' + err.message); }));
+    if (doPos) jobs.push(apiPost({ action: 'setPosItemStatus', category: it.category, name: it.name, status: val, staffName, staffPin })
+      .then(r => { if (r.status !== 'ok') throw new Error(r.message || '寫入失敗'); })
+      .catch(err => { setPos(pCur); throw new Error('POS功能：' + err.message); }));
+    Promise.allSettled(jobs).then(rs => {
+      const bad = rs.filter(x => x.status === 'rejected').map(x => x.reason.message);
+      if (!bad.length) return;
+      renderMergedItemStatusList();
+      alert('「' + it.name + '」' + (jobs.length > 1 && bad.length < jobs.length ? '有一邊' : '') + '沒有改成功（沒成功的那邊已還原，畫面就是現在的狀態）：\n' + bad.join('\n') + '\n\n請確認網路連線後再改一次');
+    });
+  }, revert);
+}
+
 function renderMergedItemStatusList() {
   const container = document.getElementById('pos-item-status-list');
   container.innerHTML = '';
@@ -1809,27 +1843,13 @@ function renderMergedItemStatusList() {
         const tabletGroup = document.createElement('div');
         tabletGroup.className = 'control-group';
         tabletGroup.innerHTML = '<span class="label">線上點餐</span>';
-        const tabletSelect = buildAvailSelect_(tabletCurrent, (val, selectEl) => {
-          const previous = tabletCurrent;
-          if (!currentStoreStatus.items) currentStoreStatus.items = {};
-          currentStoreStatus.items[statusKey] = val === '供應中' ? undefined : val;
-          const revert = () => { currentStoreStatus.items[statusKey] = previous === '供應中' ? undefined : previous; selectEl.value = previous; };
-          withPosPerm_('itemStatus', '品項上下架', (staffName, staffPin) => {
-            apiPost({ action: 'setItemStatus', name: statusKey, status: val, staffName, staffPin })
-              .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
-              .catch(err => {
-                console.warn('雲端平板/線上點餐狀態同步失敗', err);
-                revert();
-                alert(`「${it.name}」線上點餐狀態沒有改成功：${err.message}(畫面已還原)`);
-              });
-          }, revert);
-        });
+        const tabletSelect = buildAvailSelect_(tabletCurrent, (val, selectEl) => posAvailSet_(it, statusKey, 'online', val, selectEl, tabletCurrent, posCurrent));
         tabletGroup.appendChild(tabletSelect);
 
         const posGroup = document.createElement('div');
         posGroup.className = 'control-group';
         posGroup.innerHTML = '<span class="label">POS功能</span>';
-        const posSelect = buildAvailSelect_(posCurrent, val => setPosLocalItemStatus(it.category, it.name, val));
+        const posSelect = buildAvailSelect_(posCurrent, (val, selectEl) => posAvailSet_(it, statusKey, 'pos', val, selectEl, tabletCurrent, posCurrent));
         posGroup.appendChild(posSelect);
 
         controls.appendChild(tabletGroup);

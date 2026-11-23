@@ -419,6 +419,8 @@
   <!-- 11-14 老闆：側欄照「範圍」分三段(門市在上、品牌在下)：這間店 → 品牌範本→門市(可切換) → 品牌・全部門市共用；原本「會員相關」一組裡三種範圍混在一起，拆到各段 -->
   <div class="nav-sec store" data-sec="store" role="button" tabindex="0" title="點一下收合／展開">🟠 這間店<span class="sec-caret">▼</span></div>
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">上下架管理</button>
+  <!-- 11-23 UX 🟡a：報表原本要進「POS管理」點方格才到；側欄直接放一項（方格照留） -->
+  <button id="tab-btn-report" onclick="switchPosManageSubview('report')">📊 報表</button>
   <button id="tab-btn-merchant" onclick="toggleMerchantGroup()">
     <span class="group-toggle">商家管理 <span id="bo-merchant-badge" title="金流告警還沒處理" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span> <span class="group-caret" id="merchant-caret">▶</span></span>
   </button>
@@ -563,12 +565,14 @@
   </div>
   <h3 style="font-size:1rem;margin:18px 0 6px;border-top:2px solid #eee;padding-top:12px;">品項上下架</h3>
   <p style="font-size:0.8rem;color:var(--muted);">
-    每個品項有兩個獨立開關：<b>線上點餐</b>(共用同一份狀態) 跟 <b>POS功能</b>(獨立狀態，互不影響)。
+    每個品項有兩個開關：<b>線上點餐</b> 跟 <b>POS功能</b>。<b>兩邊狀態一樣時，改一邊另一邊會一起改</b>（例如本日售完不會漏改線上）；刻意設成不一樣的（例如只在門市賣）只改你點的那一邊。
     這裡改了會直接反映到對應的前台畫面，不需要老闆自己再跑去POS功能操作。
   </p>
   <p style="font-size:0.8rem;color:var(--muted);">
     <b>只在門市賣、線上不要出現</b>：分類右邊的「線上」選<b>不顯示</b>＝整個分類線上看不到；單一品項的線上點餐選<b>永久下架</b>＝線上看不到(本日售完則照舊灰色顯示)。都是立刻生效、不用發布，門市POS不受影響。
   </p>
+  <!-- 11-23 UX 🟡d：兩百多個品項要一個分類一個分類展開找 → 搜尋框 -->
+  <input type="search" id="avail-search" placeholder="🔍 搜尋品項或分類，例如：蛋餅" oninput="renderAvailabilityList()" style="width:100%;max-width:420px;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;margin:4px 0 10px;">
   <div id="availability-list"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-storeinfo" class="view" style="display:none;">
@@ -1861,6 +1865,7 @@ function renderBoStoreStatus_(st) {
   document.getElementById('bo-ops-pause-btn').textContent = st.paused ? '恢復接單' : '暫停接單';
 }
 function loadBoStoreStatus_() {
+  boPauseEodRefresh_();   // 11-23 UX 🟡b：順便更新「暫停到今天營業結束」選項
   return apiGet({ action: 'storeStatus', storeId: BO_OPS_STORE }).then(renderBoStoreStatus_).catch(() => {});
 }
 // PIN 視窗：名字固定是登入的人；bodyHtml 可放確認說明/黃色警告。
@@ -1905,10 +1910,49 @@ function boBusyClick_() {
       .catch(() => alert('網路異常，請重新整理確認狀態'));
   });
 }
+// 11-23 UX 🟡b：暫停只有 15／30／60 分鐘，臨時整天不接線上單沒有快捷 → 加「暫停到今天營業結束」
+//   結束時間照「商店時段設定」今天的營業時間（特殊日期優先）；已經過了營業時間就不顯示這個選項。到點自動恢復，晚上照樣能預訂明天
+let boPauseEod_ = null;   // {end:'13:00', endSec}
+function boTaipeiNow_() { return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Taipei' })); }
+function boPauseEodRefresh_() {
+  return apiGet({ action: 'storeScheduleSettings', storeId: BO_OPS_STORE }).then(d => {
+    boPauseEod_ = null;
+    if (d && d.status === 'ok') {
+      const now = boTaipeiNow_();
+      const ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      const sp = (d.specialDates || []).find(s => s.date === ymd);
+      const ranges = sp ? (sp.closed ? [] : [{ end: sp.end }]) : (d.businessHours || []).filter(r => Number(r.weekday) === now.getDay());
+      const ends = ranges.map(r => String(r.end || '')).filter(e => /^\d{1,2}:\d{2}/.test(e)).sort();
+      if (ends.length) {
+        const end = ends[ends.length - 1].slice(0, 5), [h, m] = end.split(':').map(Number);
+        boPauseEod_ = { end, endSec: h * 3600 + m * 60 };
+      }
+    }
+    boPauseEodPaint_();
+  }).catch(() => {});
+}
+function boPauseEodLeftMin_() {
+  if (!boPauseEod_) return 0;
+  const n = boTaipeiNow_(), nowSec = n.getHours() * 3600 + n.getMinutes() * 60 + n.getSeconds();
+  return Math.ceil((boPauseEod_.endSec - nowSec) / 60);
+}
+function boPauseEodPaint_() {
+  const sel = document.getElementById('bo-ops-pause-min');
+  if (!sel) return;
+  let opt = sel.querySelector('option[value="eod"]');
+  if (boPauseEodLeftMin_() > 0) {
+    if (!opt) { opt = document.createElement('option'); opt.value = 'eod'; sel.appendChild(opt); }
+    opt.textContent = '暫停到今天營業結束（' + boPauseEod_.end + '）';
+  } else if (opt) { if (sel.value === 'eod') sel.value = '15'; opt.remove(); }
+}
 function boPauseClick_() {
   const on = !!boStoreStatus_.paused;
-  const min = Number(document.getElementById('bo-ops-pause-min').value);
-  openBoOpsPinFor_('pause', on ? '恢復接單' : '暫停接單', on ? '' : '線上點餐暫停 ' + min + ' 分鐘，時間到自動恢復。門市平板會顯示是後台由你暫停的。', pin => {
+  const sel = document.getElementById('bo-ops-pause-min');
+  const eod = sel.value === 'eod';
+  const min = eod ? boPauseEodLeftMin_() : Number(sel.value);
+  if (!on && eod && !(min > 0)) { alert('今天已經過了營業時間，線上點餐不用暫停'); boPauseEodPaint_(); return; }
+  const what = eod ? '線上點餐暫停到今天營業結束（' + boPauseEod_.end + '），時間到自動恢復，顧客晚上照樣可以預訂明天的單。' : '線上點餐暫停 ' + min + ' 分鐘，時間到自動恢復。';
+  openBoOpsPinFor_('pause', on ? '恢復接單' : '暫停接單', on ? '' : what + '門市平板會顯示是後台由你暫停的。', pin => {
     boOpsPost_(on ? { action: 'clearPause', staffPin: pin } : { action: 'setPause', minutes: min, staffPin: pin })
       .then(d => { if (d.status !== 'ok') alert(d.message || '操作失敗'); return loadBoStoreStatus_(); })
       .catch(() => alert('網路異常，請重新整理確認狀態'));
@@ -2712,7 +2756,8 @@ function switchBackofficeTab(name) {
   document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
   document.getElementById('tab-btn-member')?.classList.toggle('active', name === 'member');   // 11-14 側欄分段後沒有「會員相關」群組鈕了
-  document.getElementById('tab-btn-posmanage').classList.toggle('active', name === 'posmanage');
+  document.getElementById('tab-btn-posmanage').classList.toggle('active', name === 'posmanage' && currentPosManageSubview !== 'report');
+  document.getElementById('tab-btn-report').classList.toggle('active', name === 'posmanage' && currentPosManageSubview === 'report');   // 11-23 UX 🟡a
   document.getElementById('tab-btn-group').classList.toggle('active', name === 'group');
   document.getElementById('view-group').style.display = name === 'group' ? 'block' : 'none';
   if (name === 'group' && !groupListLoaded) { groupListLoaded = true; loadGroupList(); }
@@ -3602,8 +3647,14 @@ function renderAvailabilityList() {
     });
   }
 
+  // 11-23 UX 🟡d：有打搜尋字 → 只列名字有這個字的品項（分類名稱對到就整個分類），分類自動展開
+  const qRaw = (document.getElementById('avail-search') || {}).value || '', q = qRaw.trim().toLowerCase();
+  let shown = 0;
   grouped.forEach((items, cat) => {
-    const expanded = availabilityExpandedCats.has(cat);
+    if (q && !String(cat).toLowerCase().includes(q)) items = items.filter(it => String(it.name).toLowerCase().includes(q));
+    if (q && !items.length) return;
+    shown++;
+    const expanded = q ? true : availabilityExpandedCats.has(cat);
     const row = document.createElement('div');
     row.className = 'mc-accordion-row';
 
@@ -3665,35 +3716,13 @@ function renderAvailabilityList() {
         const tabletGroup = document.createElement('div');
         tabletGroup.className = 'control-group';
         tabletGroup.innerHTML = '<span class="label">線上點餐</span>';
-        const tabletSelect = buildStatusSelect(tabletCurrent, (val, selectEl) => {
-          const previous = tabletCurrent;
-          tabletStatusMap[it.name] = val === '供應中' ? undefined : val;
-          apiPost({ action: 'setItemStatus', name: it.name, status: val })
-            .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); refreshMonthReminder_(); })
-            .catch(err => {
-              console.warn('雲端平板狀態同步失敗', err);
-              tabletStatusMap[it.name] = previous === '供應中' ? undefined : previous;
-              selectEl.value = previous;
-              alert(`「${it.name}」線上點餐狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
-            });
-        });
+        const tabletSelect = buildStatusSelect(tabletCurrent, (val, selectEl) => boAvailSet_(it, 'online', val, selectEl, tabletCurrent, posCurrent));
         tabletGroup.appendChild(tabletSelect);
 
         const posGroup = document.createElement('div');
         posGroup.className = 'control-group';
         posGroup.innerHTML = '<span class="label">POS功能</span>';
-        const posSelect = buildStatusSelect(posCurrent, (val, selectEl) => {
-          const previous = posCurrent;
-          posStatusMap[posStatusKey(it.category, it.name)] = val === '供應中' ? undefined : val;
-          apiPost({ action: 'setPosItemStatus', category: it.category, name: it.name, status: val })
-            .then(data => { if (data.status !== 'ok') throw new Error(data.message || '寫入失敗'); })
-            .catch(err => {
-              console.warn('POS功能狀態同步失敗', err);
-              posStatusMap[posStatusKey(it.category, it.name)] = previous === '供應中' ? undefined : previous;
-              selectEl.value = previous;
-              alert(`「${it.name}」POS功能狀態同步失敗，請確認網路連線後重試(畫面已還原)`);
-            });
-        });
+        const posSelect = buildStatusSelect(posCurrent, (val, selectEl) => boAvailSet_(it, 'pos', val, selectEl, tabletCurrent, posCurrent));
         posGroup.appendChild(posSelect);
 
         controls.appendChild(tabletGroup);
@@ -3704,6 +3733,37 @@ function renderAvailabilityList() {
       row.appendChild(body);
     }
     listEl.appendChild(row);
+  });
+  if (q && !shown) listEl.innerHTML = '<div class="empty-hint">找不到「' + escapeHtml(qRaw.trim()) + '」，換個字試試</div>';
+}
+
+// 11-23 UX 🟡c：線上點餐、POS功能兩份狀態各自獨立，本日售完常常只改到一邊（線上照賣、顧客付了錢到店才知道沒有）
+//   → 兩邊狀態本來一樣：改一邊另一邊一起改；本來就不一樣（例如只在門市賣＝線上永久下架）：只改點的那邊，不會把刻意的設定弄亂
+//   選「永久下架」先確認（不會自己恢復）
+function boAvailSet_(it, side, val, selectEl, tCur, pCur) {
+  const cur = side === 'online' ? tCur : pCur;
+  if (val === cur) return;
+  const both = tCur === pCur;
+  if (val === '永久下架' && !confirm('確定要把「' + it.name + '」' + (both ? '線上點餐和 POS 都' : (side === 'online' ? '線上點餐' : 'POS功能')) + '設成「永久下架」嗎？\n\n永久下架不會自己恢復，之後要回來改成「供應中」。')) { selectEl.value = cur; return; }
+  const doOn = side === 'online' || both, doPos = side === 'pos' || both;
+  const pKey = posStatusKey(it.category, it.name);
+  const setOn = v => { tabletStatusMap[it.name] = v === '供應中' ? undefined : v; };
+  const setPos = v => { posStatusMap[pKey] = v === '供應中' ? undefined : v; };
+  if (doOn) setOn(val);
+  if (doPos) setPos(val);
+  renderAvailabilityList();
+  const jobs = [];
+  if (doOn) jobs.push(apiPost({ action: 'setItemStatus', name: it.name, status: val })
+    .then(r => { if (r.status !== 'ok') throw new Error(r.message || '寫入失敗'); refreshMonthReminder_(); })
+    .catch(err => { setOn(tCur); throw new Error('線上點餐：' + err.message); }));
+  if (doPos) jobs.push(apiPost({ action: 'setPosItemStatus', category: it.category, name: it.name, status: val })
+    .then(r => { if (r.status !== 'ok') throw new Error(r.message || '寫入失敗'); })
+    .catch(err => { setPos(pCur); throw new Error('POS功能：' + err.message); }));
+  Promise.allSettled(jobs).then(rs => {
+    const bad = rs.filter(x => x.status === 'rejected').map(x => x.reason.message);
+    if (!bad.length) return;
+    renderAvailabilityList();
+    alert('「' + it.name + '」' + (jobs.length > 1 && bad.length < jobs.length ? '有一邊' : '') + '沒有改成功（沒成功的那邊已還原，畫面就是現在的狀態）：\n' + bad.join('\n') + '\n\n請確認網路連線後再改一次');
   });
 }
 
