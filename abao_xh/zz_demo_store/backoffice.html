@@ -457,7 +457,7 @@
   </div>
   <button id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
   <button id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
-  <button id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">區塊配置</button>
+  <button id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">新品／好康</button>
   <div class="nav-sec brand" data-sec="brand" role="button" tabindex="0" title="點一下收合／展開">🟣 品牌共用<span class="sec-caret">▼</span><small>全部門市一起生效</small></div>
   <button class="nav-brand" id="mb-sub-btn-members" onclick="switchMemberSubview('members')">👥 會員清單</button>
   <button class="nav-brand" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
@@ -791,7 +791,7 @@
       <div style="margin-bottom:4px;">新店「籌備中」時顧客還不能線上點餐，平板可以結帳做內部測試。會複製什麼、不會複製什麼：</div>
       <ul class="os-list">
         <li>✅ 從這間店複製：營業時間、接單時間、取餐設定、飲品升級規則、角色權限、線下／第三方收款清單、自取規則（新店沒填才帶）</li>
-        <li>✅ 從品牌範本帶入並發布：菜單（分類、品項、客製化）、優惠券、集點禮、加價購、區塊配置</li>
+        <li>✅ 從品牌範本帶入並發布：菜單（分類、品項、客製化）、優惠券、集點禮、加價購、新品／好康</li>
         <li>⚠ 付款方式：線上刷卡、Apple Pay、線上／線下 LINE Pay、取餐付款<b>全部先關</b>（新店還沒有自己的藍新、LINE Pay），之後到新店後台「付款方式」自己開</li>
         <li>❌ 不複製：店長／夥伴帳號（老闆帳號全品牌通用，店長、夥伴到新店後台建）、店休日、售完狀態、訂單、平板</li>
         <li>🔁 「籌備中」的店可以再按一次，重新抓這間店最新的設定和品牌範本；營業中的店（啟用而且有訂單）不能按</li>
@@ -876,7 +876,7 @@
       <li>效果：固定金額折抵，或依購買品項打折／免費／加一元多一件。</li>
       <li>勾「顯示為 POS 按鈕」＝出現在門市平板「優惠券」分類讓店員點，而且只在券的生效日～到期日之間出現。</li>
       <li>沒勾＝只能透過集點兌換、生日禮、註冊禮、店員贈送取得。</li>
-      <li>線上要自動套用，要綁在「區塊配置 → 會員好康」的活動上。</li>
+      <li>線上要自動套用，要綁在「新品／好康 → 會員好康」的活動上。</li>
     </ul></details>
     <div id="pm-domain-controls"></div>
     <div class="mc-layout">
@@ -896,7 +896,7 @@
       線上點餐頁「新品推薦」「會員好康」兩個分頁的內容。
     </p>
     <details class="hb-rule" style="margin:-6px 0 10px;"><summary>規則說明</summary><ul>
-      <li>改的是草稿，按「發布到正式版」顧客才看得到；優惠券、集點禮、加價購、區塊配置一起發布。</li>
+      <li>改的是草稿，按「發布到正式版」顧客才看得到；優惠券、集點禮、加價購、新品／好康一起發布。</li>
       <li>會員好康的活動綁了券，優惠日線上會自動套用；沒綁就只顯示。</li>
     </ul></details>
     <div id="hb-domain-controls"></div>
@@ -2995,7 +2995,7 @@ function osSubmit_(id) {
   const prep = osStatusOf_(s) === 'prep';
   const msg = (prep ? '重新抓最新設定：' : '開新店：') + osName_(s) + '\n\n' +
     '會從「' + boStoreShortName_() + '」複製：營業／接單時間、取餐設定、飲品升級、權限、收款清單\n' +
-    '會從品牌範本帶入並發布：菜單、優惠券、集點禮、加價購、區塊配置\n' +
+    '會從品牌範本帶入並發布：菜單、優惠券、集點禮、加價購、新品／好康\n' +
     '付款方式線上收款、LINE Pay、取餐付款全部先關\n\n' +
     (prep ? '這間店原本的設定、菜單、優惠會被覆蓋（覆蓋前菜單、優惠會自動備份）。\n' : '') + '新店狀態＝籌備中（顧客還不能線上點餐）。確定？';
   if (!confirm(msg)) return;
@@ -3172,7 +3172,7 @@ function renderSchedHours(kind, type, rules, containerId) {
         <span>～</span>
         <input type="time" class="sched-end" value="${escapeHtml(r.end)}">
         <button type="button" onclick="schedSaveRange('${kind}','${type}',this)">儲存</button>
-        <button type="button" onclick="schedDeleteRange('${kind}','${type}',this)">刪除</button>
+        <button type="button" onclick="schedDeleteRange('${kind}','${type}',this)" style="margin-left:18px;color:#c0392b;border-color:#e3a8a0;">刪除</button>
       </div>`).join('');
     return `
       <div class="sched-day-row">
@@ -3931,7 +3931,7 @@ function renderMonthReminder_(items) {
   mrItems = items;
   const box = document.getElementById('month-remind');
   if (!items.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
-  const goLabel = { promo: '去優惠券', blocks: '去區塊配置' };
+  const goLabel = { promo: '去優惠券', blocks: '去新品／好康' };
   box.innerHTML = `
     <div class="mr-head" onclick="mrOpen=!mrOpen;renderMonthReminder_(mrItems);">
       🔔 待更新的活動優惠／新品（${items.length}）<span class="mr-caret">${mrOpen ? '收起' : '展開'}</span>
@@ -4130,7 +4130,7 @@ function checkPublishRefs_(which) {
         : '⚠ 這份菜單發布後，以下正式上線的設定會連不到品項／分類：';
       const tail = which === 'promo'
         ? '發布後線上會顯示「暫停供應」或優惠用不到。建議先到「菜單管理」發布菜單。'
-        : '發布後線上會顯示「暫停供應」或優惠用不到。建議先到「優惠券」「區塊配置」改好這些設定。';
+        : '發布後線上會顯示「暫停供應」或優惠用不到。建議先到「優惠券」「新品／好康」改好這些設定。';
       return confirm(head + '\n' + issues.map(x => '・' + x).join('\n') + '\n\n' + tail + '\n\n按「確定」仍然發布，按「取消」先不發布。');
     });
 }
@@ -4395,10 +4395,10 @@ function renderMcItemEditor() {
     </div>
     <div class="mc-field-row">
       <label class="mc-field">套餐價格<input id="mc-f-priceset" type="number" value="${item.price_set ?? ''}"></label>
-      <label class="mc-field">副價格(選填，第二份量選項的價格)<input id="mc-f-pricealt" type="number" value="${item.price_alt ?? ''}"></label>
+      <label class="mc-field">第二種份量的價格（選填）<input id="mc-f-pricealt" type="number" value="${item.price_alt ?? ''}"></label>
     </div>
     <div style="font-size:0.75rem;color:var(--muted);margin:-6px 0 8px;">
-      填了「副價格」後，線上點餐會多顯示一個可選份量按鈕，前提是品項名稱要包含「(選項1/選項2)」格式，例如「蛋餅(半份/一份)」——「價格」對應第一個選項、「副價格」對應第二個選項
+      品名寫成「蛋餅(半份/一份)」這種格式時才用得到：上面「價格」填半份的價格，這格填一份的價格。填了之後，線上點餐會多一顆份量按鈕讓顧客選
     </div>
     <label class="mc-field">備註<textarea id="mc-f-note" rows="2">${escapeHtml(item.note || '')}</textarea></label>
     <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;margin:8px 0;">
@@ -5290,7 +5290,7 @@ function renderPromoDomainControls() {
     <div class="edit-target-bar${isBrand ? ' brand' : ''}">
       <b>正在改：</b>
       <select onchange="mcSwitchStoreEverywhere_(this.value)">${MC_STORE_OPTIONS.map(o => `<option value="${escapeHtml(o.id)}"${o.id === MC_STORE_ID ? ' selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}</select>
-      <span>${isBrand ? '改好按下面「同步到分店」' : '這間店的草稿，按「發布到正式版」才生效'}；菜單、優惠券、集點禮、區塊配置一起切換</span>
+      <span>${isBrand ? '改好按下面「同步到分店」' : '這間店的草稿，按「發布到正式版」才生效'}；菜單、優惠券、集點禮、新品／好康一起切換</span>
     </div>
     <div style="display:${isBrand ? 'none' : 'flex'};gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
       <button type="button" class="mc-save-btn" onclick="publishPromoDomain(this)">發布到正式版</button>
@@ -5385,7 +5385,7 @@ function publishPromoDomain(btn) {
   checkPublishRefs_('promo').then(goOn => { if (goOn) publishPromoDomainGo_(btn); });
 }
 function publishPromoDomainGo_(btn) {
-  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的集點禮/優惠券/加價購/區塊配置草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
+  if (!confirm('確定要把「' + mcStoreNameOf_(MC_STORE_ID) + '」的集點禮/優惠券/加價購/新品／好康草稿整批覆蓋發布成正式上線版本嗎？\n\n・這是整批覆蓋，不是合併\n・發布後顧客/POS會立刻看到最新設定\n・系統會自動存一份發布前的快照，之後可以在「📜版本回溯」復原\n\n請確認草稿內容都已經檢查過再繼續。')) return;
   btn.disabled = true; btn.textContent = '發布中...';
   apiPost({ action: 'publishStorePromos', storeId: MC_STORE_ID }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '發布失敗');
@@ -5402,7 +5402,7 @@ function syncPromoDomainToStores(alsoPublish, btn) {
   const label = alsoPublish ? '同步且發布' : '同步（只到草稿）';
   // 11-23 UX ③：原本只寫「集點禮/優惠券」、沒寫店名；其實加價購、新品推薦、好康活動也一起覆蓋
   if (!confirm('確定要把品牌範本' + label + '到：' + checked.map(id => mcStoreNameOf_(id)).join('、') + '？\n\n'
-    + '・會整批覆蓋這些店的：優惠券、集點禮、加價購、新品推薦卡片、好康活動（區塊配置）\n'
+    + '・會整批覆蓋這些店的：優惠券、集點禮、加價購、新品推薦卡片、會員好康活動（新品／好康）\n'
     + '・不是合併：分店自己改的會被蓋掉（鎖定的除外）\n'
     + (alsoPublish ? '・同步且發布：顧客馬上就會看到新的內容\n' : '・只到草稿：各店要再按「發布到正式版」，顧客才會看到\n')
     + '・系統會自動存一份覆蓋前的快照，之後可以在「📜版本回溯」復原')) return;
@@ -5498,7 +5498,7 @@ function loadHomeBlocks() {
     refreshPromoPublishDiff_();
   }).catch(err => {
     document.getElementById('hb-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
-    console.warn('區塊配置讀取失敗', err);
+    console.warn('新品／好康讀取失敗', err);
   });
 }
 function switchHbTab(tab, keepSelection) {
