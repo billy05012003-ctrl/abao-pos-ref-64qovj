@@ -322,6 +322,12 @@
   .pmg-crumb a { color:var(--brand); cursor:pointer; text-decoration:none; font-weight:600; }
   .pmg-kv { display:grid; grid-template-columns:120px 1fr; gap:6px 8px; font-size:0.88rem; }
   .pmg-kv div:nth-child(odd) { color:var(--muted); }
+  /* 11-23 後台 UX 🔴：「同步且發布」會立刻上線到多間店 → 紅框、跟「只到草稿」分開；時段改了還沒存 → 淡黃底 */
+  .bo-live-btn { background:#fff !important; color:#c0392b !important; border:2px solid #c0392b !important; margin-left:24px; }
+  div:has(> .bo-live-btn) { flex-wrap:wrap; row-gap:14px; }
+  @media (max-width:600px) { .bo-live-btn { margin-left:0; } }
+  .sched-range-item.sched-dirty { background:#fff8e1; border-radius:6px; }
+  .sched-range-item.sched-dirty::after { content:'還沒儲存'; font-size:0.72rem; color:#b35c00; margin-left:4px; }
   /* 11-23 出單簡稱（菜單管理 → 出單簡稱） */
   .pl-live { display:inline-block; background:#e8f6ec; color:#1f7a3a; border-radius:6px; padding:3px 8px; font-size:0.82rem; font-weight:700; margin:0 0 10px; }
   .pl-tbl { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
@@ -414,7 +420,7 @@
   <div class="nav-sec store" data-sec="store" role="button" tabindex="0" title="點一下收合／展開">🟠 這間店<span class="sec-caret">▼</span></div>
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">上下架管理</button>
   <button id="tab-btn-merchant" onclick="toggleMerchantGroup()">
-    <span class="group-toggle">商家管理 <span class="group-caret" id="merchant-caret">▶</span></span>
+    <span class="group-toggle">商家管理 <span id="bo-merchant-badge" title="金流告警還沒處理" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span> <span class="group-caret" id="merchant-caret">▶</span></span>
   </button>
   <div class="sub-list" id="merchant-sublist">
     <button class="sub-item" id="mch-sub-btn-storeinfo" onclick="switchMerchantSubview('storeinfo')">店家資訊</button>
@@ -707,7 +713,7 @@
     <div id="mc-sync-store-list" style="display:flex;gap:12px;flex-wrap:wrap;font-size:0.85rem;"></div>
     <div style="display:flex;gap:8px;">
       <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(false, this)">同步（只到草稿）</button>
-      <button type="button" class="mc-save-btn" onclick="syncBrandMenuToStores(true, this)">同步且發布</button>
+      <button type="button" class="mc-save-btn bo-live-btn" onclick="syncBrandMenuToStores(true, this)">同步且發布（勾選的店會立刻上線）</button>
     </div>
   </div>
   <div style="margin-bottom:16px;">
@@ -1222,10 +1228,21 @@ function boFeedbackEnd_(fb, d) {
   const a = fb.action;
   const done = /^resolve/.test(a) ? '已處理' : /^delete/.test(a) ? '已刪除' : /^publish/.test(a) ? '已發布' : /^sync/.test(a) ? '已同步' : /^restore/.test(a) ? '已回復'
     : /^upload/.test(a) ? '已上傳' : /^reorder/.test(a) ? '已更新排序' : '已儲存';
+  // 11-23 UX ④：菜單、優惠券、集點禮、加價購、區塊配置改的是草稿，原本只跳「已儲存」，店長以為已經上線
+  if (d && d.status === 'ok' && BO_DRAFT_ACTIONS_.includes(a)) {
+    const brand = typeof MC_STORE_ID !== 'undefined' && MC_STORE_ID === '__brand__';
+    boToast_('✅ ' + (done === '已儲存' ? '已存到草稿' : done + '（草稿）') + (brand ? '，要「同步到分店」各店才會更新' : '，記得按「發布到正式版」才會上線'), true, 5000);
+    return;
+  }
   if (d && d.status === 'ok') boToast_('✅ ' + done, true);
   else boToast_('⚠ 沒有成功' + (d && d.message ? '：' + d.message : d ? '' : '（網路異常）'), false);
 }
-function boToast_(text, ok) {
+// 11-23 UX ④：改的是草稿（要發布才上線）的動作
+const BO_DRAFT_ACTIONS_ = ['upsertMenuItem', 'deleteMenuItem', 'upsertOptionGroup', 'deleteOptionGroup', 'upsertOptionValue', 'deleteOptionValue',
+  'setItemGroupLinks', 'copyItemGroupLinks', 'bulkAttachGroupToCategory', 'setItemComboGroupLinks', 'copyItemComboGroupLinks', 'reorderMenuCategories', 'reorderMenuItems',
+  'upsertPromo', 'deletePromo', 'reorderPromos', 'upsertPointGift', 'deletePointGift', 'upsertAddon', 'deleteAddon', 'reorderAddons',
+  'upsertHomeCard', 'deleteHomeCard', 'reorderHomeCards', 'upsertHomeAct', 'deleteHomeAct', 'reorderHomeActs', 'seedHomeActs'];
+function boToast_(text, ok, ms) {
   let el = document.getElementById('bo-toast');
   if (!el) {
     el = document.createElement('div');
@@ -1238,7 +1255,7 @@ function boToast_(text, ok) {
   el.style.color = '#fff';
   el.style.opacity = '1';
   clearTimeout(boToast_.t);
-  boToast_.t = setTimeout(() => { el.style.opacity = '0'; }, ok ? 2000 : 4000);
+  boToast_.t = setTimeout(() => { el.style.opacity = '0'; }, ms || (ok ? 2000 : 4000));
 }
 
 // ---- POS後台登入(2026-09-25)：閘門之外再用店長/老闆PIN登入，後端發12小時通行證，改資料都要帶著 ----
@@ -2430,10 +2447,13 @@ if (NEW_API_) {
 function psOwnerOnly_() { return NEW_API_ && !isBoOwner_(); }
 function payAlertTime_(v) { const ms = typeof v === 'number' ? v : Date.parse(v); return isNaN(ms) ? '—' : boFmtMs_(ms); }
 function setPayAlertBadge_(n) {
-  const el = document.getElementById('bo-payalert-badge');
-  if (!el) return;
-  el.textContent = n > 99 ? '99+' : String(n);
-  el.style.display = n > 0 ? '' : 'none';
+  // 11-23 UX ①：「商家管理」收起來時，子選單的數字看不到 → 群組標題旁也顯示一份
+  ['bo-payalert-badge', 'bo-merchant-badge'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = n > 99 ? '99+' : String(n);
+    el.style.display = n > 0 ? '' : 'none';
+  });
 }
 // 老闆登入後：有沒處理的告警就在最上面跳紅條(沿用原本備份紅條的位置)，選單也顯示數字
 function checkPayAlertWarn_() {
@@ -2442,8 +2462,8 @@ function checkPayAlertWarn_() {
   apiGet({ action: 'paymentAlerts', storeId: BO_HOME_STORE_ }).then(d => {
     const n = d && d.status === 'ok' ? (d.alerts || []).length : 0;
     setPayAlertBadge_(n);
-    if (!n || !isBoOwner_()) { box.style.display = 'none'; return; }
-    box.innerHTML = `⚠ 有 ${n} 筆金流告警還沒處理（付款或退款需要人工核對）。<button type="button" onclick="switchMerchantSubview('payalert')">去看</button>`;
+    if (!n) { box.style.display = 'none'; return; }   // 11-23 UX ①：店長也看得到紅條（「標記已處理」還是只有老闆能按）
+    box.innerHTML = `⚠ 有 ${n} 筆金流告警還沒處理（付款或退款需要人工核對）${isBoOwner_() ? '' : '，請通知老闆處理'}。<button type="button" onclick="switchMerchantSubview('payalert')">去看</button>`;
     box.style.display = 'block';
   }).catch(() => {});
 }
@@ -2686,6 +2706,7 @@ function deletePosStaffRow() {
 }
 
 function switchBackofficeTab(name) {
+  if (!boLeaveOk_()) return;   // 11-23 UX ⑤：品項視窗改了還沒存
   boCurrentTab_ = name; boUpdateScope_();   // 11-14 品牌／門市區隔：子分頁變數在呼叫前就設好了
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
@@ -3024,7 +3045,7 @@ function switchSchedSubview(name) {
 }
 
 function loadScheduleData() {
-  apiGet({ action: 'storeScheduleSettings', storeId: SCHED_STORE_ID }).then(data => {
+  return apiGet({ action: 'storeScheduleSettings', storeId: SCHED_STORE_ID }).then(data => {   // 11-23 回傳 promise：存一段後要把其他還沒存的改動放回去
     if (data.status !== 'ok') {
       ['sched-hours-list', 'sched-order-list', 'sched-pickup-form', 'sched-special-list'].forEach(id => {
         document.getElementById(id).innerHTML = '<div class="empty-hint">讀取失敗：' + escapeHtml(data.message || '') + '</div>';
@@ -3095,6 +3116,63 @@ function renderSchedHours(kind, type, rules, containerId) {
       </div>`;
   }).join('');
   t24Upgrade_(container);
+  if (!container.dataset.dirtyWatch) {   // 11-23 UX ⑥：改了還沒按儲存的時段標淡黃底「還沒儲存」
+    container.dataset.dirtyWatch = '1';
+    container.addEventListener('change', e => { const row = e.target.closest('.sched-range-item[data-orig-start]'); if (row) row.classList.add('sched-dirty'); });
+  }
+}
+// 11-23 UX ⑥：原本按某一天的「儲存」會整頁重新載入，其他天改好還沒存的會悄悄變回原樣
+//   → 重新載入前先記下其他還沒存的時段（含「新增時段」那格已經填的），載入後放回去並標「還沒儲存」
+function schedPendingEdits_(skipRow) {
+  const out = [];
+  ['sched-hours-list', 'sched-order-list'].forEach(cid => {
+    const c = document.getElementById(cid);
+    if (!c) return;
+    c.querySelectorAll('.sched-range-item').forEach(row => {
+      if (row === skipRow) return;
+      const wd = row.dataset.weekday || (row.closest('.sched-ranges') || {}).dataset && row.closest('.sched-ranges').dataset.weekday;
+      if (row.dataset.origStart !== undefined) {
+        if (!row.classList.contains('sched-dirty')) return;
+        out.push({ cid, wd: String(wd), orig: row.dataset.origStart, start: row.querySelector('.sched-start').value, end: row.querySelector('.sched-end').value });
+      } else {
+        const s = row.querySelector('.sched-start-new'), e = row.querySelector('.sched-end-new');
+        if (s && e && (s.value || e.value)) out.push({ cid, wd: String(wd), orig: null, start: s.value, end: e.value });
+      }
+    });
+  });
+  return out;
+}
+function schedSetTime_(inp, v) {
+  if (!inp) return;
+  inp.value = v || '';
+  const wrap = inp.previousElementSibling;
+  if (wrap && wrap.classList.contains('t24')) {
+    const [hs, ms] = wrap.querySelectorAll('select');
+    const [h, m] = (v || '').split(':');
+    hs.value = h || ''; ms.value = m || '';
+  }
+}
+function schedRestoreEdits_(list) {
+  list.forEach(p => {
+    const c = document.getElementById(p.cid);
+    if (!c) return;
+    const box = c.querySelector('.sched-ranges[data-weekday="' + p.wd + '"]');
+    if (!box) return;
+    if (p.orig !== null) {
+      const row = [...box.querySelectorAll('.sched-range-item[data-orig-start]')].find(r => r.dataset.origStart === p.orig);
+      if (!row) return;
+      schedSetTime_(row.querySelector('.sched-start'), p.start); schedSetTime_(row.querySelector('.sched-end'), p.end);
+      row.classList.add('sched-dirty');
+    } else {
+      const row = box.querySelector('.sched-start-new') && box.querySelector('.sched-start-new').closest('.sched-range-item');
+      if (!row) return;
+      schedSetTime_(row.querySelector('.sched-start-new'), p.start); schedSetTime_(row.querySelector('.sched-end-new'), p.end);
+    }
+  });
+}
+function schedReloadKeep_(skipRow) {
+  const keep = schedPendingEdits_(skipRow);
+  return loadScheduleData().then(() => { schedRestoreEdits_(keep); return keep.length; });
 }
 
 function schedSaveRange(kind, type, btn) {
@@ -3108,7 +3186,7 @@ function schedSaveRange(kind, type, btn) {
     action: 'upsertScheduleRule',
     rule: { storeId: SCHED_STORE_ID, type, weekday, start, end, status: '啟用', originalKey: `${SCHED_STORE_ID}||${type}||${weekday}||${origStart}` }
   }).then(data => {
-    if (data.status === 'ok') { alert('已儲存'); loadScheduleData(); }
+    if (data.status === 'ok') schedReloadKeep_(row).then(n => alert('已儲存' + (n ? '\n\n還有 ' + n + ' 個時段改了還沒儲存，記得也要按那一格的「儲存」或「+ 新增時段」' : '')));
     else alert('儲存失敗：' + (data.message || ''));
   });
 }
@@ -3119,7 +3197,7 @@ function schedDeleteRange(kind, type, btn) {
   const weekday = Number(row.dataset.weekday);
   const start = row.dataset.origStart;
   apiPost({ action: 'deleteScheduleRule', storeId: SCHED_STORE_ID, type, weekday, start }).then(data => {
-    if (data.status === 'ok') loadScheduleData();
+    if (data.status === 'ok') schedReloadKeep_(row);
     else alert('刪除失敗：' + (data.message || ''));
   });
 }
@@ -3130,7 +3208,7 @@ function schedAddRange(kind, type, weekday, btn) {
   const end = row.querySelector('.sched-end-new').value;
   if (!start || !end) { alert('請填完整開始/結束時間'); return; }
   apiPost({ action: 'upsertScheduleRule', rule: { storeId: SCHED_STORE_ID, type, weekday, start, end, status: '啟用' } }).then(data => {
-    if (data.status === 'ok') loadScheduleData();
+    if (data.status === 'ok') schedReloadKeep_(row);
     else alert('新增失敗：' + (data.message || ''));
   });
 }
@@ -3199,7 +3277,7 @@ function schedAddSpecialDate() {
       document.getElementById('sched-special-new-closed').checked = false;
       document.getElementById('sched-special-new-note').value = '';
       schedToggleSpecialClosedFields_();
-      loadScheduleData();
+      schedReloadKeep_(null);   // 11-23 UX ⑥：每週時段改了還沒存的不要被蓋掉
     } else alert('新增失敗：' + (data.message || ''));
   });
 }
@@ -3207,7 +3285,7 @@ function schedAddSpecialDate() {
 function schedDeleteSpecialDate(date) {
   if (!confirm('確定要刪除「' + date + '」這筆特殊日期設定嗎？')) return;
   apiPost({ action: 'deleteSpecialDate', storeId: SCHED_STORE_ID, date }).then(data => {
-    if (data.status === 'ok') loadScheduleData();
+    if (data.status === 'ok') schedReloadKeep_(null);
     else alert('刪除失敗：' + (data.message || ''));
   });
 }
@@ -3237,8 +3315,15 @@ function pmSettingRow_(key, name, on, lock, desc, warn) {
       <div style="flex-basis:100%;font-size:0.76rem;color:${warn ? '#c0392b' : 'var(--muted)'};line-height:1.5;">${desc}</div>
     </div>`;
 }
+// 11-23 UX ⑦：點一下就生效、沒有確認；手滑關掉顧客馬上不能付款 → 關掉前先問（打開不用問）
+const PM_OFF_CONFIRM_ = {
+  payAtPickup: ['取餐現場付款', ''], credit: ['線上信用卡', '\n・Apple Pay 也會一起關掉'], applePay: ['Apple Pay', ''], linePayOnline: ['線上 LINE Pay', ''],
+  linePayScan: ['門市 LINE Pay 掃碼收款', '\n・LINE Pay 支付載具也會一起關掉'], linePayCarrier: ['LINE Pay 支付載具', ''], twqr: ['門市 TWQR', ''], aftee: ['AFTEE 先享後付', ''],
+};
 function pmSettingToggle_(key, el) {
   const on = el.checked;
+  const oc = PM_OFF_CONFIRM_[key];
+  if (!on && oc && !confirm('確定要關掉「' + oc[0] + '」嗎？\n\n・關掉後顧客馬上不能用「' + oc[0] + '」付款' + oc[1])) { el.checked = true; return; }
   el.disabled = true;
   apiGet({ action: 'paymentMethodSettings', storeId: SCHED_STORE_ID }).then(cur => {
     if (cur.status !== 'ok') throw new Error('讀取目前設定失敗');
@@ -4123,20 +4208,54 @@ function scrollEditorIntoView_(id) {
   if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' });
 }
 function pmScrollEditor_() { scrollEditorIntoView_('pm-editor'); }
+// 11-23 UX ⑧：手機上清單和編輯框是上下排，點清單裡的一筆，編輯框出現在畫面下方看不到（以為沒反應）→ 自動捲過去
+//   只在「上下排」時捲（編輯框在清單下面）；電腦左右排不動。清單裡的排序把手、勾選框不算
+document.addEventListener('click', e => {
+  const t = e.target;
+  if (!t || !t.closest || t.closest('.mc-cat-handle, input, select, textarea')) return;
+  const hit = t.closest('.mc-layout > .mc-col:not(.mc-col-wide) .mc-item-row, .mc-layout > .mc-col:not(.mc-col-wide) .mt-row, .mc-layout > .mc-col:not(.mc-col-wide) .mc-add-btn');
+  if (!hit) return;
+  const lay = hit.closest('.mc-layout'), listCol = hit.closest('.mc-col'), wide = lay && lay.querySelector(':scope > .mc-col-wide');
+  if (!wide) return;
+  setTimeout(() => {
+    if (wide.getBoundingClientRect().top < listCol.getBoundingClientRect().bottom - 4) return;   // 左右排（電腦）：不用捲
+    const r = wide.getBoundingClientRect();
+    if (r.top > window.innerHeight - 120 || r.top < 0) wide.scrollIntoView({ block: 'start' });
+  }, 80);
+});
 // 字串列表(innerHTML 組出來的)用的拖曳把手
 function sortHandleHtml_(onDown) {
   return `<span class="mc-cat-handle" title="拖曳調整順序" onpointerdown="${onDown}" onclick="event.stopPropagation()">⠿</span>`;
 }
 
 // 品項編輯用彈出視窗(modal)：開啟時渲染renderMcItemEditor()，關閉時清掉mcCurrentItem
+// 11-23 UX ⑤：改到一半點到灰色背景、按 ×、切到別頁，改的內容直接不見 → 有改過沒存就先問
+let mcItemDirty_ = false;
 function openMcItemModal() {
   renderMcItemEditor();
+  mcItemDirty_ = false;
+  const body = document.getElementById('mc-item-modal-body');
+  if (!body.dataset.dirtyWatch) {
+    body.dataset.dirtyWatch = '1';
+    // 只算品項欄位（mc-f-*）；客製化選項掛載、照片是按了就存，不算「還沒儲存」
+    ['input', 'change'].forEach(ev => body.addEventListener(ev, e => { if (e.target && /^mc-f-/.test(e.target.id || '')) mcItemDirty_ = true; }));
+  }
   document.getElementById('mc-item-modal-overlay').style.display = 'flex';
 }
 
-function closeMcItemModal() {
-  document.getElementById('mc-item-modal-overlay').style.display = 'none';
+function closeMcItemModal(force) {
+  const ov = document.getElementById('mc-item-modal-overlay');
+  if (!force && ov.style.display !== 'none' && mcItemDirty_ && !confirm('這個品項改了還沒儲存，要放棄修改嗎？\n\n按「取消」回去繼續改，記得按「儲存」。')) return false;
+  ov.style.display = 'none';
   mcCurrentItem = null;
+  mcItemDirty_ = false;
+  return true;
+}
+// 切到別頁前：品項視窗開著又改過 → 先問；按取消就留在原頁
+function boLeaveOk_() {
+  const ov = document.getElementById('mc-item-modal-overlay');
+  if (ov && ov.style.display !== 'none') return closeMcItemModal() !== false;
+  return true;
 }
 
 function renderMcItemEditor() {
@@ -4297,7 +4416,8 @@ function saveMcItem() {
     mcCurrentItem = { category: payload.category, name: payload.name };
     mcExpandedCats.add(payload.category);
     // 存完不關視窗——新增品項第一次存檔後才能接著設定客製化選項，重繪modal內容(此時isNew會變false)
-    return loadMenuCms().then(() => renderMcItemEditor());
+    mcItemDirty_ = false;
+    return loadMenuCms().then(() => { renderMcItemEditor(); mcItemDirty_ = false; });
   }).catch(err => alert('儲存失敗：' + err.message));
 }
 
@@ -4305,7 +4425,7 @@ function deleteMcItem() {
   if (!confirm('確定要刪除「' + mcCurrentItem.name + '」嗎？此動作無法復原。')) return;
   apiPost({ action: 'deleteMenuItem', category: mcCurrentItem.category, name: mcCurrentItem.name, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
-    closeMcItemModal();
+    closeMcItemModal(true);
     return loadMenuCms();
   }).catch(err => alert('刪除失敗：' + err.message));
 }
@@ -5072,7 +5192,7 @@ function renderPromoDomainControls() {
       </div>
       <div style="display:flex;gap:8px;">
         <button type="button" class="mc-save-btn" onclick="syncPromoDomainToStores(false, this)">同步（只到草稿）</button>
-        <button type="button" class="mc-save-btn" onclick="syncPromoDomainToStores(true, this)">同步且發布</button>
+        <button type="button" class="mc-save-btn bo-live-btn" onclick="syncPromoDomainToStores(true, this)">同步且發布（勾選的店會立刻上線）</button>
       </div>
     </div>
     <div style="margin-bottom:16px;">
@@ -5169,11 +5289,16 @@ function syncPromoDomainToStores(alsoPublish, btn) {
   const checked = Array.from(btn.closest('.promo-sync-row').querySelectorAll('.promo-sync-store-cb:checked')).map(cb => cb.value);
   if (!checked.length) { alert('請至少勾選一間要同步的分店'); return; }
   const label = alsoPublish ? '同步且發布' : '同步（只到草稿）';
-  if (!confirm('確定要把品牌範本的集點禮/優惠券' + label + '到勾選的分店嗎？\n\n・這是整批覆蓋目的地，不是合併\n・系統會自動存一份覆蓋前的快照，之後可以在「📜版本回溯」復原')) return;
+  // 11-23 UX ③：原本只寫「集點禮/優惠券」、沒寫店名；其實加價購、新品推薦、好康活動也一起覆蓋
+  if (!confirm('確定要把品牌範本' + label + '到：' + checked.map(id => mcStoreNameOf_(id)).join('、') + '？\n\n'
+    + '・會整批覆蓋這些店的：優惠券、集點禮、加價購、新品推薦卡片、好康活動（區塊配置）\n'
+    + '・不是合併：分店自己改的會被蓋掉（鎖定的除外）\n'
+    + (alsoPublish ? '・同步且發布：顧客馬上就會看到新的內容\n' : '・只到草稿：各店要再按「發布到正式版」，顧客才會看到\n')
+    + '・系統會自動存一份覆蓋前的快照，之後可以在「📜版本回溯」復原')) return;
   btn.disabled = true;
   apiPost({ action: 'syncBrandPromosToStores', storeIds: checked, alsoPublish }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '同步失敗');
-    alert('同步完成');
+    alert('同步完成' + (alsoPublish ? '（已一併發布，顧客已經看得到）' : '（已寫入分店草稿，還沒發布）'));
   }).catch(err => alert('同步失敗：' + err.message))
     .finally(() => { btn.disabled = false; });
 }
