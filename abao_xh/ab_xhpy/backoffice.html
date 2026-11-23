@@ -5,7 +5,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>POS後台</title>
 <style>
   :root { --brand: #e8632c; --bg: #f5f5f5; --muted: #888; --border: #eee0d4; --card: #fff; }
@@ -322,6 +322,11 @@
   .pmg-crumb a { color:var(--brand); cursor:pointer; text-decoration:none; font-weight:600; }
   .pmg-kv { display:grid; grid-template-columns:120px 1fr; gap:6px 8px; font-size:0.88rem; }
   .pmg-kv div:nth-child(odd) { color:var(--muted); }
+  /* 11-23 UX 🟡e：手機上下拉選單、輸入框太小難點；字 16 號以上 iPhone 點輸入框才不會自己跳放大（放大限制已拿掉，可以兩指放大） */
+  @media (max-width:700px) {
+    .main-content select, .main-content input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]), .main-content textarea { font-size:16px !important; min-height:40px; }
+    .main-content textarea { min-height:64px; }
+  }
   /* 11-23 後台 UX 🔴：「同步且發布」會立刻上線到多間店 → 紅框、跟「只到草稿」分開；時段改了還沒存 → 淡黃底 */
   .bo-live-btn { background:#fff !important; color:#c0392b !important; border:2px solid #c0392b !important; margin-left:24px; }
   div:has(> .bo-live-btn) { flex-wrap:wrap; row-gap:14px; }
@@ -546,6 +551,7 @@
       <h3>當日營收 <span class="ops-refresh" onclick="loadBoRevenue_()">重新整理</span></h3>
       <div class="ops-money" id="bo-ops-revenue">—</div>
       <div class="ops-meta" id="bo-ops-revenue-count"></div>
+      <div class="ops-meta" style="margin-top:2px;">今天取餐、已收款的單；不含外送平台、待收款、作廢、退款（＝報表的「銷售淨額 − 外送平台」）</div>
       <div class="ops-meta" style="margin-top:4px;"><a style="color:var(--brand);cursor:pointer;font-weight:600;" onclick="rptOpenToday_()">看詳細 →</a></div>
     </div>
   </div>
@@ -2777,7 +2783,9 @@ function deletePosStaffRow() {
 
 function switchBackofficeTab(name) {
   if (!boLeaveOk_()) return;   // 11-23 UX ⑤：品項視窗改了還沒存
+  const backToAvail = name === 'availability' && boCurrentTab_ !== 'availability';
   boCurrentTab_ = name; boUpdateScope_();   // 11-14 品牌／門市區隔：子分頁變數在呼叫前就設好了
+  if (backToAvail) refreshAvailStatus_();   // 11-23 UX 🟡p
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
   document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
@@ -3628,10 +3636,25 @@ function loadAvailability() {
     posStatusMap = (posData.status === 'ok' && posData.items) ? posData.items : {};
     renderBoStoreStatus_(storeData);
     renderAvailabilityList();
+    availLoadedOnce_ = true;
   }).catch(() => {
     document.getElementById('availability-list').innerHTML = '<div class="empty-hint">載入失敗，請確認網路連線後重新整理頁面</div>';
   });
 }
+
+// 11-23 UX 🟡p：上下架狀態原本只在打開後台時讀一次，店員在平板標了售完，後台要整頁重新整理才看得到
+//   → 切回「上下架管理」、或從別的視窗／App 切回這個分頁時，重讀狀態（只重讀狀態：搜尋字、展開的分類照留）
+let availLoadedOnce_ = false;
+function refreshAvailStatus_() {
+  if (!availLoadedOnce_) return;
+  if (boSession) { loadBoRevenue_(); loadBoOrders_(); }
+  return Promise.all([apiGet({ action: 'storeStatus', storeId: BO_HOME_STORE_ }), apiGet({ action: 'posItemStatus' })]).then(([storeData, posData]) => {
+    if (storeData.status === 'ok') { tabletStatusMap = storeData.items || {}; renderBoStoreStatus_(storeData); }
+    if (posData.status === 'ok') posStatusMap = posData.items || {};
+    renderAvailabilityList();
+  }).catch(() => {});
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && boCurrentTab_ === 'availability') refreshAvailStatus_(); });
 
 function posStatusKey(cat, name) { return cat + '||' + name; }
 
@@ -4520,6 +4543,9 @@ function saveMcItem() {
     status: MC_STATUS
   };
   if (hasNegativeAmount_([payload.price, payload.priceM, payload.priceL, payload.priceSet, payload.priceAlt])) { alert('價格不能是負數'); return; }
+  // 11-23 UX 🟡o：價格、中杯、大杯、套餐價格全部空白也存得進去（後端也收）→ 先確認，怕是漏填
+  if ([payload.price, payload.priceM, payload.priceL, payload.priceSet].every(v => v === '' || v == null)
+    && !confirm('「' + name + '」沒有填任何價格（價格、中杯／大杯、套餐價格都是空的），線上點餐和平板會沒有價格可以算。\n\n確定要這樣存嗎？按「取消」回去補價格。')) return;
   apiPost({ action: 'upsertMenuItem', item: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     mcCurrentItem = { category: payload.category, name: payload.name };
