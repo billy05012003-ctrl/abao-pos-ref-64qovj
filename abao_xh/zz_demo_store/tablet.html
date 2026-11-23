@@ -2029,6 +2029,11 @@ function currentTierPerks_() {
 
 // 依品項名稱查CATALOG目前的基本售價(單一定價品項用，飲料M/L這種不適用)，
 // 給「自動加購品項」(例如原本寫死的週四雞塊免費)算加入購物車的價格用
+// 11-23 出單簡稱：活動自動加的品項找它的分類（找不到＝不帶，出單照原本品名）
+function findCatalogItemCat_(name) {
+  for (const cat in CATALOG) if ((CATALOG[cat] || []).some(it => it.name === name)) return cat;
+  return undefined;
+}
 function findCatalogItemPrice_(name) {
   for (const cat in CATALOG) {
     const item = (CATALOG[cat] || []).find(it => it.name === name);
@@ -2605,7 +2610,7 @@ async function applyDirectDiscount(type) {
     let line = posCart.find(c => c.baseName === behavior.autoAddItem);
     if (!line) {
       const price = findCatalogItemPrice_(behavior.autoAddItem);
-      line = { lineKey: behavior.autoAddItem + '|free|', name: behavior.autoAddItem, baseName: behavior.autoAddItem, size: null, price, basePrice: price, qty: 1, note: '' };
+      line = { lineKey: behavior.autoAddItem + '|free|', name: behavior.autoAddItem, baseName: behavior.autoAddItem, size: null, price, basePrice: price, qty: 1, note: '', cat: findCatalogItemCat_(behavior.autoAddItem) };
       posCart.push(line);
     }
     applyDirectDiscountEffect_(type, behavior.effect, line.lineKey);
@@ -2736,7 +2741,10 @@ function rebuildDrinkComboDerivedData_() {
   }
 }
 
+// 11-23 出單簡稱（後台「菜單管理 → 出單簡稱」；{分類: {label, pos}}）：雲端出單由後端套，這份只給斷網時平板自己出單用
+let PRINT_LABELS_ = {};
 function applyMenuCmsData_(data) {
+  PRINT_LABELS_ = (data.printLabels && typeof data.printLabels === 'object') ? data.printLabels : {};
   CATALOG = data.catalog;
   OPTION_GROUPS = data.optionGroups;
   ITEM_GROUPS_MAP = data.itemGroups;
@@ -2745,7 +2753,7 @@ function applyMenuCmsData_(data) {
 }
 
 function loadMenuCmsData() {
-  return apiGet({ action: 'menuCmsData' }).then(resp => {
+  return apiGet({ action: 'menuCmsData', pl: 1 }).then(resp => {   // 11-23 pl=1：一起拿出單簡稱（斷網自己出單用）
     if (!resp || resp.status !== 'ok') throw new Error('menuCmsData回傳格式異常');
     applyMenuCmsData_(resp);
     try { localStorage.setItem(MENU_CMS_CACHE_KEY, JSON.stringify(resp)); } catch (e) {}
@@ -4036,7 +4044,7 @@ function onPosScheduleToggle() {
 function submitPosOrder() {
   const total = getPosCartFinalTotal();
   // 2026-09-19：補送品項備註(note)供出單機廚房單使用
-  const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '' }));
+  const items = posCart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '', cat: c.cat || (c.edit && c.edit.cat) || undefined }));   // 11-23 cat：出單簡稱（出單時照後台設定在品名前後加分類簡稱）
   const paymentMethod = document.getElementById('pos-payment-method').value;
   if (!paymentMethod) {   // 11-22 (19p) 不預選：一定要按付款方式
     alert('請先按付款方式（現金、LINE Pay…）');
@@ -5342,8 +5350,10 @@ function buildCupLabels_(r, isDrinkName) {
     if (pm) { base = pm[1].trim(); opts = splitTopLevelOptions_(pm[2]); }
     var qty = Math.max(1, Math.min(Number(it.qty) || 1, 50));
     var who = it.who ? String(it.who) : '';
+    var pm0 = it.n0 ? String(it.n0).match(/^([^（]*)（(.*)）\s*$/) : null;   // 11-23 套過出單簡稱：用原本品名判斷是不是飲料（同雲端 ticket.js）
+    var base0 = it.n0 ? (pm0 ? pm0[1].trim() : String(it.n0)) : base;
     var q;
-    if (isDrinkName(base)) {
+    if (isDrinkName(base0)) {
       for (q = 0; q < qty; q++) cups.push({ name: base + (it.size ? ' ' + it.size : ''), opts: opts, note: it.note ? String(it.note) : '', who: who, price: '$' + (Number(it.price) || 0) });
       return;
     }
@@ -5426,13 +5436,36 @@ function posCheckoutKeyFor_(p) {
   return posCheckoutKey_.key;
 }
 
+// 11-23 出單簡稱：跟雲端 ticket.js labelName／labelItems 同一套，改一邊要改另一邊
+//   放後面「原味（一般）」→「原味蛋餅（一般）」、放前面「玉米」→「單點玉米」；品名本來就以簡稱結尾／開頭不重複加；套過的記 n0＝原本品名
+function labelName_(name, e) {
+  const L = e && String(e.label || '').trim();
+  if (!L) return name;
+  const m = String(name).match(/^([^（]*)(（.*）\s*)$/);
+  const base = (m ? m[1] : String(name)).trim(), rest = m ? m[2] : '';
+  if (!base) return name;
+  if (e.pos === '前') return base.startsWith(L) ? name : L + base + rest;
+  return base.endsWith(L) ? name : base + L + rest;
+}
+function labelItems_(items) {
+  const labels = PRINT_LABELS_ || {};
+  if (!Array.isArray(items)) return items;
+  return items.map(it => {
+    if (!it || typeof it !== 'object' || !it.cat || it.x2) return it;
+    const k = String(it.cat).trim();
+    const e = Object.prototype.hasOwnProperty.call(labels, k) ? labels[k] : null;
+    if (!e) return it;
+    const n = labelName_(String(it.name || ''), e);
+    return n === it.name ? it : Object.assign({}, it, { name: n, n0: it.name });
+  });
+}
 // 出單內容：跟雲端出單同一套排版(offlineBuildTicketLines_)，最上面多印一行【離線單】
 function offlineTicketLines_(o) {
   const r = [];
   r[0] = o.createdAt; r[1] = o.orderId; r[2] = STORE_ID;
   r[3] = o.pickupDate || todayYmd_();
   r[4] = o.pickupTime || new Date(o.createdAt).toTimeString().slice(0, 5);
-  r[5] = JSON.stringify(o.items || []); r[6] = o.totalAmount; r[7] = '';
+  r[5] = JSON.stringify(labelItems_(o.items || [])); r[6] = o.totalAmount; r[7] = '';   // 11-23 出單簡稱
   r[8] = o.paymentMethod === '取餐付款' ? '待收款' : (o.pickupDate ? '未取餐' : '已取餐');
   r[9] = 'POS'; r[10] = o.paymentMethod;
   r[11] = o.memberPhone || ''; r[37] = o.dineMode || ''; r[38] = o.phoneTail || '';   // 11-21 末三碼、內用外帶（同雲端出單）
@@ -5449,7 +5482,7 @@ function offlineDrinkTest_() {
 function offlineLabels_(o) {
   try {
     const r = [];
-    r[1] = o.orderId; r[4] = o.pickupTime || new Date(o.createdAt).toTimeString().slice(0, 5); r[5] = JSON.stringify(o.items || []);
+    r[1] = o.orderId; r[4] = o.pickupTime || new Date(o.createdAt).toTimeString().slice(0, 5); r[5] = JSON.stringify(labelItems_(o.items || []));   // 11-23 出單簡稱
     return offlineBuildCupLabels_(r, offlineDrinkTest_());
   } catch (e) { return []; }
 }

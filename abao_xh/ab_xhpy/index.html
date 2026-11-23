@@ -2005,7 +2005,7 @@ function syncActGifts_() {
       const cur = cart.find(c => c.lineKey === key);
       if (cur && cur.gift.src === src.lineKey && cur.name === src.name && cur.price === src.price) return;
       if (cur) cart = cart.filter(c => c !== cur);
-      cart.push({ lineKey: key, name: src.name, baseName: src.baseName, size: src.size, price: src.price, basePrice: lineBase_(src), qty: 1, note: '', gift: { voucherId: v.voucherId, type: v.type, addOne: true, src: src.lineKey } });
+      cart.push({ lineKey: key, name: src.name, baseName: src.baseName, size: src.size, price: src.price, basePrice: lineBase_(src), qty: 1, note: '', cat: lineCat_(src), gift: { voucherId: v.voucherId, type: v.type, addOne: true, src: src.lineKey } });
       changed = true;
       return;
     }
@@ -4039,7 +4039,7 @@ function confirmAddToCart() {
   if (gp && !editingKey && gp.item === currentModal.item.name) {
     pendingGiftPick_ = null;
     cart.push({ lineKey: giftKey_(gp.voucherId) + '|' + Date.now().toString(36), name: displayName, baseName: currentModal.item.name, size: currentModal.size, price: unit, basePrice: currentModal.basePrice,
-      qty: 1, note: '節氣贈品' + (note ? '，' + note : ''), gift: { voucherId: gp.voucherId, type: gp.type, pick: true } });
+      qty: 1, note: '節氣贈品' + (note ? '，' + note : ''), cat: currentModal.cat, gift: { voucherId: gp.voucherId, type: gp.type, pick: true } });
     currentModal.qty -= 1;
   }
   const existing = currentModal.qty > 0 ? cart.find(c => c.lineKey === lineKey) : null;
@@ -4332,6 +4332,7 @@ function submitOrder(e) {
   const orderNo = 'MB' + Date.now().toString().slice(-8);
   // 2026-09-19：補送品項備註(note)，出單機廚房單會印在該品項下面；之前只送name/size/qty/price，顧客寫的「少蔥」等會遺失
   const items = cart.map(c => ({ name: c.name, size: c.size || '', qty: c.qty, price: c.price, note: c.note || '', x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined,
+    cat: lineCat_(c),   // 11-23 出單簡稱：帶分類，出單時照後台設定在品名前後加簡稱（後端只存不算錢）
     edit: c.edit && !c.gift ? c.edit : undefined }));   // x1＝套餐加購價，後端照後台價驗證並記在訂單；edit＝點餐選擇快照(我的訂單「再點一次」用，後端只存不算錢)
 
   // 「取餐現場付款」只有PAY_AT_PICKUP_ENABLED開啟時欄位才會顯示，關閉時select維持隱藏，
@@ -5215,8 +5216,14 @@ function loadGroupCtx_(gid) { try { return JSON.parse(localStorage.getItem(group
 function saveGroupCtx_() { if (!groupCtx) return; try { localStorage.setItem(groupStoreKey_(groupCtx.groupId), JSON.stringify(groupCtx)); } catch (e) {} }
 // 第二次健檢(2026-09-24)：內部測試走藍新測試站(?mpgtest=1)時，分享給朋友的連結也要帶著，否則朋友付款會走到正式站
 function groupShareUrl_() { return location.origin + location.pathname + '?g=' + encodeURIComponent(groupCtx.groupId) + (MPG_SANDBOX ? '&mpgtest=1' : ''); }
+// 11-23 出單簡稱：這一項的分類（加入購物車時記在點餐選擇快照 edit.cat；加一份贈品／節氣贈品另外記 cat）。
+// 找不到（舊版頁面加進來的、活動自動加的贈品）＝不帶，出單照原本品名
+function lineCat_(c) {
+  const v = c && (c.cat || (c.edit && c.edit.cat));
+  return typeof v === 'string' && v ? v : undefined;
+}
 function groupItemsFromCart_() {
-  return cart.map(c => ({ lineKey: c.lineKey, name: c.name, baseName: c.baseName, size: c.size || '', price: c.price, basePrice: c.basePrice, qty: c.qty, note: c.note || '', set: (c.edit && c.edit.setForm === 'set') || undefined, x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined }))
+  return cart.map(c => ({ lineKey: c.lineKey, name: c.name, baseName: c.baseName, size: c.size || '', price: c.price, basePrice: c.basePrice, qty: c.qty, note: c.note || '', cat: lineCat_(c), set: (c.edit && c.edit.setForm === 'set') || undefined, x1: c.x1 ? { name: c.x1.name, sauceGroups: (c.x1.sauceGroups || []).map(g => ({ name: g.name, picks: g.picks })) } : undefined }))
     .concat(otherNeedsAsGroupItems_());   // 自己選的其他需求一起存進揪團
 }
 function groupStatusClass_(st) { return st === '收單中' ? 'open' : (st === '已結單' || st === '已截止' || st === '付款中') ? 'locked' : st === '已成立' ? 'done' : 'dead'; }

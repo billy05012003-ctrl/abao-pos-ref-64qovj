@@ -322,6 +322,26 @@
   .pmg-crumb a { color:var(--brand); cursor:pointer; text-decoration:none; font-weight:600; }
   .pmg-kv { display:grid; grid-template-columns:120px 1fr; gap:6px 8px; font-size:0.88rem; }
   .pmg-kv div:nth-child(odd) { color:var(--muted); }
+  /* 11-23 出單簡稱（菜單管理 → 出單簡稱） */
+  .pl-live { display:inline-block; background:#e8f6ec; color:#1f7a3a; border-radius:6px; padding:3px 8px; font-size:0.82rem; font-weight:700; margin:0 0 10px; }
+  .pl-tbl { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  .pl-row { display:grid; grid-template-columns:minmax(150px,1.3fr) 64px 110px 150px minmax(180px,2fr); gap:10px; align-items:center; padding:9px 12px; border-top:1px solid #f3ebe4; font-size:0.86rem; }
+  .pl-row.head { border-top:none; background:#faf6f2; font-weight:700; color:#777; font-size:0.78rem; }
+  .pl-row.off .pl-lbl, .pl-row.off .pl-pos { visibility:hidden; }
+  .pl-cat b { display:block; } .pl-cat small { color:var(--muted); font-size:0.74rem; }
+  .pl-cat .pl-inh { color:#6a3db8; font-size:0.72rem; } .pl-cat .pl-own { color:var(--brand); font-size:0.72rem; }
+  .pl-cat .pl-reset { border:none; background:none; color:#6a3db8; text-decoration:underline; cursor:pointer; padding:0; font-size:0.72rem; }
+  .pl-sw { position:relative; width:44px; height:24px; background:#ccc; border-radius:12px; cursor:pointer; border:none; padding:0; }
+  .pl-sw::after { content:''; position:absolute; top:3px; left:3px; width:18px; height:18px; background:#fff; border-radius:50%; transition:.15s; }
+  .pl-sw.on { background:var(--brand); } .pl-sw.on::after { left:23px; }
+  .pl-lbl input { width:100%; padding:6px 8px; border:1px solid #d8cdc4; border-radius:8px; font-size:0.9rem; }
+  .pl-lbl input.bad { border-color:#c62828; background:#fff3f3; }
+  .pl-pos label { margin-right:6px; white-space:nowrap; cursor:pointer; font-size:0.84rem; }
+  .pl-pv { font-family:"Courier New","MingLiU",monospace; font-size:0.85rem; color:#222; word-break:break-all; }
+  .pl-pv .t { color:#b9481a; font-weight:700; } .pl-pv .s { color:var(--muted); font-family:inherit; font-size:0.76rem; }
+  .pl-err { color:#c62828; font-size:0.76rem; grid-column:3 / 6; }
+  .pl-bar { position:sticky; bottom:0; background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 12px; display:flex; gap:10px; align-items:center; margin-top:12px; box-shadow:0 -2px 8px rgba(0,0,0,.05); }
+  @media (max-width: 760px) { .pl-row { grid-template-columns:1fr 64px; } .pl-row.head { display:none; } .pl-lbl, .pl-pos, .pl-pv { grid-column:1 / 3; } .pl-err { grid-column:1 / 3; } }
 </style>
 </head>
 <body>
@@ -423,6 +443,7 @@
   <div class="sub-list" id="menucms-sublist">
     <button class="sub-item" id="mc-sub-btn-categories" onclick="switchMcSubview('categories')">品項分類</button>
     <button class="sub-item" id="mc-sub-btn-options" onclick="switchMcSubview('options')">客製化選項庫</button>
+    <button class="sub-item" id="mc-sub-btn-printlabels" onclick="switchMcSubview('printlabels')">出單簡稱</button>
   </div>
   <button id="mb-sub-btn-points" onclick="switchMemberSubview('points')">集點禮</button>
   <button id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
@@ -671,6 +692,7 @@
     <select id="mc-store-select" onchange="mcSwitchStore(this.value)"></select>
     <span id="mc-target-hint">這間店的草稿，按「發布到正式版」才生效</span>
   </div>
+  <div id="mc-draft-tools"><!-- 11-23：出單簡稱頁存檔就生效，這一整塊（草稿說明、發布、同步、版本回溯）在那頁藏起來 -->
   <p class="bo-lead">這裡改的是<b>草稿</b>，按「發布到正式版」才生效。</p>
   <details class="bo-help"><summary>說明</summary><div>
     這裡改的是<b>草稿</b>版本，不會馬上讓顧客/POS看到——改完要按「發布到正式版」才會真的生效。
@@ -695,6 +717,7 @@
       <div id="mc-snapshot-list"><div class="empty-hint">載入中...</div></div>
     </div>
   </div>
+  </div><!-- /mc-draft-tools -->
   <div id="mc-subview-categories" style="display:block;">
     <p class="bo-lead">改品項名稱、價格、新增刪除；改的是<b>草稿</b>，要發布才生效。</p>
     <details class="bo-help"><summary>說明</summary><div>
@@ -702,6 +725,21 @@
     </div></details>
     <div id="mc-cat-list"><div class="empty-hint">載入中...</div></div>
     <button type="button" class="mc-add-btn" onclick="mcAddCategory()">+ 新增分類</button>
+  </div>
+  <!-- 11-23 出單簡稱（SQL 54；後端 GET printLabels／POST savePrintLabels）：廚房單、杯貼品名前後加分類簡稱 -->
+  <div id="mc-subview-printlabels" style="display:none;">
+    <p class="bo-lead">廚房單、杯貼上的品名前後加上分類名稱，避免同名品項搞混（例如招牌蛋餅的「原味」、單點的「玉米」）。</p>
+    <div class="pl-live">✅ 存檔馬上生效，不用按發布</div>
+    <details class="bo-help"><summary>說明</summary><div>
+      ・開關打開才會加；關著就照原本品名印。<br>
+      ・只影響印出來的單（廚房單、杯貼），點餐頁、平板畫面、報表上的品名都不變。<br>
+      ・品名結尾（放後面）或開頭（放前面）本來就是這個簡稱的，不會重複加，例如「烤肉穀堡」不會變成「烤肉穀堡穀堡」。<br>
+      ・<b>品牌範本</b>設的是所有門市的預設；某間店要不一樣，上面「正在改：」切到那間店再改，只影響那間店，也可以按「改回品牌設定」。<br>
+      ・設定存好後，下一張出的單就照新的印；補印的舊單如果是這次更新以前下的（沒有分類資料），照原本品名印。<br>
+      ・分類是用名稱對的：分類改名後要回來這頁重新設定。
+    </div></details>
+    <div id="pl-table" class="pl-tbl"><div class="empty-hint">載入中...</div></div>
+    <div class="pl-bar"><button type="button" class="mc-save-btn" id="pl-save-btn" onclick="savePrintLabels_()">儲存</button><button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="loadPrintLabels_()">放棄修改</button><span id="pl-msg" style="font-size:0.85rem;"></span></div>
   </div>
   <div id="mc-subview-options" style="display:none;">
     <p class="bo-lead">全部品項共用的選項組（例如甜度），改了會影響所有用到它的品項。</p>
@@ -1371,6 +1409,123 @@ function toggleMenuGroup() {
 function switchMcSubview(name) {
   currentMcSubview = name;
   switchBackofficeTab('menucms');
+}
+
+// ---- 11-23 出單簡稱（SQL 54；後端 GET printLabels／POST savePrintLabels）----
+// 一頁列出這份菜單的全部分類：開關＋簡稱（最多 6 字）＋放前面／放後面＋「印出來的樣子」（這個分類前 3 項）。
+// 品牌範本＝所有門市預設；門市那份＝自己改過的才存（蓋過品牌），「改回品牌設定」＝刪掉門市那列。存檔馬上生效，不用發布
+let plState_ = null;   // { scope, rows: [{cat, items, on, label, pos, own, dirty}], reset: Set }
+const PL_MAX_ = 6;
+function plSyncChrome_() {
+  const onPl = currentMcSubview === 'printlabels' && boCurrentTab_ === 'menucms';
+  const tools = document.getElementById('mc-draft-tools');
+  if (tools) tools.style.display = onPl ? 'none' : '';
+  const hint = document.getElementById('mc-target-hint');
+  if (hint) hint.textContent = onPl ? (MC_STORE_ID === '__brand__' ? '所有門市的預設；存檔馬上生效' : '只影響這間店；存檔馬上生效')
+    : (MC_STORE_ID === '__brand__' ? '改好按下面「同步到分店」，各店再各自發布' : '這間店的草稿，按「發布到正式版」才生效');
+}
+function plShowName_(cat) { const i = cat.indexOf('_'); return (i >= 0 ? cat.slice(i + 1) : cat).trim() || cat; }
+function plApplied_(name, r) {
+  const L = String(r.label || '').trim();
+  if (!r.on || !L) return { text: name };
+  const back = r.pos !== '前';
+  if (back ? name.endsWith(L) : name.startsWith(L)) return { text: name, dup: true };
+  return { text: name, tag: L, back };
+}
+function plPreviewHtml_(r) {
+  if (!r.items.length) return '<span class="s">（這個分類還沒有品項）</span>';
+  const parts = r.items.map(n => {
+    const a = plApplied_(n, r);
+    if (a.tag) return a.back ? escapeHtml(a.text) + '<span class="t">' + escapeHtml(a.tag) + '</span>' : '<span class="t">' + escapeHtml(a.tag) + '</span>' + escapeHtml(a.text);
+    return escapeHtml(a.text) + (a.dup ? '<span class="s">（已含）</span>' : '');
+  });
+  return parts.join('、') + (r.on ? '' : ' <span class="s">（照原本品名）</span>');
+}
+function plRowHtml_(r, i) {
+  const bad = r.on && !String(r.label || '').trim();
+  const store = plState_.scope === 'store';
+  const tag = !store ? '' : (r.own ? '<span class="pl-own">這間店自己改過</span>　<button type="button" class="pl-reset" onclick="plReset_(' + i + ')">改回品牌設定</button>' : '<span class="pl-inh">跟品牌範本一樣</span>');
+  const show = plShowName_(r.cat);
+  return `<div class="pl-row${r.on ? '' : ' off'}" data-i="${i}">
+    <div class="pl-cat"><b>${escapeHtml(show)}</b><small>${r.items.length ? r.count + ' 項' : ''}${show !== r.cat.trim() ? '　' + escapeHtml(r.cat) : ''}</small>${tag ? '<div>' + tag + '</div>' : ''}</div>
+    <div><button type="button" class="pl-sw${r.on ? ' on' : ''}" onclick="plToggle_(${i})" aria-label="${escapeHtml(show)} 出單加分類名稱"></button></div>
+    <div class="pl-lbl"><input maxlength="${PL_MAX_}" value="${escapeHtml(r.label)}" placeholder="例如：蛋餅" class="${bad ? 'bad' : ''}" oninput="plLabel_(${i}, this.value)"></div>
+    <div class="pl-pos"><label><input type="radio" name="pl-p${i}" ${r.pos === '前' ? 'checked' : ''} onchange="plPos_(${i}, '前')">放前面</label><label><input type="radio" name="pl-p${i}" ${r.pos !== '前' ? 'checked' : ''} onchange="plPos_(${i}, '後')">放後面</label></div>
+    <div class="pl-pv" id="pl-pv${i}">${plPreviewHtml_(r)}</div>
+    ${bad ? '<div class="pl-err">請填簡稱，或把開關關掉</div>' : ''}
+  </div>`;
+}
+function plRender_() {
+  const el = document.getElementById('pl-table');
+  if (!plState_.rows.length) { el.innerHTML = '<div class="empty-hint">這份菜單還沒有分類</div>'; return; }
+  el.innerHTML = '<div class="pl-row head"><div>分類</div><div>加簡稱</div><div>簡稱</div><div>位置</div><div>印出來的樣子（這個分類前 3 項）</div></div>' + plState_.rows.map(plRowHtml_).join('');
+}
+function plRerow_(i) {
+  const old = document.querySelector('#pl-table .pl-row[data-i="' + i + '"]');
+  if (!old) return;
+  const tmp = document.createElement('div'); tmp.innerHTML = plRowHtml_(plState_.rows[i], i);
+  old.replaceWith(tmp.firstElementChild);
+}
+function plTouch_(i) { const r = plState_.rows[i]; r.dirty = true; if (plState_.scope === 'store') { r.own = true; plState_.reset.delete(r.cat); } document.getElementById('pl-msg').textContent = ''; }
+function plToggle_(i) { const r = plState_.rows[i]; r.on = !r.on; plTouch_(i); plRerow_(i); if (r.on && !r.label.trim()) { const inp = document.querySelector('#pl-table .pl-row[data-i="' + i + '"] .pl-lbl input'); if (inp) inp.focus(); } }
+function plLabel_(i, v) {
+  const r = plState_.rows[i]; const wasOwn = r.own; r.label = v; plTouch_(i);
+  if (plState_.scope === 'store' && !wasOwn) { plRerow_(i); const inp = document.querySelector('#pl-table .pl-row[data-i="' + i + '"] .pl-lbl input'); if (inp) { inp.focus(); inp.setSelectionRange(v.length, v.length); } return; }
+  document.getElementById('pl-pv' + i).innerHTML = plPreviewHtml_(r);
+  const row = document.querySelector('#pl-table .pl-row[data-i="' + i + '"]');
+  const bad = r.on && !v.trim();
+  row.querySelector('.pl-lbl input').classList.toggle('bad', bad);
+  const e = row.querySelector('.pl-err');
+  if (bad && !e) row.insertAdjacentHTML('beforeend', '<div class="pl-err">請填簡稱，或把開關關掉</div>');
+  if (!bad && e) e.remove();
+}
+function plPos_(i, p) { const r = plState_.rows[i]; const wasOwn = r.own; r.pos = p; plTouch_(i); if (plState_.scope === 'store' && !wasOwn) plRerow_(i); else document.getElementById('pl-pv' + i).innerHTML = plPreviewHtml_(r); }
+function plReset_(i) {
+  const r = plState_.rows[i], b = plState_.brandMap[r.cat.trim()];
+  r.on = b ? b.on : false; r.label = b ? b.label : ''; r.pos = b ? b.pos : '後'; r.own = false; r.dirty = false;
+  plState_.reset.add(r.cat);
+  document.getElementById('pl-msg').textContent = '';
+  plRerow_(i);
+}
+function loadPrintLabels_() {
+  const el = document.getElementById('pl-table');
+  el.innerHTML = '<div class="empty-hint">載入中...</div>';
+  document.getElementById('pl-msg').textContent = '';
+  const sid = MC_STORE_ID;
+  return Promise.all([apiGet({ action: 'menuCmsData', storeId: sid, status: MC_STATUS }), apiGet({ action: 'printLabels', storeId: sid })]).then(([menu, pl]) => {
+    if (sid !== MC_STORE_ID) return;   // 讀的途中換了門市：丟掉
+    if (!pl || pl.status !== 'ok') { el.innerHTML = '<div class="empty-hint">' + escapeHtml((pl && pl.message) || '讀取失敗，請重新整理') + '</div>'; plState_ = null; return; }
+    if (!menu || menu.status !== 'ok') { el.innerHTML = '<div class="empty-hint">菜單讀取失敗，請重新整理</div>'; plState_ = null; return; }
+    const scope = pl.scope === 'brand' ? 'brand' : 'store';
+    const brandMap = {}, storeMap = {};
+    (pl.brand || []).forEach(x => { brandMap[String(x.cat).trim()] = x; });
+    (pl.store || []).forEach(x => { storeMap[String(x.cat).trim()] = x; });
+    const order = (menu.categoryOrder && menu.categoryOrder.length) ? menu.categoryOrder : Object.keys(menu.catalog || {});
+    const rows = order.map(cat => {
+      const its = (menu.catalog && menu.catalog[cat]) || [];
+      const k = String(cat).trim();
+      const own = scope === 'store' && !!storeMap[k];
+      const src = scope === 'brand' ? brandMap[k] : (storeMap[k] || brandMap[k]);
+      return { cat, items: its.slice(0, 3).map(it => it.name), count: its.length, on: !!(src && src.on), label: src ? String(src.label || '') : '', pos: src && src.pos === '前' ? '前' : '後', own, dirty: false };
+    });
+    plState_ = { scope, rows, brandMap, reset: new Set() };
+    plRender_();
+  }).catch(err => { el.innerHTML = '<div class="empty-hint">讀取失敗，請確認網路連線後重新整理</div>'; console.warn('出單簡稱讀取失敗', err); });
+}
+function savePrintLabels_() {
+  if (!plState_) return;
+  const msg = document.getElementById('pl-msg');
+  const bad = plState_.rows.filter(r => r.on && !r.label.trim()).map(r => plShowName_(r.cat));
+  if (bad.length) { msg.style.color = '#c62828'; msg.textContent = '⚠ 沒有存：' + bad.join('、') + ' 開了但沒填簡稱'; return; }
+  const rows = plState_.rows.filter(r => plState_.scope === 'brand' ? true : r.own).map(r => ({ cat: r.cat, on: r.on, label: r.label.trim(), pos: r.pos }));
+  const reset = plState_.scope === 'store' ? [...plState_.reset] : [];
+  apiPost({ action: 'savePrintLabels', storeId: MC_STORE_ID, rows, reset }).then(d => {
+    if (d && d.status === 'ok') {
+      msg.style.color = '#1f7a3a';
+      msg.textContent = '✅ 已儲存：' + (plState_.scope === 'brand' ? '所有門市的預設（自己改過的店照那間店的）' : '只影響這間店') + '，下一張出的單就照新的印';
+      plState_.rows.forEach(r => { r.dirty = false; }); plState_.reset.clear();
+    } else { msg.style.color = '#c62828'; msg.textContent = '⚠ 沒有成功：' + ((d && d.message) || '請重新整理後再試'); }
+  }).catch(() => { msg.style.color = '#c62828'; msg.textContent = '⚠ 沒有成功：網路連線失敗，請再試一次'; });
 }
 
 // 「商家管理」側欄巢狀展開（2026-09-16新增，比照大麥「店家設定」的分類方式）：
@@ -2606,6 +2761,10 @@ function switchBackofficeTab(name) {
   document.getElementById('mc-sub-btn-options').classList.toggle('active', name === 'menucms' && currentMcSubview === 'options');
   document.getElementById('mc-subview-categories').style.display = (name === 'menucms' && currentMcSubview === 'categories') ? 'block' : 'none';
   document.getElementById('mc-subview-options').style.display = (name === 'menucms' && currentMcSubview === 'options') ? 'block' : 'none';
+  document.getElementById('mc-sub-btn-printlabels').classList.toggle('active', name === 'menucms' && currentMcSubview === 'printlabels');
+  document.getElementById('mc-subview-printlabels').style.display = (name === 'menucms' && currentMcSubview === 'printlabels') ? 'block' : 'none';
+  plSyncChrome_();
+  if (name === 'menucms' && currentMcSubview === 'printlabels') loadPrintLabels_();
   if (name === 'menucms') {
     document.getElementById('menucms-sublist').classList.add('open');
     document.getElementById('menucms-caret').classList.add('open');
@@ -3672,6 +3831,8 @@ function mcSwitchStore(storeId) {
   if (currentMemberSubview === 'points') { mbLoaded.points = true; loadPointGifts(); }
   else if (currentMemberSubview === 'promo') { mbLoaded.promo = true; loadPromos(); }
   else if (currentMemberSubview === 'blocks') { mbLoaded.blocks = true; loadHomeBlocks(); }
+  plSyncChrome_();
+  if (currentMcSubview === 'printlabels' && boCurrentTab_ === 'menucms') loadPrintLabels_();
 }
 
 // ---- 版本回溯(2026-09-15新增) ----
