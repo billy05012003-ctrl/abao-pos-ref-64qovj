@@ -2229,8 +2229,8 @@ function renderNotifySettings_() {
   const d = notifyData_, el = document.getElementById('notify-form');
   if (!d || !el) return;
   const owner = isBoOwner_(), s = d.settings || {};
-  const top = (d.sqlReady === false ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 資料庫還沒更新（SQL 46），下面是預設值，暫時存不進去。</div>' : '')
-    + (!d.lineReady ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 還沒設定 LINE 發訊權杖：LINE 接單通知、LINE 作廢退款通知、LINE 取餐通知不能打開；「LINE 通知老闆」只會記在金流告警、不會發 LINE。</div>' : '');
+  const top = (d.sqlReady === false ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 這個功能系統還沒更新完成，下面是預設值，暫時存不進去，請聯絡系統廠商。</div>' : '')
+    + (!d.lineReady ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 還沒接上 LINE 官方帳號（要請系統廠商設定）：LINE 接單通知、LINE 作廢退款通知、LINE 取餐通知不能打開；「LINE 通知老闆」只會記在金流告警、不會發 LINE。</div>' : '');
   const rows = NOTIFY_ROWS_.map(r => {
     if (r.sec) return `<div style="font-weight:700;margin:14px 0 4px;">${r.sec}</div>`;
     const on = !!s[r.key], lock = !owner || d.sqlReady === false || (r.line && !d.lineReady && !on);
@@ -2248,7 +2248,7 @@ function renderNotifySettings_() {
     <div style="margin-top:6px;">${owners}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">
       <button type="button" id="notify-test-btn" class="mc-save-btn" style="padding:6px 14px;" ${owner && d.lineReady && d.sqlReady !== false && (d.owners || []).some(o => o.line) ? '' : 'disabled'} onclick="notifyTestLine_()">📨 傳測試訊息到我的 LINE</button>
-      <span id="notify-test-msg" style="font-size:0.8rem;color:var(--muted);">${!d.lineReady ? '還沒設定 LINE 發訊權杖，不能測' : !(d.owners || []).some(o => o.line) ? '上面的手機要有一支「有綁 LINE」才能測' : '傳一則給上面有綁 LINE 的手機，確認收得到（用掉 1 則免費訊息）'}</span>
+      <span id="notify-test-msg" style="font-size:0.8rem;color:var(--muted);">${!d.lineReady ? '還沒接上 LINE 官方帳號，不能測' : !(d.owners || []).some(o => o.line) ? '上面的手機要有一支「有綁 LINE」才能測' : '傳一則給上面有綁 LINE 的手機，確認收得到（用掉 1 則免費訊息）'}</span>
     </div>`;
 }
 // 11-20 老闆要：按一下傳 LINE 測試訊息，確認權杖和綁定都對
@@ -2296,14 +2296,14 @@ function renderSmsSettings_() {
   const cur = list.find(p => p.id === s.provider);
   const ready = !!(cur && cur.ready);
   const lockOn = !canEdit || (!s.enabled && !ready);
-  const top = (d.sqlReady === false ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 資料庫還沒更新（SQL 47），下面是預設值，暫時存不進去。</div>' : '')
-    + (!list.length ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 還沒接任何簡訊商：選好簡訊商、申請帳號後，由系統管理員把簡訊商接上，這裡才選得到、開關才打得開。</div>' : '');
-  const opts = ['<option value="">（請選擇）</option>'].concat(list.map(p => `<option value="${escapeHtml(p.id)}" ${p.id === s.provider ? 'selected' : ''}>${escapeHtml(p.label)}${p.ready ? '' : '（金鑰還沒設定）'}</option>`)).join('');
+  const top = (d.sqlReady === false ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 這個功能系統還沒更新完成，下面是預設值，暫時存不進去，請聯絡系統廠商。</div>' : '')
+    + (!list.length ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 還沒接任何簡訊商：選好簡訊商、申請帳號後，由系統廠商把簡訊商接上，這裡才選得到、開關才打得開。</div>' : '');
+  const opts = ['<option value="">（請選擇）</option>'].concat(list.map(p => `<option value="${escapeHtml(p.id)}" ${p.id === s.provider ? 'selected' : ''}>${escapeHtml(p.label)}${p.ready ? '' : '（還沒接好）'}</option>`)).join('');
   el.innerHTML = top + `
     <div class="sched-special-row">
       <b>LINE 註冊要簡訊驗證碼</b>
       <label style="display:flex;align-items:center;gap:4px;cursor:${lockOn ? 'not-allowed' : 'pointer'};${lockOn ? 'opacity:.45;' : ''}"><input type="checkbox" ${s.enabled ? 'checked' : ''} ${lockOn ? 'disabled' : ''} onchange="smsSave_({ enabled: this.checked }, this)">${s.enabled ? '🟢 啟用' : '🔴 停用'}</label>
-      <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">${s.enabled ? '顧客 LINE 註冊時要輸入簡訊驗證碼。' : (ready ? '點一下就打開。' : '先在下面選好簡訊商（金鑰設定好）才打得開。')}</div>
+      <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">${s.enabled ? '顧客 LINE 註冊時要輸入簡訊驗證碼。' : (ready ? '點一下就打開。' : '先在下面選好簡訊商（系統廠商要先接好）才打得開。')}</div>
     </div>
     <div style="font-weight:700;margin:14px 0 4px;">簡訊商</div>
     <select id="sms-provider" style="padding:6px 8px;min-width:220px;" ${canEdit ? '' : 'disabled'} onchange="smsSave_({ provider: this.value }, null)">${opts}</select>
@@ -2315,10 +2315,10 @@ function renderSmsSettings_() {
     <div style="font-size:0.76rem;color:var(--muted);line-height:1.6;">驗證碼 ${rules.codeLen || 6} 位數、${Math.round((rules.ttlSec || 300) / 60)} 分鐘內有效；同一支手機 ${rules.cooldownSec || 60} 秒內不能重發；每支手機、每個 LINE 每天最多 ${rules.phoneDaily || 5} 次；輸錯 ${rules.maxAttempts || 5} 次要重新發送。驗證碼只存加密後的樣子，看不到原本的數字。</div>
     ${d.updatedBy ? `<div class="ops-meta" style="margin-top:10px;">最後修改：${escapeHtml(d.updatedBy)}</div>` : ''}
     ${cur && !cur.testMode ? `<div style="font-weight:700;margin:14px 0 4px;">傳一則測試簡訊</div>
-    <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">不用打開開關，就能確認簡訊商和金鑰都設好了。填自己的手機，按一下會收到一則測試簡訊（每天最多 5 則，會扣 1 則簡訊費）。</div>
+    <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">不用打開開關，就能確認簡訊商都接好了。填自己的手機，按一下會收到一則測試簡訊（每天最多 5 則，會扣 1 則簡訊費）。</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input id="sms-test-phone" type="tel" maxlength="10" inputmode="numeric" placeholder="09xxxxxxxx" style="width:140px;padding:6px 8px;" ${isBoOwner_() && ready ? '' : 'disabled'}>
       <button type="button" id="sms-test-btn" class="mc-save-btn" style="padding:6px 14px;" ${isBoOwner_() && ready ? '' : 'disabled'} onclick="smsTestSend_()">📨 傳測試簡訊</button>
-      <span id="sms-test-msg" style="font-size:0.8rem;color:var(--muted);">${ready ? '' : '金鑰還沒設定好，不能測'}</span></div>` : ''}`;
+      <span id="sms-test-msg" style="font-size:0.8rem;color:var(--muted);">${ready ? '' : '簡訊商還沒接好，不能測'}</span></div>` : ''}`;
 }
 // 11-21 傳一則測試簡訊（只限老闆；後端每店每天 5 則）
 function smsTestSend_() {
@@ -2370,7 +2370,7 @@ function loadBoEinvLog_() {
   el.innerHTML = '<div class="empty-hint">載入中...</div>';
   apiGet({ action: 'einvSettingsLog', storeId: SCHED_STORE_ID }).then(d => {
     if (!d || d.status !== 'ok') {
-      el.innerHTML = '<div class="empty-hint">' + (d && d.code === 'sql_missing' ? '資料庫還沒更新（SQL 51），還沒有紀錄' : '讀取失敗：' + escapeHtml((d && d.message) || '')) + '</div>';
+      el.innerHTML = '<div class="empty-hint">' + (d && d.code === 'sql_missing' ? '這個功能系統還沒更新完成，還沒有紀錄（請聯絡系統廠商）' : '讀取失敗：' + escapeHtml((d && d.message) || '')) + '</div>';
       return;
     }
     const logs = d.logs || [];
@@ -2419,7 +2419,7 @@ function renderBoEinv_() {
   const lock = !owner || noKeys || sqlMiss;
   const mi = d.methodInvoice || {};
   const lpOff = mi['線下LINEPay'] === false, tqOff = mi['線下TWQR'] === false;
-  const top = (sqlMiss ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 資料庫還沒更新（SQL 48），暫時不能設定。</div>' : '')
+  const top = (sqlMiss ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ 這個功能系統還沒更新完成，暫時不能設定，請聯絡系統廠商。</div>' : '')
     + (noKeys ? '<div style="font-size:0.85rem;color:#c0392b;margin-bottom:8px;">⚠ <b>這間店還沒設 ezPay 電子發票帳號，要廠商（BZ）設定後才能開。</b>每間店（每個統編）各自一組，不會用到別間店的。</div>'
       : d.env === 'test' ? '<div style="font-size:0.85rem;margin-bottom:8px;">目前接的是 <b>ezPay 電子發票測試站</b>（商店代號 ' + escapeHtml(d.merchantId || '') + '）：開出來的不是真的發票，可以放心測。</div>'
       : '<div style="font-size:0.85rem;color:#a32d2d;margin-bottom:8px;"><b>目前接的是 ezPay 正式站（商店代號 ' + escapeHtml(d.merchantId || '') + '）：打開就會真的開發票、上傳財政部。</b></div>')
@@ -2448,7 +2448,7 @@ function renderBoEinv_() {
     + `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 8px;font-size:0.85rem;">常用捐贈碼 <input id="einv-love" type="text" inputmode="numeric" maxlength="7" value="${escapeHtml(d.loveCode || '')}" style="width:110px;padding:6px 8px;" ${lock ? 'disabled' : ''}>
       <button type="button" class="mc-save-btn" style="padding:6px 14px;" ${lock ? 'disabled' : ''} onclick="einvSave_({ loveCode: document.getElementById('einv-love').value.trim() })">儲存</button></div>`
     + einvRow_('b2b', '統編（公司報帳）', d.b2b !== false, lock, '結帳畫面「統編」：輸入 8 碼統一編號（系統會檢查對不對），證明聯會印買方統編和明細。')
-    + `<div style="margin-top:14px;"><button type="button" class="mc-save-btn" style="padding:6px 14px;" ${!owner || noKeys ? 'disabled' : ''} onclick="einvTest_(this)">測試連線（檢查 ezPay 金鑰）</button> <span id="einv-test-res" style="font-size:0.82rem;"></span></div>`
+    + `<div style="margin-top:14px;"><button type="button" class="mc-save-btn" style="padding:6px 14px;" ${!owner || noKeys ? 'disabled' : ''} onclick="einvTest_(this)">測試連線（檢查 ezPay 帳號）</button> <span id="einv-test-res" style="font-size:0.82rem;"></span></div>`
     + (d.updatedBy ? `<div class="ops-meta" style="margin-top:10px;">最後修改：${escapeHtml(d.updatedBy)}</div>` : '');
 }
 function einvSave_(patch, el) {
@@ -2606,7 +2606,7 @@ function loadBoCfgStatus_() {
         <div class="ops-meta" style="margin-bottom:6px;">後台最後一次發布到正式版的時間</div>
         <div class="pmg-kv">
           <div>菜單</div><div>${d.menuPublishedAt ? boFmtMs_(d.menuPublishedAt) + ' 發布' : notYet}</div>
-          <div>優惠／會員相關</div><div>${d.promoPublishedAt ? boFmtMs_(d.promoPublishedAt) + ' 發布' : notYet}</div>
+          <div>優惠活動</div><div>${d.promoPublishedAt ? boFmtMs_(d.promoPublishedAt) + ' 發布' : notYet}</div>
         </div></div>
       <div class="ops-card"><h3>門市平板有沒有換成新版</h3>${devs || '<div class="ops-meta" style="padding:6px 0;">最近 7 天沒有平板回報（平板打開 POS 頁後約 1 分鐘會出現在這裡）</div>'}
         ${oldCount ? '<div class="ops-meta" style="margin-top:8px;">另有 ' + oldCount + ' 筆舊的平板啟用紀錄（最近 7 天沒有使用，可能是舊測試機、手機，或重新啟用前留下的），不影響運作。</div>' : ''}
@@ -4128,7 +4128,7 @@ function checkPublishRefs_(which) {
         : '⚠ 這份菜單發布後，以下正式上線的設定會連不到品項／分類：';
       const tail = which === 'promo'
         ? '發布後線上會顯示「暫停供應」或優惠用不到。建議先到「菜單管理」發布菜單。'
-        : '發布後線上會顯示「暫停供應」或優惠用不到。建議先到「會員相關」改好這些設定。';
+        : '發布後線上會顯示「暫停供應」或優惠用不到。建議先到「優惠券」「區塊配置」改好這些設定。';
       return confirm(head + '\n' + issues.map(x => '・' + x).join('\n') + '\n\n' + tail + '\n\n按「確定」仍然發布，按「取消」先不發布。');
     });
 }
@@ -6752,7 +6752,12 @@ function savePromo() {
 }
 
 function deletePromo() {
-  if (!confirm('確定要刪除「' + pmCurrentName + '」這個優惠券嗎？此動作無法復原，集點禮/生日禮/註冊禮若還在使用這個名稱要記得一併調整。')) return;
+  // 11-23 UX 🟡l：原本只說「集點禮/生日禮/註冊禮若還在使用要記得調整」，沒說到底用在哪 → 直接列出來
+  const used = pwUsageList_(pmCurrentName);
+  const msg = used.length
+    ? '⚠「' + pmCurrentName + '」還用在：' + used.join('、') + '\n\n刪掉後這些地方會失效（活動不發券、集點禮／生日禮／註冊禮換不到），建議先改掉再刪。\n\n還是要刪除嗎？刪了不能復原。'
+    : '確定要刪除「' + pmCurrentName + '」這個優惠券嗎？刪了不能復原。'
+  if (!confirm(msg)) return;
   apiPost({ action: 'deletePromo', name: pmCurrentName, storeId: MC_STORE_ID, version: MC_STATUS }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '刪除失敗');
     pmCurrentName = null;
@@ -7085,12 +7090,16 @@ function pwFlagsHtml_(type, g) {
     </div>`;
 }
 // 這張券用在哪(活動、集點禮、生日禮、註冊禮)；用在兩個以上的地方要提醒「改了會一起變」
-function pwUsageHtml_(name) {
+function pwUsageList_(name) {   // 11-23 拆出來：刪券前也要列
   const list = [];
   (pmActs_ || []).filter(a => a.promo === name).forEach(a => list.push('活動「' + a.title + '」' + (a.status === '停用' ? '（停用中）' : '')));
   (pgGifts || []).filter(g => g.voucherType === name).forEach(g => list.push('集點禮（' + g.points + ' 點）'));
   if ((bgGifts || []).some(g => g.voucherType === name)) list.push('生日禮');
   if ((rgGifts || []).some(g => g.voucherType === name)) list.push('註冊禮');
+  return list;
+}
+function pwUsageHtml_(name) {
+  const list = pwUsageList_(name);
   if (!list.length) return '';
   return `<div class="pw-usage">🔗 這張券用在：${escapeHtml(list.join('、'))}${list.length > 1 ? '<br><b style="color:#c0392b;">⚠ 這幾個地方共用同一張券，改了會一起變</b>' : ''}</div>`;
 }
