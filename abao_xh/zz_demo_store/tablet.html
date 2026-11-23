@@ -5178,7 +5178,15 @@ function splitTopLevelOptions_(s) {
   out.push(cur);
   return out.map(function (x) { return x.trim(); }).filter(function (x) { return x; });
 }
+// 11-23：跟雲端 ticket.js printSafe 同一套——拿掉 Big5 出單機印不出來的表情符號（顧客名字的 ♉ 會印成「??」）
+var PRINT_KEEP_ = '\u2640\u2642\u2196\u2197\u2198\u2199';
+function printSafe_(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u{10000}-\u{10FFFF}\uFE00-\uFE0F\u200D\u20E3]/gu, '')
+    .replace(/\p{Extended_Pictographic}/gu, function (ch) { return PRINT_KEEP_.indexOf(ch) !== -1 ? ch : ''; });
+}
 function buildTicketLines_(r, printCount) {
+  r = r.slice(); r[5] = printSafe_(r[5]); r[7] = printSafe_(r[7]);   // 11-23 品項／備註先拿掉表情符號（不改到原本的陣列）
   // 每行欄寬：這台出單機(HIP-6666)實測一行放不下48個半形字(分隔線與右靠價格會折行)，之前實測32欄剛好放得下，先用32。
   // 換機型或紙寬時要重新量，見交接檔
   var W = 32;
@@ -5320,6 +5328,7 @@ function buildTicketLines_(r, printCount) {
   return lines;
 }
 function buildCupLabels_(r, isDrinkName) {
+  r = r.slice(); r[5] = printSafe_(r[5]); r[7] = printSafe_(r[7]);   // 11-23 同出單：拿掉表情符號
   var items = [];
   try { items = JSON.parse(r[5] || '[]'); } catch (e) { items = []; }
   var id = String(r[1] || '');
