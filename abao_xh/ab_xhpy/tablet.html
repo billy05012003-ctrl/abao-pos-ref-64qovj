@@ -507,10 +507,10 @@
     </section>
 
     <section style="margin:0 0 12px;">
-      <h2>🏷 補印杯貼 <span class="refresh-link" onclick="loadLabelOrders_()">載入／重新整理</span></h2>
-      <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">今天有飲料的單（新的在上面）。點一張單，勾要補的杯，按「印出勾選的杯貼」。</div>
+      <h2>🖨 補印（廚房單／杯貼） <span class="refresh-link" onclick="loadLabelOrders_()">載入／重新整理</span></h2>
+      <div style="font-size:0.76rem;color:var(--muted);margin:0 0 8px;">今天的單（新的在上面）。點一張單：按「🖨 補印廚房單」；有飲料的單再勾要補的杯，按「印出勾選的杯貼」。</div>
       <input type="text" id="lbl-search" inputmode="text" placeholder="輸入單號後段找，例如 0030、L03" oninput="renderLabelOrders_()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;margin-bottom:8px;">
-      <div id="lbl-orders"><div class="empty-hint">按上方「載入」查看今天有飲料的單</div></div>
+      <div id="lbl-orders"><div class="empty-hint">按上方「載入」查看今天的單</div></div>
     </section>
 
     <section style="margin:0 0 12px;display:none;" id="stuck-payment-section">
@@ -990,6 +990,8 @@ function notifyReady_(orderId) {
 }
 
 // ---------- 補印杯貼(10-13 老闆定案)：今天有飲料的單→點開→勾杯→印；不用 PIN。還沒上傳的離線單也列 ----------
+// 11-25 老闆（做法 A）：改成「🖨 補印（廚房單／杯貼）」——帶 all=1 讓後端連沒點飲料的單也列；點開每張單都有「🖨 補印廚房單」（同待取餐卡片，reprintKitchen_）
+//   現場結帳的單一結帳就是已取餐、不在待取餐訂單，原本沒地方補印廚房單；還沒上傳的離線單照舊從紅條→離線單重印
 let labelOrders_ = [], labelOpenId_ = null;
 function loadLabelOrders_() {
   const box = document.getElementById('lbl-orders');
@@ -997,7 +999,7 @@ function loadLabelOrders_() {
   const local = offlineLoad_().filter(o => !o.syncedAt).map(o => ({ orderId: o.orderId, time: o.pickupTime || new Date(o.createdAt).toTimeString().slice(0, 5), channel: 'POS（離線，還沒上傳）', createdAt: Date.parse(o.createdAt) || 0, labels: offlineLabels_(o) })).filter(o => o.labels.length);
   const done = cloud => { labelOrders_ = local.concat(cloud).sort((a, b) => b.createdAt - a.createdAt); renderLabelOrders_(); };
   if (posOffline_()) { done([]); return; }
-  apiGet({ action: 'labelOrders', storeId: STORE_ID }).then(d => {
+  apiGet({ action: 'labelOrders', storeId: STORE_ID, all: '1' }).then(d => {
     if (!d || d.status !== 'ok') { box.innerHTML = '<div class="empty-hint">' + escapeHtml_((d && d.message) || '讀取失敗') + '</div>'; return; }
     done(d.orders || []);
   }).catch(() => done([]));
@@ -1006,22 +1008,26 @@ function renderLabelOrders_() {
   const box = document.getElementById('lbl-orders');
   const q = document.getElementById('lbl-search').value.trim();
   const list = labelOrders_.filter(o => !q || o.orderId.indexOf(q) !== -1);
-  if (!labelOrders_.length) { box.innerHTML = '<div class="empty-hint">今天還沒有飲料的單</div>'; return; }
+  if (!labelOrders_.length) { box.innerHTML = '<div class="empty-hint">今天還沒有可以補印的單</div>'; return; }
   if (!list.length) { box.innerHTML = '<div class="empty-hint">找不到單號有「' + escapeHtml_(q) + '」的單</div>'; return; }
   const w = prnFrame_();
   box.innerHTML = list.map(o => {
     const open = o.orderId === labelOpenId_;
-    const no = o.labels[0].no;
-    const names = o.labels.map(l => l.name).join('、');
-    const cups = !open ? '' : `<div style="margin-top:8px">${o.labels.map((l, i) => `
+    const hasCup = o.labels.length > 0, isLocal = /^POS（離線/.test(o.channel || '');
+    const no = hasCup ? o.labels[0].no : (o.no || o.orderId);
+    const names = hasCup ? o.labels.map(l => l.name).join('、') : (o.names || []).join('、');
+    const kitchen = isLocal
+      ? '<div class="meta" style="margin-top:8px">廚房單：離線單請點上方紅條→離線單→「重印這張離線單」</div>'
+      : `<button type="button" class="btn btn-primary" style="width:100%;margin-top:8px" onclick="reprintKitchen_('${escapeHtml_(o.orderId)}')">🖨 補印廚房單</button>`;
+    const cups = !open ? '' : kitchen + (!hasCup ? '' : `<div style="margin-top:8px">${o.labels.map((l, i) => `
         <label style="display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px dashed var(--border)">
           <input type="checkbox" class="lbl-cup" data-i="${i}" checked style="width:20px;height:20px">
           ${w && w.labelPreview_ ? `<img src="${w.labelPreview_(l)}" alt="" style="width:120px;border:1px solid var(--border);border-radius:4px">` : ''}
           <span style="font-size:0.85rem">${l.idx}/${l.total} ${escapeHtml_(l.name)}<br><span style="color:var(--muted)">${escapeHtml_((l.opts || []).join('・'))}</span></span>
         </label>`).join('')}
-        <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="printLabelOrder_('${escapeHtml_(o.orderId)}', this)">🏷 印出勾選的杯貼</button></div>`;
+        <button type="button" class="btn btn-primary" style="width:100%;margin-top:6px" onclick="printLabelOrder_('${escapeHtml_(o.orderId)}', this)">🏷 印出勾選的杯貼</button></div>`);
     return `<div class="order-card" style="display:block;cursor:pointer" onclick="if(!event.target.closest('label,button'))toggleLabelOrder_('${escapeHtml_(o.orderId)}')">
-      <div style="display:flex;justify-content:space-between;gap:8px"><strong>${escapeHtml_(no)}　${escapeHtml_(o.time)}</strong><span>${o.labels.length} 杯 ${open ? '▲' : '▼'}</span></div>
+      <div style="display:flex;justify-content:space-between;gap:8px"><strong>${escapeHtml_(no)}　${escapeHtml_(o.time)}</strong><span>${hasCup ? o.labels.length + ' 杯' : '沒有飲料'} ${open ? '▲' : '▼'}</span></div>
       <div class="meta">${escapeHtml_(o.orderId)}・${escapeHtml_(o.channel)}・${escapeHtml_(names)}</div>${cups}
     </div>`;
   }).join('');
@@ -5550,8 +5556,10 @@ function buildTicketLines_(r, printCount) {
       pushOpt(opts[o], afterDrink ? 3 : 1);
     }
     if (it.note) {
-      var inl = wrapByWidth_('※ ' + String(it.note), W - 2);
-      for (var z = 0; z < inl.length; z++) pushSub('  ' + inl[z]);
+      // 11-25 同 ticket.js：品項備註換行時第二行起對齊備註文字（不是對齊 ※）
+      var nmW = dispWidth_('※ ');
+      var inl = wrapByWidth_(String(it.note), W - 2 - nmW);
+      for (var z = 0; z < inl.length; z++) pushSub('  ' + (z === 0 ? '※ ' : new Array(nmW + 1).join(' ')) + inl[z]);
     }
   }
   if (otherNeeds.length) {
