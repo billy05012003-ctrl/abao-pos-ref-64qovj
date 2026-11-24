@@ -5475,7 +5475,7 @@ function buildTicketLines_(r, printCount) {
   else payLine = '付款：' + (r[10] || '') + '（已付款）';
 
   // 11-21 老闆（參考大麥）：跟雲端 ticket.js 同一套新樣式——待付款黑底白字、備註框、品名加高、末三碼、內用外帶（出單機指令直接放在文字行裡）
-  var ESC_ = { tallOn: '\x1D\x21\x01\x1C\x21\x08', tallOff: '\x1D\x21\x00\x1C\x21\x00', invOn: '\x1D\x42\x01', invOff: '\x1D\x42\x00', gapOn: '\x1B\x32', gapOff: '\x1B\x4A\x18' };   // 11-24 同 ticket.js：品項之間空一行、品名下一行先往下走紙 24 點（≈3mm）
+  var ESC_ = { tallOn: '\x1D\x21\x01\x1C\x21\x08', tallOff: '\x1D\x21\x00\x1C\x21\x00', invOn: '\x1D\x42\x01', invOff: '\x1D\x42\x00', gapOn: '\x1B\x32', gapOff: '\x1B\x4A\x18', noteGap: '\x1B\x4A\x10', optGap: '\x1B\x4A\x08' };   // 11-24 同 ticket.js：品項之間空一行、品名下一行先往下走紙 24 點（≈3mm）
   var tall_ = function (t) { return ESC_.tallOn + t + ESC_.tallOff; };
   var tailSrc = String(r[38] || '').replace(/\D/g, ''), memSrc = String(r[11] || '').replace(/\D/g, '');
   var tail = tailSrc.length === 3 ? tailSrc : (memSrc.length >= 3 ? memSrc.slice(-3) : '');
@@ -5519,25 +5519,25 @@ function buildTicketLines_(r, printCount) {
     var pm = fullName.match(/^([^（]*)（(.*)）\s*$/);
     if (pm) { baseName = pm[1].trim(); opts = splitTopLevelOptions_(pm[2]); }
     var label = baseName + (it.size ? '(' + it.size + ')' : '');
-    var qtyPart = ' x' + (Number(it.qty) || 1);
-    var pricePart = it.price !== undefined ? '$' + ((Number(it.price) || 0) * (Number(it.qty) || 1)) : '';
-    // 價格靠右佔「價格字數+1」欄，其餘給品名；先折品名，再把「 x數量」接在最後一行，放不下就獨立一行(不把x與數字切開)
-    var avail = W - (pricePart ? dispWidth_(pricePart) + 1 : 0);
-    var labelLines = wrapByWidth_(label, avail);
-    var lastIdx = labelLines.length - 1;
-    if (dispWidth_(labelLines[lastIdx] + qtyPart) <= avail) labelLines[lastIdx] += qtyPart;
-    else labelLines.push(qtyPart.replace(/^ /, ''));
+    // 11-24 同 ticket.js（老闆選「丙」）：數量黑底白字一格放在金額前面、兩個都靠第一行最右邊；金額不寫 $、固定佔 4 欄；品名第二行起先走紙 8 點
+    var qn = String(Number(it.qty) || 1), qtyInv = ESC_.invOn + ' ' + qn + ' ' + ESC_.invOff;
+    var priceNum = it.price !== undefined ? String((Number(it.price) || 0) * (Number(it.qty) || 1)) : '';
+    var pr = priceNum ? padLeft_(priceNum, Math.max(4, priceNum.length)) : '';
+    var rightW = qn.length + 2 + (pr ? pr.length + 1 : 0);
+    var labelLines = wrapByWidth_(label, W - rightW - 1);
     for (var k = 0; k < labelLines.length; k++) {
-      lines.push((k === labelLines.length - 1 ? ESC_.gapOn : '') + tall_(k === labelLines.length - 1 && pricePart ? padRight_(labelLines[k], avail) + padLeft_(pricePart, W - avail) : labelLines[k]));
+      lines.push((k > 0 ? ESC_.optGap : '') + (k === labelLines.length - 1 ? ESC_.gapOn : '') + tall_(k === 0 ? padRight_(labelLines[k], W - rightW) + qtyInv + (pr ? ' ' + pr : '') : labelLines[k]));
     }
     // 套餐配料分層(2026-09-29 老闆定案，跟點餐頁套餐流程的頁面順序一致)：
     //   第一層＝飲料之前的頁(第一頁餐點特製、升級套餐的點心)；第二層＝飲料頁(飲料名稱＋冰塊甜度，兩行對齊，不印「飲料：」)；
     //   第三層＝飲料之後的頁(嚴選限定/豪華升級、加價購、醬料)。點餐頁把套餐飲料組成「飲料：中杯紅茶（正常冰、正常糖）」並排好順序
-    var afterDrink = false;
+    var afterDrink = false, subStarted = false;
+    // 11-24 同 ticket.js：配料和品項備註也加高；第二行起先走紙 8 點
+    var pushSub = function (s) { lines.push((subStarted ? ESC_.optGap : '') + tall_(s)); subStarted = true; };
     var pushOpt = function (text, level) {
       var pad = new Array(level * 2 + 1).join(' ');
       var ow = wrapOptionText_(text, W - pad.length - 2);
-      for (var q = 0; q < ow.length; q++) lines.push(pad + (q === 0 ? '- ' : '  ') + ow[q]);
+      for (var q = 0; q < ow.length; q++) pushSub(pad + (q === 0 ? '- ' : '  ') + ow[q]);
     };
     for (var o = 0; o < opts.length; o++) {
       var dm = opts[o].match(/^飲料：(.*?)(?:（(.*)）)?$/);
@@ -5551,7 +5551,7 @@ function buildTicketLines_(r, printCount) {
     }
     if (it.note) {
       var inl = wrapByWidth_('※ ' + String(it.note), W - 2);
-      for (var z = 0; z < inl.length; z++) lines.push('  ' + inl[z]);
+      for (var z = 0; z < inl.length; z++) pushSub('  ' + inl[z]);
     }
   }
   if (otherNeeds.length) {
@@ -5570,7 +5570,7 @@ function buildTicketLines_(r, printCount) {
   if (parsed.note) {   // 11-21 備註框（同 ticket.js noteBox）
     var lab = ' 備註 ', inner = W - 4;
     var nb = ['┌─' + lab + new Array((inner - dispWidth_(lab)) / 2).join('─') + '┐'];
-    wrapByWidth_(parsed.note, inner).forEach(function (l) { nb.push(tall_('│' + padRight_(l, inner) + '│')); });
+    wrapByWidth_(parsed.note, inner).forEach(function (l, k) { nb.push((k > 0 ? ESC_.noteGap : '') + tall_('│' + padRight_(l, inner) + '│')); });   // 11-24 (15o) 同 ticket.js：備註行和行之間走紙 16 點
     nb.push('└' + new Array(inner / 2 + 1).join('─') + '┘');
     nb.forEach(function (l) { lines.push(l); });
   }
