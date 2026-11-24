@@ -5465,7 +5465,7 @@ function buildTicketLines_(r, printCount) {
   else payLine = '付款：' + (r[10] || '') + '（已付款）';
 
   // 11-21 老闆（參考大麥）：跟雲端 ticket.js 同一套新樣式——待付款黑底白字、備註框、品名加高、末三碼、內用外帶（出單機指令直接放在文字行裡）
-  var ESC_ = { tallOn: '\x1D\x21\x01\x1C\x21\x08', tallOff: '\x1D\x21\x00\x1C\x21\x00', invOn: '\x1D\x42\x01', invOff: '\x1D\x42\x00' };
+  var ESC_ = { tallOn: '\x1D\x21\x01\x1C\x21\x08', tallOff: '\x1D\x21\x00\x1C\x21\x00', invOn: '\x1D\x42\x01', invOff: '\x1D\x42\x00', gapOn: '\x1B\x33\x40', gapOff: '\x1B\x32' };   // 11-24 同 ticket.js：品項之間空一行、品名下面多空 16 點
   var tall_ = function (t) { return ESC_.tallOn + t + ESC_.tallOff; };
   var tailSrc = String(r[38] || '').replace(/\D/g, ''), memSrc = String(r[11] || '').replace(/\D/g, '');
   var tail = tailSrc.length === 3 ? tailSrc : (memSrc.length >= 3 ? memSrc.slice(-3) : '');
@@ -5494,6 +5494,7 @@ function buildTicketLines_(r, printCount) {
   var lastWho = null;
   for (var i = 0; i < items.length; i++) {
     var it = items[i] || {};
+    if (i > 0) lines.push('');   // 11-24 品項之間空一行
     if (isGroup && String(it.who || '') !== lastWho) {
       lastWho = String(it.who || '');
       var whoSum = byWho[lastWho].reduce(function (s, x) { return s + (Number(x.price) || 0) * (Number(x.qty) || 1); }, 0);
@@ -5517,7 +5518,7 @@ function buildTicketLines_(r, printCount) {
     if (dispWidth_(labelLines[lastIdx] + qtyPart) <= avail) labelLines[lastIdx] += qtyPart;
     else labelLines.push(qtyPart.replace(/^ /, ''));
     for (var k = 0; k < labelLines.length; k++) {
-      lines.push(tall_(k === labelLines.length - 1 && pricePart ? padRight_(labelLines[k], avail) + padLeft_(pricePart, W - avail) : labelLines[k]));
+      lines.push((k === labelLines.length - 1 ? ESC_.gapOn : '') + tall_(k === labelLines.length - 1 && pricePart ? padRight_(labelLines[k], avail) + padLeft_(pricePart, W - avail) : labelLines[k]));
     }
     // 套餐配料分層(2026-09-29 老闆定案，跟點餐頁套餐流程的頁面順序一致)：
     //   第一層＝飲料之前的頁(第一頁餐點特製、升級套餐的點心)；第二層＝飲料頁(飲料名稱＋冰塊甜度，兩行對齊，不印「飲料：」)；
@@ -5581,6 +5582,7 @@ function buildTicketLines_(r, printCount) {
     for (var k2 = 0; k2 < dl.length; k2++) lines.push(k2 === dl.length - 1 ? padRight_(dl[k2], avail2) + padLeft_(amt, W - avail2) : dl[k2]);
   });
   lines.push('合計 $' + total);
+  for (var g = 1; g < lines.length; g++) if (lines[g - 1].indexOf(ESC_.gapOn) >= 0 && lines[g].indexOf(ESC_.gapOn) < 0) lines[g] = ESC_.gapOff + lines[g];   // 品名下一行改回預設行距
   return lines;
 }
 function buildCupLabels_(r, isDrinkName) {
