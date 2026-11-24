@@ -2963,6 +2963,42 @@ function goToPosDiscountCategory() {
     grid.appendChild(card);
   });
   itemsCol.appendChild(grid);
+  // 11-24 老闆定：今天不能用的活動鍵不要整個藏起來——60 天內有活動日的放下面灰色顯示「下次 M/D（週）」，按了只提示、不套用
+  const upcoming = posUpcomingActButtons_();
+  if (upcoming.length) {
+    const title = document.createElement('div');
+    title.className = 'pos-col-title';
+    title.style.cssText = 'margin-top:16px;color:var(--muted);';
+    title.textContent = '接下來的活動（今天不能用）';
+    itemsCol.appendChild(title);
+    const g2 = document.createElement('div');
+    g2.className = 'pos-item-grid';
+    upcoming.forEach(u => {
+      const card = document.createElement('div');
+      card.className = 'pos-grid-card pos-discount-card';
+      card.style.cssText = 'opacity:0.6;filter:grayscale(1);cursor:not-allowed;';
+      card.innerHTML = `<div class="name">${escapeHtml_(u.name)}</div><div style="font-size:0.72rem;margin-top:4px;">下次 ${posMdW_(u.date)}</div>`;
+      card.onclick = () => alert(`「${u.name}」今天不能用\n\n下次活動日：${posMdW_(u.date)}${u.title ? '（' + u.title + '）' : ''}`);
+      g2.appendChild(card);
+    });
+    itemsCol.appendChild(g2);
+  }
+}
+// 11-24：今天不能用、但接下來 60 天內有門市活動日的活動鍵（後端 homeActs 只給 60 天內的活動日），照下次日期排
+function posUpcomingActButtons_() {
+  const t = todayYmd_(), nowList = posDiscountTypesNow_(), out = [];
+  POS_ALL_PROMOS.filter(p => p.status !== '停用' && p.showAsButton && !isTierPerkPromo_(p) && nowList.indexOf(p.name) === -1).forEach(p => {
+    let best = null;
+    posStoreActsOf_(p.name).forEach(a => (a.dates || []).forEach(d => {
+      if (d > t && (!p.startDate || d >= p.startDate) && (!p.endDate || d <= p.endDate) && (!best || d < best.date)) best = { date: d, title: a.title || '' };
+    }));
+    if (best) out.push({ name: p.name, date: best.date, title: best.title });
+  });
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+function posMdW_(ymd) {
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  return m + '/' + d + '（' + '日一二三四五六'[new Date(y, m - 1, d).getDay()] + '）';
 }
 
 // ---------------------------------------------------------------
