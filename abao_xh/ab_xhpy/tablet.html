@@ -668,6 +668,7 @@
     <div style="font-size:0.76rem;color:var(--muted);margin:0 0 10px;">
       「關帳」會把今天(取餐日期=今天)還卡著的「取餐付款待收款」「線上金流待付款」訂單一次作廢，先看過清單再確認，需要店長以上權限。
     </div>
+    <div id="close-register-quick-note"></div>
     <div id="close-register-preview-list"><div class="empty-hint">載入中...</div></div>
     <div style="margin-top:10px;">
       <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">店長／老闆姓名</label>
@@ -1680,6 +1681,7 @@ function loadRegisterLog() {
 function openCloseRegisterPreview() {
   document.getElementById('pos-close-register-overlay').classList.add('open');
   document.getElementById('close-register-preview-list').innerHTML = '<div class="empty-hint">載入中...</div>';
+  qoCloseReminder_();   // 11-24 外送平台還沒打烊補登的提醒（不擋）
   document.getElementById('close-register-staff-pin').value = '';
   document.getElementById('close-register-staff-select').innerHTML = '<option value="">請選擇</option>';
   closeRegisterStaffConfigured_ = true; // 查回來之前先當作「有設定」，避免查詢還沒回來時被誤判成不用驗證
@@ -2981,9 +2983,17 @@ function goToPosQuickOrderCategory() {
   setPosStep('items');
 
   itemsCol.innerHTML = `
-    <div style="max-width:360px;">
+    <div style="max-width:440px;">
       <div class="pos-col-title">快速出單（熊貓/581/日系）</div>
-      <div style="font-size:0.78rem;color:var(--muted);margin-bottom:10px;">只記總金額，不進購物車；不計入門市總金額，另外累計。發票類型供之後手動開立實際發票參照，這裡不會真的開發票。</div>
+      <div id="qo-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+        <button type="button" class="pos-pay-btn" data-tab="single" onclick="qoTab_('single')">單張登記</button>
+        <button type="button" class="pos-pay-btn" data-tab="close" onclick="qoTab_('close')">打烊補登</button>
+        <button type="button" class="pos-pay-btn" data-tab="log" onclick="qoTab_('log')">紀錄／改金額</button>
+      </div>
+      <div id="qo-pane-close" style="display:none;"></div>
+      <div id="qo-pane-log" style="display:none;"></div>
+      <div id="qo-pane-single">
+      <div style="font-size:0.78rem;color:var(--muted);margin-bottom:10px;">只記總金額，不進購物車；不計入門市總金額，另外累計。發票類型供之後手動開立實際發票參照，這裡不會真的開發票。白天沒空一張一張打，打烊時到「打烊補登」照抄平台今日總額也可以。</div>
       <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">來源</label>
       <input type="hidden" id="quick-order-source">
       <div id="quick-order-source-group" style="display:flex;flex-wrap:wrap;gap:8px;">
@@ -3002,6 +3012,7 @@ function goToPosQuickOrderCategory() {
       </div>
       <button class="btn btn-primary" style="width:100%;padding:10px;margin-top:14px;" onclick="submitQuickOrder()">出單</button>
       <div id="quick-order-summary" style="margin-top:16px;padding-top:10px;border-top:1px dashed var(--border);font-size:0.82rem;color:var(--muted);">載入今日累計中...</div>
+      </div>
     </div>
   `;
   // 記住上次選擇(2026-09-17新增)：來源/發票類型改天再登記外送單時預設帶上次選的，不用每次重選
@@ -3013,7 +3024,177 @@ function goToPosQuickOrderCategory() {
   const srcOn = quickSourcesOn_();   // 10-23 後台第三方收款關掉的不列
   setQuickOrderSource_(srcOn.includes(savedSource) ? savedSource : (srcOn[0] || ''));
   setQuickOrderInvoiceType_(INVOICE_TYPES.includes(savedInvoiceType) ? savedInvoiceType : INVOICE_TYPES[0]);
-  loadQuickOrderSummary();
+  qoTab_('single');
+}
+
+// ---- 11-24 外送平台打烊補登＋改金額（後端 quickDay／quickCloseDay／quickAdjust；SQL 55）----
+// 打烊補登：照抄平台 App 今日總額，系統算差額（少了補一張「打烊補登」、剛好記「對過了」、多了提醒去改）
+// 紀錄／改金額：可以往前選到上個月 1 號；改金額要店長以上 PIN，改成 0＝整筆退掉；算回原本那天；不動任何金流
+let qoDay_ = null, qoLogDate_ = '', qoEditing_ = '';
+const QO_ADJ_REASONS_ = ['平台退款', '打錯金額', '漏打補登', '其他'];
+const qoMoney_ = n => '$' + (Number(n) || 0).toLocaleString();
+function qoTab_(tab) {
+  document.querySelectorAll('#qo-tabs .pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-tab') === tab));
+  ['single', 'close', 'log'].forEach(t => { const el = document.getElementById('qo-pane-' + t); if (el) el.style.display = t === tab ? '' : 'none'; });
+  if (tab === 'single') loadQuickOrderSummary();
+  if (tab === 'close') qoLoadClose_();
+  if (tab === 'log') { qoEditing_ = ''; qoLoadLog_(qoLogDate_); }
+}
+function qoErrHtml_(d) { return '<div class="empty-hint" style="color:#c0392b;">' + escapeHtml_((d && d.message) || '讀取失敗，請稍後再試') + '</div>'; }
+// 今天各平台：已登記多少（只算已收款的）、最後一次補登
+function qoSumOf_(day, src) {
+  const list = (day.orders || []).filter(o => o.source === src && o.status !== '已退款');
+  return { total: list.reduce((a, o) => a + o.total, 0), count: list.length };
+}
+function qoLastClose_(day, src) { return (day.closes || []).filter(c => c.source === src).slice(-1)[0] || null; }
+function qoLoadClose_() {
+  const pane = document.getElementById('qo-pane-close');
+  if (!pane) return;
+  pane.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'quickDay', storeId: STORE_ID }).then(d => {
+    if (!pane.isConnected) return;
+    if (d.status !== 'ok') { pane.innerHTML = qoErrHtml_(d); return; }
+    qoDay_ = d;
+    const srcs = quickSourcesOn_();
+    if (!srcs.length) { pane.innerHTML = '<div class="empty-hint" style="color:#c0392b;">後台「第三方收款」都關了</div>'; return; }
+    pane.innerHTML = '<div style="font-size:0.78rem;color:var(--muted);margin-bottom:8px;">打烊時打開外送平台 App，照抄「今日總額」，系統自己算要補多少。那個平台今天沒單就打 0。白天打錯的單請到「紀錄／改金額」改。</div>'
+      + srcs.map(src => {
+        const sum = qoSumOf_(d, src), last = qoLastClose_(d, src);
+        return `<div class="order-card" style="display:block;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <strong>${escapeHtml_(src)}</strong>
+            <span class="meta">今天已登記 ${qoMoney_(sum.total)}（${sum.count} 筆）</span>
+          </div>
+          ${last ? `<div class="meta" style="color:#1e8449;margin-top:2px;">✅ ${escapeHtml_(last.at)} ${escapeHtml_(last.by || '')} 補登過（平台總額 ${qoMoney_(last.platformTotal)}${last.added ? '，補了 ' + qoMoney_(last.added) : '，剛好對上'}）</div>` : '<div class="meta" style="color:#c0392b;margin-top:2px;">今天還沒補登</div>'}
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <input type="number" inputmode="numeric" min="0" id="qo-close-${escapeHtml_(src)}" placeholder="平台今日總額" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+            <button class="btn btn-primary" style="padding:8px 14px;" onclick="qoCloseSubmit_('${escapeHtml_(src)}')">補登</button>
+          </div>
+        </div>`;
+      }).join('');
+  }).catch(() => { if (pane.isConnected) pane.innerHTML = qoErrHtml_(null); });
+}
+function qoCloseSubmit_(src) {
+  const el = document.getElementById('qo-close-' + src);
+  const raw = el ? String(el.value).trim() : '';
+  const total = Number(raw);
+  if (raw === '' || !Number.isInteger(total) || total < 0) { alert('請輸入平台今日總額（整數，沒單請打 0）'); return; }
+  const rec = qoDay_ ? qoSumOf_(qoDay_, src).total : 0;
+  if (total < rec) { alert(`${src}：今天已登記 ${qoMoney_(rec)}，比平台總額 ${qoMoney_(total)} 多了 ${qoMoney_(rec - total)}。\n\n請到「紀錄／改金額」把打錯的那張改掉，再回來補登。`); return; }
+  const msg = total === rec
+    ? `${src}：今天已登記 ${qoMoney_(rec)}，跟平台總額剛好對上。\n\n記成「今天對過了」？`
+    : `${src}：今天已登記 ${qoMoney_(rec)}，平台總額 ${qoMoney_(total)}\n\n要補登 ${qoMoney_(total - rec)}？`;
+  if (!confirm(msg)) return;
+  withPosPerm_('quickOrder', '打烊補登', (staffName, staffPin) => {
+    apiPost({ action: 'quickCloseDay', storeId: STORE_ID, staffName, staffPin, source: src, platformTotal: total }).then(r => {
+      if (r.status !== 'ok') { alert(r.message || '補登失敗'); return; }
+      if (r.result === 'over') alert(`${src}：系統查到今天已登記 ${qoMoney_(r.recorded)}，比平台總額多了 ${qoMoney_(r.over)}（可能另一台平板剛登記）。\n請到「紀錄／改金額」看一下。`);
+      else if (r.result === 'added') alert(`已補登「${src}」${qoMoney_(r.added)}（訂單編號 ${r.orderId}）`);
+      else alert(`「${src}」今天對過了，不用補`);
+      qoLoadClose_();
+    }).catch(() => alert('網路異常，請稍後再試'));
+  });
+}
+function qoLoadLog_(date) {
+  const pane = document.getElementById('qo-pane-log');
+  if (!pane) return;
+  pane.innerHTML = '<div class="empty-hint">載入中...</div>';
+  apiGet({ action: 'quickDay', storeId: STORE_ID, date: date || '' }).then(d => {
+    if (!pane.isConnected) return;
+    if (d.status !== 'ok') { pane.innerHTML = qoErrHtml_(d) + (date ? '<button class="btn" onclick="qoLoadLog_(\'\')">回今天</button>' : ''); return; }
+    qoDay_ = d; qoLogDate_ = d.date === d.today ? '' : d.date;
+    const rows = (d.orders || []).map(o => {
+      const done = o.status === '已退款', editing = qoEditing_ === o.orderId;
+      return `<div class="order-card" style="display:block;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <div><strong>${escapeHtml_(o.source)}</strong>　${done ? '<s>' + qoMoney_(o.total) + '</s> <span style="color:#c0392b;">已退掉</span>' : qoMoney_(o.total)}
+            ${o.adjusted ? '<span style="font-size:0.72rem;color:#b9770e;border:1px solid #b9770e;border-radius:4px;padding:0 4px;margin-left:4px;">改過</span>' : ''}
+            ${o.note ? '<span class="meta">　' + escapeHtml_(o.note) + '</span>' : ''}</div>
+          ${done ? '' : `<button class="btn" style="padding:4px 10px;" onclick="qoEditOpen_('${escapeHtml_(o.orderId)}')">改金額</button>`}
+        </div>
+        <div class="meta">${escapeHtml_(o.time)}　${escapeHtml_(o.orderId)}</div>
+        ${editing ? qoEditHtml_(o) : ''}
+      </div>`;
+    }).join('');
+    const closes = (d.closes || []).map(c => `<div class="meta">✅ ${escapeHtml_(c.at)} ${escapeHtml_(c.source)} 打烊補登（平台 ${qoMoney_(c.platformTotal)}，補 ${qoMoney_(c.added)}）${c.by ? '・' + escapeHtml_(c.by) : ''}</div>`).join('');
+    pane.innerHTML = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <input type="date" id="qo-log-date" value="${escapeHtml_(d.date)}" min="${escapeHtml_(d.minDate)}" max="${escapeHtml_(d.today)}" onchange="qoEditing_='';qoLoadLog_(this.value)" style="padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;">
+        ${d.date === d.today ? '<span class="meta">今天</span>' : '<button class="btn" style="padding:4px 10px;" onclick="qoEditing_=\'\';qoLoadLog_(\'\')">回今天</button>'}
+      </div>
+      <div style="font-size:0.76rem;color:var(--muted);margin-bottom:8px;">可以選到上個月 1 號（${escapeHtml_(d.minDate.slice(5).replace('-', '/'))}）。平台退款、打錯、漏打都在這裡改，改了算回那一天；改成 0＝整筆退掉。只改報表、不動任何金流，錢請在平台那邊退。</div>
+      ${rows || '<div class="empty-hint">這天沒有外送平台的單</div>'}
+      ${closes ? '<div style="margin-top:8px;">' + closes + '</div>' : ''}`;
+  }).catch(() => { if (pane.isConnected) pane.innerHTML = qoErrHtml_(null); });
+}
+function qoEditOpen_(orderId) { qoEditing_ = qoEditing_ === orderId ? '' : orderId; qoLoadLog_(qoLogDate_); }
+function qoEditHtml_(o) {
+  return `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);">
+    <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">改成多少（原本 ${qoMoney_(o.total)}；整筆退掉打 0）</label>
+    <input type="number" inputmode="numeric" min="0" id="qo-adj-total" placeholder="新的金額" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+    <label style="display:block;font-size:0.8rem;margin:8px 0 4px;color:var(--muted)">原因</label>
+    <input type="hidden" id="qo-adj-reason">
+    <div id="qo-adj-reason-group" style="display:flex;flex-wrap:wrap;gap:6px;">
+      ${QO_ADJ_REASONS_.map(r => `<button type="button" class="pos-pay-btn" data-value="${r}" onclick="qoAdjReason_('${r}')">${r}</button>`).join('')}
+    </div>
+    <input type="text" id="qo-adj-note" maxlength="60" placeholder="說明（選「其他」一定要填）" style="width:100%;margin-top:6px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <button class="btn" style="flex:1;" onclick="qoEditOpen_('${escapeHtml_(o.orderId)}')">取消</button>
+      <button class="btn btn-primary" style="flex:2;" onclick="qoAdjSubmit_('${escapeHtml_(o.orderId)}', ${Number(o.total) || 0}, '${escapeHtml_(o.source)}')">確定修改（需要店長 PIN）</button>
+    </div>
+  </div>`;
+}
+function qoAdjReason_(r) {
+  document.getElementById('qo-adj-reason').value = r;
+  document.querySelectorAll('#qo-adj-reason-group .pos-pay-btn').forEach(b => b.classList.toggle('active', b.getAttribute('data-value') === r));
+}
+function qoAdjSubmit_(orderId, oldTotal, src) {
+  const raw = String(document.getElementById('qo-adj-total').value).trim();
+  const total = Number(raw);
+  const reason = document.getElementById('qo-adj-reason').value;
+  const note = String(document.getElementById('qo-adj-note').value).trim();
+  if (raw === '' || !Number.isInteger(total) || total < 0) { alert('請輸入正確的金額（整數，整筆退掉打 0）'); return; }
+  if (total === oldTotal) { alert('金額跟原本一樣，不用改'); return; }
+  if (!reason) { alert('請選擇原因'); return; }
+  if (reason === '其他' && !note) { alert('選「其他」請填寫說明'); return; }
+  const day = qoDay_ ? qoDay_.date : '';
+  const msg = total === 0
+    ? `確定把 ${day.slice(5).replace('-', '/')}「${src}」${qoMoney_(oldTotal)} 這筆整筆退掉嗎？\n\n只改報表，錢請在平台那邊退。`
+    : `確定把 ${day.slice(5).replace('-', '/')}「${src}」從 ${qoMoney_(oldTotal)} 改成 ${qoMoney_(total)} 嗎？\n\n改了算回那一天的報表，只改報表、不動任何金流。`;
+  if (!confirm(msg)) return;
+  withPosPerm_('refund', '外送平台改金額', (staffName, staffPin) => {
+    apiPost({ action: 'quickAdjust', storeId: STORE_ID, staffName, staffPin, orderId, newTotal: total, reason, reasonNote: note }).then(r => {
+      if (r.status !== 'ok') { alert(r.message || '修改失敗'); return; }
+      alert(r.refunded ? `已整筆退掉（${r.date.slice(5).replace('-', '/')}「${r.source}」${qoMoney_(r.oldTotal)}）` : `已改成 ${qoMoney_(r.newTotal)}（原本 ${qoMoney_(r.oldTotal)}，算回 ${r.date.slice(5).replace('-', '/')}）`);
+      qoEditing_ = '';
+      qoLoadLog_(qoLogDate_);
+    }).catch(() => alert('網路異常，請稍後再試'));
+  });
+}
+// 關帳提醒：打開的外送平台今天還沒打烊補登 → 列出來＋「去補登」（只提醒，不擋關帳）
+function qoCloseReminder_() {
+  const box = document.getElementById('close-register-quick-note');
+  if (!box) return;
+  box.innerHTML = '';
+  const srcs = quickSourcesOn_();
+  if (!srcs.length) return;
+  apiGet({ action: 'quickDay', storeId: STORE_ID }).then(d => {
+    if (!box.isConnected || d.status !== 'ok') return;   // 讀不到（例如 SQL 還沒貼）就不提醒，不影響關帳
+    const left = srcs.filter(src => !qoLastClose_(d, src));
+    if (!left.length) return;
+    box.innerHTML = `<div style="background:#fef5e7;border:1px solid #f5cba7;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:0.82rem;">
+      ⚠ 外送平台今天還沒打烊補登：<strong>${left.map(escapeHtml_).join('、')}</strong>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+        <button class="btn btn-primary" style="padding:4px 12px;" onclick="qoGoClose_()">去補登</button>
+        <span class="meta">不補也可以直接關帳，報表的外送平台只會算白天打的</span>
+      </div>
+    </div>`;
+  }).catch(() => {});
+}
+function qoGoClose_() {
+  closeCloseRegisterPreview();
+  closePosManageOverlay();
+  goToPosQuickOrderCategory();
+  qoTab_('close');
 }
 
 function setQuickOrderSource_(source) {

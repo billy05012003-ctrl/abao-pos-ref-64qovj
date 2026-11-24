@@ -1026,6 +1026,7 @@
     <div id="rpt-sales">
       <div class="rpt-cards" id="rpt-cards"></div>
       <div class="ops-meta" id="rpt-cards-note" style="margin-top:4px;"></div>
+      <div id="rpt-adj"></div>
       <div class="rpt-box"><div class="rpt-box-h">銷售概況</div><div id="rpt-chart"></div></div>
       <div class="rpt-two">
         <div class="rpt-box"><div class="rpt-box-h">人氣排行 <span class="rpt-seg"><button type="button" class="active" onclick="rptRankKind_('qty',false,this)">餐點</button><button type="button" onclick="rptRankKind_('qty',true,this)">套餐</button></span></div><div id="rpt-rank-qty"></div></div>
@@ -1727,10 +1728,21 @@ function renderRptSales_() {
   document.getElementById('rpt-cards').innerHTML = card('銷售淨額', rptMoney_(a.net), '銷售總額 ' + rptMoney_(a.gross)) + card('實際結帳單量', a.n.toLocaleString())
     + card('平均單價', rptMoney_(a.avg)) + card('折扣金額', rptMoney_(a.disc)) + card('作廢金額', rptMoney_(a.voidAmt), a.voidN + ' 張') + card('退款金額', rptMoney_(a.refAmt), a.refN + ' 張');
   document.getElementById('rpt-cards-note').textContent = a.unsN ? `待收款 ${a.unsN} 張 ${rptMoney_(a.unsAmt)}（取餐付款還沒收，未算入）` : '';
+  renderRptAdj_();
   renderRptChart_();
   ['qty', 'amount'].forEach(renderRptRank_);
   renderRptHbars_();
   renderRptSalesTable_();
+}
+// 11-24 外送平台改金額（平板 快速出單→紀錄／改金額；SQL 55）：這段期間有調整就列出來，看得出哪天的數字被動過
+function renderRptAdj_() {
+  const el = document.getElementById('rpt-adj');
+  const list = (rptData_ && rptData_.quickAdjusts) || [];
+  if (!list.length) { el.innerHTML = ''; return; }
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  el.innerHTML = `<details class="bo-help" style="margin-top:6px;" open><summary>⚠ 這段期間有 ${list.length} 筆外送平台調整（數字已算回原本那天）</summary><div>`
+    + list.map(x => `<div class="ops-meta">${esc(x.date.slice(5).replace('-', '/'))}　${esc(x.source)}　${rptMoney_(x.oldTotal)} → ${x.newTotal ? rptMoney_(x.newTotal) : '整筆退掉'}　${esc(x.reason)}　（${esc(x.by || '')} ${esc(x.at)} 改，單號 ${esc(x.orderId)}）</div>`).join('')
+    + '</div></details>';
 }
 // 銷售概況折線圖：一天看每小時；超過一天看每天；超過兩個月看每月
 function renderRptChart_() {
