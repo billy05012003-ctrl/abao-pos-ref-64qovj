@@ -945,10 +945,20 @@ function loadOrders() {
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${readyBtn_(data.readyNotify, o)}${o.unpaid
           ? `<button class="btn btn-primary" onclick="markCollected('${o.orderId}', ${Number(o.totalAmount) || 0})">💵 收款 $${o.totalAmount}</button><button class="btn btn-secondary" onclick="openVoidOrder('${o.orderId}')">作廢</button>`
-          : `<button class="btn btn-primary" onclick="markReady('${o.orderId}')">已取餐</button>`}</div>
+          : `<button class="btn btn-primary" onclick="markReady('${o.orderId}')">已取餐</button>`}<button class="btn btn-secondary" onclick="reprintKitchen_('${o.orderId}')">🖨 補印廚房單</button></div>
       </div>
     `).join('');
   });
+}
+
+// ---- 11-24 (2s) 補印廚房單：待取餐卡片上的按鈕；不用 PIN（同補印杯貼）；單上最上面印黑底白字「補印（第N次）」----
+//   後端擋：線上單還沒按確認接單、還在排隊／列印中、已作廢、待付款、沒進過出單佇列（快速出單）
+function reprintKitchen_(orderId) {
+  if (posOffline_()) { alert('現在斷網，雲端的單補印不了；離線單請點上方紅條→離線單→「重印這張離線單」'); return; }
+  if (!confirm('確定要補印「' + orderId + '」的廚房單嗎？\n（單子最上面會印「補印」）')) return;
+  apiPost({ action: 'reprint', orderId, storeId: STORE_ID }).then(d => {
+    alert(d && d.status === 'ok' ? '已排進出單機，等一下就會印出來（單子最上面印「補印」）' : ((d && d.message) || '補印失敗'));
+  }).catch(() => alert('網路異常，不確定有沒有送出；等 10 秒看出單機有沒有印，沒有再按一次'));
 }
 
 // ---- 11-21 取餐通知（後台「訂單通知設定 → LINE 取餐通知」打開才出現；SQL 50）----
@@ -5471,7 +5481,7 @@ function buildTicketLines_(r, printCount) {
   var tail = tailSrc.length === 3 ? tailSrc : (memSrc.length >= 3 ? memSrc.slice(-3) : '');
   var dine = channel !== '線上' ? String(r[37] || '') : '';
   var lines = [];
-  if (printCount > 1) lines.push('*** 補印 *** (第' + printCount + '次)');
+  if (printCount > 1) lines.push(ESC_.invOn + ESC_.tallOn + padRight_(' 補印（第' + printCount + '次）', W) + ESC_.tallOff + ESC_.invOff);   // 11-24 同 ticket.js：補印黑底白字加高
   if (status === '待收款') lines.push(ESC_.invOn + ESC_.tallOn + padRight_(' 待付款 $' + total, W) + ESC_.tallOff + ESC_.invOff);
   lines.push('== ' + storeName + ' ==');
   lines.push('訂單 ' + r[1] + (tail ? '  末3碼 ' + tail : ''));
