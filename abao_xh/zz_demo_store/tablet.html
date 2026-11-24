@@ -5467,7 +5467,7 @@ function buildTicketLines_(r, printCount) {
   else payLine = '付款：' + (r[10] || '') + '（已付款）';
 
   // 11-21 老闆（參考大麥）：跟雲端 ticket.js 同一套新樣式——待付款黑底白字、備註框、品名加高、末三碼、內用外帶（出單機指令直接放在文字行裡）
-  var ESC_ = { tallOn: '\x1D\x21\x01\x1C\x21\x08', tallOff: '\x1D\x21\x00\x1C\x21\x00', invOn: '\x1D\x42\x01', invOff: '\x1D\x42\x00', gapOn: '\x1B\x33\x40', gapOff: '\x1B\x32' };   // 11-24 同 ticket.js：品項之間空一行、品名下面多空 16 點
+  var ESC_ = { tallOn: '\x1D\x21\x01\x1C\x21\x08', tallOff: '\x1D\x21\x00\x1C\x21\x00', invOn: '\x1D\x42\x01', invOff: '\x1D\x42\x00', gapOn: '\x1B\x32', gapOff: '\x1B\x4A\x18' };   // 11-24 同 ticket.js：品項之間空一行、品名下一行先往下走紙 24 點（≈3mm）
   var tall_ = function (t) { return ESC_.tallOn + t + ESC_.tallOff; };
   var tailSrc = String(r[38] || '').replace(/\D/g, ''), memSrc = String(r[11] || '').replace(/\D/g, '');
   var tail = tailSrc.length === 3 ? tailSrc : (memSrc.length >= 3 ? memSrc.slice(-3) : '');
@@ -5584,7 +5584,7 @@ function buildTicketLines_(r, printCount) {
     for (var k2 = 0; k2 < dl.length; k2++) lines.push(k2 === dl.length - 1 ? padRight_(dl[k2], avail2) + padLeft_(amt, W - avail2) : dl[k2]);
   });
   lines.push('合計 $' + total);
-  for (var g = 1; g < lines.length; g++) if (lines[g - 1].indexOf(ESC_.gapOn) >= 0 && lines[g].indexOf(ESC_.gapOn) < 0) lines[g] = ESC_.gapOff + lines[g];   // 品名下一行改回預設行距
+  for (var g = 1; g < lines.length; g++) if (lines[g - 1].indexOf(ESC_.gapOn) >= 0 && lines[g].indexOf(ESC_.gapOn) < 0 && lines[g] !== '') lines[g] = ESC_.gapOff + lines[g];   // 品名下一行先往下走紙（空行不用）
   return lines;
 }
 function buildCupLabels_(r, isDrinkName) {
