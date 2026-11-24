@@ -277,6 +277,8 @@
   .pmg-tile .ic { font-size:1.4rem; display:block; margin-bottom:4px; }
   .pmg-tile:disabled { background:#f2f2f2; color:#999; border-style:dashed; cursor:default; }
   .pmg-soon { display:inline-block; font-size:0.68rem; background:#ddd; color:#666; padding:1px 6px; border-radius:6px; margin-top:4px; }
+  .pmg-soon:empty { display:none; }   /* 11-25 沒有數字就不顯示（原本會多一條灰線） */
+  .pmg-tile .pmg-alert { background:#c0392b; color:#fff; }
   .pmg-crumb { font-size:0.9rem; margin:0 0 10px; }
   /* 11-13 報表 */
   .rpt-bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:6px 0 10px; font-size:0.9rem; }
@@ -454,10 +456,11 @@
     <button class="sub-item" id="pmg-sub-btn-perm" onclick="switchPosManageSubview('perm')">角色權限設定</button>
   </div>
   <div class="nav-sec switch" data-sec="switch" role="button" tabindex="0" title="點一下收合／展開">🔀 品牌範本→門市<span class="sec-caret">▼</span><small>在頁面上方切換</small></div>
-  <button id="tab-btn-menucms" onclick="toggleMenuGroup()">
-    <span class="group-toggle">菜單管理 <span class="group-caret" id="menucms-caret">▶</span></span>
+  <!-- 11-25 老闆（15k 點法統一）：菜單管理也改「點開一頁格子」；子選單 DOM 保留隱藏 -->
+  <button id="tab-btn-menucms" onclick="switchMcSubview('home')">
+    <span class="group-toggle">🍽 菜單管理 <span class="group-caret" id="menucms-caret" style="display:none;">▶</span></span>
   </button>
-  <div class="sub-list" id="menucms-sublist">
+  <div class="sub-list" id="menucms-sublist" style="display:none;">
     <button class="sub-item" id="mc-sub-btn-categories" onclick="switchMcSubview('categories')">品項分類</button>
     <button class="sub-item" id="mc-sub-btn-options" onclick="switchMcSubview('options')">客製化選項庫</button>
     <button class="sub-item" id="mc-sub-btn-printlabels" onclick="switchMcSubview('printlabels')">出單簡稱</button>
@@ -466,12 +469,13 @@
   <button id="mb-sub-btn-promo" onclick="switchMemberSubview('promo')">優惠券</button>
   <button id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">新品／好康</button>
   <div class="nav-sec brand" data-sec="brand" role="button" tabindex="0" title="點一下收合／展開">🟣 品牌共用<span class="sec-caret">▼</span><small>全部門市一起生效</small></div>
-  <button class="nav-brand" id="mb-sub-btn-members" onclick="switchMemberSubview('members')">👥 會員清單</button>
-  <!-- 11-25 會員 LINE 綁定從「POS管理」搬來：換綁申請整個品牌共用（資料庫不分門市）；限老闆照舊 -->
-  <button class="nav-brand" id="nav-btn-linebind" onclick="switchPosManageSubview('linebind')">💬 會員 LINE 綁定 <span class="pmg-soon" id="bo-linebind-badge" style="color:#c0392b;font-size:0.72rem;"></span></button>
-  <button class="nav-brand" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
-  <button class="nav-brand" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
-  <button class="nav-brand" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
+  <!-- 11-25 老闆（15k）：會員相關五項收進「👥 會員」格子頁；原本的側欄按鈕留著隱藏（切換、授權程式沿用 id） -->
+  <button class="nav-brand" id="mb-sub-btn-home" onclick="switchMemberSubview('home')">👥 會員</button>
+  <button class="nav-brand" id="mb-sub-btn-members" style="display:none;" onclick="switchMemberSubview('members')">👥 會員清單</button>
+  <button class="nav-brand" id="nav-btn-linebind" style="display:none;" onclick="switchPosManageSubview('linebind')">💬 會員 LINE 綁定</button>
+  <button class="nav-brand" id="mb-sub-btn-tiers" style="display:none;" onclick="switchMemberSubview('tiers')">會員分級</button>
+  <button class="nav-brand" id="mb-sub-btn-birthday" style="display:none;" onclick="switchMemberSubview('birthday')">生日禮</button>
+  <button class="nav-brand" id="mb-sub-btn-register" style="display:none;" onclick="switchMemberSubview('register')">註冊禮</button>
   <button class="nav-brand" id="mb-sub-btn-openstore" onclick="switchMemberSubview('openstore')">🏪 開新店</button>
 </nav>
 <script>
@@ -770,7 +774,16 @@
     </div>
   </div>
   </div><!-- /mc-draft-tools -->
+  <!-- 11-25 老闆（15k）：菜單管理格子頁；上面「正在改：」照舊顯示（決定改品牌範本還是這間店） -->
+  <div id="mc-subview-home" style="display:none;">
+    <div class="pmg-grid">
+      <button type="button" class="pmg-tile" onclick="switchMcSubview('categories')"><span class="ic">📂</span>品項分類</button>
+      <button type="button" class="pmg-tile" onclick="switchMcSubview('options')"><span class="ic">🧩</span>客製化選項庫</button>
+      <button type="button" class="pmg-tile" onclick="switchMcSubview('printlabels')"><span class="ic">🏷</span>出單簡稱</button>
+    </div>
+  </div>
   <div id="mc-subview-categories" style="display:block;">
+    <div class="pmg-crumb"><a onclick="switchMcSubview('home')">← 菜單管理</a> ／ 品項分類</div>
     <p class="bo-lead">改品項名稱、價格、新增刪除；改的是<b>草稿</b>，要發布才生效。</p>
     <details class="bo-help"><summary>說明</summary><div>
       改品項名稱/價格、新增/刪除品項、調整品項要用哪些客製化選項都在這裡。改的是<b>草稿</b>，要按上面的「發布到正式版」顧客和門市POS才看得到(發布後線上馬上換新，門市平板閒置時會自動更新)。點分類可以展開/收合看底下的品項，點品項會彈出視窗編輯。
@@ -780,6 +793,7 @@
   </div>
   <!-- 11-23 出單簡稱（SQL 54；後端 GET printLabels／POST savePrintLabels）：廚房單、杯貼品名前後加分類簡稱 -->
   <div id="mc-subview-printlabels" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchMcSubview('home')">← 菜單管理</a> ／ 出單簡稱</div>
     <p class="bo-lead">廚房單、杯貼上的品名前後加上分類名稱，避免同名品項搞混（例如招牌蛋餅的「原味」、單點的「玉米」）。</p>
     <div class="pl-live">✅ 存檔馬上生效，不用按發布</div>
     <details class="bo-help"><summary>說明</summary><div>
@@ -794,6 +808,7 @@
     <div class="pl-bar"><button type="button" class="mc-save-btn" id="pl-save-btn" onclick="savePrintLabels_()">儲存</button><button type="button" class="mc-add-btn" style="width:auto;padding:6px 14px;" onclick="loadPrintLabels_()">放棄修改</button><span id="pl-msg" style="font-size:0.85rem;"></span></div>
   </div>
   <div id="mc-subview-options" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchMcSubview('home')">← 菜單管理</a> ／ 客製化選項庫</div>
     <p class="bo-lead">全部品項共用的選項組（例如甜度），改了會影響所有用到它的品項。</p>
     <details class="bo-help"><summary>說明</summary><div>
       這裡是全部品項共用的「客製化選項庫」，例如「麵包醬料選擇」「甜度選擇」這種選項組本身。改這裡會影響所有掛載這個群組的品項。跟品項分類一樣改的是<b>草稿</b>，要到「品項分類」按「發布到正式版」才會生效。
@@ -811,8 +826,19 @@
   </div>
 </div>
 <div id="view-member" class="view" style="display:none;">
+  <!-- 11-25 老闆（15k）：品牌共用「👥 會員」格子頁 -->
+  <div id="mb-subview-home" style="display:none;">
+    <div class="pmg-grid">
+      <button type="button" class="pmg-tile" id="mb-tile-members" onclick="switchMemberSubview('members')"><span class="ic">👥</span>會員清單</button>
+      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('linebind')"><span class="ic">💬</span>LINE 綁定<br><span class="pmg-soon pmg-alert" id="bo-linebind-badge"></span></button>
+      <button type="button" class="pmg-tile" id="mb-tile-tiers" onclick="switchMemberSubview('tiers')"><span class="ic">🏅</span>會員分級</button>
+      <button type="button" class="pmg-tile" id="mb-tile-birthday" onclick="switchMemberSubview('birthday')"><span class="ic">🎂</span>生日禮</button>
+      <button type="button" class="pmg-tile" id="mb-tile-register" onclick="switchMemberSubview('register')"><span class="ic">🎁</span>註冊禮</button>
+    </div>
+  </div>
   <!-- 11-16 (9b) 會員清單（對照大麥「品牌會員列表」）：只看不改；電話老闆看完整、店長看遮罩；後端 GET memberList -->
   <div id="mb-subview-members" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchMemberSubview('home')">← 會員</a> ／ 會員清單</div>
     <p class="bo-lead">會員全部門市共用，這頁<b>只能看</b>。</p>
     <details class="bo-help"><summary>說明</summary><div>會員全部門市共用。這一頁<b>只能看</b>：要改會員資料、點數，請在門市平板或側欄「💬 會員 LINE 綁定」處理。等級、半年累積是會員最後一次查詢或消費時算的，很久沒來的會員可能還是舊等級。</div></details>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
@@ -842,6 +868,7 @@
     <div id="os-result"></div>
   </div>
   <div id="mb-subview-tiers">
+    <div class="pmg-crumb"><a onclick="switchMemberSubview('home')">← 會員</a> ／ 會員分級</div>
     <p class="bo-lead">升等門檻、點數倍率，改完立刻生效。</p>
     <details class="bo-help"><summary>說明</summary><div>
       升等/續等門檻、點數倍率都在這裡改，改完立刻生效，會直接套用到所有會員下次查詢/消費時的等級判定。
@@ -860,6 +887,7 @@
     </div>
   </div>
   <div id="mb-subview-birthday" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchMemberSubview('home')">← 會員</a> ／ 生日禮</div>
     <p style="font-size:0.8rem;color:var(--muted);">
       生日當月自動發，每人每年一次；生效、到期天數從發放當天算，0＝當天。
     </p>
@@ -876,6 +904,7 @@
     </div>
   </div>
   <div id="mb-subview-register" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchMemberSubview('home')">← 會員</a> ／ 註冊禮</div>
     <p style="font-size:0.8rem;color:var(--muted);">
       新會員一註冊就自動發（可多筆）；生效、到期天數從註冊當天算，0＝當天。
     </p>
@@ -1012,7 +1041,7 @@
   </div>
   <!-- 10-16 會員 LINE 綁定(限老闆)：換了新 LINE 的顧客登入被擋時自動留申請，老闆回撥會員手機確認本人後換綁；也能只解除 -->
   <div id="pmg-subview-linebind" style="display:none;">
-    <div class="pmg-crumb">💬 會員 LINE 綁定 <span class="ops-refresh" onclick="loadBoLineBind_()">重新整理</span></div>
+    <div class="pmg-crumb"><a onclick="switchMemberSubview('home')">← 會員</a> ／ LINE 綁定 <span class="ops-refresh" onclick="loadBoLineBind_()">重新整理</span></div>
     <div id="bo-pmg-linebind"><div class="empty-hint">載入中...</div></div>
   </div>
   <!-- 11-20 (3e) 電子發票設定（ezPay 電子發票加值中心；設計 電子發票設計_2026-11-20.md）：總開關只限老闆；LINE Pay 支付載具從「付款方式設定→線下收款」搬來這裡 -->
@@ -1192,7 +1221,7 @@ function applyBoStoreProfile_(p) {
 //  store＝只影響這間店(其他所有頁：上下架、商家管理、飲品升級、POS管理、團購…)
 //  品牌名、店名都從門市資料讀(brandName／displayName)，不寫死
 let boCurrentTab_ = 'availability';
-const BO_BRAND_SUBVIEWS_ = ['members', 'tiers', 'birthday', 'register', 'openstore'];
+const BO_BRAND_SUBVIEWS_ = ['home', 'members', 'tiers', 'birthday', 'register', 'openstore'];
 const BO_SWITCH_SUBVIEWS_ = ['points', 'promo', 'blocks'];
 function boScopeNow_() {
   if (boCurrentTab_ === 'posmanage' && currentPosManageSubview === 'linebind') return 'brand';   // 11-25 會員 LINE 綁定搬到品牌共用
@@ -1215,7 +1244,7 @@ function boUpdateScope_() {
   bar.style.display = 'flex';
   bar.className = 'bo-scope-bar ' + (scope === 'brand' ? 'brand' : 'store');
   bar.innerHTML = scope === 'brand'
-    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>${boCurrentTab_ === 'posmanage' ? '會員 LINE 換綁全部門市共用（只限老闆）' : currentMemberSubview === 'members' ? '會員全部門市共用，這一頁只能看' : currentMemberSubview === 'openstore' ? '開新店、正式開放（只限老闆）' : '這一頁存了馬上生效，全部門市一起套用'}</span>`
+    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>${boCurrentTab_ === 'posmanage' ? '會員 LINE 換綁全部門市共用（只限老闆）' : currentMemberSubview === 'home' ? '會員相關設定，全部門市一起生效' : currentMemberSubview === 'members' ? '會員全部門市共用，這一頁只能看' : currentMemberSubview === 'openstore' ? '開新店、正式開放（只限老闆）' : '這一頁存了馬上生效，全部門市一起套用'}</span>`
     : `<b>🏪 只影響 ${escapeHtml(boStoreShortName_())}</b><span>這一頁的設定只改這間店，不會動到其他門市</span>`;
 }
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
@@ -1386,6 +1415,7 @@ const BO_LIC_MAP_ = {
   'tab-btn-group': 'group_order', 'mch-tile-drinkupgrade': 'promo', 'mch-tile-group': 'group_order',   // 11-25 格子頁
   'mb-sub-btn-points': 'member', 'mb-sub-btn-members': 'member', 'mb-sub-btn-tiers': 'member',
   'mb-sub-btn-birthday': 'member', 'mb-sub-btn-register': 'member',
+  'mb-tile-members': 'member', 'mb-tile-tiers': 'member', 'mb-tile-birthday': 'member', 'mb-tile-register': 'member',   // 11-25 會員格子頁
   'mb-sub-btn-openstore': 'vendor',
 };
 const BO_LIC_NAME_ = { promo: '優惠活動', group_order: '揪團', member: '會員', multistore: '多店' };
@@ -1479,7 +1509,7 @@ const ITEM_LIST = [{"category":"美式狂想套餐 SET MEALS ($129)","name":"美
 
 let mcLoaded = false;
 let mtLoaded = false;
-let currentMcSubview = 'categories';
+let currentMcSubview = 'home';   // 11-25 點菜單管理先到格子頁
 function toggleMenuGroup() {
   const sublist = document.getElementById('menucms-sublist');
   const willOpen = !sublist.classList.contains('open');
@@ -1500,7 +1530,7 @@ const PL_MAX_ = 6;
 function plSyncChrome_() {
   const onPl = currentMcSubview === 'printlabels' && boCurrentTab_ === 'menucms';
   const tools = document.getElementById('mc-draft-tools');
-  if (tools) tools.style.display = onPl ? 'none' : '';
+  if (tools) tools.style.display = (onPl || currentMcSubview === 'home') ? 'none' : '';   // 11-25 格子頁不顯示發布／同步那塊
   const hint = document.getElementById('mc-target-hint');
   if (hint) hint.textContent = onPl ? (MC_STORE_ID === '__brand__' ? '所有門市的預設；存檔馬上生效' : '只影響這間店；存檔馬上生效')
     : (MC_STORE_ID === '__brand__' ? '改好按下面「同步到分店」，各店再各自發布' : '這間店的草稿，按「發布到正式版」才生效');
@@ -1627,8 +1657,8 @@ function switchMerchantSubview(name) {
 }
 
 // 「會員相關」側欄巢狀展開：會員分級/生日禮/註冊禮/集點禮/優惠券共用同一套子分頁切換邏輯
-const MB_SUBVIEWS = ['members', 'tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade', 'openstore'];
-let mbLoaded = { members: false, tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false, openstore: false };
+const MB_SUBVIEWS = ['home', 'members', 'tiers', 'birthday', 'register', 'points', 'promo', 'blocks', 'drinkupgrade', 'openstore'];
+let mbLoaded = { home: true, members: false, tiers: false, birthday: false, register: false, points: false, promo: false, blocks: false, drinkupgrade: false, openstore: false };
 let currentMemberSubview = 'tiers';
 function toggleMemberGroup() { switchMemberSubview(currentMemberSubview); }   // 11-14 側欄分段後「會員相關」群組鈕拿掉了，保留給舊呼叫
 function switchMemberSubview(name) {
@@ -2157,6 +2187,14 @@ function loadBoPrinterModes_() {
     box.innerHTML = `<div class="ops-card"><h3>門市平板用哪種出單機</h3>${rows || '<div class="ops-meta" style="padding:6px 0;">最近 7 天沒有平板回報</div>'}
       <div class="ops-meta" style="margin-top:6px;">只能看；要改請到那台平板「POS管理 → 出單機設定」（要店長以上 PIN）。平板每分鐘回報一次。</div></div>`;
   }).catch(() => { box.innerHTML = '<div class="empty-hint">網路異常，請稍後再試</div>'; });
+}
+// 11-25 「👥 會員」格子頁：老闆登入才去問 LINE 換綁待處理幾筆（店長看不到這格的數字，後端也擋）
+function mbHomeBadge_() {
+  const badge = document.getElementById('bo-linebind-badge');
+  if (!badge || !isBoOwner_()) { if (badge) badge.textContent = ''; return; }
+  apiPost({ action: 'lineBindAdmin', storeId: SCHED_STORE_ID }).then(d => {
+    if (d && d.status === 'ok') badge.textContent = (d.requests || []).length ? (d.requests || []).length + ' 筆待處理' : '';
+  }).catch(() => {});
 }
 // 10-16 會員 LINE 綁定(限老闆，後端也擋)：申請清單→回撥會員手機確認本人→換綁；另可只解除；下方最近 30 筆紀錄
 let boLineBindReqs_ = [];
@@ -2919,6 +2957,7 @@ function switchBackofficeTab(name) {
   }
   document.getElementById('mc-sub-btn-categories').classList.toggle('active', name === 'menucms' && currentMcSubview === 'categories');
   document.getElementById('mc-sub-btn-options').classList.toggle('active', name === 'menucms' && currentMcSubview === 'options');
+  document.getElementById('mc-subview-home').style.display = (name === 'menucms' && currentMcSubview === 'home') ? 'block' : 'none';   // 11-25
   document.getElementById('mc-subview-categories').style.display = (name === 'menucms' && currentMcSubview === 'categories') ? 'block' : 'none';
   document.getElementById('mc-subview-options').style.display = (name === 'menucms' && currentMcSubview === 'options') ? 'block' : 'none';
   document.getElementById('mc-sub-btn-printlabels').classList.toggle('active', name === 'menucms' && currentMcSubview === 'printlabels');
@@ -2943,6 +2982,8 @@ function switchBackofficeTab(name) {
     document.getElementById('mb-sub-btn-' + sv).classList.toggle('active', name === 'member' && currentMemberSubview === sv && sv !== 'drinkupgrade');
     document.getElementById('mb-subview-' + sv).style.display = (name === 'member' && currentMemberSubview === sv) ? 'block' : 'none';
   });
+  document.getElementById('mb-sub-btn-home').classList.toggle('active', (name === 'member' && ['home', 'members', 'tiers', 'birthday', 'register'].includes(currentMemberSubview)) || (name === 'posmanage' && currentPosManageSubview === 'linebind'));   // 11-25
+  if (name === 'member' && currentMemberSubview === 'home') mbHomeBadge_();
   if (name === 'member') {
     document.getElementById('member-sublist')?.classList.add('open');
     document.getElementById('member-caret')?.classList.add('open');
