@@ -2249,6 +2249,7 @@ function renderCartRedeem_() {
   box.innerHTML = `
     <details ${cartRedeemOpen_ ? 'open' : ''} ontoggle="cartRedeemOpen_ = this.open" style="border:1px dashed var(--border);border-radius:8px;padding:6px 10px;">
       <summary style="font-size:0.82rem;font-weight:600;color:var(--muted);cursor:pointer;">集點兌換（目前 ${pts} 點${canCount ? `，可兌換 ${canCount} 項` : ''}）</summary>
+      ${pts < 0 ? `<div style="font-size:0.76rem;color:#c0392b;padding:4px 0;line-height:1.5;">有訂單退款，扣回那張單給的點數時點數已經換券用掉，目前欠 ${-pts} 點；之後消費會先補回，補回後才能再兌換。</div>` : ''}
       ${POINT_REDEMPTION_CATALOG.map((e, idx) => {
         const enough = pts >= e.points;
         return `<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;font-size:0.82rem;">
