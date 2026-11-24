@@ -553,17 +553,17 @@
         <button type="button" class="pmg-tile" onclick="pmgOpen_('open')"><span class="ic">🔓</span>開帳</button>
         <button type="button" class="pmg-tile" onclick="openCloseRegisterPreview()"><span class="ic">🔒</span>關帳</button>
         <button type="button" class="pmg-tile" onclick="pmgOpen_('log')"><span class="ic">📋</span>開關帳記錄</button>
+        <!-- 11-25 老闆：跟後台一樣，現金收支併進「每日」（開帳、關帳、現金收支是同一件事的前中後） -->
+        <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
       </div>
       <div class="pmg-grp">帳務</div>
       <div class="pmg-grid">
         <button type="button" class="pmg-tile" onclick="openTabReport_()"><span class="ic">📊</span>報表</button>
-        <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
         <button type="button" class="pmg-tile" id="pmg-einv-tile" disabled onclick="pmgOpen_('einv')"><span class="ic">🧾</span><span id="pmg-einv-label">電子發票設定</span><br><span class="pmg-soon" id="pmg-einv-soon">未開啟</span></button>
       </div>
       <div class="pmg-grp">系統</div>
       <div class="pmg-grid">
         <button type="button" class="pmg-tile" onclick="pmgOpen_('ver')"><span class="ic">🔄</span>資料版本</button>
-        <button type="button" class="pmg-tile" onclick="pmgOpen_('staff')"><span class="ic">👥</span>夥伴帳號說明</button>
         <!-- 10-13 出單機設定：這台平板用藍牙或網路出單機(填 IP)，改設定要店長以上 PIN(權限 printSettings) -->
         <button type="button" class="pmg-tile" onclick="pmgOpen_('printer')"><span class="ic">🖨️</span>出單機設定</button>
       </div>
@@ -574,6 +574,8 @@
       <select id="pos-open-staff-select" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;margin-bottom:8px;">
         <option value="">請選擇夥伴</option>
       </select>
+      <!-- 11-25 老闆：「夥伴帳號說明」那格拿掉，說明搬到這裡（找不到名字時才用得到） -->
+      <div style="font-size:0.76rem;color:var(--muted);line-height:1.6;margin:0 0 8px;">找不到自己的名字？請老闆到 POS後台「POS管理」→「夥伴帳號管理」新增。開帳的夥伴清單、關帳和贈送兌換券要的店長／老闆 PIN，都是讀同一份設定。</div>
       <div class="row">
         <button class="btn btn-primary" onclick="doOpenRegister()">開帳</button>
       </div>
@@ -653,9 +655,6 @@
       </div>
     </section>
 
-    <section class="pmg-sub" id="pmg-sub-staff">
-      <div style="font-size:0.82rem;color:var(--muted);line-height:1.6;">新增/編輯夥伴請到POS後台「POS管理」→「夥伴帳號管理」設定。這裡「開帳」的夥伴清單、「關帳」跟「贈送兌換券」需要的店長/老闆PIN驗證，都是讀同一份設定。</div>
-    </section>
   </div>
 </div>
 
@@ -1298,7 +1297,7 @@ function closePosManageOverlay() {
   document.getElementById('pos-manage-overlay').classList.remove('open');
 }
 // 10-10 分組按鈕格：name=null 回按鈕格首頁；子頁面左上 ← 回首頁，首頁 ← 關閉
-const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', staff: '夥伴帳號說明', printer: '出單機設定', report: '今日報表', einv: '電子發票' };
+const PMG_TITLES_ = { open: '開帳', log: '開關帳記錄', ver: '資料版本', printer: '出單機設定', report: '今日報表', einv: '電子發票' };   // 11-25 夥伴帳號說明拿掉（說明搬到開帳頁）
 let pmgCurrent_ = null;
 function pmgOpen_(name) {
   pmgCurrent_ = name;
@@ -1347,7 +1346,7 @@ function loadTabReport_() {
     if (items.length) h += '<div class="tr-h">人氣排行（前 10）</div><table class="tr-table"><tr><th>品項</th><th>份數</th><th>金額</th></tr>'
       + items.map((i, n) => `<tr><td>${n + 1}. ${escapeHtml_(i.name)}${i.size ? ' ' + escapeHtml_(i.size) : ''}</td><td>${i.qty}</td><td>${$(i.amount)}</td></tr>`).join('') + '</table>';
     if (!s.n && !s.voidN && !s.refN && !s.unsN) h += '<div class="empty-hint" style="margin-top:8px;">今天還沒有營收</div>';
-    h += '<div style="font-size:0.74rem;color:var(--muted);margin-top:10px;">看其他日期、收款方式報表、匯出 Excel → 後台「POS管理 → 報表」</div>';
+    h += '<div style="font-size:0.74rem;color:var(--muted);margin-top:10px;">看其他日期、收款方式報表、匯出 Excel → 後台側欄「📊 報表」</div>';
     body.innerHTML = h;
   }).catch(() => { body.innerHTML = '<div class="empty-hint">連線失敗，請稍後再試</div>'; });
 }

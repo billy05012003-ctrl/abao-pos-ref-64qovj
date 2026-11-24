@@ -428,10 +428,11 @@
   <button id="tab-btn-availability" class="active" onclick="switchBackofficeTab('availability')">上下架管理</button>
   <!-- 11-23 UX 🟡a：報表原本要進「POS管理」點方格才到；側欄直接放一項（方格照留） -->
   <button id="tab-btn-report" onclick="switchPosManageSubview('report')">📊 報表</button>
-  <button id="tab-btn-merchant" onclick="toggleMerchantGroup()">
-    <span class="group-toggle">商家管理 <span id="bo-merchant-badge" title="金流告警還沒處理" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span> <span class="group-caret" id="merchant-caret">▶</span></span>
+  <!-- 11-25 老闆（15k 選單點法統一）：商家管理改成跟 POS管理一樣「點開一頁格子」；子選單 DOM 保留隱藏（切換程式沿用） -->
+  <button id="tab-btn-merchant" onclick="switchMerchantSubview('home')">
+    <span class="group-toggle">🏪 商家管理 <span id="bo-merchant-badge" title="金流告警還沒處理" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span> <span class="group-caret" id="merchant-caret" style="display:none;">▶</span></span>
   </button>
-  <div class="sub-list" id="merchant-sublist">
+  <div class="sub-list" id="merchant-sublist" style="display:none;">
     <button class="sub-item" id="mch-sub-btn-storeinfo" onclick="switchMerchantSubview('storeinfo')">店家資訊</button>
     <button class="sub-item" id="mch-sub-btn-schedule" onclick="switchMerchantSubview('schedule')">商店時段設定</button>
     <button class="sub-item" id="mch-sub-btn-payment" onclick="switchMerchantSubview('payment')">付款方式設定</button>
@@ -440,8 +441,9 @@
     <button class="sub-item" id="mch-sub-btn-payalert" style="display:none;" onclick="switchMerchantSubview('payalert')">金流告警 <span id="bo-payalert-badge" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;margin-left:4px;"></span></button>
   </div>
   <!-- 飲品升級：規則存在各店(drink_upgrade_rules.store_id)，11-14 從「會員相關」移到「這間店」並顯示出來(優惠券清單裡的捷徑列照留) -->
-  <button id="mb-sub-btn-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')">飲品升級</button>
-  <button id="tab-btn-group" onclick="switchBackofficeTab('group')">👥 團購模組</button>
+  <!-- 11-25 飲品升級、團購模組改進「商家管理」格子頁；側欄按鈕留著隱藏（切換、授權程式沿用 id） -->
+  <button id="mb-sub-btn-drinkupgrade" style="display:none;" onclick="switchMemberSubview('drinkupgrade')">飲品升級</button>
+  <button id="tab-btn-group" style="display:none;" onclick="switchBackofficeTab('group')">👥 團購模組</button>
   <!-- 10-10：POS管理改成點進去是分組按鈕格，側欄不再展開子選單(子選單 DOM 保留隱藏，切換程式沿用) -->
   <button id="tab-btn-posmanage" onclick="switchPosManageSubview('home')">
     <span class="group-toggle">⚙ POS管理 <span class="group-caret" id="posmanage-caret" style="display:none;">▶</span></span>
@@ -465,6 +467,8 @@
   <button id="mb-sub-btn-blocks" onclick="switchMemberSubview('blocks')">新品／好康</button>
   <div class="nav-sec brand" data-sec="brand" role="button" tabindex="0" title="點一下收合／展開">🟣 品牌共用<span class="sec-caret">▼</span><small>全部門市一起生效</small></div>
   <button class="nav-brand" id="mb-sub-btn-members" onclick="switchMemberSubview('members')">👥 會員清單</button>
+  <!-- 11-25 會員 LINE 綁定從「POS管理」搬來：換綁申請整個品牌共用（資料庫不分門市）；限老闆照舊 -->
+  <button class="nav-brand" id="nav-btn-linebind" onclick="switchPosManageSubview('linebind')">💬 會員 LINE 綁定 <span class="pmg-soon" id="bo-linebind-badge" style="color:#c0392b;font-size:0.72rem;"></span></button>
   <button class="nav-brand" id="mb-sub-btn-tiers" onclick="switchMemberSubview('tiers')">會員分級</button>
   <button class="nav-brand" id="mb-sub-btn-birthday" onclick="switchMemberSubview('birthday')">生日禮</button>
   <button class="nav-brand" id="mb-sub-btn-register" onclick="switchMemberSubview('register')">註冊禮</button>
@@ -583,7 +587,32 @@
   <input type="search" id="avail-search" placeholder="🔍 搜尋品項或分類，例如：蛋餅" oninput="renderAvailabilityList()" style="width:100%;max-width:420px;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:0.95rem;margin:4px 0 10px;">
   <div id="availability-list"><div class="empty-hint">載入中...</div></div>
 </div>
+<!-- 11-25 老闆（15k）：商家管理格子頁（同 POS管理的寫法）；點格子進去，頁首「← 商家管理」回來 -->
+<div id="view-merchant-home" class="view" style="display:none;">
+  <div class="pmg-grp">店家設定</div>
+  <div class="pmg-grid">
+    <button type="button" class="pmg-tile" onclick="switchMerchantSubview('storeinfo')"><span class="ic">🏠</span>店家資訊</button>
+    <button type="button" class="pmg-tile" onclick="switchMerchantSubview('schedule')"><span class="ic">🕐</span>商店時段設定</button>
+  </div>
+  <div class="pmg-grp">收款與發票</div>
+  <div class="pmg-grid">
+    <button type="button" class="pmg-tile" onclick="switchMerchantSubview('payment')"><span class="ic">💳</span>付款方式設定</button>
+    <button type="button" class="pmg-tile" id="pmg-einv-tile" disabled onclick="switchPosManageSubview('einv')"><span class="ic">🧾</span>電子發票<br><span class="pmg-soon" id="pmg-einv-soon">準備中</span></button>
+    <button type="button" class="pmg-tile" onclick="switchMerchantSubview('payalert')"><span class="ic">🚨</span>金流告警<br><span id="mch-tile-payalert-badge" style="display:none;background:#c0392b;color:#fff;border-radius:999px;padding:0 7px;font-size:0.72rem;"></span></button>
+  </div>
+  <div class="pmg-grp">通知</div>
+  <div class="pmg-grid">
+    <button type="button" class="pmg-tile" onclick="switchMerchantSubview('notify')"><span class="ic">🔔</span>訂單通知設定</button>
+    <button type="button" class="pmg-tile" onclick="switchMerchantSubview('sms')"><span class="ic">📱</span>簡訊驗證碼</button>
+  </div>
+  <div class="pmg-grp">優惠與團購</div>
+  <div class="pmg-grid">
+    <button type="button" class="pmg-tile" id="mch-tile-drinkupgrade" onclick="switchMemberSubview('drinkupgrade')"><span class="ic">🥤</span>飲品升級</button>
+    <button type="button" class="pmg-tile" id="mch-tile-group" onclick="switchBackofficeTab('group')"><span class="ic">👥</span>團購模組</button>
+  </div>
+</div>
 <div id="view-storeinfo" class="view" style="display:none;">
+  <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 店家資訊</div>
   <p style="font-size:0.8rem;color:var(--muted);">點餐頁的店家資訊、自取規則，存了立刻生效；營業時間會自動帶，不用填。</p>
   <div id="storeinfo-form" style="max-width:560px;">
     <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">顯示店名</label>
@@ -598,6 +627,7 @@
   </div>
 </div>
 <div id="view-schedule" class="view" style="display:none;">
+  <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 商店時段設定</div>
   <p style="font-size:0.8rem;color:var(--muted);">
     <b>線上點餐</b>的營業、接單、取餐時間，改完立刻生效，不影響門市平板。
   </p>
@@ -639,6 +669,7 @@
   </div>
 </div>
 <div id="view-payment" class="view" style="display:none;">
+  <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 付款方式設定</div>
   <div id="bo-owner-only-payment" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">付款方式設定只有老闆可以修改，目前是唯讀。</div>
   <div class="sched-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
     <button type="button" class="sched-tab-btn active" id="pm-tab-btn-online" onclick="switchPmSubview('online')">線上收款</button>
@@ -686,18 +717,21 @@
 <!-- 11-08 前端切換準備：金流告警(只有打新後端時選單才出現；讀 paymentAlerts、按 resolvePaymentAlert) -->
 <!-- 11-20 (9g) 訂單通知設定：每間店自己的開關（老闆 11-20 定規格） -->
 <div id="view-notify" class="view" style="display:none;">
+  <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 訂單通知設定</div>
   <div id="bo-owner-only-notify" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">訂單通知設定只有老闆可以修改，目前是唯讀。</div>
   <p style="font-size:0.8rem;color:var(--muted);">線上單要平板按「確認接單」才出單；這裡設怎麼通知顧客、太久沒確認怎麼提醒。開關點一下就存。</p>
   <div id="notify-form"><div class="empty-hint">載入中...</div></div>
 </div>
 <!-- 11-20 簡訊驗證碼：LINE 註冊時要收手機簡訊驗證碼（每間店自己的開關，預設關；只限老闆） -->
 <div id="view-sms" class="view" style="display:none;">
+  <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 簡訊驗證碼</div>
   <div id="bo-owner-only-sms" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">簡訊驗證碼設定只有老闆可以修改，目前是唯讀。</div>
   <p class="bo-lead">打開後，顧客第一次用 LINE 註冊要先收簡訊驗證碼。</p>
   <details class="bo-help"><summary>說明</summary><div>打開後，顧客第一次用 LINE 註冊會員時，要先收手機簡訊驗證碼才能完成註冊。可以擋住「有人用自己的 LINE 填別人的手機號碼註冊，或綁走在門市辦的會員」。店員在平板幫顧客建會員不受影響。關著＝跟以前一樣，不用驗證碼。</div></details>
   <div id="sms-form"><div class="empty-hint">載入中...</div></div>
 </div>
 <div id="view-payalert" class="view" style="display:none;">
+  <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 金流告警</div>
   <p class="bo-lead">系統自己處理不了、要人工看的金流狀況；處理好按「標記已處理」。</p>
   <details class="bo-help"><summary>說明</summary><div>線上刷卡、LINE Pay、退款過程中系統自己處理不了、需要人工看一下的狀況，例如付款金額不符、訂單作廢後顧客才付款、同一張單付了兩次、店員人工標記已付款、退款帳務沒寫成功。看完、到藍新／LINE Pay 商家後台核對處理好之後，按「標記已處理」收起來。</div></details>
   <div id="bo-owner-only-payalert" style="display:none;font-size:0.85rem;color:#a32d2d;margin-bottom:8px;">只有老闆可以標記已處理，目前是唯讀。</div>
@@ -780,7 +814,7 @@
   <!-- 11-16 (9b) 會員清單（對照大麥「品牌會員列表」）：只看不改；電話老闆看完整、店長看遮罩；後端 GET memberList -->
   <div id="mb-subview-members" style="display:none;">
     <p class="bo-lead">會員全部門市共用，這頁<b>只能看</b>。</p>
-    <details class="bo-help"><summary>說明</summary><div>會員全部門市共用。這一頁<b>只能看</b>：要改會員資料、點數，請在門市平板或「POS管理 → 會員 LINE 綁定」處理。等級、半年累積是會員最後一次查詢或消費時算的，很久沒來的會員可能還是舊等級。</div></details>
+    <details class="bo-help"><summary>說明</summary><div>會員全部門市共用。這一頁<b>只能看</b>：要改會員資料、點數，請在門市平板或側欄「💬 會員 LINE 綁定」處理。等級、半年累積是會員最後一次查詢或消費時算的，很久沒來的會員可能還是舊等級。</div></details>
     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
       <input id="ml-q" type="search" placeholder="搜尋姓名，或電話（至少 3 碼）" maxlength="30" style="flex:1;min-width:200px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onkeydown="if(event.key==='Enter')loadMemberList_(true)">
       <select id="ml-tier" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;" onchange="loadMemberList_(true)"><option value="">全部等級</option></select>
@@ -922,6 +956,7 @@
     </div>
   </div>
   <div id="mb-subview-drinkupgrade" style="display:none;">
+    <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 飲品升級</div>
     <p style="font-size:0.8rem;color:var(--muted);">設定哪類飲品能升級成什麼、加多少錢；平板會直接換成升級後的飲品。</p>
     <div class="mc-layout">
       <div class="mc-col" style="max-height:none;">
@@ -937,6 +972,7 @@
   </div>
 </div>
 <div id="view-group" class="view" style="display:none;">
+  <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 團購模組</div>
   <p class="bo-lead">最近的揪團和每人明細（只能看）。</p>
   <details class="bo-help"><summary>說明</summary><div>
     線上點餐的「揪團」：團主開團分享連結，朋友免登入加餐，團主結單後一次付清，出單時每個人的餐點分開印名字。
@@ -956,21 +992,16 @@
   <!-- 10-10 分組按鈕格(POS管理項目最雜，用按鈕比較不會視覺疲勞；目前只有這區用按鈕) -->
   <div id="pmg-subview-home">
     <div id="bo-pmg-today" class="pmg-today">今天開帳狀態載入中…</div>
+    <!-- 11-25 老闆：報表只留側欄、電子發票搬到商家管理、會員 LINE 綁定搬到品牌共用；現金收支併進「每日」 -->
     <div class="pmg-grp">每日</div>
     <div class="pmg-grid">
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('log')"><span class="ic">📋</span>開關帳記錄</button>
-    </div>
-    <div class="pmg-grp">帳務</div>
-    <div class="pmg-grid">
-      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('report')"><span class="ic">📊</span>報表</button>
       <button type="button" class="pmg-tile" disabled><span class="ic">💵</span>現金收支<br><span class="pmg-soon">準備中</span></button>
-      <button type="button" class="pmg-tile" id="pmg-einv-tile" disabled onclick="switchPosManageSubview('einv')"><span class="ic">🧾</span>電子發票設定<br><span class="pmg-soon" id="pmg-einv-soon">準備中</span></button>
     </div>
     <div class="pmg-grp">帳號與權限</div>
     <div class="pmg-grid">
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('partner')"><span class="ic">👥</span>夥伴帳號管理</button>
       <button type="button" class="pmg-tile" onclick="switchPosManageSubview('perm')"><span class="ic">🔑</span>角色權限設定</button>
-      <button type="button" class="pmg-tile" onclick="switchPosManageSubview('linebind')"><span class="ic">💬</span>會員 LINE 綁定<br><span class="pmg-soon" id="bo-linebind-badge"></span></button>
     </div>
     <div class="pmg-grp">系統</div>
     <div class="pmg-grid">
@@ -981,12 +1012,12 @@
   </div>
   <!-- 10-16 會員 LINE 綁定(限老闆)：換了新 LINE 的顧客登入被擋時自動留申請，老闆回撥會員手機確認本人後換綁；也能只解除 -->
   <div id="pmg-subview-linebind" style="display:none;">
-    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 會員 LINE 綁定 <span class="ops-refresh" onclick="loadBoLineBind_()">重新整理</span></div>
+    <div class="pmg-crumb">💬 會員 LINE 綁定 <span class="ops-refresh" onclick="loadBoLineBind_()">重新整理</span></div>
     <div id="bo-pmg-linebind"><div class="empty-hint">載入中...</div></div>
   </div>
   <!-- 11-20 (3e) 電子發票設定（ezPay 電子發票加值中心；設計 電子發票設計_2026-11-20.md）：總開關只限老闆；LINE Pay 支付載具從「付款方式設定→線下收款」搬來這裡 -->
   <div id="pmg-subview-einv" style="display:none;">
-    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 電子發票設定 <span class="ops-refresh" onclick="loadBoEinv_()">重新整理</span></div>
+    <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 電子發票設定 <span class="ops-refresh" onclick="loadBoEinv_()">重新整理</span></div>
     <div id="bo-einv-form"><div class="empty-hint">載入中...</div></div>
     <!-- 11-21 老闆：最近 3 天的發票要能收起來（記住上次開或關） -->
     <details id="bo-einv-list-box" style="margin-top:18px;" ontoggle="boEinvListToggle_(this)">
@@ -1015,7 +1046,7 @@
   </div>
   <!-- 11-13 報表（規格 報表設計_2026-11-13.md）：營業銷售報表＋收款方式報表，照大麥版面；營業日＝取餐日、待收款不算、作廢退款分開 -->
   <div id="pmg-subview-report" style="display:none;">
-    <div class="pmg-crumb"><a onclick="switchPosManageSubview('home')">← POS管理</a> ／ 報表</div>
+    <div class="pmg-crumb">📊 報表</div>
     <div class="rpt-bar">
       <span class="rpt-presets"><button type="button" data-p="today" onclick="rptPreset_('today')">今天</button><button type="button" data-p="yday" onclick="rptPreset_('yday')">昨天</button><button type="button" data-p="week" onclick="rptPreset_('week')">本週</button><button type="button" data-p="month" onclick="rptPreset_('month')">本月</button><button type="button" data-p="lmonth" onclick="rptPreset_('lmonth')">上個月</button></span>
       <input type="date" id="rpt-from" onchange="rptDatesEdited_()"> ～ <input type="date" id="rpt-to" onchange="rptDatesEdited_()">
@@ -1164,6 +1195,7 @@ let boCurrentTab_ = 'availability';
 const BO_BRAND_SUBVIEWS_ = ['members', 'tiers', 'birthday', 'register', 'openstore'];
 const BO_SWITCH_SUBVIEWS_ = ['points', 'promo', 'blocks'];
 function boScopeNow_() {
+  if (boCurrentTab_ === 'posmanage' && currentPosManageSubview === 'linebind') return 'brand';   // 11-25 會員 LINE 綁定搬到品牌共用
   if (boCurrentTab_ === 'member' && BO_BRAND_SUBVIEWS_.includes(currentMemberSubview)) return 'brand';
   if (boCurrentTab_ === 'menucms' || (boCurrentTab_ === 'member' && BO_SWITCH_SUBVIEWS_.includes(currentMemberSubview)))
     return (typeof MC_STORE_ID !== 'undefined' && MC_STORE_ID === '__brand__') ? 'brandEdit' : 'storeEdit';
@@ -1183,7 +1215,7 @@ function boUpdateScope_() {
   bar.style.display = 'flex';
   bar.className = 'bo-scope-bar ' + (scope === 'brand' ? 'brand' : 'store');
   bar.innerHTML = scope === 'brand'
-    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>${currentMemberSubview === 'members' ? '會員全部門市共用，這一頁只能看' : currentMemberSubview === 'openstore' ? '開新店、正式開放（只限老闆）' : '這一頁存了馬上生效，全部門市一起套用'}</span>`
+    ? `<b>🏷 ${escapeHtml(brandName ? brandName + ' 品牌' : '品牌')}・所有門市共用</b><span>${boCurrentTab_ === 'posmanage' ? '會員 LINE 換綁全部門市共用（只限老闆）' : currentMemberSubview === 'members' ? '會員全部門市共用，這一頁只能看' : currentMemberSubview === 'openstore' ? '開新店、正式開放（只限老闆）' : '這一頁存了馬上生效，全部門市一起套用'}</span>`
     : `<b>🏪 只影響 ${escapeHtml(boStoreShortName_())}</b><span>這一頁的設定只改這間店，不會動到其他門市</span>`;
 }
 // 多店化第 1 段(2026-10-15，規格 多店化設計_2026-10-15.md)：呼叫後端沒帶店代號就補本店的，防後端「沒帶就當培英」把別店的單算到培英；有明確指定的(例如品牌範本 __brand__)照舊
@@ -1351,7 +1383,7 @@ function renderBoUser_() {
 //   後端沒開授權檢查（mode＝off）、或這個客戶授權表一列都沒有（configured＝false）→ 照舊全部顯示
 const BO_LIC_MAP_ = {
   'mb-sub-btn-drinkupgrade': 'promo', 'mb-sub-btn-promo': 'promo', 'mb-sub-btn-blocks': 'promo',
-  'tab-btn-group': 'group_order',
+  'tab-btn-group': 'group_order', 'mch-tile-drinkupgrade': 'promo', 'mch-tile-group': 'group_order',   // 11-25 格子頁
   'mb-sub-btn-points': 'member', 'mb-sub-btn-members': 'member', 'mb-sub-btn-tiers': 'member',
   'mb-sub-btn-birthday': 'member', 'mb-sub-btn-register': 'member',
   'mb-sub-btn-openstore': 'vendor',
@@ -1580,8 +1612,9 @@ function savePrintLabels_() {
 
 // 「商家管理」側欄巢狀展開（2026-09-16新增，比照大麥「店家設定」的分類方式）：
 // 目前只有「商店時段設定」一個子項，之後如果要做付款方式管理/取餐方式設定等功能可以比照同一套模式擴充
-let currentMerchantSubview = 'schedule';
+let currentMerchantSubview = 'home';   // 11-25 點商家管理先到格子頁
 function toggleMerchantGroup() {
+  if (true) { switchMerchantSubview('home'); return; }   // 11-25 改格子頁（舊的展開程式留著不用）
   const sublist = document.getElementById('merchant-sublist');
   const willOpen = !sublist.classList.contains('open');
   sublist.classList.toggle('open', willOpen);
@@ -2546,7 +2579,7 @@ function psOwnerOnly_() { return NEW_API_ && !isBoOwner_(); }
 function payAlertTime_(v) { const ms = typeof v === 'number' ? v : Date.parse(v); return isNaN(ms) ? '—' : boFmtMs_(ms); }
 function setPayAlertBadge_(n) {
   // 11-23 UX ①：「商家管理」收起來時，子選單的數字看不到 → 群組標題旁也顯示一份
-  ['bo-payalert-badge', 'bo-merchant-badge'].forEach(id => {
+  ['bo-payalert-badge', 'bo-merchant-badge', 'mch-tile-payalert-badge'].forEach(id => {   // 11-25 商家管理格子也顯示
     const el = document.getElementById(id);
     if (!el) return;
     el.textContent = n > 99 ? '99+' : String(n);
@@ -2809,12 +2842,16 @@ function switchBackofficeTab(name) {
   boCurrentTab_ = name; boUpdateScope_();   // 11-14 品牌／門市區隔：子分頁變數在呼叫前就設好了
   if (backToAvail) refreshAvailStatus_();   // 11-23 UX 🟡p
   document.getElementById('tab-btn-availability').classList.toggle('active', name === 'availability');
-  document.getElementById('tab-btn-merchant').classList.toggle('active', name === 'merchant');
+  // 11-25：飲品升級、團購模組、電子發票都在商家管理格子裡 → 亮「商家管理」；會員 LINE 綁定在品牌共用
+  const mchOwned_ = name === 'merchant' || name === 'group' || (name === 'member' && currentMemberSubview === 'drinkupgrade') || (name === 'posmanage' && currentPosManageSubview === 'einv');
+  document.getElementById('tab-btn-merchant').classList.toggle('active', mchOwned_);
+  document.getElementById('nav-btn-linebind').classList.toggle('active', name === 'posmanage' && currentPosManageSubview === 'linebind');
+  document.getElementById('view-merchant-home').style.display = (name === 'merchant' && currentMerchantSubview === 'home') ? 'block' : 'none';
   document.getElementById('tab-btn-menucms').classList.toggle('active', name === 'menucms');
   document.getElementById('tab-btn-member')?.classList.toggle('active', name === 'member');   // 11-14 側欄分段後沒有「會員相關」群組鈕了
-  document.getElementById('tab-btn-posmanage').classList.toggle('active', name === 'posmanage' && currentPosManageSubview !== 'report');
+  document.getElementById('tab-btn-posmanage').classList.toggle('active', name === 'posmanage' && !['report', 'einv', 'linebind'].includes(currentPosManageSubview));
   document.getElementById('tab-btn-report').classList.toggle('active', name === 'posmanage' && currentPosManageSubview === 'report');   // 11-23 UX 🟡a
-  document.getElementById('tab-btn-group').classList.toggle('active', name === 'group');
+  document.getElementById('tab-btn-group').classList.toggle('active', false);   // 11-25 側欄這顆藏起來了，亮商家管理
   document.getElementById('view-group').style.display = name === 'group' ? 'block' : 'none';
   if (name === 'group' && !groupListLoaded) { groupListLoaded = true; loadGroupList(); }
   document.getElementById('view-availability').style.display = name === 'availability' ? 'block' : 'none';
@@ -2903,7 +2940,7 @@ function switchBackofficeTab(name) {
     loadMenuCms();
   }
   MB_SUBVIEWS.forEach(sv => {
-    document.getElementById('mb-sub-btn-' + sv).classList.toggle('active', name === 'member' && currentMemberSubview === sv);
+    document.getElementById('mb-sub-btn-' + sv).classList.toggle('active', name === 'member' && currentMemberSubview === sv && sv !== 'drinkupgrade');
     document.getElementById('mb-subview-' + sv).style.display = (name === 'member' && currentMemberSubview === sv) ? 'block' : 'none';
   });
   if (name === 'member') {
@@ -3489,7 +3526,7 @@ function loadLinePayScanSettings() {
       pmSettingRow_('linePayScan', '線下LINEPay', data.linePayScanEnabled, noLp,
         (noLp ? PM_NO_LP_ : '') + '平板會多一顆「線下LINEPay」，掃顧客的 LINE Pay 付款碼收款。' + lpEnvNote_(data) + boHelp_('開啟後門市平板付款方式會多一顆「線下LINEPay」：店員用掃碼器掃顧客手機上的 LINE Pay 付款碼收款，收款成功才出單。斷網時不能用（按鈕會反灰）。「LINEPay mini」（人工收款）在下方清單另外開關，是備援。改完門市平板 5 分鐘內會跟上（要馬上生效可在平板重新整理）。'), noLp) +
       (NEW_API_ ? `<div class="sched-special-row"><b>LINE Pay 支付載具</b><span style="font-size:0.85rem;">${data.linePayCarrierEnabled ? '🟢 啟用' : '🔴 停用'}</span>
-        <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">11-20 起改到 <a style="cursor:pointer;color:var(--brand);text-decoration:underline;" onclick="switchPosManageSubview('einv')">POS管理 → 電子發票設定</a> 的「載具」那區開關。</div></div>`
+        <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">11-20 起改到 <a style="cursor:pointer;color:var(--brand);text-decoration:underline;" onclick="switchPosManageSubview('einv')">商家管理 → 電子發票</a> 的「載具」那區開關。</div></div>`
       : pmSettingRow_('linePayCarrier', 'LINE Pay 支付載具', data.linePayCarrierEnabled, !data.linePayScanEnabled,
         (data.linePayScanEnabled ? '' : '<b>須先開啟「線下LINEPay」。</b>') + '開啟後，顧客用 LINE Pay 付款時會一併記下他的手機條碼載具（掃一次同時付款＋存載具），電子發票做好後直接用。要同時到 LINE Pay 商家後台把「於 Payment API 回應中，提供 LINE Pay 用戶電子發票手機載具資訊」改成「使用」。')) +   // 11-20 (3e) 新後端：搬到電子發票設定，這裡留一行指引
       (('twqrAccountOk' in data) ? pmSettingRow_('twqr', '線下TWQR（ezPay 簡單付）', data.twqrEnabled, !data.twqrAccountOk,
