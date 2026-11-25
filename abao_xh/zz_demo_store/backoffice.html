@@ -3102,7 +3102,8 @@ function osOpenForm_(id) {
     <label>地址（空白＝不改）</label><input id="os-f-addr" maxlength="80" placeholder="例如：○○市○○區○○路1號">
     <label>訂餐專線（空白＝不改）</label><div class="ph-row"><input id="os-f-phone-a" class="ph-a" inputmode="numeric" maxlength="4" placeholder="04">－<input id="os-f-phone-n" class="ph-n" inputmode="numeric" maxlength="10" placeholder="8852662"></div>
     <label>客服電話（頁尾顯示；空白＝不改）</label><div class="ph-row"><input id="os-f-svc-a" class="ph-a" inputmode="numeric" maxlength="4" placeholder="0909">－<input id="os-f-svc-n" class="ph-n" inputmode="numeric" maxlength="10" placeholder="504662"></div>
-    <div class="ph-hint">電話只填數字：市話區碼 04、號碼 8852662；手機 0909、504662。客服信箱開好店後到「店家資訊」填。</div>
+    <div class="ph-hint">電話只填數字：市話區碼 04、號碼 8852662；手機 0909、504662。</div>
+    <label>客服信箱（選填；空白＝不改，之後也可以到「店家資訊」填）</label><input id="os-f-email" type="email" maxlength="80" placeholder="例如：abao@gmail.com">
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
       <button type="button" class="ops-btn" id="os-go" onclick="osSubmit_('${escapeHtml(s.storeId)}')">${prep ? '🔁 重新抓' : '🏪 開新店'}</button>
       <button type="button" class="ops-btn" onclick="document.getElementById('os-form-box').innerHTML=''">取消</button>
@@ -3120,7 +3121,8 @@ function osSubmit_(id) {
     (prep ? '這間店原本的設定、菜單、優惠會被覆蓋（覆蓋前菜單、優惠會自動備份）。\n' : '') + '新店狀態＝籌備中（顧客還不能線上點餐）。確定？';
   if (!confirm(msg)) return;
   const info = { displayName: document.getElementById('os-f-name').value.trim(), address: document.getElementById('os-f-addr').value.trim(),
-    phone: phGet_('os-f-phone'), servicePhone: phGet_('os-f-svc') };   // 11-25 拆兩格，格式跟店家資訊一樣
+    phone: phGet_('os-f-phone'), servicePhone: phGet_('os-f-svc'),   // 11-25 拆兩格，格式跟店家資訊一樣
+    serviceEmail: document.getElementById('os-f-email').value.trim() };   // 11-25 客服信箱（選填）
   osBusy_ = true;
   const go = document.getElementById('os-go'); if (go) { go.disabled = true; go.textContent = '處理中…（約 10～20 秒）'; }
   apiPost({ action: 'openNewStore', storeId: BO_HOME_STORE_, newStoreId: id, info }).then(d => {
