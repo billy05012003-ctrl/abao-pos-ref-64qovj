@@ -305,6 +305,12 @@
   .os-table td { padding:8px 9px; border-bottom:1px solid #eee; vertical-align:top; }
   .os-badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:0.75rem; white-space:nowrap; }
   .os-badge.run { background:#e3f4e6; color:#1e6b2e; } .os-badge.prep { background:#fff1d6; color:#8a5a00; } .os-badge.new { background:#eee; color:#666; }
+  /* 11-25 電話拆兩格（區碼－號碼），店家資訊、開新店共用 */
+  .ph-row { display:flex; align-items:center; gap:6px; }
+  .ph-row input { padding:8px; box-sizing:border-box; font-size:0.95rem; }
+  .ph-row input.ph-a { width:84px !important; flex:none; }
+  .ph-row input.ph-n { width:170px !important; flex:none; }
+  .ph-hint { font-size:0.75rem; color:var(--muted); margin-top:3px; }
   .os-form { border:1px solid #e2d6f5; background:#faf7fd; border-radius:10px; padding:12px 14px; margin:10px 0; }
   .os-form label { display:block; font-size:0.8rem; color:#555; margin:8px 0 3px; }
   .os-form input { width:100%; max-width:420px; padding:7px 9px; border:1px solid var(--border); border-radius:8px; font-size:0.9rem; box-sizing:border-box; }
@@ -615,14 +621,20 @@
 </div>
 <div id="view-storeinfo" class="view" style="display:none;">
   <div class="pmg-crumb"><a onclick="switchMerchantSubview('home')">← 商家管理</a> ／ 店家資訊</div>
-  <p style="font-size:0.8rem;color:var(--muted);">點餐頁的店家資訊、自取規則，存了立刻生效；營業時間會自動帶，不用填。</p>
+  <p style="font-size:0.8rem;color:var(--muted);">點餐頁、商店資訊頁的店家資訊和自取規則，存了立刻生效；營業時間會自動帶，不用填。</p>
   <div id="storeinfo-form" style="max-width:560px;">
     <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">顯示店名</label>
     <input type="text" id="si-f-name" maxlength="30" style="width:100%;padding:8px;box-sizing:border-box;">
     <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">地址</label>
     <input type="text" id="si-f-address" maxlength="80" style="width:100%;padding:8px;box-sizing:border-box;">
-    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">電話</label>
-    <input type="text" id="si-f-phone" maxlength="20" style="width:100%;padding:8px;box-sizing:border-box;">
+    <!-- 11-25 老闆定：電話分「訂餐專線」「客服電話」，都拆區碼／號碼兩格；加客服信箱 -->
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">訂餐專線</label>
+    <div class="ph-row"><input type="text" id="si-f-phone-a" class="ph-a" inputmode="numeric" maxlength="4" placeholder="04">－<input type="text" id="si-f-phone-n" class="ph-n" inputmode="numeric" maxlength="10" placeholder="8852662"></div>
+    <div class="ph-hint">市話：區碼 04、號碼 8852662；手機：0909、504662（只填數字）</div>
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">客服電話</label>
+    <div class="ph-row"><input type="text" id="si-f-svc-a" class="ph-a" inputmode="numeric" maxlength="4" placeholder="0909">－<input type="text" id="si-f-svc-n" class="ph-n" inputmode="numeric" maxlength="10" placeholder="504662"></div>
+    <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">客服信箱</label>
+    <input type="email" id="si-f-email" maxlength="80" placeholder="例如：abao@gmail.com" style="width:100%;padding:8px;box-sizing:border-box;">
     <label style="display:block;font-size:0.85rem;margin:10px 0 4px;">自取規則（一行一條，顧客結帳前要勾選同意）</label>
     <textarea id="si-f-rules" rows="6" maxlength="500" style="width:100%;padding:8px;box-sizing:border-box;font-family:inherit;"></textarea>
     <button type="button" class="mc-add-btn" style="width:auto;padding:8px 20px;margin-top:10px;" onclick="saveStoreInfo()">儲存店家資訊</button>
@@ -3086,8 +3098,9 @@ function osOpenForm_(id) {
     <b>${prep ? '🔁 重新抓最新設定：' : '🏪 開新店：'}${escapeHtml(osName_(s))}</b>（從 ${escapeHtml(boStoreShortName_())} 複製）
     <label>顯示店名（顧客看到的；空白＝不改）</label><input id="os-f-name" maxlength="30" value="${escapeHtml(s.displayName || '')}">
     <label>地址（空白＝不改）</label><input id="os-f-addr" maxlength="80" placeholder="例如：○○市○○區○○路1號">
-    <label>店內電話（空白＝不改）</label><input id="os-f-phone" maxlength="20" placeholder="例如：04-1234567">
-    <label>客服電話（頁尾顯示；空白＝不改）</label><input id="os-f-svc" maxlength="20">
+    <label>訂餐專線（空白＝不改）</label><div class="ph-row"><input id="os-f-phone-a" class="ph-a" inputmode="numeric" maxlength="4" placeholder="04">－<input id="os-f-phone-n" class="ph-n" inputmode="numeric" maxlength="10" placeholder="8852662"></div>
+    <label>客服電話（頁尾顯示；空白＝不改）</label><div class="ph-row"><input id="os-f-svc-a" class="ph-a" inputmode="numeric" maxlength="4" placeholder="0909">－<input id="os-f-svc-n" class="ph-n" inputmode="numeric" maxlength="10" placeholder="504662"></div>
+    <div class="ph-hint">電話只填數字：市話區碼 04、號碼 8852662；手機 0909、504662。客服信箱開好店後到「店家資訊」填。</div>
     <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
       <button type="button" class="ops-btn" id="os-go" onclick="osSubmit_('${escapeHtml(s.storeId)}')">${prep ? '🔁 重新抓' : '🏪 開新店'}</button>
       <button type="button" class="ops-btn" onclick="document.getElementById('os-form-box').innerHTML=''">取消</button>
@@ -3105,7 +3118,7 @@ function osSubmit_(id) {
     (prep ? '這間店原本的設定、菜單、優惠會被覆蓋（覆蓋前菜單、優惠會自動備份）。\n' : '') + '新店狀態＝籌備中（顧客還不能線上點餐）。確定？';
   if (!confirm(msg)) return;
   const info = { displayName: document.getElementById('os-f-name').value.trim(), address: document.getElementById('os-f-addr').value.trim(),
-    phone: document.getElementById('os-f-phone').value.trim(), servicePhone: document.getElementById('os-f-svc').value.trim() };
+    phone: phGet_('os-f-phone'), servicePhone: phGet_('os-f-svc') };   // 11-25 拆兩格，格式跟店家資訊一樣
   osBusy_ = true;
   const go = document.getElementById('os-go'); if (go) { go.disabled = true; go.textContent = '處理中…（約 10～20 秒）'; }
   apiPost({ action: 'openNewStore', storeId: BO_HOME_STORE_, newStoreId: id, info }).then(d => {
@@ -3179,13 +3192,31 @@ function escapeHtml(s) {
 }
 
 // ---- 店家資訊（2026-09-30新增）：點餐頁地址列與「訂餐資訊」頁內容，跟商店時段設定同一支讀取 API 回來 ----
+// 11-25 電話拆兩格（區碼／號碼）：讀進來拆、存的時候用「區碼-號碼」送，後端 phone.js 統一成 04-885-2662／0909-504662
+function phSplit_(v) {
+  const s = String(v || '').replace(/\s+/g, ''), d = s.replace(/\D/g, '');
+  if (!d) return ['', ''];
+  if (/^09\d{8}$/.test(d) || /^0800\d{6}$/.test(d)) return [d.slice(0, 4), d.slice(4)];
+  const i = s.indexOf('-');
+  return i > 0 ? [s.slice(0, i).replace(/\D/g, ''), s.slice(i + 1).replace(/\D/g, '')] : ['', d];
+}
+function phJoin_(a, n) {
+  a = String(a || '').replace(/\D/g, ''); n = String(n || '').replace(/\D/g, '');
+  return a || n ? a + '-' + n : '';
+}
+function phSet_(id, v) { const [a, n] = phSplit_(v); document.getElementById(id + '-a').value = a; document.getElementById(id + '-n').value = n; }
+function phGet_(id) { return phJoin_(document.getElementById(id + '-a').value, document.getElementById(id + '-n').value); }
+function storeInfoFill_(si) {
+  document.getElementById('si-f-name').value = si.name || '';
+  document.getElementById('si-f-address').value = si.address || '';
+  phSet_('si-f-phone', si.phone);
+  phSet_('si-f-svc', si.servicePhone);
+  document.getElementById('si-f-email').value = si.serviceEmail || '';
+  document.getElementById('si-f-rules').value = si.pickupRules || '';
+}
 function loadStoreInfo() {
   apiGet({ action: 'storeScheduleSettings', storeId: SCHED_STORE_ID }).then(data => {
-    const si = (data && data.storeInfo) || {};
-    document.getElementById('si-f-name').value = si.name || '';
-    document.getElementById('si-f-address').value = si.address || '';
-    document.getElementById('si-f-phone').value = si.phone || '';
-    document.getElementById('si-f-rules').value = si.pickupRules || '';
+    storeInfoFill_((data && data.storeInfo) || {});
   }).catch(() => alert('讀取店家資訊失敗，請重新整理'));
 }
 function saveStoreInfo() {
@@ -3193,10 +3224,12 @@ function saveStoreInfo() {
     action: 'updateStoreInfo', storeId: SCHED_STORE_ID,
     name: document.getElementById('si-f-name').value,
     address: document.getElementById('si-f-address').value,
-    phone: document.getElementById('si-f-phone').value,
+    phone: phGet_('si-f-phone'),
+    servicePhone: phGet_('si-f-svc'),
+    serviceEmail: document.getElementById('si-f-email').value,
     pickupRules: document.getElementById('si-f-rules').value
   }).then(data => {
-    if (data.status === 'ok') alert('已儲存');
+    if (data.status === 'ok') { if (data.storeInfo) storeInfoFill_(data.storeInfo); alert('已儲存'); }   // 存完照後端統一後的格式重填
     else alert('儲存失敗：' + (data.message || ''));
   });
 }

@@ -57,7 +57,7 @@
 
 <section id="about">
   <h2>關於我們</h2>
-  <p><span data-store="displayName">A-Bao溪湖培英店</span>（營業登記名稱：<span data-store="legalName">美寶美食館</span>）位於彰化縣溪湖鎮，是一間現點現做的早餐店，提供美式漢堡、蛋餅、吐司、炒麵、捲餅、茶飲與咖啡等餐點，歡迎現場用餐、外帶，或線上預訂後到店自取。</p>
+  <p><span data-store="displayName">A-Bao溪湖培英店</span>（營業登記名稱：<span data-store="legalName">美寶美食館</span>）位於彰化縣溪湖鎮，是一間現點現做的早餐店，提供美式漢堡、蛋餅、土司、炒麵、捲餅、茶飲與咖啡等餐點，歡迎現場用餐、外帶，或線上預訂後到店自取。</p>
   <table class="info">
     <tr><th>商店名稱</th><td><span data-store="displayName">A-Bao溪湖培英店</span></td></tr>
     <tr><th>營業登記名稱</th><td><span data-store="legalName">美寶美食館</span></td></tr>
@@ -65,7 +65,7 @@
     <tr><th>營業地址</th><td><span data-store="address">彰化縣溪湖鎮東寮里培英路16號1樓</span></td></tr>
     <tr><th>營業時間</th><td class="biz-hours">每日 05:20～13:00（無公休日）</td></tr>
     <tr><th>客服電話</th><td><a data-store-tel="servicePhone" href="tel:0909504662">0909-504662</a></td></tr>
-    <tr><th>店內電話</th><td><a data-store-tel="storePhone" href="tel:048852662">04-885-2662</a></td></tr>
+    <tr><th>訂餐專線</th><td><a data-store-tel="storePhone" href="tel:048852662">04-885-2662</a></td></tr>
     <tr><th>客服信箱</th><td><a data-store-mail="serviceEmail" href="mailto:billy05012003@gmail.com">billy05012003@gmail.com</a></td></tr>
   </table>
 </section>
@@ -158,7 +158,7 @@
   <h2>聯絡我們</h2>
   <table class="info">
     <tr><th>客服電話</th><td><a data-store-tel="servicePhone" href="tel:0909504662">0909-504662</a></td></tr>
-    <tr><th>店內電話</th><td><a data-store-tel="storePhone" href="tel:048852662">04-885-2662</a></td></tr>
+    <tr><th>訂餐專線</th><td><a data-store-tel="storePhone" href="tel:048852662">04-885-2662</a></td></tr>
     <tr><th>客服信箱</th><td><a data-store-mail="serviceEmail" href="mailto:billy05012003@gmail.com">billy05012003@gmail.com</a></td></tr>
     <tr><th>營業地址</th><td><span data-store="address">彰化縣溪湖鎮東寮里培英路16號1樓</span></td></tr>
     <tr><th>營業時間</th><td class="biz-hours">每日 05:20～13:00（無公休日）</td></tr>
@@ -252,7 +252,8 @@
           html.push('<div class="item">' +
             (it.photoUrl ? '<img loading="lazy" alt="" src="' + esc(it.photoUrl) + '" onerror="this.style.display=\'none\'">' : '') +
             '<div><div class="nm">' + esc(it.name) + '</div>' +
-            (it.note ? '<div class="nt">' + esc(it.note) + '</div>' : '') +
+            // 11-25：菜單備註裡的 <br> 先跳脫再換回真的換行（其他標籤照樣當文字顯示）
+            (it.note ? '<div class="nt">' + esc(it.note).replace(/&lt;br\s*\/?&gt;/gi, '<br>') + '</div>' : '') +
             '<div class="pr">' + esc(priceLabel(it)) + '</div></div></div>');
         });
         html.push('</div>');
