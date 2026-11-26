@@ -2742,6 +2742,8 @@ let CATALOG = {};
 // 菜單CMS化Phase 1（2026-09-06）：OPTION_GROUPS同樣改成向雲端讀取，不再寫死在這裡
 let OPTION_GROUPS = {};
 
+// 11-26 (2u)／(12h) 去寫死：飲料分類＝下面 A-Bao 舊名單 ＋ 後台分類有勾「飲料」的（menuCmsData.drinkCategories），聯集、舊名單排前面；
+//   applyMenuCmsData_ 讀到菜單時就地補進來（同一個陣列，別處參照不用改）；SQL 58 還沒貼＝只有舊名單，跟原本一樣
 const DRINK_FAMILY = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
   'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
   'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
@@ -2794,7 +2796,11 @@ function rebuildDrinkComboDerivedData_() {
 
 // 11-23 出單簡稱（後台「菜單管理 → 出單簡稱」；{分類: {label, pos}}）：雲端出單由後端套，這份只給斷網時平板自己出單用
 let PRINT_LABELS_ = {};
+function mergeDrinkFamily_(extra) {
+  (Array.isArray(extra) ? extra : []).forEach(cat => { if (typeof cat === 'string' && !DRINK_FAMILY.includes(cat)) DRINK_FAMILY.push(cat); });
+}
 function applyMenuCmsData_(data) {
+  mergeDrinkFamily_(data.drinkCategories);
   PRINT_LABELS_ = (data.printLabels && typeof data.printLabels === 'object') ? data.printLabels : {};
   CATALOG = data.catalog;
   OPTION_GROUPS = data.optionGroups;
@@ -2917,6 +2923,12 @@ function posAddonNames_() {
   };
   POS_ADDON_GROUP_CODES_.forEach(c => add(c, false));
   POS_ADDON_PRICED_ONLY_CODES_.forEach(c => add(c, true));
+  // 11-26 (2u)／(12h)：後台群組設「可以標售完」的也算（all＝全部選項、priced＝只有要加錢的）；跟上面舊名單聯集，培英不變
+  Object.keys(OPTION_GROUPS || {}).forEach(c => {
+    if (POS_ADDON_GROUP_CODES_.includes(c) || POS_ADDON_PRICED_ONLY_CODES_.includes(c)) return;
+    const m = OPTION_GROUPS[c] && OPTION_GROUPS[c].selloutMode;
+    if (m === 'all' || m === 'priced') add(c, m === 'priced');
+  });
   if (names.length) { posAddonCache_ = { src: OPTION_GROUPS, names }; return names; }
   return STORE_ID === 'meibao' ? ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY).map(it => it.name) : [];
 }
@@ -5747,7 +5759,7 @@ function offlineTicketLines_(o) {
 // 杯貼(10-13)：跟雲端同一套 buildCupLabels_；哪些品名算飲料看菜單裡的飲料分類
 function offlineDrinkTest_() {
   const set = new Set();
-  offlineTicketKit_.drinkCats.forEach(c => (CATALOG[c] || []).forEach(it => set.add(it.name)));
+  offlineTicketKit_.drinkCats.concat(DRINK_FAMILY).forEach(c => (CATALOG[c] || []).forEach(it => set.add(it.name)));   // 11-26：加上後台勾「飲料」的分類
   return name => set.has(name);
 }
 function offlineLabels_(o) {

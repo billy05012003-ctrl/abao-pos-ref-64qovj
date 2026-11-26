@@ -90,6 +90,7 @@
   .mc-accordion-header { display:flex; align-items:center; gap:6px; padding:2px 8px; }
   .mc-accordion-toggle { flex:1; min-width:0; text-align:left; border:none; background:none; padding:10px 6px; font-size:0.92rem; font-weight:600; cursor:pointer; color:#222; display:flex; align-items:center; gap:6px; }
   .mc-accordion-caret { color:var(--muted); font-size:0.7rem; width:12px; display:inline-block; flex:0 0 auto; }
+  .mc-cat-drink { flex:0 0 auto; display:flex; align-items:center; gap:4px; font-size:0.78rem; color:var(--muted); white-space:nowrap; cursor:pointer; }
   .mc-accordion-add-btn { flex:0 0 auto; border:1px dashed var(--brand); background:none; color:var(--brand); padding:6px 10px; border-radius:6px; font-size:0.78rem; cursor:pointer; white-space:nowrap; }
   .mc-accordion-body { border-top:1px solid var(--border); padding:6px 10px 10px 34px; }
   .cat-title { font-size:0.85rem; font-weight:700; color:var(--muted); margin:16px 0 6px; }
@@ -1342,7 +1343,7 @@ setInterval(() => {
 
 // 11-23 UX ④：改的是草稿（要發布才上線）的動作
 const BO_DRAFT_ACTIONS_ = ['upsertMenuItem', 'deleteMenuItem', 'upsertOptionGroup', 'deleteOptionGroup', 'upsertOptionValue', 'deleteOptionValue',
-  'setItemGroupLinks', 'copyItemGroupLinks', 'bulkAttachGroupToCategory', 'setItemComboGroupLinks', 'copyItemComboGroupLinks', 'reorderMenuCategories', 'reorderMenuItems',
+  'setItemGroupLinks', 'copyItemGroupLinks', 'bulkAttachGroupToCategory', 'setItemComboGroupLinks', 'copyItemComboGroupLinks', 'reorderMenuCategories', 'reorderMenuItems', 'setCategoryDrink',
   'upsertPromo', 'deletePromo', 'reorderPromos', 'upsertPointGift', 'deletePointGift', 'upsertAddon', 'deleteAddon', 'reorderAddons',
   'upsertHomeCard', 'deleteHomeCard', 'reorderHomeCards', 'upsertHomeAct', 'deleteHomeAct', 'reorderHomeActs', 'seedHomeActs'];
 function boToast_(text, ok, ms) {
@@ -3727,9 +3728,16 @@ function mcShortCatName(cat) {
 }
 // 只有這幾個分類的品項會用中杯/大杯計價，其餘分類品項一律單一價格，
 // 品項編輯畫面依此決定要不要顯示中杯/大杯價格欄位(比照原本DRINK_FAMILY定義)
-const MC_DRINK_CATEGORIES = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
+// 11-26 (2u)／(12h) 去寫死：下面是 A-Bao 舊名單（固定算飲料、勾選框鎖住）；分類勾「飲料」的（menuCmsData.drinkCategories）
+//   在 loadMenuCms 讀到時併進 MC_DRINK_CATEGORIES（同一個陣列就地重算，別處參照不用改）
+const MC_DRINK_CATEGORIES_BASE_ = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
   'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
   'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
+const MC_DRINK_CATEGORIES = MC_DRINK_CATEGORIES_BASE_.slice();
+function setMcDrinkCategories_(extra) {
+  MC_DRINK_CATEGORIES.length = 0;
+  MC_DRINK_CATEGORIES_BASE_.concat(Array.isArray(extra) ? extra : []).forEach(c => { if (typeof c === 'string' && !MC_DRINK_CATEGORIES.includes(c)) MC_DRINK_CATEGORIES.push(c); });
+}
 
 let tabletStatusMap = {};   // 雲端平板/線上點餐共用狀態，key=品項名稱；分類的線上顯示開關 key=「分類｜分類key」(10-03)
 // 線上點餐顯示開關(2026-10-03，規格見 線上點餐勾選設計_2026-10-03.md)：沒設定過的分類，單點/三明治/其他預設不顯示、其他預設顯示
@@ -3826,7 +3834,23 @@ function buildAddonStatusItems_() {
       items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
     });
   });
+  // 11-26 (2u)／(12h)：群組設「可以標售完」的也算（all＝全部選項、priced＝只有要加錢的）；跟上面舊名單聯集，培英不變（平板 posAddonNames_ 同一套）
+  Object.keys(mcOptionGroups || {}).forEach(code => {
+    if (addonStatusFixedMode_(code)) return;
+    const g = mcOptionGroups[code];
+    const m = g && g.selloutMode;
+    if (!(m === 'all' || m === 'priced') || !g.options) return;
+    g.options.forEach(o => {
+      if ((m === 'priced' && !(Number(o.price) > 0)) || seen.has(o.name)) return;
+      seen.add(o.name);
+      items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
+    });
+  });
   return items;
+}
+// A-Bao 舊名單裡的群組：固定可標售完（'all'／'priced'），後台選單鎖住；不在名單＝null
+function addonStatusFixedMode_(code) {
+  return ADDON_STATUS_GROUP_CODES.includes(code) ? 'all' : ADDON_STATUS_PRICED_ONLY_CODES.includes(code) ? 'priced' : null;
 }
 
 function renderAvailabilityList() {
@@ -4121,6 +4145,7 @@ function loadMenuCms() {
     mcItemGroups = data.itemGroups;
     mcItemComboGroups = data.itemComboGroups || {};
     mcCategoryOrder = data.categoryOrder || Object.keys(data.catalog);
+    setMcDrinkCategories_(data.drinkCategories);   // 11-26：分類勾「飲料」的
     if (mcCurrentGroupCode && mcCurrentGroupCode !== 'NEW' && !mcOptionGroups[mcCurrentGroupCode]) mcCurrentGroupCode = null;   // 那組已經不在(被刪/回溯)才關
     if (MC_STATUS === 'draft') refreshMenuPublishDiff_();   // 草稿還沒發布提醒
     renderMcCatList();
@@ -4312,6 +4337,19 @@ function syncBrandMenuToStores(alsoPublish, clickedBtn) {
 }
 
 // ---- 分類手風琴列表（比照大麥「品牌範本餐點管理」的版面：每個分類一整列，展開看品項，點品項彈modal編輯）----
+function setMcCategoryDrink_(cat, cb) {
+  const want = cb.checked;
+  cb.disabled = true;
+  apiPost({ action: 'setCategoryDrink', category: cat, isDrink: want, storeId: MC_STORE_ID, status: MC_STATUS }).then(data => {
+    if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
+    return loadMenuCms();
+  }).catch(err => {
+    alert('飲料分類儲存失敗：' + err.message);
+    cb.checked = !want;
+    cb.disabled = false;
+  });
+}
+
 function renderMcCatList() {
   const el = document.getElementById('mc-cat-list');
   el.innerHTML = '';
@@ -4341,6 +4379,20 @@ function renderMcCatList() {
       renderMcCatList();
     };
     header.appendChild(toggleBtn);
+
+    // 11-26 (2u)／(12h)：分類勾「飲料」＝印杯貼、可當套餐飲料、品項有中杯／大杯價；A-Bao 舊名單的分類固定勾、鎖住
+    const drinkLbl = document.createElement('label');
+    drinkLbl.className = 'mc-cat-drink';
+    const drinkFixed = MC_DRINK_CATEGORIES_BASE_.includes(cat);
+    drinkLbl.title = drinkFixed ? '原本就固定算飲料的分類，暫時不能取消' : MC_STATUS !== 'draft' ? '要在草稿版才能改' : '勾了＝這個分類是飲料：出單印杯貼、可當套餐飲料、品項可填中杯／大杯價（存到草稿，發布後生效）';
+    const drinkCb = document.createElement('input');
+    drinkCb.type = 'checkbox';
+    drinkCb.checked = MC_DRINK_CATEGORIES.includes(cat);
+    drinkCb.disabled = drinkFixed || MC_STATUS !== 'draft';
+    drinkCb.onchange = () => setMcCategoryDrink_(cat, drinkCb);
+    drinkLbl.appendChild(drinkCb);
+    drinkLbl.appendChild(document.createTextNode('飲料'));
+    header.appendChild(drinkLbl);
 
     const addItemBtn = document.createElement('button');
     addItemBtn.type = 'button';
@@ -4930,6 +4982,15 @@ function renderGroupEditor() {
     <label class="mc-field" style="flex-direction:row;align-items:center;gap:6px;">
       <input type="checkbox" id="mc-g-online" ${g.onlineVisible === false ? '' : 'checked'} onchange="onMcGroupOnlineToggle_(this)"> 線上點餐（取消勾選，代表線上點餐整組不顯示）
     </label>
+    ${(() => { const fx = isNew ? null : addonStatusFixedMode_(mcCurrentGroupCode); const v = fx || g.selloutMode || ''; return `
+    <label class="mc-field">可以在「品項上下架」標售完
+      <select id="mc-g-sellout" ${fx ? 'disabled' : ''}>
+        <option value="" ${v === '' ? 'selected' : ''}>不行</option>
+        <option value="all" ${v === 'all' ? 'selected' : ''}>全部選項</option>
+        <option value="priced" ${v === 'priced' ? 'selected' : ''}>只有要加錢的選項</option>
+      </select>
+    </label>
+    <p style="font-size:0.78rem;color:var(--muted);margin:-4px 0 8px;">${fx ? '這組原本就固定可以標售完，暫時不能改' : '選了以後，這組的選項會出現在平板和後台「品項上下架」的「加購品項/配料選擇」，賣完可以標售完'}</p>`; })()}
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMcGroup()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteMcGroup()">刪除整個群組</button>' : ''}
@@ -5236,6 +5297,8 @@ function saveMcGroup() {
     storeId: MC_STORE_ID,
     status: MC_STATUS
   };
+  const sellSel = document.getElementById('mc-g-sellout');   // 11-26：鎖住的（A-Bao 舊名單）不送＝不動
+  if (sellSel && !sellSel.disabled) payload.selloutMode = sellSel.value;
   apiPost({ action: 'upsertOptionGroup', group: payload }).then(data => {
     if (data.status !== 'ok') throw new Error(data.message || '儲存失敗');
     mcCurrentGroupCode = data.code;
@@ -5533,6 +5596,7 @@ function refreshMenuPublishDiff_() {
       .concat(diffByKey_(d.optionGroups || {}, l.optionGroups || {}, k => '客製化選項「' + (((d.optionGroups || {})[k] || (l.optionGroups || {})[k] || {}).label || k) + '」'))
       .concat(diffByKey_(Object.assign({}, d.itemGroups, d.itemComboGroups && { __combo: d.itemComboGroups }), Object.assign({}, l.itemGroups, l.itemComboGroups && { __combo: l.itemComboGroups }), k => k === '__combo' ? '套餐限定客製化掛載' : '客製化掛載「' + k.split('||').pop() + '」'));
     if (JSON.stringify(d.categoryOrder || []) !== JSON.stringify(l.categoryOrder || [])) changes.push('修改分類排序');
+    if (JSON.stringify(d.drinkCategories || []) !== JSON.stringify(l.drinkCategories || [])) changes.push('修改飲料分類');   // 11-26
     renderPublishDiff_([el], changes);
   }).catch(() => renderPublishDiff_([el], [], '暫時無法比對草稿與正式版(網路問題)，發布前請自行確認'));
 }
