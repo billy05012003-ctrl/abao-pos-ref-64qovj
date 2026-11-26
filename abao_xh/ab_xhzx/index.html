@@ -770,7 +770,20 @@ const STORE_ID = (function () {
 //   圖文選單經過 ../stores.html 時直接進這間；門市清單（後端 onlineStores：啟用＋有 LIFF＋有正式版菜單）存在本機，
 //   兩間以上才顯示頁首「⇄ 換店」、我的訂單別間店的單標店名
 const LAST_STORE_KEY_ = 'abao_last_store_v1', STORE_LIST_KEY_ = 'abao_store_list_v1';
-try { if (STORE_ID && /\/abao_xh\/[A-Za-z0-9_]+\//.test(location.pathname)) localStorage.setItem(LAST_STORE_KEY_, STORE_ID); } catch (e) {}
+// 11-26 (12i) 第二版：圖文選單「線上點餐／我的訂單」直接連培英的 LIFF 並帶 ?rm=1（原本先開 stores.html 再跳 LIFF，
+//   LINE 會把 LIFF 開成新的一層、選門市頁留在下面，要按兩次 X 才關得掉）。這頁自己判斷：
+//   只有一間店、從我的訂單來（本來就列全品牌的單）、上次選的就是這間 → 留下；上次選別間 → 換到那間的 LIFF；兩間以上還沒選過 → 去選門市頁
+//   LIFF 有時把參數包在 liff.state 裡，兩邊都看
+const RM_PARAMS_ = (function () {
+  const q = new URLSearchParams(location.search), st = q.get('liff.state');
+  if (st) { try { new URLSearchParams(st.slice(st.indexOf('?') + 1)).forEach((v, k) => { if (!q.has(k)) q.set(k, v); }); } catch (e) {} }
+  return q;
+})();
+const FROM_RICHMENU_ = RM_PARAMS_.get('rm') === '1';
+let PREV_LAST_STORE_ = '';
+try { PREV_LAST_STORE_ = localStorage.getItem(LAST_STORE_KEY_) || ''; } catch (e) {}
+function rememberStore_() { try { if (STORE_ID && /\/abao_xh\/[A-Za-z0-9_]+\//.test(location.pathname)) localStorage.setItem(LAST_STORE_KEY_, STORE_ID); } catch (e) {} }
+if (!FROM_RICHMENU_) rememberStore_();   // 從圖文選單來的等 richMenuRoute_ 決定留不留下再記
 var ONLINE_STORES_ = (function () { try { const c = JSON.parse(localStorage.getItem(STORE_LIST_KEY_) || 'null'); return c && Array.isArray(c.stores) ? c.stores : null; } catch (e) { return null; } })();
 function storeShortName_(id) { const s = (ONLINE_STORES_ || []).find(x => x.storeId === id); return s ? (s.shortName || s.displayName) : '其他門市'; }
 function refreshStoreSwitch_() {
@@ -785,6 +798,22 @@ function loadOnlineStores_() {
     refreshStoreSwitch_();
     if (typeof myOrdersData_ !== 'undefined' && myOrdersData_ && typeof renderMyOrdersPane_ === 'function') renderMyOrdersPane_();
   }).catch(() => {});
+}
+async function richMenuRoute_() {
+  if (!FROM_RICHMENU_) return;
+  let list = ONLINE_STORES_;
+  if (!list || !list.length) {   // 手機沒存過清單：問一次（最多等 3 秒，問不到就留在這間）
+    try {
+      const d = await Promise.race([apiGet_({ action: 'onlineStores' }), new Promise(r => setTimeout(() => r(null), 3000))]);
+      if (d && d.status === 'ok' && Array.isArray(d.stores)) { list = ONLINE_STORES_ = d.stores; try { localStorage.setItem(STORE_LIST_KEY_, JSON.stringify({ at: Date.now(), stores: d.stores })); } catch (e) {} refreshStoreSwitch_(); }
+    } catch (e) {}
+  }
+  list = list || [];
+  if (list.length < 2 || !list.some(x => x.storeId === STORE_ID) || RM_PARAMS_.get('tab') === 'mine') { rememberStore_(); return; }
+  const last = list.find(x => x.storeId === PREV_LAST_STORE_);
+  if (last && last.storeId === STORE_ID) { rememberStore_(); return; }
+  if (last && last.liffId) { location.replace('https://liff.line.me/' + encodeURIComponent(last.liffId)); return; }
+  location.replace('../stores.html?go=order&change=1');   // 兩間以上、還沒選過：先選
 }
 function switchStore_() { location.href = '../stores.html?go=' + (typeof homeTab_ !== 'undefined' && homeTab_ === 'mine' ? 'mine' : 'order') + '&change=1'; }
 const STORE_PROFILE_KEY_ = 'abao_store_profile_' + STORE_ID;
@@ -6429,7 +6458,7 @@ else if (QR_TO_LINE_ === 'wait') {   // 11-16 (15c)：第一次來還不知道 L
   ensureLiffId_().then(id => { if (id) location.replace('https://liff.line.me/' + id + '?src=menuline'); else startLineInit_(); });
 }
 else startLineInit_();
-refreshStoreSwitch_(); setTimeout(loadOnlineStores_, 1500);   // 11-26 (12i)：晚一點再問，不跟菜單、登入搶
+refreshStoreSwitch_(); richMenuRoute_(); setTimeout(loadOnlineStores_, 1500);   // 11-26 (12i)：清單晚一點再問，不跟菜單、登入搶
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 checkLinePayReturn_(); // 10-23 從 LINE Pay 跳回來(網址帶 lpreturn)：後端確認收款後一樣輪詢
 setTimeout(checkUnfinishedPay_, 1500); // 10-23 付款頁直接關掉的單：重新打開時問要不要放回購物車(等購物車暫存讀完、頁面畫好)
