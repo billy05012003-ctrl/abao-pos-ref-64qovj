@@ -2308,7 +2308,7 @@ const PAY_ALERT_KIND_ = {
   twqr_refund_pending: 'TWQR 退款處理中', twqr_refund_failed: 'TWQR 退款失敗',
   online_unconfirmed: '線上單太久沒確認接單', line_quota: 'LINE 免費訊息用完',   // 11-20 (9g)
   sms_balance_low: '簡訊餘額快用完', sms_balance_empty: '簡訊餘額用完', sms_store_daily: '驗證簡訊達每日上限', sms_provider_error: '驗證簡訊發不出去',   // 11-25 (S7)
-  line_quota_low: 'LINE 免費訊息快用完', sms_fallback_on: 'LINE 用完、已改發簡訊', sms_fallback_cap: '轉發簡訊達每月上限'   // 11-26 (9j)
+  line_quota_low: 'LINE 免費訊息快用完', sms_fallback_on: 'LINE 用完、已改發簡訊', sms_fallback_cap: '轉發簡訊達每月上限', sms_fallback_fail: '轉簡訊發不出去'   // 11-26 (9j)
 };
 // ---- 11-20 (9g) 訂單通知設定 ----
 let notifyData_ = null;
@@ -2402,8 +2402,9 @@ function notifySmsCell_(d, owner, r) {
   const fb = d.smsFb;
   if (!fb) return '';   // 後端還沒更新：不顯示
   const s = d.settings || {}, lineOn = !!s[r.key], on = lineOn && notifySmsOn_(r.sms);
-  const lock = !owner || !fb.rowsOk || !lineOn || (!fb.providerReady && !on);
-  const tip = !fb.rowsOk ? '系統還沒更新完成' : !lineOn ? '先打開左邊的 LINE 通知' : (!fb.providerReady && !on) ? '先到「簡訊驗證碼」選簡訊商' : 'LINE 快用完時改發簡訊';
+  const live = fb.providerReady && fb.liveKey !== false;   // 11-26：測試金鑰（sk_test_）發不出簡訊 → 不給勾（已勾的可以取消）
+  const lock = !owner || !fb.rowsOk || !lineOn || (!live && !on);
+  const tip = !fb.rowsOk ? '系統還沒更新完成' : !lineOn ? '先打開左邊的 LINE 通知' : (!fb.providerReady && !on) ? '先到「簡訊驗證碼」選簡訊商' : (!live && !on) ? '目前是簡訊測試金鑰，換正式金鑰後才能打開' : 'LINE 快用完時改發簡訊';
   return `<label title="${tip}" style="display:flex;align-items:center;gap:4px;margin-left:10px;padding-left:10px;border-left:1px solid var(--line, #ddd);cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="notifySmsRow_('${r.sms}', this)">📩 轉簡訊</label>`;
 }
 function notifySmsRow_(key, el) { el.disabled = true; notifySave_({ settings: notifySmsPayload_(key, el.checked) }, el); }
@@ -2420,7 +2421,8 @@ function notifySmsFbHtml_(d, owner) {
     : `本月已用 <b>${Number(q.used) || 0}</b>／${q.limit} 則，剩 <b style="color:${q.limit - q.used <= (fb.lineLowAt || 30) ? '#c0392b' : 'inherit'};">${Math.max(0, q.limit - q.used)}</b> 則`;
   const warn = !fb.sqlReady || !fb.rowsOk ? '⚠ 這個功能系統還沒更新完成，「轉簡訊」暫時打不開，請聯絡系統廠商。'
     : !fb.providerReady ? '⚠ 還沒選好簡訊商：請先到「商家管理 → 簡訊驗證碼」選簡訊商（驗證碼開關不用打開），上面的「轉簡訊」才打得開。'
-    : fb.testMode ? '⚠ 目前選的是測試簡訊商，不會真的發簡訊。' : '';
+    : fb.testMode ? '⚠ 目前選的是測試簡訊商，不會真的發簡訊，上面的「轉簡訊」打不開。'
+    : fb.liveKey === false ? '⚠ 目前是簡訊測試金鑰（發不出簡訊），換成正式金鑰後上面的「轉簡訊」才打得開。' : '';
   return `<div style="font-weight:700;margin:14px 0 4px;">轉簡訊設定（LINE 快用完時）</div>
     ${warn ? `<div style="font-size:0.85rem;color:#c0392b;margin-bottom:6px;">${warn}</div>` : ''}
     <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;">上面哪一種 LINE 通知勾了「📩 轉簡訊」，LINE 官方帳號免費訊息快用完時，那種通知就改用簡訊發給顧客，每則約 0.78 元。${boHelp_('LINE 剩下面設定的則數時，有勾「轉簡訊」的顧客通知就改發簡訊，剩下的 LINE 留給「LINE 通知老闆」用；LINE 說額度用完時也會當場改發。顧客沒綁 LINE、但有留手機的單也會直接發簡訊。取餐通知可以重按，簡訊每張單只發一次。簡訊開頭是【品牌名】、不放網址，一則 70 字以內。LINE 剩 30 則、第一次改發簡訊、到每月上限時，各在金流告警記一筆並 LINE 通知老闆（每月各一次）。簡訊商和金鑰跟「簡訊驗證碼」共用。左邊的 LINE 通知關著時，「轉簡訊」不能勾。')}</div>
