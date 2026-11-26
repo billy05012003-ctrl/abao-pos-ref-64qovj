@@ -3906,6 +3906,19 @@ function buildAddonStatusItems_() {
   return items;
 }
 // A-Bao 舊名單裡的群組：固定可標售完（'all'／'priced'），後台選單鎖住；不在名單＝null
+// 11-26 老闆要的提醒：開放一組選項可標售完之前要注意的三件事（必選、跟菜單品項同名、選項很多）
+function mcSelloutWarnings_(g) {
+  const out = [];
+  if (!g) return out;
+  const opts = (g.options || []).map(o => o.name);
+  if (g.required) out.push('這組是「必選」：選項全部標售完時，顧客會沒得選、點不下去，建議維持「不行」');
+  const items = new Set();
+  Object.keys(mcCatalog || {}).forEach(c => (mcCatalog[c] || []).forEach(it => items.add(it.name)));
+  const same = opts.filter(n => items.has(n));
+  if (same.length) out.push('「' + same.slice(0, 3).join('、') + '」' + (same.length > 3 ? '等 ' + same.length + ' 個' : '') + '跟菜單品項同名：線上點餐標售完會連品項一起售完（POS 功能那邊是分開的）');
+  if (opts.length > 8) out.push('這組有 ' + opts.length + ' 個選項，開放後平板的「加購品項/配料選擇」清單會變長，店員比較難找');
+  return out;
+}
 function addonStatusFixedMode_(code) {
   return ADDON_STATUS_GROUP_CODES.includes(code) ? 'all' : ADDON_STATUS_PRICED_ONLY_CODES.includes(code) ? 'priced' : null;
 }
@@ -5047,7 +5060,8 @@ function renderGroupEditor() {
         <option value="priced" ${v === 'priced' ? 'selected' : ''}>只有要加錢的選項</option>
       </select>
     </label>
-    <p style="font-size:0.78rem;color:var(--muted);margin:-4px 0 8px;">${fx ? '這組原本就固定可以標售完，暫時不能改' : '選了以後，這組的選項會出現在平板和後台「品項上下架」的「加購品項/配料選擇」，賣完可以標售完'}</p>`; })()}
+    <p style="font-size:0.78rem;color:var(--muted);margin:-4px 0 8px;">${fx ? '這組原本就固定可以標售完，暫時不能改' : '選了以後，這組的選項會出現在平板和後台「品項上下架」的「加購品項/配料選擇」，賣完可以標售完'}</p>
+    ${fx ? '' : mcSelloutWarnings_(g).map(w => `<p style="font-size:0.78rem;color:#A32D2D;margin:0 0 6px;">⚠ ${escapeHtml(w)}</p>`).join('')}`; })()}
     <div style="margin:14px 0;">
       <button type="button" class="mc-save-btn" onclick="saveMcGroup()">儲存</button>
       ${!isNew ? '<button type="button" class="mc-delete-btn" onclick="deleteMcGroup()">刪除整個群組</button>' : ''}
