@@ -2317,10 +2317,10 @@ let notifyData_ = null;
 const NOTIFY_ROWS_ = [
   { sec: '顧客通知' },
   { key: 'screenLive', name: '畫面即時更新', short: '顧客停在「訂單完成」或「我的訂單」畫面時，店家一接單就自動顯示，不花錢。', desc: '顧客停在「訂單完成」畫面或「我的訂單」時，店家一按確認接單就自己顯示「✅ 店家已確認接單」。不花錢、顧客不用加好友；顧客關掉畫面就看不到。' },
-  { key: 'lineConfirm', name: 'LINE 接單通知', line: true, short: '店家按「確認接單」時 LINE 通知顧客，每張單扣 1 則官方帳號額度。', desc: '店家按「確認接單」時，用官方帳號 LINE 通知顧客（附我的訂單連結）。每張單扣 1 則官方帳號訊息額度（免費方案每月 200 則，用完發不出去、不會收錢）；顧客要先加官方帳號好友才收得到。' },
-  { key: 'lineVoid', name: 'LINE 作廢退款通知', line: true, short: '線上單退款／作廢時 LINE 通知顧客，很少發生。', desc: '平板或後台把已付款的線上單退款／作廢時，LINE 通知顧客「訂單已取消、款項已退回」。很少發生，費用很少。' },
+  { key: 'lineConfirm', name: 'LINE 接單通知', line: true, sms: 'smsConfirm', short: '店家按「確認接單」時 LINE 通知顧客，每張單扣 1 則官方帳號額度。', desc: '店家按「確認接單」時，用官方帳號 LINE 通知顧客（附我的訂單連結）。每張單扣 1 則官方帳號訊息額度（免費方案每月 200 則，用完發不出去、不會收錢）；顧客要先加官方帳號好友才收得到。' },
+  { key: 'lineVoid', name: 'LINE 作廢退款通知', line: true, sms: 'smsVoid', short: '線上單退款／作廢時 LINE 通知顧客，很少發生。', desc: '平板或後台把已付款的線上單退款／作廢時，LINE 通知顧客「訂單已取消、款項已退回」。很少發生，費用很少。' },
   // 11-21 老闆：先做、預設關（SQL 50）
-  { key: 'lineReady', name: 'LINE 取餐通知', line: true, short: '店家按「取餐通知」時 LINE 告訴顧客餐點好了，每次扣 1 則官方帳號額度。', desc: '店家按「取餐通知」時，用官方帳號 LINE 通知顧客餐點好了。每次扣 1 則官方帳號訊息額度（免費方案每月 200 則）；顧客要先加官方帳號好友才收得到。打開後平板「待取餐訂單」每張單會多一顆「取餐通知」按鈕（顧客沒綁 LINE 的單按鈕是灰的）；「畫面即時更新」開著時，顧客的「我的訂單」也會顯示「🍳 餐點好了，可以來拿」。' },
+  { key: 'lineReady', name: 'LINE 取餐通知', line: true, sms: 'smsReady', short: '店家按「取餐通知」時 LINE 告訴顧客餐點好了，每次扣 1 則官方帳號額度。', desc: '店家按「取餐通知」時，用官方帳號 LINE 通知顧客餐點好了。每次扣 1 則官方帳號訊息額度（免費方案每月 200 則）；顧客要先加官方帳號好友才收得到。打開後平板「待取餐訂單」每張單會多一顆「取餐通知」按鈕（顧客沒綁 LINE 的單按鈕是灰的）；「畫面即時更新」開著時，顧客的「我的訂單」也會顯示「🍳 餐點好了，可以來拿」。' },
   { sec: '店內提醒' },
   { key: 'tabletAlert', name: '平板全螢幕提醒', short: '線上單太久沒確認，平板跳出全螢幕紅色提醒。', desc: '線上單太久沒確認：現在下的單 10 分鐘、預訂單取餐前 15 分鐘 → 平板跳出全螢幕紅色視窗擋住收銀畫面，按確認接單才消失（購物車有東西、結帳中先不跳）。' },
   { key: 'ownerLine', name: 'LINE 通知老闆', short: '線上單一直沒確認、或電子發票出問題時，LINE 通知下面「接收提醒的手機」。', desc: '還是沒確認：現在下的單 20 分鐘、預訂單到了取餐時間 → 金流告警記一筆，並 LINE 通知下面「接收提醒的手機」（附訂單號、取餐時間、顧客電話）。每張單只通知一次。電子發票開不出來、一直連不上 ezPay、開立失敗、快到作廢期限還沒作廢、要人工處理、證明聯印不出來時也會通知（同一種問題在後台按「標記已處理」之前只通知一次）。' },
@@ -2350,7 +2350,7 @@ function renderNotifySettings_() {
     const on = !!s[r.key], lock = !owner || d.sqlReady === false || (r.line && !d.lineReady && !on);
     return `<div class="sched-special-row">
       <b>${r.name}</b>
-      <label style="display:flex;align-items:center;gap:4px;cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="notifyToggle_('${r.key}', this)">${on ? '🟢 啟用' : '🔴 停用'}</label>
+      <label style="display:flex;align-items:center;gap:4px;cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="notifyToggle_('${r.key}', this)">${on ? '🟢 啟用' : '🔴 停用'}</label>${r.sms ? notifySmsCell_(d, owner, r) : ''}
       <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">${r.short ? r.short + boHelp_(r.desc) : r.desc}</div>
     </div>`;
   }).join('');
@@ -2383,39 +2383,50 @@ function notifySave_(payload, el) {
     renderNotifySettings_();
   }).catch(() => { alert('網路異常，沒有儲存'); if (el) { el.checked = !el.checked; el.disabled = false; } });
 }
-function notifyToggle_(key, el) { el.disabled = true; notifySave_({ settings: { [key]: el.checked } }, el); }
-// ---- 11-26 (9j) LINE 額度用完轉簡訊（後端 notifySettings.smsFb；SQL 59）----
+function notifyToggle_(key, el) {
+  el.disabled = true;
+  const p = { [key]: el.checked };
+  // 11-26 (9j) 關掉某種 LINE 通知時，它的「轉簡訊」一起關（不然打開過的勾選會留著、總開關也不會跟著關）
+  const row = NOTIFY_ROWS_.find(r => r.key === key && r.sms);
+  if (row && !el.checked && notifySmsOn_(row.sms)) Object.assign(p, notifySmsPayload_(row.sms, false));
+  notifySave_({ settings: p }, el);
+}
+// ---- 11-26 (9j) LINE 額度用完轉簡訊（後端 notifySettings.smsFb；SQL 59／60）----
+// 老闆 11-26 定：每種 LINE 通知那一列後面一欄「轉簡訊」各自開關；哪一列開，總開關 smsFallback 就跟著開，全部關＝總開關關
+const notifySmsOn_ = k => { const s = (notifyData_ && notifyData_.settings) || {}; return s.smsFallback === true && s[k] === true; };
+function notifySmsPayload_(key, v) {
+  const p = {}; let any = false;
+  NOTIFY_ROWS_.filter(r => r.sms).forEach(r => { const on = r.sms === key ? v : notifySmsOn_(r.sms); p[r.sms] = on; if (on) any = true; });
+  p.smsFallback = any;
+  return p;
+}
+function notifySmsCell_(d, owner, r) {
+  const fb = d.smsFb;
+  if (!fb) return '';   // 後端還沒更新：不顯示
+  const s = d.settings || {}, lineOn = !!s[r.key], on = lineOn && notifySmsOn_(r.sms);
+  const lock = !owner || !fb.rowsOk || !lineOn || (!fb.providerReady && !on);
+  const tip = !fb.rowsOk ? '系統還沒更新完成' : !lineOn ? '先打開左邊的 LINE 通知' : (!fb.providerReady && !on) ? '先到「簡訊驗證碼」選簡訊商' : 'LINE 快用完時改發簡訊';
+  return `<label title="${tip}" style="display:flex;align-items:center;gap:4px;margin-left:10px;padding-left:10px;border-left:1px solid var(--line, #ddd);cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="notifySmsRow_('${r.sms}', this)">📩 轉簡訊</label>`;
+}
+function notifySmsRow_(key, el) { el.disabled = true; notifySave_({ settings: notifySmsPayload_(key, el.checked) }, el); }
 function notifySmsFbHtml_(d, owner) {
   const fb = d.smsFb;
   if (!fb) return '';   // 後端還沒更新：整區不顯示
-  const s = d.settings || {}, on = !!s.smsFallback;
+  const s = d.settings || {};
   const canEdit = owner && fb.sqlReady;
-  const lockMain = !canEdit || (!fb.providerReady && !on);
   const q = fb.lineQuota;
   const quotaText = !d.lineReady ? '還沒接上 LINE 官方帳號'
     : !fb.sqlReady ? '—'
     : !q ? '查不到（稍後再看）'
     : q.limit == null ? `本月已用 ${Number(q.used) || 0} 則（付費方案、不限量）`
     : `本月已用 <b>${Number(q.used) || 0}</b>／${q.limit} 則，剩 <b style="color:${q.limit - q.used <= (fb.lineLowAt || 30) ? '#c0392b' : 'inherit'};">${Math.max(0, q.limit - q.used)}</b> 則`;
-  const warn = !fb.sqlReady ? '⚠ 這個功能系統還沒更新完成，暫時存不進去，請聯絡系統廠商。'
-    : !fb.providerReady ? '⚠ 還沒選好簡訊商：請先到「商家管理 → 簡訊驗證碼」選簡訊商（驗證碼開關不用打開），這裡才打得開。'
+  const warn = !fb.sqlReady || !fb.rowsOk ? '⚠ 這個功能系統還沒更新完成，「轉簡訊」暫時打不開，請聯絡系統廠商。'
+    : !fb.providerReady ? '⚠ 還沒選好簡訊商：請先到「商家管理 → 簡訊驗證碼」選簡訊商（驗證碼開關不用打開），上面的「轉簡訊」才打得開。'
     : fb.testMode ? '⚠ 目前選的是測試簡訊商，不會真的發簡訊。' : '';
-  const sub = (key, name) => {
-    const v = s[key] !== false, lock = !canEdit;
-    return `<label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${v ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="notifyToggle_('${key}', this)">${name}</label>`;
-  };
-  return `<div style="font-weight:700;margin:14px 0 4px;">LINE 額度用完轉簡訊</div>
+  return `<div style="font-weight:700;margin:14px 0 4px;">轉簡訊設定（LINE 快用完時）</div>
     ${warn ? `<div style="font-size:0.85rem;color:#c0392b;margin-bottom:6px;">${warn}</div>` : ''}
-    <div class="sched-special-row">
-      <b>LINE 快用完時改發簡訊</b>
-      <label style="display:flex;align-items:center;gap:4px;cursor:${lockMain ? 'not-allowed' : 'pointer'};${lockMain ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lockMain ? 'disabled' : ''} onchange="notifyToggle_('smsFallback', this)">${on ? '🟢 啟用' : '🔴 停用'}</label>
-      <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">官方帳號免費訊息快用完時，顧客通知改用簡訊發，每則約 0.78 元。${boHelp_('上面的 LINE 接單通知、LINE 作廢退款通知要打開才會發；這裡決定 LINE 快用完時要不要改發簡訊。LINE 剩下面設定的則數時，顧客通知就改發簡訊，剩下的 LINE 留給「LINE 通知老闆」用；LINE 說額度用完時也會當場改發。顧客沒綁 LINE、但有留手機的單也會直接發簡訊。簡訊開頭是【品牌名】、不放網址，一則 70 字以內。LINE 剩 30 則、第一次改發簡訊、到每月上限時，各在金流告警記一筆並 LINE 通知老闆（每月各一次）。簡訊商和金鑰跟「簡訊驗證碼」共用。')}</div>
-    </div>
+    <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;">上面哪一種 LINE 通知勾了「📩 轉簡訊」，LINE 官方帳號免費訊息快用完時，那種通知就改用簡訊發給顧客，每則約 0.78 元。${boHelp_('LINE 剩下面設定的則數時，有勾「轉簡訊」的顧客通知就改發簡訊，剩下的 LINE 留給「LINE 通知老闆」用；LINE 說額度用完時也會當場改發。顧客沒綁 LINE、但有留手機的單也會直接發簡訊。取餐通知可以重按，簡訊每張單只發一次。簡訊開頭是【品牌名】、不放網址，一則 70 字以內。LINE 剩 30 則、第一次改發簡訊、到每月上限時，各在金流告警記一筆並 LINE 通知老闆（每月各一次）。簡訊商和金鑰跟「簡訊驗證碼」共用。左邊的 LINE 通知關著時，「轉簡訊」不能勾。')}</div>
     <div style="font-size:0.8rem;line-height:1.7;margin:6px 0;">LINE 官方帳號：${quotaText}<br>本月已轉發簡訊：<b>${Number(fb.sentMonth) || 0}</b> 則${fb.provider ? '（' + escapeHtml(fb.provider) + '）' : ''}</div>
-    <div style="font-size:0.85rem;margin-top:6px;">要轉簡訊的通知：</div>
-    ${sub('smsConfirm', '接單通知（顧客關掉畫面也知道店家接單了）')}
-    ${sub('smsVoid', '作廢退款通知')}
-    <div style="font-size:0.76rem;color:var(--muted);margin:2px 0 8px;">取餐通知不轉簡訊。</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.85rem;">
       每月最多轉 <input id="notify-sms-cap" type="number" min="0" max="5000" value="${Number(s.smsMonthlyCap) || 0}" style="width:80px;padding:6px 8px;" ${canEdit ? '' : 'disabled'}> 則，
       LINE 剩 <input id="notify-line-reserve" type="number" min="0" max="200" value="${Number(s.lineReserve) || 0}" style="width:70px;padding:6px 8px;" ${canEdit ? '' : 'disabled'}> 則時開始轉
