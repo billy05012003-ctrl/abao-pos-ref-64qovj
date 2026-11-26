@@ -4261,7 +4261,8 @@ populatePosPickupTimeSelects_();
 function setPosPickupDateQuick_(daysFromToday) {
   const d = new Date();
   d.setDate(d.getDate() + daysFromToday);
-  document.getElementById('pos-pickup-date').value = d.toISOString().slice(0, 10);
+  // 11-26 老闆：改用平板當地（台灣）日期；原本 toISOString 是國際標準時間，早上 8 點前「今天」會變成前一天
+  document.getElementById('pos-pickup-date').value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 // 11-21 內用／外帶（預設外帶）
@@ -4296,7 +4297,7 @@ function onPosScheduleToggle() {
   if (on && !fields.dataset.initialized) {
     fields.dataset.initialized = '1';
     const dateEl = document.getElementById('pos-pickup-date');
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todayYmd_();   // 11-26 台灣日期（原本國際標準時間，早上 8 點前會帶成昨天）
     dateEl.value = todayStr;
     dateEl.min = todayStr;
     // 預設帶入「現在往後捨入到下一個5分鐘整數」的時間，方便店員快速微調，不用從00:00開始選
@@ -4334,7 +4335,7 @@ function submitPosOrder() {
     pickupDate = document.getElementById('pos-pickup-date').value;
     pickupTime = document.getElementById('pos-pickup-hour').value + ':' + document.getElementById('pos-pickup-minute').value;
     if (!pickupDate) { alert('請填寫取餐日期'); return; }
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = todayYmd_();   // 11-26 台灣日期
     if (pickupDate < todayStr) { alert('取餐日期不可早於今天，請重新選擇'); return; }
     const tailEl = document.getElementById('pos-phone-tail');   // 11-21 老闆：電話預約必填末三碼
     if (!/^\d{3}$/.test(tailEl.value)) { alert('電話預約請填顧客電話末三碼（3 碼數字）'); tailEl.focus(); return; }
