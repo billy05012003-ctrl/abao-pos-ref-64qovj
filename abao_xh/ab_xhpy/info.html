@@ -41,6 +41,7 @@
 <header class="top">
   <h1><span data-store="displayName">A-Bao溪湖培英店</span></h1>
   <p>營業登記名稱：<span data-store="legalName">美寶美食館</span>　統一編號：<span data-store="taxId">82416619</span></p>
+  <p id="store-switch" style="display:none;"><a href="../stores.html?go=info&amp;change=1" style="color:#fff; border:1px solid rgba(255,255,255,.75); border-radius:10px; padding:1px 10px; text-decoration:none;">⇄ 看其他門市</a></p>
 </header>
 
 <nav class="tabs" aria-label="頁面導覽">
@@ -189,6 +190,11 @@
     if (m) return STORE_PATH_ALIAS_[m[1]] || m[1];
     return /(^|[.])bzhouse[.]tw$/.test(location.hostname) ? '' : (DEV_QS_.get('store') || 'meibao');
   })();
+  // 11-26 (12i) 選門市頁：本機存過的門市清單（點餐頁／選門市頁存的）有兩間以上、而且有這間店，才顯示「⇄ 看其他門市」
+  try {
+    const c = JSON.parse(localStorage.getItem('abao_store_list_v1') || 'null'), list = c && Array.isArray(c.stores) ? c.stores : [];
+    if (list.length >= 2 && list.some(x => x.storeId === STORE_ID)) document.getElementById('store-switch').style.display = '';
+  } catch (e) {}
   const PROFILE_KEY = 'abao_store_profile_' + STORE_ID;
   let profile = null;
   try { profile = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null'); } catch (e) {}

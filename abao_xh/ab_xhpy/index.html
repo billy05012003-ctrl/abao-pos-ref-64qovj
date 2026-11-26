@@ -396,7 +396,7 @@
   <!-- 2026-09-27 老闆指示拿掉「🎫 我的兌換券」查詢(只要輸入手機就能看別人的資料)；LINE 登入做好後改成「我的會員」頁 -->
   <div style="padding-left:34px; padding-right:34px;">
     <h1 data-store="displayName">A-Bao溪湖培英店</h1>
-    <p>線上預訂・到店自取</p>
+    <p>線上預訂・到店自取<a id="store-switch" href="javascript:void(0)" onclick="switchStore_()" style="display:none; margin-left:10px; color:#fff; border:1px solid rgba(255,255,255,.75); border-radius:12px; padding:4px 12px; text-decoration:none; white-space:nowrap; line-height:1.2;">⇄ 換店</a></p>
   </div>
 </header>
 <div id="home-pane-new" class="home-pane"></div>
@@ -766,6 +766,27 @@ const STORE_ID = (function () {
 })();
 // 門市資料(店名/登記名稱/統編/地址/電話)：後端「門市設定＋店家資訊」(storeProfile)，存在本機下次一打開先套用；
 // 網頁上標 data-store="欄位" 的地方換成本店資料(HTML 裡寫的是培英，培英看起來不變；別店還沒讀到前先清空，不會閃培英)
+// 11-26 (12i) 選門市頁（老闆選做法 A）：每次打開哪間店的點餐頁就記成「上次選的店」（門市 QR 直接進來也算），
+//   圖文選單經過 ../stores.html 時直接進這間；門市清單（後端 onlineStores：啟用＋有 LIFF＋有正式版菜單）存在本機，
+//   兩間以上才顯示頁首「⇄ 換店」、我的訂單別間店的單標店名
+const LAST_STORE_KEY_ = 'abao_last_store_v1', STORE_LIST_KEY_ = 'abao_store_list_v1';
+try { if (STORE_ID && /\/abao_xh\/[A-Za-z0-9_]+\//.test(location.pathname)) localStorage.setItem(LAST_STORE_KEY_, STORE_ID); } catch (e) {}
+var ONLINE_STORES_ = (function () { try { const c = JSON.parse(localStorage.getItem(STORE_LIST_KEY_) || 'null'); return c && Array.isArray(c.stores) ? c.stores : null; } catch (e) { return null; } })();
+function storeShortName_(id) { const s = (ONLINE_STORES_ || []).find(x => x.storeId === id); return s ? (s.shortName || s.displayName) : '其他門市'; }
+function refreshStoreSwitch_() {
+  const b = document.getElementById('store-switch');
+  if (b) b.style.display = (ONLINE_STORES_ || []).length >= 2 && ONLINE_STORES_.some(x => x.storeId === STORE_ID) ? 'inline-block' : 'none';
+}
+function loadOnlineStores_() {
+  return apiGet_({ action: 'onlineStores' }).then(d => {
+    if (!d || d.status !== 'ok' || !Array.isArray(d.stores)) return;
+    ONLINE_STORES_ = d.stores;
+    try { localStorage.setItem(STORE_LIST_KEY_, JSON.stringify({ at: Date.now(), stores: d.stores })); } catch (e) {}
+    refreshStoreSwitch_();
+    if (typeof myOrdersData_ !== 'undefined' && myOrdersData_ && typeof renderMyOrdersPane_ === 'function') renderMyOrdersPane_();
+  }).catch(() => {});
+}
+function switchStore_() { location.href = '../stores.html?go=' + (typeof homeTab_ !== 'undefined' && homeTab_ === 'mine' ? 'mine' : 'order') + '&change=1'; }
 const STORE_PROFILE_KEY_ = 'abao_store_profile_' + STORE_ID;
 let STORE_PROFILE_ = null;
 try { STORE_PROFILE_ = JSON.parse(localStorage.getItem(STORE_PROFILE_KEY_) || 'null'); } catch (e) {}
@@ -5817,15 +5838,16 @@ function myOrderCardHtml_(o) {
   const st = myOrderStatus_(o);
   const items = o.items.filter(i => !i.gift).map(i => `${i.who ? '<b>' + escapeHtml_(i.who) + '</b> ' : ''}${escapeHtml_(i.name)}${i.size ? ' ' + escapeHtml_(i.size) : ''} ×${i.qty}`);
   const gifts = o.items.filter(i => i.gift).map(i => escapeHtml_(i.name.split('（')[0]));
-  const canReorder = o.items.some(i => i.edit);
+  const other = !!(o.storeId && STORE_ID && o.storeId !== STORE_ID);   // 11-26 (12i) 我的訂單列全品牌的單：別間店的單
+  const canReorder = !other && o.items.some(i => i.edit);
   const why = o.channel === '門市' ? '門市單' : (o.group ? '揪團單' : '');
   return `<div class="mo-card">
-    <div class="mo-head"><span>${myWhen_(o.pickupDate, o.pickupTime)}<span class="mo-tag">${escapeHtml_(o.channel)}</span>${o.group ? '<span class="mo-tag">揪團</span>' : ''}</span><span class="mo-st ${st[1]}">${escapeHtml_(st[0])}</span></div>
+    <div class="mo-head"><span>${myWhen_(o.pickupDate, o.pickupTime)}<span class="mo-tag">${escapeHtml_(o.channel)}</span>${o.group ? '<span class="mo-tag">揪團</span>' : ''}${other ? `<span class="mo-tag">${escapeHtml_(storeShortName_(o.storeId))}</span>` : ''}</span><span class="mo-st ${st[1]}">${escapeHtml_(st[0])}</span></div>
     <div class="mo-title">${escapeHtml_(o.orderId)}</div>
     ${o.status === '待付款' ? '<div class="mo-note" style="color:#b35c00;margin:2px 0 4px;">還沒完成付款：30 分鐘內沒付款會自動取消、不會扣款，要吃請重新點一次。</div>' : ''}
     <div class="mo-items">${items.join('<br>')}${gifts.length ? `<br><span class="mo-note">🎁 ${gifts.join('、')}</span>` : ''}${o.needs.length ? `<br><span class="mo-note">其他需求：${o.needs.map(escapeHtml_).join('、')}</span>` : ''}</div>
     <div class="mo-foot"><span>實付 <b>$${o.total}</b>${myPointsNote_(o)}</span>
-      ${canReorder ? `<button type="button" class="mo-btn" onclick="reorderMyOrder_('${escapeHtml_(o.orderId)}')">再點一次</button>` : (why ? `<span class="mo-note">${why}不能再點一次</span>` : '')}</div>
+      ${canReorder ? `<button type="button" class="mo-btn" onclick="reorderMyOrder_('${escapeHtml_(o.orderId)}')">再點一次</button>` : (other && o.channel === '線上' && !o.group ? `<a class="mo-note" href="../stores.html?go=order&pick=${encodeURIComponent(o.storeId)}">到${escapeHtml_(storeShortName_(o.storeId))}點 ›</a>` : (why ? `<span class="mo-note">${why}不能再點一次</span>` : ''))}</div>
   </div>`;
 }
 function myGroupCardHtml_(g) {
@@ -5883,6 +5905,7 @@ function openMyGroup_(gid) {
 function reorderMyOrder_(orderId) {
   const o = ((myOrdersData_ || {}).orders || []).find(x => x.orderId === orderId);
   if (!o) return;
+  if (o.storeId && STORE_ID && o.storeId !== STORE_ID) return;   // 11-26 (12i) 別間店的單不在這裡再點（品項、價格可能不同）
   if (groupCheckoutMode) { alert('請先完成或取消揪團結帳，再使用再點一次'); return; }
   // 網路慢時 LINE 登入/會員資料還沒帶好：先不加購物車(不然購物車打開會停在登入/加入會員的畫面)
   if (!verifiedMember) { alert('會員資料還在載入，請稍等幾秒再按一次「再點一次」'); return; }
@@ -6406,6 +6429,7 @@ else if (QR_TO_LINE_ === 'wait') {   // 11-16 (15c)：第一次來還不知道 L
   ensureLiffId_().then(id => { if (id) location.replace('https://liff.line.me/' + id + '?src=menuline'); else startLineInit_(); });
 }
 else startLineInit_();
+refreshStoreSwitch_(); setTimeout(loadOnlineStores_, 1500);   // 11-26 (12i)：晚一點再問，不跟菜單、登入搶
 checkMpgReturn(); // 檢查是否剛從藍新付款頁導回來(網址帶mpgreturn=1)，是的話顯示等待畫面並輪詢確認
 checkLinePayReturn_(); // 10-23 從 LINE Pay 跳回來(網址帶 lpreturn)：後端確認收款後一樣輪詢
 setTimeout(checkUnfinishedPay_, 1500); // 10-23 付款頁直接關掉的單：重新打開時問要不要放回購物車(等購物車暫存讀完、頁面畫好)

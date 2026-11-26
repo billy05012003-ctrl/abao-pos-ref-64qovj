@@ -1,0 +1,97 @@
+<!-- 11-26 (12i) 選門市頁（老闆選做法 A）：LINE 圖文選單三格改連這頁，再依顧客選的店轉到那間店。
+     部署：產生正式部署檔.mjs 複製成 abao_xh/stores.html（品牌資料夾底下、各店資料夾外面，全品牌一頁）。
+     圖文選單網址：線上點餐 stores.html?go=order／我的訂單 stores.html?go=mine／商店資訊 stores.html?go=info
+     規則：①只列「真的能線上點餐」的店（後端 onlineStores：啟用＋有 LIFF＋有正式版菜單；籌備中不列）
+           ②只有一間店 → 直接進去，顧客看不到這頁（只有培英營業時跟原本一模一樣）
+           ③記住上次選的店（點餐頁每次打開也會記），下次直接進；?change=1＝點餐頁按「換店」進來，一定顯示清單
+           ④我的訂單本來就列全品牌的單 → 不用選，直接進上次的店（沒有就第一間）
+           ⑤?pick=店代號＝我的訂單「到某某店點」直接進那間店
+           ⑥讀不到後端 → 用上次存的清單；從來沒讀過 → 進入口門市（ENTRY_PATH），不會空白
+     不寫死品牌名稱：畫面上的店名、地址都是後端資料。 -->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="robots" content="noindex">
+<title>選擇門市</title>
+<style>
+  :root { --brand: #e8632c; --bg: #f7f3ef; --muted: #666; --border: #e6d6c8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif; background: var(--bg); color: #222; }
+  header { background: var(--brand); color: #fff; padding: 18px 16px 16px; text-align: center; }
+  header h1 { margin: 0; font-size: 1.2rem; }
+  header p { margin: 4px 0 0; font-size: 0.85rem; opacity: 0.9; }
+  main { max-width: 520px; margin: 0 auto; padding: 14px; }
+  .st { display: block; width: 100%; text-align: left; background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px 16px; margin: 0 0 10px; font: inherit; color: inherit; cursor: pointer; }
+  .st:active { background: #fff3ec; }
+  .st b { font-size: 1.1rem; }
+  .st .addr { display: block; color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+  .st .last { display: inline-block; margin-left: 6px; background: var(--brand); color: #fff; border-radius: 10px; padding: 1px 8px; font-size: 0.75rem; vertical-align: 2px; }
+  .msg { text-align: center; color: var(--muted); padding: 30px 10px; line-height: 1.7; }
+  .msg button { margin-top: 10px; background: var(--brand); color: #fff; border: none; border-radius: 10px; padding: 10px 18px; font-size: 1rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="ttl">選擇門市</h1>
+  <p id="sub">選好之後下次會直接進這間店，點餐頁上方可以「換店」</p>
+</header>
+<main id="main"><div class="msg">載入中…</div></main>
+<script>
+const BACKEND_URL_SET_ = "https://abao-api.billy05012003.workers.dev/";
+const APP_KEY = 'bzpos-web-2026';
+const ENTRY_STORE = 'meibao';     // 問後端用的入口門市（決定是哪個品牌；後端只回同一個品牌的店）
+const ENTRY_PATH = 'ab_xhpy';     // 後端讀不到、手機也沒存過清單時，直接進這間店
+const LAST_STORE_KEY_ = 'abao_last_store_v1', STORE_LIST_KEY_ = 'abao_store_list_v1';   // 點餐頁也用這兩個
+const qs = new URLSearchParams(location.search);
+const GO = ['order', 'mine', 'info'].includes(qs.get('go')) ? qs.get('go') : 'order';
+const CHANGE = qs.get('change') === '1', PICK = qs.get('pick') || '';
+const BASE = location.pathname.replace(/[^/]*$/, '');   // …/abao_xh/
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ls = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+function urlOf(s) {
+  if (GO === 'info') return BASE + encodeURIComponent(s.urlPath) + '/info.html';
+  // 線上點餐、我的訂單走那間店的 LIFF（在 LINE 裡自動登入）；沒有 LIFF（只會發生在退回入口門市時）就開網頁
+  if (s.liffId) return 'https://liff.line.me/' + encodeURIComponent(s.liffId) + (GO === 'mine' ? '?tab=mine' : '');
+  return BASE + encodeURIComponent(s.urlPath) + '/' + (GO === 'mine' ? '?tab=mine' : '');
+}
+function go(s, replace) {
+  if (s.storeId) ls.set(LAST_STORE_KEY_, s.storeId);
+  const u = urlOf(s);
+  if (replace) location.replace(u); else location.href = u;
+}
+function cachedList() {
+  try { const c = JSON.parse(ls.get(STORE_LIST_KEY_) || 'null'); return c && Array.isArray(c.stores) && c.stores.length ? c.stores : null; } catch (e) { return null; }
+}
+async function fetchList() {
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 6000);
+  try {
+    const r = await fetch(BACKEND_URL_SET_ + '?' + new URLSearchParams({ action: 'onlineStores', storeId: ENTRY_STORE, appKey: APP_KEY, _: Date.now() }), { cache: 'no-store', signal: ctl.signal });
+    const d = await r.json();
+    if (d && d.status === 'ok' && Array.isArray(d.stores)) { ls.set(STORE_LIST_KEY_, JSON.stringify({ at: Date.now(), stores: d.stores })); return d.stores; }
+  } catch (e) { /* 連不上就用存的 */ } finally { clearTimeout(t); }
+  return null;
+}
+function render(list, last) {
+  document.getElementById('ttl').textContent = GO === 'info' ? '要看哪間店的資訊？' : '請選擇要點餐的門市';
+  const main = document.getElementById('main');
+  main.innerHTML = list.map((s, i) => `<button type="button" class="st" data-i="${i}"><b>${esc(s.shortName || s.displayName)}</b>${s.storeId === last ? '<span class="last">上次選的</span>' : ''}<span class="addr">${esc(s.address || s.displayName)}</span></button>`).join('');
+  main.querySelectorAll('.st').forEach(b => b.addEventListener('click', () => go(list[Number(b.dataset.i)], false)));
+}
+(async function () {
+  let list = await fetchList();
+  if (!list || !list.length) list = cachedList();
+  if (!list || !list.length) { go({ storeId: '', urlPath: ENTRY_PATH, liffId: '' }, true); return; }   // 從來沒讀到清單：直接進入口門市
+  const last = ls.get(LAST_STORE_KEY_) || '';
+  const byId = id => list.find(s => s.storeId === id);
+  if (PICK && byId(PICK)) return go(byId(PICK), true);
+  if (list.length === 1) return go(list[0], true);
+  if (!CHANGE && GO === 'mine') return go(byId(last) || list[0], true);   // 我的訂單本來就列全品牌的單
+  if (!CHANGE && byId(last)) return go(byId(last), true);
+  render(list, last);
+})();
+</script>
+</body>
+</html>
