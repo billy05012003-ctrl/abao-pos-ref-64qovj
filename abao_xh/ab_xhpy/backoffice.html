@@ -3787,15 +3787,16 @@ function mcShortCatName(cat) {
 }
 // 只有這幾個分類的品項會用中杯/大杯計價，其餘分類品項一律單一價格，
 // 品項編輯畫面依此決定要不要顯示中杯/大杯價格欄位(比照原本DRINK_FAMILY定義)
-// 11-26 (2u)／(12h) 去寫死：下面是 A-Bao 舊名單（固定算飲料、勾選框鎖住）；分類勾「飲料」的（menuCmsData.drinkCategories）
-//   在 loadMenuCms 讀到時併進 MC_DRINK_CATEGORIES（同一個陣列就地重算，別處參照不用改）
+// 11-26 (12h-14) 第二步：飲料分類只看分類勾「飲料」的（menuCmsData.drinkCategories），loadMenuCms 讀到時就地換掉 MC_DRINK_CATEGORIES；
+//   下面 A-Bao 舊名單只在菜單資料沒有 drinkCategories（理論上不會）時退回用
 const MC_DRINK_CATEGORIES_BASE_ = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
   'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
   'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
 const MC_DRINK_CATEGORIES = MC_DRINK_CATEGORIES_BASE_.slice();
-function setMcDrinkCategories_(extra) {
-  MC_DRINK_CATEGORIES.length = 0;
-  MC_DRINK_CATEGORIES_BASE_.concat(Array.isArray(extra) ? extra : []).forEach(c => { if (typeof c === 'string' && !MC_DRINK_CATEGORIES.includes(c)) MC_DRINK_CATEGORIES.push(c); });
+let MC_MENU_HAS_FLAGS_ = false;
+function setMcDrinkCategories_(list) {
+  MC_MENU_HAS_FLAGS_ = Array.isArray(list);
+  MC_DRINK_CATEGORIES.splice(0, MC_DRINK_CATEGORIES.length, ...(MC_MENU_HAS_FLAGS_ ? list.filter(c => typeof c === 'string') : MC_DRINK_CATEGORIES_BASE_));
 }
 
 let tabletStatusMap = {};   // 雲端平板/線上點餐共用狀態，key=品項名稱；分類的線上顯示開關 key=「分類｜分類key」(10-03)
@@ -3875,6 +3876,21 @@ const ADDON_STATUS_PRICED_ONLY_CODES = ['milk_tea_richness'];
 function buildAddonStatusItems_() {
   const seen = new Set();
   const items = [];
+  if (MC_MENU_HAS_FLAGS_) {
+    // 11-26 (12h-14) 第二步：只看群組設的「可以標售完」，照選項庫群組順序（平板 posAddonNames_ 同一套）
+    Object.keys(mcOptionGroups || {}).forEach(code => {
+      const g = mcOptionGroups[code];
+      const m = g && g.selloutMode;
+      if (!(m === 'all' || m === 'priced') || !g.options) return;
+      g.options.forEach(o => {
+        if ((m === 'priced' && !(Number(o.price) > 0)) || seen.has(o.name)) return;
+        seen.add(o.name);
+        items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
+      });
+    });
+    return items;
+  }
+  // 菜單資料沒有勾選欄位（理論上不會）才退回 A-Bao 舊名單
   ADDON_STATUS_GROUP_CODES.forEach(code => {
     const g = mcOptionGroups[code];
     if (!g || !g.options) return;
@@ -3889,18 +3905,6 @@ function buildAddonStatusItems_() {
     if (!g || !g.options) return;
     g.options.forEach(o => {
       if (!(Number(o.price) > 0) || seen.has(o.name)) return;
-      seen.add(o.name);
-      items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
-    });
-  });
-  // 11-26 (2u)／(12h)：群組設「可以標售完」的也算（all＝全部選項、priced＝只有要加錢的）；跟上面舊名單聯集，培英不變（平板 posAddonNames_ 同一套）
-  Object.keys(mcOptionGroups || {}).forEach(code => {
-    if (addonStatusFixedMode_(code)) return;
-    const g = mcOptionGroups[code];
-    const m = g && g.selloutMode;
-    if (!(m === 'all' || m === 'priced') || !g.options) return;
-    g.options.forEach(o => {
-      if ((m === 'priced' && !(Number(o.price) > 0)) || seen.has(o.name)) return;
       seen.add(o.name);
       items.push({ category: ADDON_STATUS_CATEGORY, name: o.name });
     });
@@ -3921,7 +3925,9 @@ function mcSelloutWarnings_(g) {
   if (opts.length > 8) out.push('這組有 ' + opts.length + ' 個選項，開放後平板的「加購品項/配料選擇」清單會變長，店員比較難找');
   return out;
 }
+// A-Bao 舊名單裡的群組：(12h-14) 第二步起不再鎖住，只有舊菜單資料（沒有勾選欄位）才固定可標售完、鎖住下拉
 function addonStatusFixedMode_(code) {
+  if (MC_MENU_HAS_FLAGS_) return null;
   return ADDON_STATUS_GROUP_CODES.includes(code) ? 'all' : ADDON_STATUS_PRICED_ONLY_CODES.includes(code) ? 'priced' : null;
 }
 
@@ -4452,10 +4458,10 @@ function renderMcCatList() {
     };
     header.appendChild(toggleBtn);
 
-    // 11-26 (2u)／(12h)：分類勾「飲料」＝印杯貼、可當套餐飲料、品項有中杯／大杯價；A-Bao 舊名單的分類固定勾、鎖住
+    // 11-26：分類勾「飲料」＝印杯貼、可當套餐飲料、品項有中杯／大杯價（(12h-14) 第二步起 A-Bao 的也能取消，不再鎖住）
     const drinkLbl = document.createElement('label');
     drinkLbl.className = 'mc-cat-drink';
-    const drinkFixed = MC_DRINK_CATEGORIES_BASE_.includes(cat);
+    const drinkFixed = !MC_MENU_HAS_FLAGS_ && MC_DRINK_CATEGORIES_BASE_.includes(cat);
     drinkLbl.title = drinkFixed ? '原本就固定算飲料的分類，暫時不能取消' : MC_STATUS !== 'draft' ? '要在草稿版才能改' : '勾了＝這個分類是飲料：出單印杯貼、可當套餐飲料、品項可填中杯／大杯價（存到草稿，發布後生效）';
     const drinkCb = document.createElement('input');
     drinkCb.type = 'checkbox';

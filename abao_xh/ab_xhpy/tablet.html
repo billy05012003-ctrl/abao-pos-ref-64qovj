@@ -2742,8 +2742,8 @@ let CATALOG = {};
 // 菜單CMS化Phase 1（2026-09-06）：OPTION_GROUPS同樣改成向雲端讀取，不再寫死在這裡
 let OPTION_GROUPS = {};
 
-// 11-26 (2u)／(12h) 去寫死：飲料分類＝下面 A-Bao 舊名單 ＋ 後台分類有勾「飲料」的（menuCmsData.drinkCategories），聯集、舊名單排前面；
-//   applyMenuCmsData_ 讀到菜單時就地補進來（同一個陣列，別處參照不用改）；SQL 58 還沒貼＝只有舊名單，跟原本一樣
+// 11-26 (12h-14) 第二步：飲料分類只看後台分類有勾「飲料」的（menuCmsData.drinkCategories）；applyMenuCmsData_ 讀到菜單時就地換成勾選的
+//   （同一個陣列，別處參照不用改）。下面 A-Bao 舊名單只在「菜單資料沒有 drinkCategories」（平板存的很舊的菜單快取）時退回用
 const DRINK_FAMILY = ['FRESH FRUIT TEA_鮮果茶 Cool', 'TIGER BROWN SUGAR SERIESs_虎斑黑糖系列 ',
   'SOYBEAN MILK WITH GRAINS_多穀系列', 'PURE TEA_純味茶', 'MILK TEA_奶茶系列', 'SOYBEAN MILK_豆漿系列',
   'TEA LATTES_茶拿鐵', 'ITALIAN STYLE COFFEE_義式咖啡', 'FRESH FRUIT TEA COOL 2_果然鮮粹 Cool'];
@@ -2796,11 +2796,14 @@ function rebuildDrinkComboDerivedData_() {
 
 // 11-23 出單簡稱（後台「菜單管理 → 出單簡稱」；{分類: {label, pos}}）：雲端出單由後端套，這份只給斷網時平板自己出單用
 let PRINT_LABELS_ = {};
-function mergeDrinkFamily_(extra) {
-  (Array.isArray(extra) ? extra : []).forEach(cat => { if (typeof cat === 'string' && !DRINK_FAMILY.includes(cat)) DRINK_FAMILY.push(cat); });
+const DRINK_FAMILY_LEGACY_ = DRINK_FAMILY.slice();
+let MENU_HAS_FLAGS_ = false;   // 菜單資料有勾選欄位（後端 11-26 起都有）；false＝很舊的快取，飲料分類、可標售完退回 A-Bao 舊名單
+function setDrinkFamily_(list) {
+  MENU_HAS_FLAGS_ = Array.isArray(list);
+  DRINK_FAMILY.splice(0, DRINK_FAMILY.length, ...(MENU_HAS_FLAGS_ ? list.filter(c => typeof c === 'string') : DRINK_FAMILY_LEGACY_));
 }
 function applyMenuCmsData_(data) {
-  mergeDrinkFamily_(data.drinkCategories);
+  setDrinkFamily_(data.drinkCategories);
   PRINT_LABELS_ = (data.printLabels && typeof data.printLabels === 'object') ? data.printLabels : {};
   CATALOG = data.catalog;
   OPTION_GROUPS = data.optionGroups;
@@ -2921,14 +2924,18 @@ function posAddonNames_() {
     const g = OPTION_GROUPS && OPTION_GROUPS[code];
     if (g && g.options) g.options.forEach(o => { if ((!pricedOnly || Number(o.price) > 0) && !names.includes(o.name)) names.push(o.name); });
   };
+  if (MENU_HAS_FLAGS_) {
+    // 11-26 (12h-14) 第二步：只看後台群組設的「可以標售完」（all＝全部選項、priced＝只有要加錢的），照選項庫群組順序
+    Object.keys(OPTION_GROUPS || {}).forEach(c => {
+      const m = OPTION_GROUPS[c] && OPTION_GROUPS[c].selloutMode;
+      if (m === 'all' || m === 'priced') add(c, m === 'priced');
+    });
+    posAddonCache_ = { src: OPTION_GROUPS, names };
+    return names;
+  }
+  // 很舊的菜單快取（沒有勾選欄位）才退回 A-Bao 舊名單
   POS_ADDON_GROUP_CODES_.forEach(c => add(c, false));
   POS_ADDON_PRICED_ONLY_CODES_.forEach(c => add(c, true));
-  // 11-26 (2u)／(12h)：後台群組設「可以標售完」的也算（all＝全部選項、priced＝只有要加錢的）；跟上面舊名單聯集，培英不變
-  Object.keys(OPTION_GROUPS || {}).forEach(c => {
-    if (POS_ADDON_GROUP_CODES_.includes(c) || POS_ADDON_PRICED_ONLY_CODES_.includes(c)) return;
-    const m = OPTION_GROUPS[c] && OPTION_GROUPS[c].selloutMode;
-    if (m === 'all' || m === 'priced') add(c, m === 'priced');
-  });
   if (names.length) { posAddonCache_ = { src: OPTION_GROUPS, names }; return names; }
   return STORE_ID === 'meibao' ? ITEM_LIST.filter(it => it.category === POS_LOCAL_ADDON_STATUS_CATEGORY).map(it => it.name) : [];
 }
@@ -5759,7 +5766,7 @@ function offlineTicketLines_(o) {
 // 杯貼(10-13)：跟雲端同一套 buildCupLabels_；哪些品名算飲料看菜單裡的飲料分類
 function offlineDrinkTest_() {
   const set = new Set();
-  offlineTicketKit_.drinkCats.concat(DRINK_FAMILY).forEach(c => (CATALOG[c] || []).forEach(it => set.add(it.name)));   // 11-26：加上後台勾「飲料」的分類
+  DRINK_FAMILY.forEach(c => (CATALOG[c] || []).forEach(it => set.add(it.name)));   // 11-26 (12h-14)：只看後台勾「飲料」的分類（舊快取才退回舊名單，見 setDrinkFamily_）
   return name => set.has(name);
 }
 function offlineLabels_(o) {
