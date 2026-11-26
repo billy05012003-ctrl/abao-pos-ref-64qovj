@@ -2309,7 +2309,8 @@ const PAY_ALERT_KIND_ = {
   refund_retry_failed: '退款重試到上限仍失敗', sha_mismatch: '付款通知簽章不對', decrypt_failed: '付款通知解不開', manual_confirm: '店員人工標記已付款',
   twqr_refund_pending: 'TWQR 退款處理中', twqr_refund_failed: 'TWQR 退款失敗',
   online_unconfirmed: '線上單太久沒確認接單', line_quota: 'LINE 免費訊息用完',   // 11-20 (9g)
-  sms_balance_low: '簡訊餘額快用完', sms_balance_empty: '簡訊餘額用完', sms_store_daily: '驗證簡訊達每日上限', sms_provider_error: '驗證簡訊發不出去'   // 11-25 (S7)
+  sms_balance_low: '簡訊餘額快用完', sms_balance_empty: '簡訊餘額用完', sms_store_daily: '驗證簡訊達每日上限', sms_provider_error: '驗證簡訊發不出去',   // 11-25 (S7)
+  line_quota_low: 'LINE 免費訊息快用完', sms_fallback_on: 'LINE 用完、已改發簡訊', sms_fallback_cap: '轉發簡訊達每月上限'   // 11-26 (9j)
 };
 // ---- 11-20 (9g) 訂單通知設定 ----
 let notifyData_ = null;
@@ -2354,7 +2355,7 @@ function renderNotifySettings_() {
     </div>`;
   }).join('');
   const owners = (d.owners || []).map(o => `<div class="ops-meta">${escapeHtml(o.phone)}　${o.member ? escapeHtml(o.name || '（會員）') + (o.line ? '　✅ 有綁 LINE，收得到' : '　⚠ 還沒用 LINE 登入過線上點餐，收不到') : '⚠ 不是會員，收不到'}</div>`).join('');
-  el.innerHTML = top + rows + `<div style="font-weight:700;margin:14px 0 4px;">接收提醒的手機（LINE 通知老闆用）</div>
+  el.innerHTML = top + rows + notifySmsFbHtml_(d, owner) + `<div style="font-weight:700;margin:14px 0 4px;">接收提醒的手機（LINE 通知老闆用）</div>
     <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">填會員手機，最多 5 支，用逗號分開。這支手機要用 LINE 登入過線上點餐（系統才知道是哪個 LINE），也要加官方帳號好友。</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;"><input id="notify-phones" value="${escapeHtml((d.ownerPhones || []).join(', '))}" placeholder="例如 0912345678, 0987654321" style="flex:1;min-width:220px;padding:6px 8px;" ${owner && d.sqlReady !== false ? '' : 'disabled'}>
       <button type="button" class="mc-save-btn" style="padding:6px 14px;" ${owner && d.sqlReady !== false ? '' : 'disabled'} onclick="notifySavePhones_()">儲存手機</button></div>
@@ -2383,6 +2384,51 @@ function notifySave_(payload, el) {
   }).catch(() => { alert('網路異常，沒有儲存'); if (el) { el.checked = !el.checked; el.disabled = false; } });
 }
 function notifyToggle_(key, el) { el.disabled = true; notifySave_({ settings: { [key]: el.checked } }, el); }
+// ---- 11-26 (9j) LINE 額度用完轉簡訊（後端 notifySettings.smsFb；SQL 59）----
+function notifySmsFbHtml_(d, owner) {
+  const fb = d.smsFb;
+  if (!fb) return '';   // 後端還沒更新：整區不顯示
+  const s = d.settings || {}, on = !!s.smsFallback;
+  const canEdit = owner && fb.sqlReady;
+  const lockMain = !canEdit || (!fb.providerReady && !on);
+  const q = fb.lineQuota;
+  const quotaText = !d.lineReady ? '還沒接上 LINE 官方帳號'
+    : !fb.sqlReady ? '—'
+    : !q ? '查不到（稍後再看）'
+    : q.limit == null ? `本月已用 ${Number(q.used) || 0} 則（付費方案、不限量）`
+    : `本月已用 <b>${Number(q.used) || 0}</b>／${q.limit} 則，剩 <b style="color:${q.limit - q.used <= (fb.lineLowAt || 30) ? '#c0392b' : 'inherit'};">${Math.max(0, q.limit - q.used)}</b> 則`;
+  const warn = !fb.sqlReady ? '⚠ 這個功能系統還沒更新完成，暫時存不進去，請聯絡系統廠商。'
+    : !fb.providerReady ? '⚠ 還沒選好簡訊商：請先到「商家管理 → 簡訊驗證碼」選簡訊商（驗證碼開關不用打開），這裡才打得開。'
+    : fb.testMode ? '⚠ 目前選的是測試簡訊商，不會真的發簡訊。' : '';
+  const sub = (key, name) => {
+    const v = s[key] !== false, lock = !canEdit;
+    return `<label style="display:flex;align-items:center;gap:6px;margin:4px 0;cursor:${lock ? 'not-allowed' : 'pointer'};${lock ? 'opacity:.45;' : ''}"><input type="checkbox" ${v ? 'checked' : ''} ${lock ? 'disabled' : ''} onchange="notifyToggle_('${key}', this)">${name}</label>`;
+  };
+  return `<div style="font-weight:700;margin:14px 0 4px;">LINE 額度用完轉簡訊</div>
+    ${warn ? `<div style="font-size:0.85rem;color:#c0392b;margin-bottom:6px;">${warn}</div>` : ''}
+    <div class="sched-special-row">
+      <b>LINE 快用完時改發簡訊</b>
+      <label style="display:flex;align-items:center;gap:4px;cursor:${lockMain ? 'not-allowed' : 'pointer'};${lockMain ? 'opacity:.45;' : ''}"><input type="checkbox" ${on ? 'checked' : ''} ${lockMain ? 'disabled' : ''} onchange="notifyToggle_('smsFallback', this)">${on ? '🟢 啟用' : '🔴 停用'}</label>
+      <div style="flex-basis:100%;font-size:0.76rem;color:var(--muted);line-height:1.5;">官方帳號免費訊息快用完時，顧客通知改用簡訊發，每則約 0.78 元。${boHelp_('上面的 LINE 接單通知、LINE 作廢退款通知要打開才會發；這裡決定 LINE 快用完時要不要改發簡訊。LINE 剩下面設定的則數時，顧客通知就改發簡訊，剩下的 LINE 留給「LINE 通知老闆」用；LINE 說額度用完時也會當場改發。顧客沒綁 LINE、但有留手機的單也會直接發簡訊。簡訊開頭是【品牌名】、不放網址，一則 70 字以內。LINE 剩 30 則、第一次改發簡訊、到每月上限時，各在金流告警記一筆並 LINE 通知老闆（每月各一次）。簡訊商和金鑰跟「簡訊驗證碼」共用。')}</div>
+    </div>
+    <div style="font-size:0.8rem;line-height:1.7;margin:6px 0;">LINE 官方帳號：${quotaText}<br>本月已轉發簡訊：<b>${Number(fb.sentMonth) || 0}</b> 則${fb.provider ? '（' + escapeHtml(fb.provider) + '）' : ''}</div>
+    <div style="font-size:0.85rem;margin-top:6px;">要轉簡訊的通知：</div>
+    ${sub('smsConfirm', '接單通知（顧客關掉畫面也知道店家接單了）')}
+    ${sub('smsVoid', '作廢退款通知')}
+    <div style="font-size:0.76rem;color:var(--muted);margin:2px 0 8px;">取餐通知不轉簡訊。</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:0.85rem;">
+      每月最多轉 <input id="notify-sms-cap" type="number" min="0" max="5000" value="${Number(s.smsMonthlyCap) || 0}" style="width:80px;padding:6px 8px;" ${canEdit ? '' : 'disabled'}> 則，
+      LINE 剩 <input id="notify-line-reserve" type="number" min="0" max="200" value="${Number(s.lineReserve) || 0}" style="width:70px;padding:6px 8px;" ${canEdit ? '' : 'disabled'}> 則時開始轉
+      <button type="button" class="mc-save-btn" style="padding:6px 14px;" ${canEdit ? '' : 'disabled'} onclick="notifySaveSmsNums_()">儲存</button>
+    </div>
+    <div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-top:4px;">到每月上限就不再發（接單、出單照常）。300 則約 234 元。LINE 剩的則數是留給「LINE 通知老闆」用的。</div>`;
+}
+function notifySaveSmsNums_() {
+  const cap = Number(document.getElementById('notify-sms-cap').value), res = Number(document.getElementById('notify-line-reserve').value);
+  if (!Number.isInteger(cap) || cap < 0 || cap > 5000) { alert('每月上限要是 0～5000 的整數'); return; }
+  if (!Number.isInteger(res) || res < 0 || res > 200) { alert('LINE 剩幾則要是 0～200 的整數'); return; }
+  notifySave_({ settings: { smsMonthlyCap: cap, lineReserve: res } }, null);
+}
 function notifySavePhones_() {
   const v = document.getElementById('notify-phones').value;
   const phones = v.split(/[,，、\s]+/).map(x => x.replace(/\D/g, '')).filter(Boolean);
