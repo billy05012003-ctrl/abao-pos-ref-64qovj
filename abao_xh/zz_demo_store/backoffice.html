@@ -2007,8 +2007,11 @@ function openBoOpsPin_(title, bodyHtml, cb, permCode) {
     .catch(() => show(true));
 }
 function openBoOpsPinFor_(permCode, title, bodyHtml, cb) { openBoOpsPin_(title, bodyHtml, cb, permCode); }
-function closeBoOpsPin_() { document.getElementById('bo-ops-pin-overlay').style.display = 'none'; boOpsPinCb_ = null; }
+function closeBoOpsPin_() { document.getElementById('bo-ops-pin-overlay').style.display = 'none'; boOpsPinCb_ = null; boOpsPinCheck_ = null; }
+// 11-27 送出前的檢查（標記已付款要打勾、人工處理完成要選原因）：回字串＝擋下提示、視窗不關；開視窗前設，關視窗時清掉
+let boOpsPinCheck_ = null;
 function confirmBoOpsPin_() {
+  if (boOpsPinCheck_) { const m = boOpsPinCheck_(); if (m) { alert(m); return; } }
   const pin = boOpsNeedPin_ ? document.getElementById('bo-ops-pin-input').value.trim() : '';
   if (boOpsNeedPin_ && !pin) { alert('請輸入 PIN'); return; }
   const cb = boOpsPinCb_;
@@ -2091,17 +2094,34 @@ function loadBoOrders_() {
       <span class="ops-meta" style="${o.unpaid ? 'color:#a32d2d;' : ''}">${o.unpaid ? '取餐付款・待收款' : '未取餐'}</span></div>`).join('');
   }).catch(() => { box.innerHTML = '<div class="ops-meta">網路異常，請稍後再試</div>'; });
 }
+// 11-27 同平板：卡住清單印取餐日，不是今天的標「預約單」（關帳只作廢今天取餐的單，預約單會一直留著）；SQL 62 才有 pickupDate
+function boStuckPickup_(o) {
+  const t = escapeHtml(o.pickupTime || '');
+  const d = String(o.pickupDate || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return t;
+  const dt = new Date(d + 'T00:00:00');
+  const now = new Date(), today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  return (dt.getMonth() + 1) + '/' + dt.getDate() + '（' + '日一二三四五六'[dt.getDay()] + '） ' + t + (d !== today ? ' <b style="color:#a32d2d;">預約單（不是今天）</b>' : '');
+}
+// 藍新「商店訂單編號」＝訂單號的 - 換成 _ 再接門市代碼（同後端 mpgOrderNoFrom、平板 mpgOrderNoOf_）
+function boMpgOrderNo_(orderId) {
+  const tag = String(BO_OPS_STORE || '').replace(/[^A-Za-z0-9]/g, '');
+  return String(orderId).replace(/-/g, '_') + (tag && tag.length <= 16 ? '_' + tag : '');
+}
 function loadBoStuck_() {
   apiGet({ action: 'stuckPaymentOrders', storeId: BO_OPS_STORE }).then(d => {
     const card = document.getElementById('bo-ops-stuck-card');
     if (d.status !== 'ok' || !d.orders.length) { card.style.display = 'none'; return; }
     card.style.display = 'block';
-    document.getElementById('bo-ops-stuck').innerHTML = d.orders.map(o => `<div class="ops-order"><div><b>${escapeHtml(o.orderId)}</b><div class="ops-meta">取餐時間 ${escapeHtml(o.pickupTime)}　$${escapeHtml(o.totalAmount)}　${escapeHtml(o.note || '')}</div></div>
+    document.getElementById('bo-ops-stuck').innerHTML = d.orders.map(o => `<div class="ops-order"><div><b>${escapeHtml(o.orderId)}</b><div class="ops-meta">取餐 ${boStuckPickup_(o)}　$${escapeHtml(o.totalAmount)}　${escapeHtml(o.note || '')}</div></div>
       <button class="ops-btn primary" onclick="boConfirmPayment_('${escapeHtml(o.orderId)}')">標記已付款</button></div>`).join('');
   }).catch(() => {});
 }
 function boConfirmPayment_(orderId) {
-  openBoOpsPinFor_('confirmPayment', '標記已付款：' + orderId, '<div class="ops-warn">請先到藍新商店後台「查詢交易紀錄」核對顧客的卡真的扣款成功再標記。標記後顧客可以直接取餐。</div>', pin => {
+  // 11-27 同平板（0009 藍新查不到卻被標記已付款）：顯示藍新商店訂單編號，要勾「已在藍新查到已付款」才能送出
+  boOpsPinCheck_ = () => (document.getElementById('bo-manualpay-check') && document.getElementById('bo-manualpay-check').checked) ? '' : '請先到藍新後台查這張單，查到「已付款」再打勾';
+  openBoOpsPinFor_('confirmPayment', '標記已付款：' + orderId, '<div class="ops-warn">請先到藍新商店後台「交易查詢」，用商店訂單編號查這張：<br><b style="font-family:monospace;font-size:1rem;">' + escapeHtml(boMpgOrderNo_(orderId)) + '</b><br>查到「已付款」才標記；<b>查不到＝顧客沒付到錢，不要標記</b>（標記後顧客可以直接取餐）。</div>'
+    + '<label style="display:flex;align-items:flex-start;gap:6px;margin-top:8px;"><input type="checkbox" id="bo-manualpay-check" style="margin-top:3px;">我已在藍新後台查到這張單「已付款」</label>', pin => {
     boOpsPost_({ action: 'staffConfirmPayment', orderId: orderId, staffPin: pin }).then(d => {
       if (d.status !== 'ok') { alert('標記失敗：' + (d.message || '')); return; }
       alert('已標記已付款');
@@ -2119,8 +2139,8 @@ function loadBoRefundable_() {
       pend.map(p => escapeHtml(p.orderId + '　$' + p.totalAmount + '　(' + p.requestedAt + ' 受理)')).join('<br>') + '</div>' : '';
     if (!d.orders.length) { box.innerHTML = '<div class="ops-meta" style="padding:8px 0;">近3天沒有可退款的訂單</div>' + pendHtml; return; }
     box.innerHTML = d.orders.map(o => `<div class="ops-order"><div><b>${escapeHtml(o.orderId)}</b> <span class="ops-meta">[${escapeHtml(o.channel)}] ${escapeHtml(o.status)}</span>${o.printed ? '<span class="ops-tag printed">🖨已出單</span>' : ''}
-        <div class="ops-meta">$${escapeHtml(o.totalAmount)}　${o.needsManual ? '<span style="color:#a32d2d;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>${boRefundNegPts_(o) !== null ? `<div class="ops-meta" style="color:#a32d2d;">⚠ 這張單給的 ${Number(o.pointsEarned)} 點已經用掉，退款後會員點數會變 ${boRefundNegPts_(o)}</div>` : ''}</div>
-      ${o.needsManual ? '<button class="ops-btn" disabled>無法自動退</button>'
+        <div class="ops-meta">$${escapeHtml(o.totalAmount)}　${o.needsManual ? '<span style="color:#a32d2d;">無藍新交易序號：先到藍新後台查這張，再按「人工處理完成」</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>${boRefundNegPts_(o) !== null ? `<div class="ops-meta" style="color:#a32d2d;">⚠ 這張單給的 ${Number(o.pointsEarned)} 點已經用掉，退款後會員點數會變 ${boRefundNegPts_(o)}</div>` : ''}</div>
+      ${o.needsManual ? `<button class="ops-btn danger" onclick="boManualRefund_('${escapeHtml(o.orderId)}', ${Number(o.totalAmount) || 0}, ${o.printed ? 'true' : 'false'})">人工處理完成</button>`
         : `<button class="ops-btn danger" onclick="boRefund_('${escapeHtml(o.orderId)}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.gateway ? 'true' : 'false'}, ${o.printed ? 'true' : 'false'}, ${boRefundNegPts_(o)})">退款</button>`}</div>`).join('') + pendHtml;
   }).catch(() => { box.innerHTML = '<div class="ops-meta">網路異常，請稍後再試</div>'; });
 }
@@ -2138,6 +2158,7 @@ function boRefund_(orderId, amount, viaGateway, printed, negPts) {
     (typeof negPts === 'number' && negPts < 0 ? '<div class="ops-warn">⚠️ 這張單給的點數已經換券用掉，退款後會員點數會變 <b>' + negPts + '</b>（之後消費先補回）。</div>' : '');
   openBoOpsPinFor_('refund', '確定要退款「' + orderId + '」$' + amount + ' 嗎？', warn + '<div>' + how + '退款後扣回點數與消費、退回用掉的兌換券，<b>無法復原</b>。紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」。</div>', pin => {
     boOpsPost_({ action: 'refundOrder', orderId: orderId, staffPin: pin }).then(d => {
+      if (d.status !== 'ok' && d.needManual) { loadBoRefundable_(); boManualRefund_(orderId, amount, printed); return; }   // 11-27 沒有藍新交易序號 → 改走人工處理完成
       if (d.status !== 'ok') { alert('退款失敗：' + (d.message || '')); loadBoRefundable_(); return; }
       if (d.pending) {
         alert('退款已受理（還沒退到顧客的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。系統已先扣回點數與消費、退回兌換券，之後會自動退款，請勿重複按退款。\n金額：$' + d.amount);
@@ -2146,6 +2167,26 @@ function boRefund_(orderId, amount, viaGateway, printed, negPts) {
       }
       loadBoRefundable_(); loadBoOrders_(); loadBoRevenue_();
     }).catch(() => alert('網路異常，退款結果不確定，請先按「重新整理」確認這張單的狀態，不要重複退款'));
+  });
+}
+// 11-27 同平板「人工處理完成」：沒有藍新交易序號的線上單（店員人工標記已付款、或 09-19 以前的單）系統沒辦法自動退款。
+//   先到藍新後台查：查不到這筆交易＝顧客沒付到錢（nopay）；有扣款＝先在藍新後台退款（refunded）。按了只改這張單、不打藍新，後端寫金流告警
+function boManualRefund_(orderId, amount, printed) {
+  const radio = (v, t) => '<label style="display:flex;align-items:flex-start;gap:6px;margin-top:6px;"><input type="radio" name="bo-mr-why" value="' + v + '" style="margin-top:3px;">' + t + '</label>';
+  boOpsPinCheck_ = () => document.querySelector('input[name="bo-mr-why"]:checked') ? '' : '請選藍新後台查到的結果';
+  openBoOpsPinFor_('refund', '人工處理完成「' + orderId + '」$' + amount,
+    (printed ? '<div class="ops-warn">⚠️ 這張已經出單，廚房可能已經在做。<br>請先打電話通知店裡<b>不要交餐</b>，再按確定。</div>' : '')
+    + '<div>這張單沒有藍新交易序號，系統沒辦法自動退款。請先到藍新商店後台「交易查詢」查：<br><b style="font-family:monospace;font-size:1rem;">' + escapeHtml(boMpgOrderNo_(orderId)) + '</b></div>'
+    + radio('nopay', '藍新查不到這筆交易（顧客沒付到錢）') + radio('refunded', '有扣款，我已經在藍新後台退款了')
+    + '<div class="ops-meta" style="margin-top:8px;">有扣款但還沒退的，請先在藍新後台退款再來按。按了只改這張單（已退款、扣回點數、退回兌換券），<b>無法復原</b>，紀錄會註明「後台・' + escapeHtml(boSession ? boSession.name : '') + '」並留一筆金流告警。</div>', pin => {
+    const picked = document.querySelector('input[name="bo-mr-why"]:checked');
+    const why = picked ? picked.value : '';
+    if (!why) return;
+    boOpsPost_({ action: 'refundOrder', orderId: orderId, staffPin: pin, manual: why }).then(d => {
+      if (d.status !== 'ok') { alert('處理失敗：' + (d.message || '')); loadBoRefundable_(); return; }
+      alert('已人工處理完成\n方式：' + String(d.mode || '').replace('人工處理：', '') + '\n金額：$' + d.amount + '\n扣回點數：' + (d.pointsReverted || 0) + '　退回兌換券：' + (d.vouchersRestored || 0) + ' 張');
+      loadBoRefundable_(); loadBoOrders_(); loadBoRevenue_();
+    }).catch(() => alert('網路異常，結果不確定，請先按「重新整理」確認這張單的狀態，不要重複操作'));
   });
 }
 // POS管理首頁：今天開帳狀態(看開關帳記錄今天最新一筆)
