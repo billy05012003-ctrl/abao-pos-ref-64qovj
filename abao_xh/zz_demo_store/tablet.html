@@ -3081,14 +3081,14 @@ function goToPosQuickOrderCategory() {
       <div id="qo-pane-close" style="display:none;"></div>
       <div id="qo-pane-log" style="display:none;"></div>
       <div id="qo-pane-single">
-      <div style="font-size:0.78rem;color:var(--muted);margin-bottom:10px;">只記總金額，不進購物車；不計入門市總金額，另外累計。發票類型供之後手動開立實際發票參照，這裡不會真的開發票。白天沒空一張一張打，打烊時到「打烊補登」照抄平台今日總額也可以。</div>
+      <div style="font-size:0.78rem;color:var(--muted);margin-bottom:10px;">只記總金額，不進購物車；不計入門市總金額，另外累計。有開電子發票、後台把這個平台設成要開的店，登記好會自動開發票（金額填平台訂單的小計，不含外送費）；沒開的店只記錄、不會開發票。白天沒空一張一張打，打烊時到「打烊補登」照抄平台今日總額也可以（有開電子發票的店要每張登記，打烊補登那筆不開發票）。</div>
       <label style="display:block;font-size:0.8rem;margin:6px 0 4px;color:var(--muted)">來源</label>
       <input type="hidden" id="quick-order-source">
       <div id="quick-order-source-group" style="display:flex;flex-wrap:wrap;gap:8px;">
         ${quickSourcesOn_().map(s => `<button type="button" class="pos-pay-btn" data-value="${s}" onclick="setQuickOrderSource_('${s}')">${s}</button>`).join('') || '<span style="font-size:0.8rem;color:#c0392b;">後台「第三方收款」都關了</span>'}
       </div>
       <label style="display:block;font-size:0.8rem;margin:10px 0 4px;color:var(--muted)">總金額</label>
-      <input type="number" id="quick-order-amount" inputmode="numeric" min="0" placeholder="顧客實付金額" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
+      <input type="number" id="quick-order-amount" inputmode="numeric" min="0" placeholder="平台訂單的小計（不含外送費）" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:0.9rem;box-sizing:border-box;">
       <label style="display:block;font-size:0.8rem;margin:10px 0 4px;color:var(--muted)">發票類型</label>
       <input type="hidden" id="quick-order-invoice-type">
       <div id="quick-order-invoice-type-group" style="display:flex;flex-wrap:wrap;gap:8px;">
@@ -4503,6 +4503,26 @@ function tryApplyCfgUpdate_() {
 Promise.all([menuCmsDataReady, promoSettingsReady, drinkUpgradeRulesReady]).then(checkCfgVersion_);
 setInterval(checkCfgVersion_, CFG_POLL_MS);
 setInterval(tryApplyCfgUpdate_, 10000);
+// 11-27 模擬日老闆發現：後台（或別台平板）改上下架、本日售完，這台不會自己知道——原本只在開機、打開「上下架管理」、
+// 後台發布菜單時才讀。改成每 60 秒順便讀一次；有變動就在閒置時重畫目前分類（正在點單不打斷，等閒置再畫）。
+// 隔天「本日售完」自動恢復也會跟著更新。讀到的狀態馬上生效（點品項時看的是最新的），只有畫面等閒置才重畫
+let itemStatusDirty_ = false;
+function itemStatusSigOf_() { return Object.keys(posItemStatusMap).sort().map(k => k + '=' + posItemStatusMap[k]).join('\n'); }
+function pollPosItemStatus_() {
+  const ov = document.getElementById('pos-item-status-overlay');
+  if (ov && ov.classList.contains('open')) return;   // 上下架管理開著：它自己會讀，關掉時也會重畫
+  const before = itemStatusSigOf_();
+  loadPosItemStatus().then(() => { if (itemStatusSigOf_() !== before) itemStatusDirty_ = true; tryApplyItemStatus_(); });
+}
+function tryApplyItemStatus_() {
+  if (!itemStatusDirty_ || cfgRefreshing || !posIsIdle_()) return;
+  itemStatusDirty_ = false;
+  // 只重畫一般品項分類（優惠券、快速出單不重畫：快速出單打到一半的金額會被清掉；那兩頁也不顯示售完）
+  const activeBtn = document.querySelector('.pos-cat-btn.active');
+  if (activeBtn && /^pos-cat-btn-\d+$/.test(activeBtn.id)) activeBtn.click();
+}
+setInterval(pollPosItemStatus_, CFG_POLL_MS);
+setInterval(tryApplyItemStatus_, 10000);
 // 11-15：主畫面暫停／忙碌提示——開機讀一次，之後每 60 秒讀一次門市狀態(後台或別台暫停的也看得到)
 loadStoreStatus().catch(() => {});
 setInterval(() => { loadStoreStatus().catch(() => {}); }, 60000);
