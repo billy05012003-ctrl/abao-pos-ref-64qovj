@@ -2308,7 +2308,8 @@ const PAY_ALERT_KIND_ = {
   twqr_refund_pending: 'TWQR 退款處理中', twqr_refund_failed: 'TWQR 退款失敗',
   online_unconfirmed: '線上單太久沒確認接單', line_quota: 'LINE 免費訊息用完',   // 11-20 (9g)
   sms_balance_low: '簡訊餘額快用完', sms_balance_empty: '簡訊餘額用完', sms_store_daily: '驗證簡訊達每日上限', sms_provider_error: '驗證簡訊發不出去',   // 11-25 (S7)
-  line_quota_low: 'LINE 免費訊息快用完', sms_fallback_on: 'LINE 用完、已改發簡訊', sms_fallback_cap: '轉發簡訊達每月上限', sms_fallback_fail: '轉簡訊發不出去'   // 11-26 (9j)
+  line_quota_low: 'LINE 免費訊息快用完', sms_fallback_on: 'LINE 用完、已改發簡訊', sms_fallback_cap: '轉發簡訊達每月上限', sms_fallback_fail: '轉簡訊發不出去',   // 11-26 (9j)
+  manual_refund: '店長人工處理完成（沒打藍新）'   // 11-27 沒有藍新交易序號的線上單
 };
 // ---- 11-20 (9g) 訂單通知設定 ----
 let notifyData_ = null;
@@ -2604,7 +2605,7 @@ function renderBoEinv_() {
       d.enabled ? '收款成功就自動開發票；紙本的出單機會另外印一張證明聯。關掉後新的單不開（之前沒開成的照樣自動補開）。'
         : '打開後，從打開那一刻起收款的單才開發票（之前的舊單不補開）。關著時結帳、出單、退款跟現在完全一樣。')
     + '<div style="font-weight:700;margin:14px 0 4px;">每種付款方式要不要開發票</div>'
-    + '<div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">打勾＝開。外送平台代收的單（熊貓、581…）由平台開，預設不開。設成不開的付款方式，平板結帳時不會出現發票選項。</div>'
+    + '<div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">打勾＝開。設成不開的付款方式，平板結帳時不會出現發票選項。外送平台代收的單（熊貓、581…）預設不開；要開請打勾：金額就是夥伴在快速出單輸入的平台訂單小計，品名一行「餐點」，打烊補登那筆不開。</div>'
     + `<div>${methods}</div>`
     + '<div style="font-weight:700;margin:14px 0 4px;">顧客可以選的拿發票方式</div>'
     + '<div style="font-size:0.76rem;color:var(--muted);line-height:1.5;margin-bottom:6px;">上面設成要開發票的單，顧客結帳時可以選這些方式拿發票（沒選＝印紙本證明聯）。關掉的方式平板上不會出現。</div>'
@@ -2637,7 +2638,7 @@ function einvMethodToggle_(name, el) {
   // 11-23 UX 🟡j：原本點一下就存、沒確認；這個設定碰到發票法規 → 改之前先確認，按取消恢復原狀
   const msg = el.checked
     ? '確定之後用「' + name + '」收款的單要開發票嗎？\n\n・從存檔那一刻起，用「' + name + '」收款的單都會開發票'
-    : '確定用「' + name + '」收款的單不開發票嗎？\n\n・依規定，除了外送平台（熊貓、581…）由平台代開的單，店家收款都要開發票\n・不確定請先問會計';
+    : '確定用「' + name + '」收款的單不開發票嗎？\n\n・依規定，店家收款都要開發票\n・外送平台的單要不要開、開給誰，不確定請先問會計';
   if (!confirm(msg)) { el.checked = !el.checked; return; }
   const map = Object.assign({}, (einvData_ && einvData_.methodInvoice) || {});
   map[name] = el.checked;

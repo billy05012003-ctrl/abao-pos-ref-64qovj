@@ -687,6 +687,33 @@
   </div>
 </div>
 
+<!-- 11-27 標記已付款前確認：顯示藍新商店訂單編號，勾了才能送出 -->
+<style>#pos-manualpay-ok:disabled{opacity:.45;cursor:not-allowed;}</style>
+<div class="pos-overlay" id="pos-manualpay-overlay" style="z-index:29;">
+  <div class="pos-sheet" style="max-width:400px;">
+    <h2 style="margin:0 0 6px;font-size:1rem;">標記已付款 <span id="pos-manualpay-order-id"></span></h2>
+    <div style="font-size:0.85rem;line-height:1.6;margin-bottom:8px;">請先到<b>藍新商店後台「交易查詢」</b>，用商店訂單編號查這張：<br>
+      <span id="pos-manualpay-mpg" style="font-family:monospace;font-size:1rem;font-weight:bold;"></span><br>
+      <span style="color:#c0392b;">查到「已付款」才標記；查不到＝顧客沒付到錢，不要標記</span>（標記後顧客可以直接來取餐）。</div>
+    <label style="display:flex;align-items:flex-start;gap:6px;font-size:0.9rem;"><input type="checkbox" id="pos-manualpay-check" onchange="document.getElementById('pos-manualpay-ok').disabled=!this.checked" style="margin-top:4px;">我已在藍新後台查到這張單「已付款」</label>
+    <button class="btn btn-primary" id="pos-manualpay-ok" style="width:100%;padding:10px;margin-top:12px;" onclick="confirmManualPay_()" disabled>確認標記已付款</button>
+    <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="closeManualPay_()">取消</button>
+  </div>
+</div>
+<!-- 11-27 人工處理完成：沒有藍新交易序號的線上單 -->
+<div class="pos-overlay" id="pos-manualrefund-overlay" style="z-index:29;">
+  <div class="pos-sheet" style="max-width:400px;">
+    <h2 style="margin:0 0 6px;font-size:1rem;">人工處理完成 <span id="pos-manualrefund-order-id"></span></h2>
+    <div style="font-size:0.85rem;line-height:1.6;margin-bottom:8px;">這張單沒有藍新交易序號，系統沒辦法自動退款。請先到<b>藍新商店後台「交易查詢」</b>查：<br>
+      <span id="pos-manualrefund-mpg" style="font-family:monospace;font-size:1rem;font-weight:bold;"></span></div>
+    <label style="display:block;font-size:0.8rem;margin:0 0 4px;color:var(--muted)">藍新後台查到的結果（必選）</label>
+    <label style="display:flex;align-items:flex-start;gap:6px;font-size:0.9rem;margin-bottom:6px;"><input type="radio" name="pos-manualrefund-why" value="nopay" style="margin-top:4px;">藍新查不到這筆交易（顧客沒付到錢）</label>
+    <label style="display:flex;align-items:flex-start;gap:6px;font-size:0.9rem;"><input type="radio" name="pos-manualrefund-why" value="refunded" style="margin-top:4px;">有扣款，我已經在藍新後台退款了</label>
+    <div style="font-size:0.78rem;color:var(--muted);margin-top:8px;">有扣款但還沒退的，請先在藍新後台退款再來按。按了只改這張單（已退款、扣回點數、退回兌換券），會通知老闆核對。</div>
+    <button class="btn btn-danger" style="width:100%;padding:10px;margin-top:12px;" onclick="confirmManualRefund_()">確認人工處理完成</button>
+    <button class="btn btn-secondary" style="width:100%;padding:10px;margin-top:6px;" onclick="closeManualRefund_()">取消</button>
+  </div>
+</div>
 <div class="pos-overlay" id="pos-void-overlay" style="z-index:29;">
   <div class="pos-sheet" style="max-width:380px;">
     <h2 style="margin:0 0 4px;font-size:1rem;">作廢訂單 <span id="pos-void-order-id"></span></h2>
@@ -1051,6 +1078,23 @@ async function printLabelOrder_(orderId, btn) {
   alert(r && r.ok ? '已補印 ' + picked.length + ' 張杯貼' : '杯貼沒印出來：' + ((r && r.why) || '出單模組沒回應'));
 }
 
+// 11-27 老闆（關帳後還能按標記已付款）：卡住清單印取餐日，不是今天的標「預約單」——關帳只作廢今天取餐的單，預約單會一直留在這裡
+//   SQL 62 才有 pickupDate；還沒貼就照舊只印時間
+function stuckPickupText_(o) {
+  const t = escapeHtml_(o.pickupTime || '');
+  const d = String(o.pickupDate || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return t;
+  const dt = new Date(d + 'T00:00:00');
+  const md = (dt.getMonth() + 1) + '/' + dt.getDate() + '（' + '日一二三四五六'[dt.getDay()] + '）';
+  const now = new Date(), today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+  return md + ' ' + t + (d !== today ? ' <span style="color:#c0392b;font-weight:bold;">預約單（不是今天）</span>' : '');
+}
+// 藍新「商店訂單編號」＝訂單號的 - 換成 _ 再接門市代碼（同後端 mpgOrderNoFrom；門市代碼超過 16 字的只印前段）
+function mpgOrderNoOf_(orderId) {
+  const tag = String(STORE_ID || '').replace(/[^A-Za-z0-9]/g, '');
+  return String(orderId).replace(/-/g, '_') + (tag && tag.length <= 16 ? '_' + tag : '');
+}
+
 function loadStuckPaymentOrders() {
   apiGet({ action: 'stuckPaymentOrders', storeId: STORE_ID }).then(data => {
     if (data.status !== 'ok') return;
@@ -1065,7 +1109,7 @@ function loadStuckPaymentOrders() {
       <div class="order-card">
         <div>
           <div><strong>${o.orderId}</strong></div>
-          <div class="meta">取餐時間 ${escapeHtml_(o.pickupTime)}　$${escapeHtml_(o.totalAmount)}　${escapeHtml_(o.note || '')}</div>
+          <div class="meta">取餐 ${stuckPickupText_(o)}　$${escapeHtml_(o.totalAmount)}　${escapeHtml_(o.note || '')}</div>
         </div>
         <button class="btn btn-primary" onclick="manualConfirmPayment('${o.orderId}')">標記已付款</button>
       </div>
@@ -1090,11 +1134,11 @@ function loadRefundableOrders() {
       <div class="order-card">
         <div>
           <div><strong>${o.orderId}</strong> <span class="meta">[${o.channel}] ${o.status}</span>${o.printed ? '<span class="tag-printed">🖨已出單</span>' : ''}</div>
-          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號，請到藍新後台人工退款</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.twqr ? 'TWQR(退回顧客的手機錢包)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>
+          <div class="meta">$${o.totalAmount}　${o.needsManual ? '<span style="color:#c0392b;">無藍新交易序號：先到藍新後台查這張，再按「人工處理完成」</span>' : (o.linePay ? 'LINE Pay(退回顧客的 LINE Pay)' : o.twqr ? 'TWQR(退回顧客的手機錢包)' : o.gateway ? '信用卡(退回顧客的卡)' : '現場退還')}</div>
           ${refundNegPts_(o) !== null ? `<div class="meta" style="color:#c0392b;">⚠ 這張單給的 ${o.pointsEarned} 點已經用掉，退款後會員點數會變 ${refundNegPts_(o)}</div>` : ''}
         </div>
         ${o.needsManual
-          ? '<button class="btn" disabled style="opacity:.5;">無法自動退</button>'
+          ? `<button class="btn btn-danger" onclick="openManualRefund_('${o.orderId}', ${Number(o.totalAmount) || 0})">人工處理完成</button>`
           : `<button class="btn btn-danger" onclick="doRefund('${o.orderId}', ${Number(o.totalAmount) || 0}, ${o.linePay ? "'linepay'" : o.twqr ? "'twqr'" : o.gateway ? 'true' : 'false'}, ${refundNegPts_(o)})">退款</button>`}
       </div>
     `).join('') + pendHtml;
@@ -1120,6 +1164,7 @@ function doRefund(orderId, amount, viaGateway, negPts) {
   if (!confirm('確定要退款「' + orderId + '」$' + amount + ' 嗎？\n\n' + how + '\n退款後會扣回點數與消費、退回用掉的兌換券。這個動作無法復原。' + negNote)) return;
   withPosPerm_('refund', '退款', (staffName, staffPin) => {
     apiPost({ action: 'refundOrder', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
+      if (data.status !== 'ok' && data.needManual) { loadRefundableOrders(); openManualRefund_(orderId, amount); return; }   // 11-27 沒有藍新交易序號 → 改走人工處理完成
       if (data.status !== 'ok') { alert('退款失敗：' + (data.message || '')); loadRefundableOrders(); return; }
       if (data.pending) {
         alert('退款已受理（還沒退到顧客的卡）\n\n這是剛付款的信用卡單，藍新要等銀行請款完成才能退款（通常1~3個上班日）。\n系統已先扣回點數與消費、退回兌換券，之後會自動退款，不用再操作，也請勿重複按退款。\n金額：$' + data.amount +
@@ -1133,6 +1178,37 @@ function doRefund(orderId, amount, viaGateway, negPts) {
   });
 }
 
+// 11-27 人工處理完成：沒有藍新交易序號的線上單（店員人工標記已付款、或 09-19 以前的單），系統沒辦法自動退款。
+//   店長先到藍新後台查這張：查不到這筆交易＝顧客沒付到錢（nopay）；有扣款＝先在藍新後台退款（refunded）。
+//   按了只改這張單（已退款、點數／兌換券退回），不打藍新；後端寫一筆金流告警給老闆核對
+let manualRefund_ = null;
+function openManualRefund_(orderId, amount) {
+  manualRefund_ = { orderId, amount };
+  document.getElementById('pos-manualrefund-order-id').textContent = orderId + '　$' + amount;
+  document.getElementById('pos-manualrefund-mpg').textContent = mpgOrderNoOf_(orderId);
+  document.querySelectorAll('input[name="pos-manualrefund-why"]').forEach(r => r.checked = false);
+  document.getElementById('pos-manualrefund-overlay').classList.add('open');
+}
+function closeManualRefund_() { document.getElementById('pos-manualrefund-overlay').classList.remove('open'); manualRefund_ = null; }
+function confirmManualRefund_() {
+  const picked = document.querySelector('input[name="pos-manualrefund-why"]:checked');
+  if (!picked) { alert('請選藍新後台查到的結果'); return; }
+  const m = manualRefund_;
+  if (!m) return;
+  const why = picked.value;
+  if (!confirm('確定「' + m.orderId + '」$' + m.amount + ' 人工處理完成？\n\n' + (why === 'nopay' ? '藍新查不到這筆交易（顧客沒付到錢）' : '已經在藍新後台退款給顧客') +
+    '\n\n系統不會再打藍新，只把這張單改成已退款、扣回點數與消費、退回兌換券，並通知老闆核對。這個動作無法復原。')) return;
+  closeManualRefund_();
+  withPosPerm_('refund', '人工處理完成', (staffName, staffPin) => {
+    apiPost({ action: 'refundOrder', orderId: m.orderId, manual: why, staffName, staffPin, storeId: STORE_ID }).then(data => {
+      if (data.status !== 'ok') { alert('處理失敗：' + (data.message || '')); loadRefundableOrders(); return; }
+      alert('已人工處理完成\n方式：' + String(data.mode || '').replace('人工處理：', '') + '\n金額：$' + data.amount +
+            refundPtsLine_(data) + '　退回兌換券：' + (data.vouchersRestored || 0) + ' 張' + callCustomerNote_(data));
+      loadRefundableOrders(); loadOrders(); loadRevenue();
+    }).catch(() => alert('網路異常，結果不確定，請先到「訂單退款」重新整理確認這張單的狀態，不要重複操作'));
+  });
+}
+
 // 11-20 (9g)：退款／作廢線上單後，後端回顧客電話（後台「訂單通知設定」開著才回）→ 提醒店員打電話通知顧客
 function callCustomerNote_(data) {
   const p = String((data && data.customerPhone) || '').replace(/\D/g, '');
@@ -1141,8 +1217,22 @@ function callCustomerNote_(data) {
   return '\n\n📞 這是線上點餐的單，顧客可能還不知道，請打電話通知顧客：' + shown;
 }
 
+// 11-27 老闆（0009 藍新查不到卻被標記已付款）：先跳視窗顯示藍新商店訂單編號，要勾「已在藍新查到已付款」才能送出
+let manualPayOrderId_ = '';
 function manualConfirmPayment(orderId) {
-  if (!confirm('確定「' + orderId + '」這筆訂單顧客真的已經付款成功嗎？\n\n請先去藍新商店後台核對過交易紀錄再標記，標記後顧客可以直接來取餐。')) return;
+  manualPayOrderId_ = orderId;
+  document.getElementById('pos-manualpay-order-id').textContent = orderId;
+  document.getElementById('pos-manualpay-mpg').textContent = mpgOrderNoOf_(orderId);
+  const ck = document.getElementById('pos-manualpay-check');
+  ck.checked = false;
+  document.getElementById('pos-manualpay-ok').disabled = true;
+  document.getElementById('pos-manualpay-overlay').classList.add('open');
+}
+function closeManualPay_() { document.getElementById('pos-manualpay-overlay').classList.remove('open'); manualPayOrderId_ = ''; }
+function confirmManualPay_() {
+  const orderId = manualPayOrderId_;
+  if (!orderId || !document.getElementById('pos-manualpay-check').checked) { alert('請先到藍新後台查這張單，查到「已付款」再打勾'); return; }
+  closeManualPay_();
   // 2026-09-19：改成需要店長以上PIN(後端staffConfirmPayment)，原本任何人都能呼叫的confirmPayment已關閉
   withPosPerm_('confirmPayment', '人工標記已付款', (staffName, staffPin) => {
     apiPost({ action: 'staffConfirmPayment', orderId: orderId, staffName, staffPin, storeId: STORE_ID }).then(data => {
@@ -5568,6 +5658,10 @@ function buildTicketLines_(r, printCount) {
     var baseName = fullName, opts = [];
     var pm = fullName.match(/^([^（]*)（(.*)）\s*$/);
     if (pm) { baseName = pm[1].trim(); opts = splitTopLevelOptions_(pm[2]); }
+    // 11-27 同 ticket.js：飲料後面的加購（嚴選限定加購、豪華經濟升級餐、×1「加購：」連同醬料）改印在飲料上面，飲料固定放最後
+    var di = -1;
+    for (var dq = 0; dq < opts.length; dq++) { if (/^飲料：/.test(opts[dq])) { di = dq; break; } }
+    if (di >= 0 && di < opts.length - 1) opts = opts.slice(0, di).concat(opts.slice(di + 1), [opts[di]]);
     var label = baseName + (it.size ? '(' + it.size + ')' : '');
     // 11-24 同 ticket.js（老闆選「丙」）：數量黑底白字一格放在金額前面、兩個都靠第一行最右邊；金額不寫 $、固定佔 4 欄；品名第二行起先走紙 8 點
     var qn = String(Number(it.qty) || 1), qtyInv = ESC_.invOn + ' ' + qn + ' ' + ESC_.invOff;
@@ -5607,6 +5701,7 @@ function buildTicketLines_(r, printCount) {
     }
   }
   if (otherNeeds.length) {
+    lines.push('');   // 11-27 同 ticket.js：【其他需求】前面空一行
     lines.push('【其他需求】');
     otherNeeds.forEach(function (n) {
       var amt = Number(n.price) || 0;
